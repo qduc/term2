@@ -242,8 +242,14 @@ export interface ApplicationTurnSession {
       }
     | undefined
   >;
+  /** Accept facts synchronously before observers or physical dispatch can advance. */
+  beginSegment(stream: AgentStream): void;
+  acceptEvent(event: ApplicationRunEvent): void;
+  acceptToolDispatch(callId: string): void;
+  acceptSegment(stream: AgentStream): void;
   consume(stream: AgentStream): Promise<void>;
-  interrupted(): Promise<ApplicationRunLoopOptions>;
+  interrupted(stream: AgentStream): Promise<ApplicationRunLoopOptions>;
+  completed(stream: AgentStream): Promise<void>;
   recover(error: unknown): Promise<boolean>;
 }
 
@@ -286,7 +292,6 @@ export interface ApplicationRunLoopDeps {
    * unobserved". Resolved via getter so the session can wire the tracker after
    * the client is constructed.
    */
-  readonly getOnToolDispatch?: () => ((callId: string) => void) | undefined;
   /**
    * Resolves the conservative cap for independent calls from one response.
    * Read when settling a completed response so runtime settings apply at the
@@ -424,6 +429,7 @@ type ModelExchange = {
 };
 
 class EventQueue {
+  constructor(private readonly acceptBeforePublish?: (event: ApplicationRunEvent) => void) {}
   #items: ApplicationRunEvent[] = [];
   #waiters: Array<{
     resolve: (result: IteratorResult<ApplicationRunEvent>) => void;
@@ -433,6 +439,7 @@ class EventQueue {
   #failure: unknown;
 
   push(item: ApplicationRunEvent): void {
+    this.acceptBeforePublish?.(item);
     const waiter = this.#waiters.shift();
     if (waiter) waiter.resolve({ done: false, value: item });
     else this.#items.push(item);
@@ -585,7 +592,6 @@ export class ApplicationRunLoop {
   #createToolCallExecution(): ToolCallExecution {
     return new ToolCallExecution({
       toolLifecycle: this.#deps.toolLifecycle,
-      getOnToolDispatch: this.#deps.getOnToolDispatch,
       resolveMaxParallelToolCalls: this.#deps.resolveMaxParallelToolCalls,
       isMaxTurnsExceeded: (error) => error instanceof MaxTurnsExceededError,
       logDiagnostic: this.#deps.logDiagnostic,
@@ -798,8 +804,12 @@ export class ApplicationRunLoop {
     if (options.hookScope !== undefined) state.hookScope = options.hookScope;
   }
 
-  #createView(state: RunState, options: ApplicationRunLoopOptions): RunContext {
-    const queue = new EventQueue();
+  #createView(
+    state: RunState,
+    options: ApplicationRunLoopOptions,
+    acceptEvent?: (event: ApplicationRunEvent) => void,
+  ): RunContext {
+    const queue = new EventQueue(acceptEvent);
     const segmentGeneration = ++this.#segmentGeneration;
     if (!state.live) this.abortSegment();
     const controller = new AbortController();
@@ -891,6 +901,7 @@ export class ApplicationRunLoop {
   }
 
   #observe(context: RunContext): void {
+    context.session!.beginSegment(context.stream);
     context.observation = context.session!.consume(context.stream);
     void context.observation.catch(() => undefined);
   }
@@ -900,6 +911,7 @@ export class ApplicationRunLoop {
     if (context.session) {
       this.#settleSegment(context, value);
       await context.observation;
+      await context.session.completed(context.stream);
     }
     return value;
   }
@@ -907,6 +919,7 @@ export class ApplicationRunLoop {
   /** Complete an event view; a pause leaves the owning async task alive. */
   #settleSegment(context: RunContext, value: unknown, error?: unknown, waiting = false): void {
     const { state, stream, queue, generation } = context;
+    if (error === undefined) context.session?.acceptSegment(stream);
     state.runBudget?.pause();
     const cancelled = error instanceof Error && error.name === 'AbortError';
     const paused = (waiting || context.resume !== undefined) && !cancelled && error === undefined;
@@ -937,10 +950,15 @@ export class ApplicationRunLoop {
     if (context.session) {
       this.#settleSegment(context, finish(context.stream, context.state, context.queue), undefined, true);
       await context.observation;
-      const options = await context.session.interrupted();
+      const options = await context.session.interrupted(context.stream);
       this.#assertLive(context);
       this.#refreshContinuation(context.state, options);
-      Object.assign(context, this.#createView(context.state, { ...options, signal: context.turnSignal }));
+      Object.assign(
+        context,
+        this.#createView(context.state, { ...options, signal: context.turnSignal }, (event) =>
+          context.session!.acceptEvent(event),
+        ),
+      );
       this.#observe(context);
       return;
     }
@@ -1009,7 +1027,7 @@ export class ApplicationRunLoop {
           const options = { ...start.options, signal: turnSignal };
           const state = this.#createState(start.agent, start.input, options);
           this.#refreshContinuation(state, options);
-          context = this.#createView(state, options);
+          context = this.#createView(state, options, (event) => session!.acceptEvent(event));
           context.session = session;
           context.turnSignal = turnSignal;
           state.live = context;
@@ -1814,6 +1832,7 @@ export class ApplicationRunLoop {
         });
         outputPush(stream, queue, { type: 'item', item: callItem });
       },
+      onExecutionStarted: (callId: string) => state.live?.session?.acceptToolDispatch(callId),
       onDispatch: (entry: ToolPlanEntry) => {
         outputPush(stream, queue, {
           type: 'tool_call_dispatched',

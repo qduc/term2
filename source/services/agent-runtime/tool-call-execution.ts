@@ -36,7 +36,6 @@ export type PendingToolApproval = {
 
 export interface ToolCallExecutionDependencies {
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
-  readonly getOnToolDispatch?: () => ((callId: string) => void) | undefined;
   readonly resolveMaxParallelToolCalls?: () => number | undefined;
   readonly isMaxTurnsExceeded?: (error: unknown) => boolean;
   readonly logDiagnostic?: (
@@ -61,6 +60,7 @@ export interface ToolCallExecutionContext {
   readonly requestSnapshot?: RequestSnapshot;
   readonly onCall: (event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>) => void;
   readonly onDispatch: (entry: ToolPlanEntry) => void;
+  readonly onExecutionStarted: (callId: string) => void;
   readonly onToolStall: (input: { name: string; argumentsText: string; effect: AnyToolDefinition['effect'] }) => void;
   readonly onResult: (entry: ToolPlanEntry, result: unknown) => void;
 }
@@ -244,12 +244,14 @@ export class ToolCallExecution {
           ? await Promise.allSettled(group.map((entry) => this.#invoke(entry, context)))
           : [{ status: 'fulfilled' as const, value: await this.#invoke(group[0], context) }];
       const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-      if (rejected) throw rejected.reason;
+      // Preserve every known outcome before a sibling's failure enters recovery.
       for (const [index, result] of results.entries()) {
-        const value = (result as PromiseFulfilledResult<unknown>).value;
+        if (result.status !== 'fulfilled') continue;
+        const value = result.value;
         group[index].result = value;
         context.onResult(group[index], value);
       }
+      if (rejected) throw rejected.reason;
       this.#log(
         'tool batch settled',
         {
@@ -303,7 +305,7 @@ export class ToolCallExecution {
       attempt,
       scope: context.hookScope ?? 'root',
     };
-    this.#deps.getOnToolDispatch?.()?.(callId);
+    context.onExecutionStarted(callId);
     await this.#notify(() => this.#deps.toolLifecycle?.before(lifecycleContext));
     try {
       const details: ToolCallDetails = {

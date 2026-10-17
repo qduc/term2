@@ -1,10 +1,11 @@
 # Contract 02 — Provider input, continuity, and effect settlement
 
-Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
+Historical verification: **owner-reviewed 2026-08-14; focused command green.**
+The evidence below records that baseline; ownership references describe the current code. Owners:
 `ToolCallExecution` (response-scoped planning and ordered call/result emission),
-`ToolExecutionLedger` + history projection (`conversation-state-projector`),
+`ConversationRecord` (private tool ledger, journal and provider-history acceptance),
 `ProviderContinuity`, `SessionInputPlanner`, `filterChainedModelInput` (`chained-input-filter.ts`),
-`SessionStreamProcessor` (finalize and debt sync), and retry/recovery policy
+`SessionTurnAdapter.#acceptSegment` (continuity publication and debt sync), and retry/recovery policy
 (`retry-classifier`, `recovery-policy`, `DefaultRecoveryExecutor`).
 
 ## 1. Contract
@@ -26,21 +27,26 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 ## 2. Owners
 
 - **Enforcement:** `ToolCallExecution` (the ephemeral ordered response plan and
-  invocation lifecycle; it does not own durable effect state); `ToolExecutionLedger` (call/result pairing, statuses,
-  reconciliation rules); `conversation-state-projector.ts` (merging ledger
-  pairs into provider history; replacement boundaries); `ProviderContinuity`
-  (chain and debt); `SessionInputPlanner` (chain vs full-history decision);
-  `filterChainedModelInput` in `source/lib/chained-input-filter.ts` (delta validation); `SessionStreamProcessor` (finalize,
-  `publishTerminalResponse`, debt sync); retry classification/policy.
+  invocation lifecycle; it does not own durable effect state); `ConversationRecord`
+  (accepted history, private tool ledger/journal, call/result evidence and reconstruction);
+  `conversation-state-projector.ts` (the projection rules used inside Record for
+  pairing and replacement boundaries); `ProviderContinuity` (chain and debt);
+  `SessionInputPlanner` (chain vs full-history decision); `filterChainedModelInput`
+  in `source/lib/chained-input-filter.ts` (delta validation);
+  `SessionTurnAdapter.#acceptSegment` (`publishTerminalResponse` and debt sync
+  after Record acceptance); retry classification/policy. `ApplicationRunLoop`
+  invokes root session acceptance synchronously before publishing observed events;
+  `SessionStreamProcessor` retains presentation state, not history mutation authority.
 - **C2.6 request admission (enforcement):** `SessionInputPlanner.build` detects foreign opaque history before chained/full-history dispatch. `InitialInputPreparer` restores the unsubmitted user turn and surfaces actionable recovery guidance. Adapter-level non-serialization remains independently enforced.
 - **C2.6 adapter isolation (enforcement):** `toResponsesApiInput` (`openai-responses-model.ts`),
   `openAICompatibleMessages` (`openai-chat-completions-model.ts:294-333`), `toPromptMessage`
   (`ai-sdk-streamed-model.ts:260-284`), and `toCodexResponsesInput` (`codex-turn-converter.ts`).
   History carry is `ApplicationRunLoop` (`application-run-loop.ts:1159-1166`), which turns
   terminal opaque output into `provider_opaque` input items (`:1864-1867`).
-- **Recovery:** `DefaultRecoveryExecutor` (`resume_stream`, `replay_turn`,
-  `retry_fresh`, `terminate`); ledger settlement on stream failure
-  (`settleOpenCallsOnStreamFailure`, `markOpenCallsAborted`);
+- **Recovery:** `DefaultRecoveryExecutor` applies `replay_turn`, `retry_fresh` and
+  `terminate` through `ConversationRecord.recover`; Record privately performs
+  ledger settlement on stream failure (`settleOpenCallsOnStreamFailure`,
+  `markOpenCallsAborted`) and history reconstruction;
   `retry-classifier`/`recovery-policy` (chain_recovery, transport_downgrade ->
   `retry_fresh` full-history). C2.7 is enforced by `classifyInLoopModelRetry`
   (`chained_delta_not_self_contained`) and `CodexResponsesWSModel.#shouldFallbackWithoutServerHistory`.
@@ -95,29 +101,37 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 
 ## 5. Settlement semantics
 
-- **Success:** terminal finalize commits history, calls
-  `publishTerminalResponse(snapshot.lastResponseId, ...)`, then syncs debt
-  (`session-stream-processor.ts:390-441`).
+- **Success:** `ConversationRecord.acceptObservedItem` accepts items before runtime
+  publication. `ConversationRecord.acceptSegment` reconciles the segment's terminal
+  history view, then `SessionTurnAdapter.#acceptSegment` calls
+  `ProviderContinuity.publishTerminalResponse` and syncs outstanding tool debt.
+  `ConversationLogger` does not replay log events into live history.
 - **Failure before dispatch:** undispatched open calls -> `aborted` with a
   synthetic result equal to the failure reason; dispatched calls -> `unknown`
   with the `UNKNOWN_OUTCOME_TOOL_RESULT` message ("Verify the current state
   before any retry, and do not re-run non-idempotent operations blindly",
   `tool-execution-ledger.ts:6-10`, `:315-347`).
-- **Cancellation/terminate:** `terminate` settles open calls and reconciles
-  history when a stream exists, then always calls `providerContinuity.clear()`
-  so no live `previousResponseId` remains (`recovery-executor.ts:100-130`;
-  "the next text-only continue otherwise gets a 400", `:115-118`); emits
-  `tool_recovery` with `{ recoveredCallIds, droppedCallIds, message }` when
-  there is a summary (`:120-128`).
-- **Retry:** `resume_stream` -> `skipUserMessage` + saved resume state +
-  `resumePreviousResponseId`; `replay_turn` -> clear continuity + import ledger
-  journal; `retry_fresh` -> clear continuity + full history
-  (`recovery-executor.ts:29-91`).
+- **Policy termination:** `DefaultRecoveryExecutor.apply` clears continuity;
+  `ConversationRecord.recover` settles open calls and reconciles history when a
+  stream exists. No live `previousResponseId` remains (`DefaultRecoveryExecutor.apply` and
+  `ConversationRecord.recover`); otherwise the next text-only continuation could
+  encounter unpaid provider tool debt. The executor emits `tool_recovery` with
+  `{ recoveredCallIds, droppedCallIds, message }` when Record returns a summary.
+- **Cancellation:** the abort path clears continuity and revokes advancement without
+  invoking recovery policy. Known returned tool outcomes remain accepted. A
+  dispatched call whose result was not observed retains the existing evidence
+  until the applicable export/import or recovery settlement; cancellation alone
+  does not prove a failed tool or physical stop.
+- **Retry:** `DefaultRecoveryExecutor.apply` clears continuity and asks
+  `ConversationRecord.recover` to apply the selected transition. `replay_turn`
+  reconstructs tool evidence from the journal snapshot and applies policy-selected
+  input rollback; `retry_fresh` retains settled evidence and prepares full-history
+  recovery. `ApplicationRunLoop.#runTurn` owns the next execution attempt.
 - **Ambiguous:** `unknown` is not a failure; ledger counts dropped pairs via
   `getRecoverySummary` (`tool-execution-ledger.ts:412-439`); replayed
   call/result pairs are dropped before history commit with a
   `conversation.stream_history.replay_dropped` event
-  (`session-stream-processor.ts:367-385`).
+  (`selectAcceptedStreamHistory` in `conversation-record-stream.ts`).
 - **Opaque isolation (C2.6):** success = own-tag spliced verbatim (Responses/Chat only);
   a foreign or unsupported item is dropped before the HTTP/WS/SDK call at the public
   adapter boundary; the lower-level AI SDK and Codex serializers throw an untyped `Error`
@@ -130,8 +144,8 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 ## 6. Observability
 
 - Events: `conversation.stream_history.replayed_tools`,
-  `conversation.stream_history.replay_dropped` (`session-stream-processor.ts:150-175`,
-  `:367-385`); `conversation.chaining_broken` ("WS-to-HTTP downgrade detected:
+  `conversation.stream_history.replay_dropped` (`warnIfStreamHistoryReplayedTools`
+  and `selectAcceptedStreamHistory` in `conversation-record-stream.ts`); `conversation.chaining_broken` ("WS-to-HTTP downgrade detected:
   chaining disabled, switching to full-history mode",
   `session-composition.ts:584-592`); `retry.conversation_state` ("Provider
   rejected conversation continuity, rebuilding full history",
@@ -147,18 +161,25 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   (C2.3 violated); replayed pairs logged before history commit mean
   reconciliation diverged (C2.2).
 
-## 7. Public boundary under test
+## 7. Current boundaries and historical test map
 
-- `ToolExecutionLedger` public methods (record/mark/settle/reconcile) —
+The test names below refer to the historical unit suite at tag
+`unit-suite-baseline`; they do not claim fresh verification of the Record boundary.
+Current root callers use `ConversationRecord.snapshot`, `exportState` and
+`exportToolEvidence` for views without mutable store/ledger/journal access.
+
+- `ConversationRecord` acceptance/recovery, backed by private `ToolExecutionLedger`
+  methods (record/mark/settle/reconcile); historical ledger coverage —
   `tool-execution-ledger.test.ts`.
 - `ProviderContinuity` (chain, debt, eligibility, clear/breakChaining) —
   `provider-continuity.test.ts`.
 - `SessionInputPlanner.build/replayFromHistory` — `session-input-planner.test.ts`.
 - `filterChainedModelInput` — `chained-input-filter.test.ts`.
-- `DefaultRecoveryExecutor` (resume/replay/retry/terminate) —
+- `DefaultRecoveryExecutor` (replay/retry/terminate) and `ConversationRecord.recover` —
   `recovery-executor.test.ts`.
-- `SessionStreamProcessor.finalize` (commit + debt sync) —
-  `session-stream-processor.test.ts`.
+- `ConversationRecord.acceptSegment` (history acceptance) and
+  `SessionTurnAdapter.#acceptSegment` (continuity + debt sync); historical
+  finalization coverage — `session-stream-processor.test.ts`.
 - Local compaction boundaries — `local-context-compactor.test.ts`.
 - Retry classification/policy — `retry-classifier.test.ts`,
   `recovery-policy.test.ts`.
@@ -172,6 +193,9 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   and unary absence.
 
 ## 8. Deterministic contract matrix
+
+Historical 2026-08-14 coverage follows. Quoted test titles preserve the old owners
+and recovery variants at that baseline; they are not current symbol guidance.
 
 | ROADMAP minimum-matrix cell | Evidence (file:title) | Status |
 | --- | --- | --- |

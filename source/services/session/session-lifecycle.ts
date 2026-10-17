@@ -1,17 +1,13 @@
-import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import { ConversationRecord } from '../conversation/conversation-record.js';
 import { SessionInputPlanner } from './session-input-planner.js';
-import { SessionToolTracker } from './session-tool-tracker.js';
-import { ConversationStore } from '../conversation/conversation-store.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import { GenerationGuard } from '../generation-guard.js';
 import { SessionContinuityReset } from './session-continuity-reset.js';
-import { projectImportedState, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
-import { ImportedConversationStateSchema } from '../conversation/conversation-state-schema.js';
+import { ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
 import type { SessionAccessState } from './session-access-state.js';
-import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import type { PendingInteractionState } from './pending-interaction-state.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';
@@ -32,8 +28,7 @@ export class SessionLifecycle {
   pendingModeNotice: string | null = null;
 
   #inputPlanner: SessionInputPlanner;
-  #toolTracker: SessionToolTracker;
-  #conversationStore: ConversationStore;
+  #record: ConversationRecord;
   #logger: ILoggingService;
   #sessionId: SessionIdSource;
   #appState: { statusMachine: TurnStatusMachine };
@@ -42,26 +37,17 @@ export class SessionLifecycle {
   #continuityReset: SessionContinuityReset;
   #sessionAccess: SessionAccessState | undefined;
   #terminateActiveTurn: (() => void) | undefined;
-  #journal: AssistantTurnJournal;
   #pendingInteraction: PendingInteractionState | undefined;
 
   constructor(deps: {
     inputPlanner: SessionInputPlanner;
-    toolTracker: SessionToolTracker;
-    conversationStore: ConversationStore;
+    record: ConversationRecord;
     logger: ILoggingService;
     sessionId: SessionIdSource;
     appState: { statusMachine: TurnStatusMachine };
     providerContinuity: ProviderContinuity;
     generationGuard: GenerationGuard;
     continuityReset: SessionContinuityReset;
-    /**
-     * Streams assistant items into the durable journal. Undo/reset must prune
-     * it alongside the store and ledger: failure recovery rebuilds the tool
-     * ledger from this buffer, so skipped pruning would resurrect tool pairs
-     * from undone turns into the next provider request.
-     */
-    journal: AssistantTurnJournal;
     /** Handle-owned root capability; absent only for compatibility callers. */
     sessionAccess?: SessionAccessState;
     /** Notify the coordinator before a generation reset invalidates a turn. */
@@ -69,8 +55,7 @@ export class SessionLifecycle {
     pendingInteraction?: PendingInteractionState;
   }) {
     this.#inputPlanner = deps.inputPlanner;
-    this.#toolTracker = deps.toolTracker;
-    this.#conversationStore = deps.conversationStore;
+    this.#record = deps.record;
     this.#logger = deps.logger;
     this.#sessionId = deps.sessionId;
     this.#appState = deps.appState;
@@ -79,7 +64,6 @@ export class SessionLifecycle {
     this.#continuityReset = deps.continuityReset;
     this.#sessionAccess = deps.sessionAccess;
     this.#terminateActiveTurn = deps.terminateActiveTurn;
-    this.#journal = deps.journal;
     this.#pendingInteraction = deps.pendingInteraction;
   }
 
@@ -94,10 +78,8 @@ export class SessionLifecycle {
     this.#generationGuard.invalidate();
     this.#clearAccessState();
     this.#continuityReset.reset(options);
-    this.#conversationStore.clear();
-    this.#toolTracker.reset();
+    this.#record.reset();
     this.#inputPlanner.reset();
-    this.#journal.clear();
     this.#pendingInteraction?.clear();
     this.#appState.statusMachine.abort();
   }
@@ -121,8 +103,6 @@ export class SessionLifecycle {
   afterUndo(): void {
     this.#terminateActiveTurn?.();
     this.#generationGuard.invalidate();
-    this.#pruneToolLedgerToCurrentHistory();
-    this.#journal.pruneToUserTurnCount(this.#conversationStore.listUserTurns().length);
     this.#continuityReset.reset();
     this.#inputPlanner.markUndoOrRewind();
     this.#appState.statusMachine.abort();
@@ -134,7 +114,6 @@ export class SessionLifecycle {
   afterToolRetry(): void {
     this.#terminateActiveTurn?.();
     this.#generationGuard.invalidate();
-    this.#pruneToolLedgerToCurrentHistory();
     this.#continuityReset.reset();
     this.#inputPlanner.markUndoOrRewind();
     this.#appState.statusMachine.abort();
@@ -148,11 +127,7 @@ export class SessionLifecycle {
     previousResponseId: string | null;
     toolLedger: SavedToolExecution[];
   } {
-    return {
-      history: this.#toolTracker.getReconciledHistory(),
-      previousResponseId: this.#providerContinuity.previousResponseId,
-      toolLedger: this.#toolTracker.export(),
-    };
+    return this.#record.exportState(this.#providerContinuity.previousResponseId);
   }
 
   /**
@@ -168,15 +143,8 @@ export class SessionLifecycle {
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
   }): void {
-    const validatedState = ImportedConversationStateSchema.parse(state);
+    const { validated: validatedState, projected } = this.#record.importState(state);
     this.#clearAccessState();
-    this.#conversationStore.clear();
-    this.#toolTracker.import(validatedState.toolLedger);
-    const projected = projectImportedState({
-      history: validatedState.history,
-      previousResponseId: validatedState.previousResponseId,
-      toolLedger: validatedState.toolLedger,
-    });
     if (projected.warnings.length > 0) {
       const addedCompletedPairs =
         (
@@ -197,9 +165,6 @@ export class SessionLifecycle {
         droppedIncompleteCalls,
       });
     }
-    for (const item of projected.history as ProviderInputItem[]) {
-      this.#conversationStore.addImportedItem(item);
-    }
     // Provider-side response chains can expire while the local transcript remains valid.
     // Force the first resumed turn to resync from full history; successful completion
     // will populate a fresh previousResponseId for subsequent chained turns.
@@ -209,10 +174,6 @@ export class SessionLifecycle {
     });
     this.#generationGuard.invalidate();
     this.#appState.statusMachine.abort();
-  }
-
-  #pruneToolLedgerToCurrentHistory(): void {
-    this.#toolTracker.pruneToCurrentHistory();
   }
 
   #clearAccessState(): void {

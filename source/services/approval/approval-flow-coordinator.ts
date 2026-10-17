@@ -1,10 +1,10 @@
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ApprovalState, type AbortedApprovalContext, type PendingApprovalContext } from './approval-state.js';
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
-import { SessionToolTracker } from '../session/session-tool-tracker.js';
 import { GenerationGuard } from '../generation-guard.js';
 import type { ToolOwner } from './tool-owner.js';
 import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
@@ -22,7 +22,7 @@ export interface ApprovalFlowCoordinatorDeps {
   approvalState: ApprovalState;
   logger: ILoggingService;
   sessionId: SessionIdSource;
-  toolTracker: SessionToolTracker;
+  record: ConversationRecord;
   generationGuard: GenerationGuard;
   /** Session-owned registry shared with nested subagent runners. */
   toolOwnership: ToolOwnershipRegistry;
@@ -100,7 +100,7 @@ export class ApprovalFlowCoordinator {
     const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
     if (this.deps.approvalState.abortPending()) {
       if (callId) this.#toolOwnership.release(callId);
-      this.deps.toolTracker.markOpenCallsAborted('Tool execution was not approved.', callId);
+      this.deps.record.markOpenCallsAborted('Tool execution was not approved.', callId);
       this.deps.logger.debug('Aborted approval - abandoning pending tool before next message', {
         eventType: 'approval.aborted',
         category: 'approval',

@@ -1,18 +1,12 @@
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import {
-  LOG_ENVELOPE_VERSION,
-  type AssistantTurnState,
-  type LogEnvelope,
-  type LogEvent,
-} from './conversation-log-events.js';
+import type { AssistantTurnState, LogEvent } from './conversation-log-events.js';
 import { TurnItemAccumulator } from '../session/turn-item-accumulator.js';
 import type {
   PersistedAssistantTurn,
   PersistedAssistantTurnItem,
 } from '../conversation/conversation-persistence-types.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import type { AssistantTurnJournal } from './assistant-turn-journal.js';
 
 export class ConversationLogger {
   private logSink: ((event: LogEvent) => void) | null = null;
@@ -21,9 +15,6 @@ export class ConversationLogger {
   private getAssistantTurnState: () => AssistantTurnState;
   private getCurrentTurnId?: () => string;
   private getToolLedger?: () => SavedToolExecution[];
-  private journal: AssistantTurnJournal;
-  private readonly replayEnvelopes: LogEnvelope[] = [];
-  private onProviderHistoryReplay?: (envelopes: LogEnvelope[]) => void;
 
   constructor(opts: {
     turnAccumulator: TurnItemAccumulator;
@@ -31,16 +22,12 @@ export class ConversationLogger {
     getAssistantTurnState: () => AssistantTurnState;
     getCurrentTurnId?: () => string;
     getToolLedger?: () => SavedToolExecution[];
-    journal: AssistantTurnJournal;
-    onProviderHistoryReplay?: (envelopes: LogEnvelope[]) => void;
   }) {
     this.turnAccumulator = opts.turnAccumulator;
     this.logger = opts.logger;
     this.getAssistantTurnState = opts.getAssistantTurnState;
     this.getCurrentTurnId = opts.getCurrentTurnId;
     this.getToolLedger = opts.getToolLedger;
-    this.journal = opts.journal;
-    this.onProviderHistoryReplay = opts.onProviderHistoryReplay;
   }
 
   setLogSink(sink: ((event: LogEvent) => void) | null): void {
@@ -56,16 +43,6 @@ export class ConversationLogger {
     try {
       const persisted = this.#withTurnId(event);
       this.logSink(persisted);
-      const envelope: LogEnvelope = {
-        v: LOG_ENVELOPE_VERSION,
-        seq: (this.replayEnvelopes.at(-1)?.seq ?? 0) + 1,
-        ts: new Date().toISOString(),
-        event: persisted,
-      };
-      this.replayEnvelopes.push(envelope);
-      if (persisted.type === 'assistant_turn' && persisted.providerHistory) {
-        this.onProviderHistoryReplay?.([...this.replayEnvelopes]);
-      }
     } catch (err: any) {
       this.logger.warn('Conversation log sink threw', {
         eventType: 'conversation_log.sink_failed',
@@ -93,14 +70,12 @@ export class ConversationLogger {
           this.turnAccumulator.flushReasoningItem();
         }
         this.turnAccumulator.appendTextDelta(event.delta);
-        this.journal.recordTextDelta(event.delta);
         return;
       case 'reasoning_delta':
         if (this.turnAccumulator.hasTextBuffer()) {
           this.turnAccumulator.flushAssistantTextItem();
         }
         this.turnAccumulator.appendReasoningDelta(event.delta);
-        this.journal.recordReasoningDelta(event.delta);
         return;
       case 'tool_started':
         this.turnAccumulator.recordToolCallItem(event.toolCallId, event.toolName, event.arguments);

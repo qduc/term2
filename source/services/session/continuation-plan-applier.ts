@@ -7,7 +7,7 @@ import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
 import type { ContinuationInit, TurnProjectionState, PreparedContinuation } from './turn-projection-state.js';
 import type { ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import type { ApprovalContext } from '../approval/approval-decision-policy.js';
-import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { SessionIdSource } from './session-identity.js';
 
 export type ContinuationPlanApplierDeps = {
@@ -15,7 +15,7 @@ export type ContinuationPlanApplierDeps = {
   toolTracker: SessionToolTracker;
   logger: ILoggingService;
   sessionId: SessionIdSource;
-  journal: AssistantTurnJournal;
+  record: ConversationRecord;
 };
 
 export class ContinuationPlanApplier {
@@ -49,7 +49,7 @@ export class ContinuationPlanApplier {
         const output = init.rejectionReason
           ? `Tool execution was not approved. User's reason: ${init.rejectionReason}`
           : 'Tool execution was not approved.';
-        this.deps.toolTracker.recordAbortedApproval(output, output, callId);
+        this.deps.record.recordAbortedApproval(output, output, callId);
       }
 
       return {
@@ -91,7 +91,7 @@ export class ContinuationPlanApplier {
       }
     }
 
-    state.setJournalSnapshot(this.deps.journal.getEvents());
+    state.setJournalSnapshot(this.deps.record.getJournalEvents());
   }
 
   recordPendingApproval(context: ApprovalContext): void {
@@ -99,7 +99,7 @@ export class ContinuationPlanApplier {
       return;
     }
 
-    this.deps.toolTracker.recordFunctionCall({
+    this.deps.record.recordFunctionCall({
       type: 'function_call',
       callId: context.callId,
       name: context.toolName,
@@ -114,7 +114,7 @@ export class ContinuationPlanApplier {
   ): AsyncGenerator<ConversationEvent, void, void> {
     if (!isApproved) {
       const callId = getCallIdFromObject(nextPlan.pendingApprovalContext.interruption);
-      this.deps.toolTracker.recordAbortedApproval(
+      this.deps.record.recordAbortedApproval(
         'Tool execution was not approved.',
         'Tool execution was not approved.',
         callId,
@@ -136,8 +136,8 @@ export class ContinuationPlanApplier {
     state.advanceFromPlan(
       nextPlan.pendingApprovalContext.state,
       nextPlan.pendingApprovalContext.inputMode,
-      this.deps.journal.getEvents(),
-      this.deps.toolTracker.activeCallIdsForCurrentTurn(),
+      this.deps.record.getJournalEvents(),
+      this.deps.record.activeCallIdsForCurrentTurn(),
     );
   }
 }

@@ -2,15 +2,14 @@ import type { UserTurn } from '../../types/user-turn.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ISettingsService } from '../service-interfaces.js';
-import { ConversationStore, type RewindTarget, type RewindTargetId } from '../conversation/conversation-store.js';
+import type { RewindTarget, RewindTargetId } from '../conversation/conversation-store.js';
+import { ConversationRecord } from '../conversation/conversation-record.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
 import type { StateSnapshot } from '../logging/conversation-log-events.js';
 import { SessionLifecycle } from './session-lifecycle.js';
-import { SessionToolTracker } from './session-tool-tracker.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import { getMethod } from '../interruption-info.js';
-import { projectSnapshot } from '../conversation/conversation-state-projector.js';
 
 /**
  * Facade that owns state/persistence/undo/shell-context/mode-notice operations
@@ -18,8 +17,7 @@ import { projectSnapshot } from '../conversation/conversation-state-projector.js
  * its surface area and make the delegation boundary explicit.
  */
 export class SessionManager {
-  readonly #conversationStore: ConversationStore;
-  readonly #toolTracker: SessionToolTracker;
+  readonly #record: ConversationRecord;
   readonly #state: SessionLifecycle;
   readonly #conversationLogger: ConversationLogger;
   readonly #agentClient: ConversationAgentClient;
@@ -27,16 +25,14 @@ export class SessionManager {
   readonly #inputPlanner: SessionInputPlanner;
 
   constructor(deps: {
-    conversationStore: ConversationStore;
-    toolTracker: SessionToolTracker;
+    record: ConversationRecord;
     state: SessionLifecycle;
     conversationLogger: ConversationLogger;
     agentClient: ConversationAgentClient;
     settingsService?: ISettingsService;
     inputPlanner: SessionInputPlanner;
   }) {
-    this.#conversationStore = deps.conversationStore;
-    this.#toolTracker = deps.toolTracker;
+    this.#record = deps.record;
     this.#state = deps.state;
     this.#conversationLogger = deps.conversationLogger;
     this.#agentClient = deps.agentClient;
@@ -53,7 +49,7 @@ export class SessionManager {
   // ── Undo ──────────────────────────────────────────────────────────
 
   undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
-    const removed = this.#conversationStore.removeLastUserTurn();
+    const removed = this.#record.removeLastUserTurn();
     if (removed === null) return null;
     this.#afterUndo(1);
     return removed;
@@ -61,11 +57,14 @@ export class SessionManager {
 
   /** Discard the latest attempt, retaining the exact original provider input. */
   retryLastUserTurn(): boolean {
-    const turn = this.#conversationStore.listUserTurns().at(-1);
-    if (!turn) return false;
-    const original = this.#conversationStore.getHistory()[turn.index]!;
-    this.undoLastUserTurn();
-    this.#conversationStore.addImportedItem(original);
+    const retry = this.#record.retryLastUserTurn();
+    if (!retry) return false;
+    this.#state.afterUndo();
+    this.#conversationLogger.log({
+      type: 'undo',
+      removedUserTurns: 1,
+      snapshot: { ...this.getCurrentSnapshot(), ...retry.discardedSnapshot },
+    });
     return true;
   }
 
@@ -76,13 +75,7 @@ export class SessionManager {
     output?: unknown;
     itemType: string;
   } | null {
-    // Reconcile with the tool ledger before reading. When a stream ends
-    // unexpectedly (interrupted/aborted), finalize() returns 'partial' and
-    // does not commit tool outputs to the store. The ledger, however,
-    // captured them during streaming. Reconciling flushes those pending
-    // entries into the store so peekLastToolOutput can find them.
-    this.#toolTracker.reconcileAndUpdateHistory();
-    return this.#conversationStore.peekLastToolOutput();
+    return this.#record.peekLastToolOutput();
   }
 
   retryLastToolOutput(): {
@@ -92,27 +85,25 @@ export class SessionManager {
     output?: unknown;
     itemType: string;
   } | null {
-    // Same reconciliation as peekLastToolOutput — see comment above.
-    this.#toolTracker.reconcileAndUpdateHistory();
-    const removed = this.#conversationStore.removeAfterLastToolOutput();
+    const removed = this.#record.removeAfterLastToolOutput();
     if (removed === null) return null;
     this.#afterToolRetry();
     return removed;
   }
 
   undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {
-    const removed = this.#conversationStore.removeNLastUserTurns(n);
+    const removed = this.#record.removeNLastUserTurns(n);
     if (removed === null) return null;
     this.#afterUndo(n);
     return removed;
   }
 
   listUserTurns(): { index: number; text: string; imageCount: number }[] {
-    return this.#conversationStore.listUserTurns();
+    return this.#record.listUserTurns();
   }
 
   listRewindTargets(): RewindTarget[] {
-    return this.#conversationStore.listRewindTargets();
+    return this.#record.listRewindTargets();
   }
 
   /**
@@ -121,7 +112,7 @@ export class SessionManager {
    * and only after the store accepted the target.
    */
   rewindToTarget(targetId: RewindTargetId): { text: string; images?: UserTurn['images'] } | null {
-    const removed = this.#conversationStore.rewindToTarget(targetId);
+    const removed = this.#record.rewindToTarget(targetId);
     if (removed === null) return null;
     this.#afterUndo(removed.discardedTurns);
     return { text: removed.text, ...(removed.images ? { images: removed.images } : {}) };
@@ -135,21 +126,19 @@ export class SessionManager {
       ? providerFn.call(this.#agentClient)
       : this.#settingsService?.get('agent.modelSelection').provider;
     const model = this.#settingsService?.get('agent.modelSelection').model;
-    return projectSnapshot({
-      history: this.#conversationStore.getHistory(),
+    return this.#record.snapshot({
       previousResponseId: this.#state.exportPersistedState().previousResponseId,
-      toolLedger: this.#toolTracker.export(),
       ...(model ? { model } : {}),
       ...(provider ? { provider } : {}),
     });
   }
 
   getProviderHistorySnapshot() {
-    return this.#conversationStore.getProviderHistorySnapshot();
+    return this.#record.getProviderHistorySnapshot();
   }
 
   replaceHistoryAtRevision(expectedRevision: number, history: readonly ProviderInputItem[]): boolean {
-    return this.#conversationStore.replaceHistoryAtRevision(expectedRevision, history);
+    return this.#record.replaceHistoryAtRevision(expectedRevision, history);
   }
 
   exportState(): {
@@ -172,7 +161,7 @@ export class SessionManager {
   // ── Shell context / mode notice ───────────────────────────────────
 
   addShellContext(historyText: string): void {
-    this.#conversationStore.addShellContext(historyText);
+    this.#record.addShellContext(historyText);
   }
 
   queueModeNotice(text: string): void {

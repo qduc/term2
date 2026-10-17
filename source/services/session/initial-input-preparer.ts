@@ -1,6 +1,6 @@
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
-import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { SessionLifecycle } from './session-lifecycle.js';
@@ -15,7 +15,7 @@ type InputSurgeErrorEvent = Extract<ConversationEvent, { type: 'error' }>;
 export type InitialInputPreparationResult = { kind: 'ready' } | { kind: 'blocked'; event: InputSurgeErrorEvent };
 
 export type InitialInputPreparerDeps = {
-  conversationStore: ConversationStore;
+  record: ConversationRecord;
   generationGuard: GenerationGuard;
   inputPlanner: SessionInputPlanner;
   logger: ILoggingService;
@@ -32,7 +32,7 @@ export class InitialInputPreparer {
     options?: { inputSurgeApproval?: InputSurgeApproval; replayFromHistory?: boolean },
   ): InitialInputPreparationResult {
     if (!skipUserMessage && !attempt.addedUserMessage && !options?.replayFromHistory) {
-      this.deps.conversationStore.addUserTurn(attempt.turn);
+      this.deps.record.addUserTurn(attempt.turn);
       attempt.markUserMessageAdded();
     }
 
@@ -44,7 +44,7 @@ export class InitialInputPreparer {
     if (plan.refusal) {
       let droppedUserMessage: { text: string; imageCount: number } | undefined;
       if (attempt.addedUserMessage && this.deps.generationGuard.isCurrent(attempt.token)) {
-        this.deps.conversationStore.removeLastUserMessage();
+        this.deps.record.removeLastUserMessage();
         droppedUserMessage = {
           text: stripMemoryRecall(attempt.turn.text),
           imageCount: attempt.turn.images?.length ?? 0,
@@ -83,7 +83,7 @@ export class InitialInputPreparer {
     if (surgeDecision.action === 'block' && !approvedSurge) {
       let droppedUserMessage: { text: string; imageCount: number } | undefined;
       if (attempt.addedUserMessage && this.deps.generationGuard.isCurrent(attempt.token)) {
-        this.deps.conversationStore.removeLastUserMessage();
+        this.deps.record.removeLastUserMessage();
         droppedUserMessage = {
           text: stripMemoryRecall(attempt.turn.text),
           imageCount: attempt.turn.images?.length ?? 0,

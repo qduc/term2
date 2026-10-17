@@ -3,6 +3,7 @@ import type { ProviderInput, ProviderInputItem } from '../contracts/provider-inp
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
+import type { ApplicationRunEvent } from '../contracts/application-stream.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
@@ -99,11 +100,16 @@ export interface SubagentEventSinkHost {
   cancelSubagentRuns?(): void;
 }
 
-/** Session projection and policy operations; execution stays in ApplicationRunLoop. */
+/** Session acceptance, presentation and policy operations; the runtime owns execution. */
 export interface ConversationTurnSession {
   prepare(signal: AbortSignal): Promise<{ input: ProviderInput; options: AgentClientRunOptions } | undefined>;
+  beginSegment(stream: AgentStream): void;
+  acceptEvent(event: ApplicationRunEvent): void;
+  acceptToolDispatch(callId: string): void;
+  acceptSegment(stream: AgentStream): void;
   consume(stream: AgentStream): Promise<void>;
-  interrupted(): Promise<AgentClientRunOptions>;
+  interrupted(stream: AgentStream): Promise<AgentClientRunOptions>;
+  completed(stream: AgentStream): Promise<void>;
   recover(error: unknown): Promise<boolean>;
 }
 
@@ -135,11 +141,6 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   editSteer?(id: string, items: readonly ProviderInputItem[]): boolean;
   setModelSelection(selection: ModelSelection): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
-  /**
-   * Wire session tool-ledger dispatch marking. Called after composition creates
-   * the tracker so mid-tool stream recovery can settle as `unknown`.
-   */
-  setOnToolDispatch?(handler: ((callId: string) => void) | undefined): void;
   requestSessionRollover?(request: SessionRolloverRequest): SessionRolloverRequestOutcome;
   consumeSessionRolloverRequest?(): SessionRolloverConsumption;
   /** Reset only the root request/agent context; retained background clients live on. */

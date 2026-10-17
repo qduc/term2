@@ -6,7 +6,7 @@ import type { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy
 import type { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import type { ClassifiedFailure, RetryCounts, RecoveryState } from '../retry/retry-contracts.js';
-import type { ContinuationState } from './continuation-state.js';
+import type { TurnProjectionState } from './turn-projection-state.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
 import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
@@ -43,7 +43,7 @@ export class ContinuationRecoveryHandler {
 
   async *handle(ctx: {
     error: unknown;
-    state: ContinuationState;
+    state: TurnProjectionState;
   }): AsyncGenerator<ConversationEvent, ContinuationRecoveryResult, void> {
     const { error, state } = ctx;
     const maxTransientRetries = this.deps.resolveRetryLimit();

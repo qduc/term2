@@ -1,0 +1,7 @@
+$ tsc --noEmit
+source/services/session/projection-independent.tmp.test.ts(22,269): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+source/services/session/projection-independent.tmp.test.ts(31,126): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+source/services/session/projection-independent.tmp.test.ts(31,160): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+source/services/session/projection-independent.tmp.test.ts(32,121): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+source/services/session/projection-independent.tmp.test.ts(32,154): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+[ELIFECYCLE] Command failed with exit code 1.

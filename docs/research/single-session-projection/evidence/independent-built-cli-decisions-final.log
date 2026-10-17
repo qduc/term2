@@ -1,0 +1,10 @@
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/single-session-projection
+
+ ✓ scripts/provider-black-box/turn-decisions.blackbox.ts > resumes repeated questions once per decision and settles cancellation before the next turn 5955ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:35:54
+   Duration  6.18s (transform 61ms, setup 0ms, import 99ms, tests 5.96s, environment 0ms)
+

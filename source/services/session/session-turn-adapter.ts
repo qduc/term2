@@ -23,10 +23,10 @@ import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { ApprovalFlowCoordinator, ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
-import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import { extractUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
-import { ContinuationState, type ContinuationInit, type PreparedContinuation } from './continuation-state.js';
+import { TurnProjectionState, type ContinuationInit, type PreparedContinuation } from './turn-projection-state.js';
 import { ToolApprovalBatchCoordinator } from '../approval/tool-approval-batch-coordinator.js';
 import {
   createApprovalRequiredTerminal,
@@ -35,8 +35,8 @@ import {
 } from '../conversation/conversation-result-builder.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionStreamProcessor } from './session-stream-processor.js';
-import { selectAgentStreamItems, type AgentStream } from '../agent-stream.js';
-import { extractCommandMessages, ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
+import { type AgentStream } from '../agent-stream.js';
+import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import {
   collectKnownToolCallIds,
   resolveAbortedApprovalCallIds,
@@ -102,7 +102,7 @@ export class SessionTurnAdapter {
   #turnSignal: AbortSignal | undefined;
   #input: TurnAttempt | string | UserTurn = '';
   #options: InitialTurnRunOptions = {};
-  #state: ContinuationState | undefined;
+  #state: TurnProjectionState | undefined;
   #segmentOutcome: BuildResultOutcome | undefined;
   #outcome: TurnOutcome = { kind: 'failed' };
   #emit: (event: ConversationEvent) => void = () => undefined;
@@ -201,6 +201,8 @@ export class SessionTurnAdapter {
     this.#options = options;
     this.#attempt = undefined;
     this.#state = undefined;
+    this.#policy = undefined;
+    this.#segmentOutcome = undefined;
     this.#activeRecoveryBudget = undefined;
     this.#outcome = { kind: 'failed' };
     const runId = `${resolveSessionId(this.deps.sessionId)}:live:${++this.#nextLiveRunId}`;
@@ -284,9 +286,13 @@ export class SessionTurnAdapter {
     }
   }
 
-  async #project<Result>(events: AsyncGenerator<ConversationEvent, Result, void>): Promise<Result> {
+  async #project<Result>(
+    events: AsyncGenerator<ConversationEvent, Result, void>,
+    onEvent?: (event: ConversationEvent) => void,
+  ): Promise<Result> {
     let next = await events.next();
     while (!next.done) {
+      onEvent?.(next.value);
       this.#emit(next.value);
       next = await events.next();
     }
@@ -325,6 +331,9 @@ export class SessionTurnAdapter {
       this.deps.journal.resetForNewTurn();
     }
     const attempt = this.#attempt;
+    this.#state ??= new TurnProjectionState(attempt.token, attempt.recoveryBudget);
+    this.#state.resetForAttempt(attempt.inputMode ?? 'delta');
+    this.#policy = undefined;
     if (this.#options.delayMs) await this.#waitBeforeRetry(attempt, this.#options.delayMs);
     if (!this.deps.generationGuard.isCurrent(attempt.token)) {
       this.#outcome = { kind: 'stale' };
@@ -337,6 +346,7 @@ export class SessionTurnAdapter {
       this.#outcome = { kind: 'failed' };
       return;
     }
+    this.#state!.inputMode = attempt.inputMode!;
     return {
       input: attempt.streamInput!,
       options: this.#initialOptions(attempt),
@@ -369,28 +379,21 @@ export class SessionTurnAdapter {
   async #consume(stream: AgentStream): Promise<void> {
     const attempt = this.#attempt!;
     attempt.attachStream(stream);
-    if (!this.#state) {
-      const projected = await this.#consumeInitialStream(stream, attempt, this.#emit);
-      if (projected.kind === 'stale') {
-        this.#outcome = { kind: 'stale' };
-        return;
-      }
-      this.#segmentOutcome = projected.outcome;
+    const state = this.#state!;
+    const projected = await this.#project(this.#projectStream(state, stream), (event) => {
+      if (state.source === 'startStream' && isCommittedOutputEvent(event)) attempt.markModelEventSeen();
+    });
+    if (projected.kind === 'stale') {
+      this.#outcome = { kind: 'stale' };
+      return;
+    }
+    this.#segmentOutcome = projected.outcome;
+    if (state.source === 'startStream') {
       attempt.advanceRetry({ ...attempt.retryCounts, transientRetryCount: 0 });
     } else {
-      const projected = await this.#project(this.#projectContinuation(this.#state, stream));
-      if (projected.kind === 'stale') {
-        this.#outcome = { kind: 'stale' };
-        return;
-      }
-      const state = this.#state;
       state.setRetryCounts({ ...state.retryCounts, transientRetryCount: 0 });
-      state.setCumulativeUsage(projected.nextCumulativeUsage);
-      state.setCumulativeCommandMessages(projected.nextCumulativeMessages);
-      state.setCumulativeTurnItems(projected.nextCumulativeTurnItems);
-      this.#segmentOutcome = projected.outcome;
-      if (projected.outcome.kind === 'response') this.#recordSuccess(state);
     }
+    if (state.source === 'startStream' || projected.outcome.kind === 'response') this.#recordSuccess(state);
     if (this.#segmentOutcome.kind === 'response')
       this.#outcome = { kind: 'response', terminal: this.#segmentOutcome.result };
   }
@@ -426,25 +429,18 @@ export class SessionTurnAdapter {
 
   async #applyDecision(init: ContinuationInit, policy?: ApprovalDecisionPolicy): Promise<void> {
     const prepared = this.deps.planApplier.prepareInit(init);
-    if (!this.#state) {
-      this.#state = new ContinuationState(init.generation, this.#activeRecoveryBudget);
-      this.#state.initializeFrom(prepared, this.#activeCallIdsForInit(init, prepared));
-    } else {
-      this.#state.currentState = prepared.state;
-      this.#state.source = prepared.source;
-      this.#state.inputMode = prepared.inputMode ?? this.#state.inputMode;
-      this.#state.previouslyEmittedIds = prepared.previouslyEmittedCommandIds;
-      this.#state.currentCallIds = this.#activeCallIdsForInit(init, prepared);
-    }
+    const state = this.#state!;
+    state.bindDecision(prepared, this.#activeCallIdsForInit(init, prepared));
     this.#policy = policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
-    await this.#project(this.deps.planApplier.applyInitialSetup(prepared, this.#state));
+    await this.#project(this.deps.planApplier.applyInitialSetup(prepared, state));
   }
 
   async #resolveInteraction(): Promise<AgentClientRunOptions> {
     const outcome = this.#segmentOutcome;
     if (!outcome || outcome.kind === 'response') throw new Error('Expected an interrupted stream');
     let init: ContinuationInit | undefined;
-    if (!this.#state) {
+    const state = this.#state!;
+    if (state.source === 'startStream') {
       if (outcome.kind === 'auto_approve') {
         if (outcome.advisory?.source === 'llm') this.#toolCallMarkers.markToolCallAsLlmAutoApproved(outcome.callId);
         init = { kind: 'approval_decision', answer: 'y', generation: this.#attempt!.token };
@@ -457,21 +453,9 @@ export class SessionTurnAdapter {
         await this.#applyDecision(init, answer.policy);
       }
     } else {
-      const result = await this.#handleApprovalOutcome(
-        outcome,
-        this.#state,
-        this.#policy!,
-        this.#state.cumulativeUsage,
-      );
+      const result = await this.#handleApprovalOutcome(outcome, state, this.#policy!, state.cumulativeUsage);
       if (result.action === 'loop') {
-        await this.#project(
-          this.deps.planApplier.applyNextPlan(
-            result.nextPlan,
-            this.#state,
-            this.#state.previouslyEmittedIds,
-            result.isApproved,
-          ),
-        );
+        await this.#project(this.deps.planApplier.applyNextPlan(result.nextPlan, state, result.isApproved));
       } else {
         if (result.result.kind !== 'approval_required')
           throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
@@ -527,7 +511,7 @@ export class SessionTurnAdapter {
 
   async #recover(error: unknown): Promise<boolean> {
     if (isClassifiedCancellation(error)) throw error;
-    if (!this.#state) {
+    if (!this.#state || this.#state.source === 'startStream') {
       const handled = await this.#project(
         this.deps.recoveryHandler.handle({ error, attempt: this.#attempt!, stream: this.#attempt?.stream ?? null }),
       );
@@ -556,7 +540,6 @@ export class SessionTurnAdapter {
     const token = this.#state.token;
     this.#attempt?.close();
     this.#attempt = undefined;
-    this.#state = undefined;
     this.#input = { text: '' };
     this.#options = {
       skipUserMessage: true,
@@ -589,70 +572,6 @@ export class SessionTurnAdapter {
 
   get activePostExecuteRunId(): string | null {
     return this.#liveRun?.runId ?? null;
-  }
-
-  async #consumeInitialStream(
-    stream: AgentStream,
-    attempt: TurnAttempt,
-    emit: (event: ConversationEvent) => void,
-  ): Promise<{ kind: 'completed'; outcome: BuildResultOutcome; generation: number } | { kind: 'stale' }> {
-    const processor = this.deps.streamProcessor.process(stream, {
-      gen: attempt.token,
-      source: 'startStream',
-      preserveExistingToolArgs: false,
-    });
-    let next = await processor.next();
-    while (!next.done) {
-      if (isCommittedOutputEvent(next.value)) attempt.markModelEventSeen();
-      emit(next.value);
-      next = await processor.next();
-    }
-    const accumulated = next.value;
-
-    const finalized = this.deps.streamProcessor.finalize(stream, attempt.token, attempt.inputMode!, 'startStream');
-    if (finalized.kind === 'stale') {
-      return { kind: 'stale' };
-    }
-
-    for (const event of this.#contextCompactionCompletedEvent({
-      stream,
-      inputTokensBefore: accumulated.latestUsage?.prompt_tokens,
-      durationMs: accumulated.lastContextCompactionDurationMs,
-    })) {
-      emit(event);
-    }
-
-    const outcome = await buildConversationResult(
-      {
-        result: stream,
-        finalOutputOverride: accumulated.finalOutput || undefined,
-        reasoningOutputOverride: accumulated.reasoningOutput || undefined,
-        emittedCommandIds: accumulated.emittedCommandIds,
-        usage: accumulated.latestUsage,
-        toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-        turnItems: this.deps.turnAccumulator.getTurnItems(),
-        token: attempt.token,
-        inputMode: attempt.inputMode!,
-      },
-      {
-        approvalFlow: this.deps.approvalFlow,
-        shellAutoApproval: this.deps.shellAutoApproval,
-        logger: this.deps.logger,
-        sessionId: resolveSessionId(this.deps.sessionId),
-        sessionAccess: this.deps.sessionAccess,
-        approvalPolicyRegistry: this.#activePolicyRegistry,
-        toolCallMarkers: this.#toolCallMarkers,
-      },
-    );
-
-    this.deps.inputPlanner.recordSuccess(
-      attempt.inputMode === 'delta' ? attempt.streamInput! : this.deps.conversationStore.getHistory(),
-      attempt.inputMode === 'delta'
-        ? { kind: attempt.inputMode }
-        : { kind: attempt.inputMode!, previousInput: attempt.streamInput! },
-    );
-
-    return { kind: 'completed', outcome, generation: attempt.token };
   }
 
   #contextCompactionCompletedEvent(args: {
@@ -721,7 +640,7 @@ export class SessionTurnAdapter {
   }
 
   async *#stagePendingParallelApprovals(
-    state: ContinuationState,
+    state: TurnProjectionState,
     activePolicy: ApprovalDecisionPolicy,
   ): AsyncGenerator<
     ConversationEvent,
@@ -751,7 +670,7 @@ export class SessionTurnAdapter {
 
   async #handleApprovalOutcome(
     outcome: Exclude<BuildResultOutcome, { kind: 'response' }>,
-    state: ContinuationState,
+    state: TurnProjectionState,
     activePolicy: ApprovalDecisionPolicy,
     nextCumulativeUsage?: NormalizedUsage,
     previousInputForSurge?: unknown,
@@ -839,68 +758,43 @@ export class SessionTurnAdapter {
     return { action: 'loop', nextPlan, isApproved: answer === 'y' };
   }
 
-  async *#projectContinuation(
-    state: ContinuationState,
+  /** Every stream segment projects through this path into the same turn state. */
+  async *#projectStream(
+    state: TurnProjectionState,
     stream: AgentStream,
-  ): AsyncGenerator<
-    ConversationEvent,
-    | { kind: 'stale' }
-    | {
-        kind: 'completed';
-        outcome: BuildResultOutcome;
-        nextCumulativeMessages: any[];
-        nextCumulativeUsage?: NormalizedUsage;
-        nextCumulativeTurnItems: any[];
-        mergedEmittedIds: Set<string>;
-      },
-    void
-  > {
+  ): AsyncGenerator<ConversationEvent, { kind: 'stale' } | { kind: 'completed'; outcome: BuildResultOutcome }, void> {
     state.setLastStream(stream);
-
-    const allEmittedIds = new Set([...state.previouslyEmittedIds]);
-
+    const previousIds = state.previouslyEmittedIds;
     const acc = yield* this.deps.streamProcessor.process(stream, {
       gen: state.token,
       source: state.source,
-      preserveExistingToolArgs: true,
-      previouslyEmittedCommandIds: allEmittedIds,
+      preserveExistingToolArgs: state.source !== 'startStream',
+      previouslyEmittedCommandIds: previousIds,
     });
+    const finalized = this.deps.streamProcessor.finalize(stream, state.token, state.inputMode, state.source);
+    if (finalized.kind === 'stale') return { kind: 'stale' };
 
-    const finalizeResult = this.deps.streamProcessor.finalize(stream, state.token, state.inputMode, state.source);
-    if (finalizeResult.kind === 'stale') {
-      return { kind: 'stale' };
-    }
-
-    for (const event of this.#contextCompactionCompletedEvent({
+    yield* this.#contextCompactionCompletedEvent({
       stream,
       inputTokensBefore: acc.latestUsage?.prompt_tokens,
       durationMs: acc.lastContextCompactionDurationMs,
-    })) {
-      yield event;
-    }
+    });
 
-    const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);
-
-    const streamMessages = extractCommandMessages(selectAgentStreamItems(stream), this.#toolCallMarkers);
-    const filteredMessages = streamMessages.filter((msg) => !state.previouslyEmittedIds.has(msg.id));
-    const nextCumulativeMessages = [...state.cumulativeCommandMessages, ...filteredMessages];
-    const nextCumulativeUsage = acc.latestUsage ?? state.cumulativeUsage;
-    const nextCumulativeTurnItems = this.deps.turnAccumulator.getTurnItems();
+    const emittedIds = new Set([...previousIds, ...acc.emittedCommandIds]);
+    const usage = acc.latestUsage ?? state.cumulativeUsage ?? extractUsage(stream);
+    const turnItems = this.deps.turnAccumulator.getTurnItems();
 
     const outcome = await buildConversationResult(
       {
         result: stream,
         finalOutputOverride: acc.finalOutput || undefined,
         reasoningOutputOverride: acc.reasoningOutput || undefined,
-        emittedCommandIds: mergedEmittedIds,
+        emittedCommandIds: emittedIds,
         usage: acc.latestUsage,
         toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-        turnItems: nextCumulativeTurnItems,
+        turnItems,
         token: state.token,
         inputMode: state.inputMode,
-        cumulativeUsage: nextCumulativeUsage,
-        cumulativeCommandMessages: nextCumulativeMessages,
-        cumulativeTurnItems: nextCumulativeTurnItems,
       },
       {
         approvalFlow: this.deps.approvalFlow,
@@ -912,15 +806,9 @@ export class SessionTurnAdapter {
         toolCallMarkers: this.#toolCallMarkers,
       },
     );
-
-    return {
-      kind: 'completed',
-      outcome,
-      nextCumulativeMessages,
-      nextCumulativeUsage,
-      nextCumulativeTurnItems,
-      mergedEmittedIds,
-    };
+    state.previouslyEmittedIds = emittedIds;
+    state.setCumulativeUsage(usage);
+    return { kind: 'completed', outcome };
   }
 
   #activeCallIdsForInit(init: ContinuationInit, prepared: PreparedContinuation): string[] {
@@ -957,12 +845,12 @@ export class SessionTurnAdapter {
     return [...callIds];
   }
 
-  #recordSuccess(state: ContinuationState, previousInputForSurge?: unknown): void {
+  #recordSuccess(state: TurnProjectionState, previousInputForSurge?: unknown): void {
+    const previousInput = state.source === 'startStream' ? this.#attempt!.streamInput! : previousInputForSurge;
+    const input = state.source === 'startStream' ? this.#attempt!.streamInput! : state.lastStream;
     this.deps.inputPlanner.recordSuccess(
-      state.inputMode === 'delta' ? (state.lastStream as any) : this.deps.conversationStore.getHistory(),
-      state.inputMode === 'delta'
-        ? { kind: state.inputMode }
-        : { kind: state.inputMode, previousInput: previousInputForSurge },
+      state.inputMode === 'delta' ? input : this.deps.conversationStore.getHistory(),
+      state.inputMode === 'delta' ? { kind: state.inputMode } : { kind: state.inputMode, previousInput },
     );
   }
 

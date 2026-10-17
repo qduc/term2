@@ -4,7 +4,7 @@ import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
-import type { ContinuationInit, ContinuationState, PreparedContinuation } from './continuation-state.js';
+import type { ContinuationInit, TurnProjectionState, PreparedContinuation } from './turn-projection-state.js';
 import type { ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import type { ApprovalContext } from '../approval/approval-decision-policy.js';
 import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
@@ -38,14 +38,9 @@ export class ContinuationPlanApplier {
           state: plan.pendingApprovalContext.state,
           interruption: plan.pendingApprovalContext.interruption,
           toolCallArgumentsById: plan.pendingApprovalContext.toolCallArgumentsById,
-          previouslyEmittedCommandIds: plan.pendingApprovalContext.emittedCommandIds,
           toolStartedEvent: undefined,
           source: 'continueRunStream',
-          token: plan.pendingApprovalContext.token,
           inputMode: plan.pendingApprovalContext.inputMode,
-          cumulativeUsage: plan.pendingApprovalContext.cumulativeUsage,
-          cumulativeCommandMessages: plan.pendingApprovalContext.cumulativeCommandMessages,
-          cumulativeTurnItems: plan.pendingApprovalContext.cumulativeTurnItems,
         };
       }
 
@@ -61,14 +56,9 @@ export class ContinuationPlanApplier {
         state: plan.pendingApprovalContext.state,
         interruption: plan.pendingApprovalContext.interruption,
         toolCallArgumentsById: plan.pendingApprovalContext.toolCallArgumentsById,
-        previouslyEmittedCommandIds: plan.pendingApprovalContext.emittedCommandIds,
         toolStartedEvent: plan.toolStartedEvent,
         source: 'continueRunStream',
-        token: plan.pendingApprovalContext.token,
         inputMode: plan.pendingApprovalContext.inputMode,
-        cumulativeUsage: plan.pendingApprovalContext.cumulativeUsage,
-        cumulativeCommandMessages: plan.pendingApprovalContext.cumulativeCommandMessages,
-        cumulativeTurnItems: plan.pendingApprovalContext.cumulativeTurnItems,
       };
     }
 
@@ -79,20 +69,15 @@ export class ContinuationPlanApplier {
       state: abortedContext.state,
       interruption: abortedContext.interruption,
       toolCallArgumentsById: abortedContext.toolCallArgumentsById,
-      previouslyEmittedCommandIds: abortedContext.emittedCommandIds,
       toolStartedEvent: undefined,
       source: 'abortResolution',
-      token: abortedContext.token,
       inputMode: abortedContext.inputMode,
-      cumulativeUsage: abortedContext.cumulativeUsage,
-      cumulativeCommandMessages: abortedContext.cumulativeCommandMessages,
-      cumulativeTurnItems: abortedContext.cumulativeTurnItems,
     };
   }
 
   async *applyInitialSetup(
     prepared: PreparedContinuation,
-    state: ContinuationState,
+    state: TurnProjectionState,
   ): AsyncGenerator<ConversationEvent, void, void> {
     if (prepared.toolStartedEvent) {
       const filtered = this.deps.toolTracker.dedupeToolStarted(prepared.toolStartedEvent);
@@ -124,8 +109,7 @@ export class ContinuationPlanApplier {
 
   async *applyNextPlan(
     nextPlan: ContinuationPlan,
-    state: ContinuationState,
-    mergedEmittedIds: Set<string>,
+    state: TurnProjectionState,
     isApproved: boolean,
   ): AsyncGenerator<ConversationEvent, void, void> {
     if (!isApproved) {
@@ -151,9 +135,7 @@ export class ContinuationPlanApplier {
 
     state.advanceFromPlan(
       nextPlan.pendingApprovalContext.state,
-      nextPlan.pendingApprovalContext.interruption,
       nextPlan.pendingApprovalContext.inputMode,
-      mergedEmittedIds,
       this.deps.journal.getEvents(),
       this.deps.toolTracker.activeCallIdsForCurrentTurn(),
     );

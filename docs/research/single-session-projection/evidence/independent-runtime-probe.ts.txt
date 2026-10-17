@@ -1,0 +1,111 @@
+import { it, expect, vi } from 'vitest';
+import { z } from 'zod';
+import { appendFileSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ApplicationRunLoop } from '../agent-runtime/application-run-loop.js';
+import { createConversationRuntime } from '../conversation/conversation-runtime-factory.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { TurnProjectionState } from './turn-projection-state.js';
+import { InitialInputPreparer } from './initial-input-preparer.js';
+import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
+import { UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
+
+const noop = () => {};
+const logger = Object.fromEntries(['info','warn','error','debug','security','setCorrelationId','clearCorrelationId','getCorrelationId'].map(k=>[k,noop]));
+
+it.each([false,true,'prepareFailure'])('independent real run-loop projection with recovery=%s', async (scenario) => {
+  const recover=scenario !== false;
+  const failPreparation=scenario === 'prepareFailure';
+  let prepareCalls=0;
+  const prepareOriginal=InitialInputPreparer.prototype.prepare;
+  const prepareSpy=vi.spyOn(InitialInputPreparer.prototype,'prepare').mockImplementation(function(...args) { if(failPreparation && ++prepareCalls===2) throw Object.assign(new Error('Independent preparation failure'),{unrecoverable:true}); return prepareOriginal.apply(this,args); });
+  const recoverySpy=vi.spyOn(InitialTurnRecoveryHandler.prototype,'handle');
+  const root = mkdtempSync(join(tmpdir(),'term2-projection-independent-'));
+  const effects = join(root,'effects.jsonl');
+  const logs = join(root,'history.jsonl');
+  const resets: any[] = [];
+  const binds: any[] = [];
+  const originalReset = TurnProjectionState.prototype.resetForAttempt;
+  const originalBind = TurnProjectionState.prototype.bindDecision;
+  const reset = vi.spyOn(TurnProjectionState.prototype,'resetForAttempt').mockImplementation(function(...args) { resets.push(this); return originalReset.apply(this,args); });
+  const bind = vi.spyOn(TurnProjectionState.prototype,'bindDecision').mockImplementation(function(...args) { binds.push(this); return originalBind.apply(this,args); });
+  let request = 0;
+  const requests: any[] = [];
+  const model = { async *stream(input: any) {
+    requests.push(input);
+    const index = request++;
+    if (recover && index === 1) throw new UnsentWebSocketRequestError('independent request was not sent');
+    const logical = recover && index > 1 ? index - 1 : index;
+    yield { type:'reasoning_delta', text:`REASON_${logical};` } as any;
+    if(logical < 2) {
+      const call = {type:'tool_call', id:`call-${logical}`, name:'projection_probe', arguments:JSON.stringify({index:logical})};
+      yield call as any;
+      yield {type:'completion', responseId:`response-${index}`, output:[call], usage:{inputTokens:10,outputTokens:2}} as any;
+    } else {
+      yield {type:'text_delta',text:'PROJECTION_DONE'} as any;
+      yield {type:'completion',responseId:`response-${index}`,output:[{type:'message',role:'assistant',content:[{type:'text',text:'PROJECTION_DONE'}]}],usage:{inputTokens:10,outputTokens:2}} as any;
+    }
+  }};
+  const agent = {name:'Projection verifier', instructions:'Fixture only',model:'fixture',tools:[{
+    name:'projection_probe',description:'Writes one fixture record',parameters:z.object({index:z.number()}),needsApproval:()=>true,
+    execute:({index}:any)=>{ appendFileSync(effects,JSON.stringify({index})+'\n'); return `OUTPUT_${index}`; },
+    formatCommandMessage:()=>[],
+  }]};
+  const loop = new ApplicationRunLoop({resolveModel:()=>model as any});
+  const client: any = {
+    async runTurn(session:any) { await loop.runTurn({
+      prepare:async(signal:any)=>{const p=await session.prepare(signal); return p && {agent,input:p.input,options:{...p.options,providerId:'fixture',supportsConversationChaining:true,maxTurns:8}};},
+      consume:(stream:any)=>session.consume(stream),interrupted:()=>session.interrupted(),recover:(error:any)=>session.recover(error),
+    }); },
+    abort:()=>loop.abort(),setModel:noop,addToolInterceptor:noop,chat:async()=>'',getProvider:()=> 'fixture',getModel:()=> 'fixture',
+  };
+  const {runtime,adapter} = createConversationRuntime({sessionId:`independent-${recover}`,agentClient:client,toolOwnership:new ToolOwnershipRegistry(),deps:{logger:logger as any,sessionContextService:{runWithContext:(_ctx:any,fn:any)=>fn(),getContext:()=>null} as any,settingsService:{get:(key:string)=>key==='agent.retryAttempts'?2:key==='agent.modelSelection'?{model:'fixture',provider:'fixture'}:undefined,set:noop} as any}});
+  runtime.logs.setLogSink(event=>appendFileSync(logs,JSON.stringify(event)+'\n'));
+  const events: any[]=[];
+  const options = {onEvent:(event:any)=>{events.push(event);}};
+  try {
+    let terminal:any = await adapter.sendMessage('Run projection probe',options);
+    expect(terminal.type).toBe('approval_required');
+    expect(terminal.usage).toMatchObject({prompt_tokens:10,completion_tokens:2});
+    if(failPreparation) {
+      await expect(adapter.handleApprovalDecision('y',undefined,options)).rejects.toThrow('Independent preparation failure');
+      expect(recoverySpy).toHaveBeenCalledTimes(1);
+      expect(new Set([...resets,...binds]).size).toBe(1);
+      expect(resets).toHaveLength(2);
+      expect(resets[1].source).toBe('startStream');
+      expect(readFileSync(effects,'utf8').trim().split('\n')).toHaveLength(1);
+      console.log(JSON.stringify({scenario,initialRecoveryCalls:recoverySpy.mock.calls.length,projectionInstances:new Set(resets).size,source:resets[1].source}));
+      return;
+    }
+    terminal=await adapter.handleApprovalDecision('y',undefined,options);
+    expect(terminal.type).toBe('approval_required');
+    expect(terminal.usage).toMatchObject({prompt_tokens:recover?10:20,completion_tokens:recover?2:4});
+    terminal=await adapter.handleApprovalDecision('y',undefined,options);
+    expect(terminal.type).toBe('response');
+    expect(terminal.finalText).toBe('PROJECTION_DONE');
+    expect(terminal.usage).toMatchObject({prompt_tokens:recover?20:30,completion_tokens:recover?4:6});
+    expect(readFileSync(effects,'utf8').trim().split('\n').map(line=>JSON.parse(line))).toEqual([{index:0},{index:1}]);
+    const commands=events.filter(e=>e.type==='command_message');
+    expect(commands).toHaveLength(2);
+    expect(new Set(commands.map(e=>e.message.id)).size).toBe(2);
+    expect(JSON.stringify(commands)).toContain('OUTPUT_0');
+    expect(JSON.stringify(commands)).toContain('OUTPUT_1');
+    expect(events.filter(e=>e.type==='reasoning_delta').map(e=>e.delta).join('')).toBe('REASON_0;REASON_1;REASON_2;');
+    expect(new Set([...resets,...binds]).size).toBe(1);
+    expect(resets).toHaveLength(recover?2:1);
+    expect(binds).toHaveLength(2);
+    const persisted=readFileSync(logs,'utf8');
+    expect(persisted).toContain('OUTPUT_0');
+    expect(persisted).toContain('OUTPUT_1');
+    const records=persisted.trim().split('\n').map(line=>JSON.parse(line));
+    expect(records.filter(e=>e.type==='assistant_journal_item' && e.item.type==='tool_result').map(e=>e.item.callId)).toEqual(['call-0','call-1']);
+    expect(records.filter(e=>e.type==='assistant_journal_delta' && e.kind==='reasoning').map(e=>e.delta).join('')).toBe('REASON_0;REASON_1;REASON_2;');
+    expect(records.filter(e=>e.type==='command_message')).toHaveLength(2);
+    if(recover) {
+      expect(JSON.stringify(requests[2])).toContain('OUTPUT_0');
+      expect(events.some(e=>e.type==='retry')).toBe(true);
+    }
+    console.log(JSON.stringify({recover,requests:requests.length,commands:commands.length,resets:resets.length,projectionInstances:new Set([...resets,...binds]).size,usage:terminal.usage,persistedBytes:persisted.length,evidenceRoot:root}));
+  } finally { prepareSpy.mockRestore();recoverySpy.mockRestore();reset.mockRestore();bind.mockRestore(); await loop.abort(); }
+},20000);

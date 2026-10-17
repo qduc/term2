@@ -31,7 +31,6 @@ import type { PersistedAssistantTurnItem } from './conversation-persistence-type
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from '../generation-guard.js';
-import { type CommandMessage } from '../../tools/types.js';
 import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
 import {
@@ -78,9 +77,6 @@ export interface ResultBuilderInput {
   turnItems?: PersistedAssistantTurnItem[];
   token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';
-  cumulativeUsage?: NormalizedUsage;
-  cumulativeCommandMessages?: CommandMessage[];
-  cumulativeTurnItems?: PersistedAssistantTurnItem[];
 }
 
 export function createApprovalRequiredTerminal(options: {
@@ -160,9 +156,6 @@ export async function buildConversationResult(
       owner: approvalFlow.resolveOwner(runBudgetInteraction),
       token: input.token,
       inputMode: input.inputMode,
-      cumulativeUsage: input.cumulativeUsage ?? usage ?? extractUsage(result),
-      cumulativeCommandMessages: input.cumulativeCommandMessages,
-      cumulativeTurnItems: input.cumulativeTurnItems,
     });
     return {
       kind: 'approval_required',
@@ -246,9 +239,6 @@ export async function buildConversationResult(
       owner: approvalFlow.resolveOwner(interruption),
       token: input.token,
       inputMode: input.inputMode,
-      cumulativeUsage: input.cumulativeUsage ?? usage ?? extractUsage(result),
-      cumulativeCommandMessages: input.cumulativeCommandMessages,
-      cumulativeTurnItems: input.cumulativeTurnItems,
     });
 
     const agent = asRecord(interruptionRecord?.agent);

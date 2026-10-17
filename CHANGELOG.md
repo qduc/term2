@@ -1,3 +1,16 @@
+## [0.32.2] - 2026-10-17
+
+### Bug Fixes
+- Gemini tool-call thought signatures are preserved when replaying conversation history, avoiding rejected tool continuations.
+- Gemini rate-limit retries honor supported provider retry delays within the retry policy's bounds.
+- Model pickers reset their selection when filtered results change, preventing a stale selection from choosing the wrong model.
+- The working indicator ends its current step when a tool result arrives instead of continuing to count tool execution as model work.
+
+### Improvements
+- Model filtering prioritizes whole-word matches.
+- The working indicator now says "Waiting for model" and shows a countdown during retry backoff.
+- Compact tool entries in `run_code` include declared return-shape guidance, and every scriptable tool must declare its scripted return contract.
+
 ## [0.32.1] - 2026-10-10
 
 ### Bug Fixes

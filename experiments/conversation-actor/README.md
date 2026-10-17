@@ -4,6 +4,10 @@ A standalone TypeScript runtime and deterministic simulation, built from a blank
 architecture against the supplied brief. It imports no Term2 runtime code, uses
 fake providers/tools, and changes no production execution behavior.
 
+The next design iteration is the [human-facing model](../../docs/design/conversation-core.md)
+and its [v2 executable challenge](v2/DESIGN.md). The original model and evidence
+below are preserved as the first experiment.
+
 Run from the repository root with the repository's installed dependencies:
 
 ```sh

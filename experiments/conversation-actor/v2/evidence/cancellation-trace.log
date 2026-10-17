@@ -1,0 +1,287 @@
+{"scenario":"cancel-waits-for-stop-evidence","result":"PASS","events":27}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "execution-result",
+    "detail": {
+      "token": 2,
+      "id": "model:2",
+      "fact": {
+        "kind": "model-result",
+        "reply": {
+          "text": "tools",
+          "calls": [
+            {
+              "id": "write",
+              "name": "fake-effect"
+            }
+          ],
+          "responseId": "r0"
+        }
+      }
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "execution-stopped",
+    "detail": {
+      "token": 2,
+      "id": "model:2"
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/write",
+      "token": 3
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "write",
+      "outcome": "unknown"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "type": "stop-requested",
+    "detail": {
+      "token": 3,
+      "id": "1/write"
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "type": "edited",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "type": "stop-unproven",
+    "detail": {
+      "token": 3,
+      "id": "1/write",
+      "reason": "no process exit proof"
+    }
+  },
+  {
+    "seq": 16,
+    "session": 1,
+    "type": "execution-result",
+    "detail": {
+      "token": 3,
+      "id": "1/write",
+      "fact": {
+        "kind": "tool-result",
+        "outcome": {
+          "kind": "unknown",
+          "reason": "Error: lost connection, effect may still be running"
+        }
+      }
+    }
+  },
+  {
+    "seq": 17,
+    "session": 1,
+    "type": "execution-stopped",
+    "detail": {
+      "token": 3,
+      "id": "1/write"
+    }
+  },
+  {
+    "seq": 18,
+    "session": 1,
+    "type": "execution-released",
+    "detail": {
+      "token": 3,
+      "id": "1/write"
+    }
+  },
+  {
+    "seq": 19,
+    "session": 1,
+    "turn": 4,
+    "type": "turn-started",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 20,
+    "session": 1,
+    "turn": 4,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 21,
+    "session": 1,
+    "turn": 4,
+    "type": "model-requested",
+    "detail": {
+      "token": 5,
+      "chained": false,
+      "items": 4
+    }
+  },
+  {
+    "seq": 22,
+    "session": 1,
+    "turn": 4,
+    "type": "stale",
+    "detail": {
+      "command": "fact",
+      "token": 3
+    }
+  },
+  {
+    "seq": 23,
+    "session": 1,
+    "turn": 4,
+    "type": "execution-result",
+    "detail": {
+      "token": 5,
+      "id": "model:5",
+      "fact": {
+        "kind": "model-result",
+        "reply": {
+          "text": "done",
+          "calls": [],
+          "responseId": "r1"
+        }
+      }
+    }
+  },
+  {
+    "seq": 24,
+    "session": 1,
+    "turn": 4,
+    "type": "execution-stopped",
+    "detail": {
+      "token": 5,
+      "id": "model:5"
+    }
+  },
+  {
+    "seq": 25,
+    "session": 1,
+    "turn": 4,
+    "type": "model-completed",
+    "detail": {
+      "token": 5,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 26,
+    "session": 1,
+    "turn": 4,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 27,
+    "session": 1,
+    "turn": 4,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]

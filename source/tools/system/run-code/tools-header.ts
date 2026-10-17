@@ -153,8 +153,13 @@ export function renderDetailedEntry(tool: ToolRegistry[number]): string {
 }
 
 function renderCompactEntry(tool: ToolRegistry[number]): string {
-  const returnState = getScriptedReturnContract(tool).kind === 'unknown' ? ' — returns unknown' : '';
-  return `- ${renderCompactSignature(tool)}${returnState}`;
+  // Mirror renderDetailedEntry: surface the declared return shape as guidance
+  // even when no scriptedReturnSchema makes the contract precise, so a script
+  // sees the actual result shape instead of a bare 'returns unknown'.
+  const scriptedReturn = scriptedReturnDescription(tool);
+  const returns = ` — returns ${scriptedReturn.value}`;
+  const guidance = scriptedReturn.legacy ? ` (guidance: ${scriptedReturn.legacy})` : '';
+  return `- ${renderCompactSignature(tool)}${returns}${guidance}`;
 }
 
 /**
@@ -162,7 +167,8 @@ function renderCompactEntry(tool: ToolRegistry[number]): string {
  *
  * Parameter signatures are approximate structural renderings. Script return
  * types, when present, are rendered from the owner schema; missing contracts
- * are explicitly shown as unknown rather than inferred from prose.
+ * are explicitly shown as unknown rather than inferred from prose, with any
+ * declared prose shape surfaced alongside as guidance.
  */
 export function renderToolsHeader(registry: ToolRegistry): string {
   if (registry.length === 0) return '';

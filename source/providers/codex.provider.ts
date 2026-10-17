@@ -29,6 +29,7 @@ import { getJwtClaims, getJwtExpiry } from './jwt-claims.js';
 import { recordSessionAccount } from './oauth-session-account.js';
 import type { SessionAccountStore } from './oauth-session-account.js';
 import { ProviderReauthenticationRequiredError } from './common/provider-errors.js';
+import type { ProviderRetryInfo } from './retrying-model.js';
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
@@ -481,11 +482,11 @@ export class CodexProvider {
     private readonly transport: 'websocket' | 'http',
     private readonly retryAttempts: number,
     private readonly websocketReceiveTimeouts: { firstFrameMs: number; interFrameMs: number },
-    private onRetry?: () => void,
+    private onRetry?: (info?: ProviderRetryInfo) => void,
     private readonly contextCompactionSessionState?: ContextCompactionSessionState,
   ) {}
 
-  setRetryCallback(callback?: () => void): void {
+  setRetryCallback(callback?: (info?: ProviderRetryInfo) => void): void {
     this.onRetry = callback;
     for (const model of this.models.values()) model.setRetryCallback(callback);
   }

@@ -3,6 +3,7 @@ import type { ISessionContextService } from '../services/service-interfaces.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
 import type { SessionAccountStore } from './oauth-session-account.js';
 import type { ContextCompactionSessionState, StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { ProviderRetryInfo } from './retrying-model.js';
 
 export interface ProviderDeps {
   settingsService: ISettingsService;
@@ -10,7 +11,7 @@ export interface ProviderDeps {
   sessionContextService?: ISessionContextService;
   /** Abort signal for provider discovery or model preparation. */
   signal?: AbortSignal;
-  onRetry?: () => void;
+  onRetry?: (info?: ProviderRetryInfo) => void;
   /** Per-client retry budget for direct streamed models. */
   retryAttempts?: number;
   /** Root-session-only observational seam. Omitted for all other clients. */

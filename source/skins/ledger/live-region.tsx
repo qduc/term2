@@ -22,7 +22,8 @@ const INTERRUPT_HINT = 'esc to interrupt';
 const PHASE_LABEL: Record<WorkingIndicatorView['phase'], string> = {
   thinking: 'Thinking',
   generating: 'Generating',
-  processing: 'Processing',
+  processing: 'Waiting for model',
+  retrying: 'Retrying',
   tool_call: 'Calling tool',
 };
 
@@ -33,13 +34,15 @@ export const LedgerWorkingIndicator: FC<WorkingIndicatorView> = ({
   tokensPerSecond,
   toolName,
   argumentChars,
+  retry,
 }) => {
   const theme = useTheme();
   const { stdout } = useStdout();
   const columns = stdout.columns ?? 100;
   const hasRate = tokensPerSecond != null && tokensPerSecond > 0;
 
-  const details: string[] = [`${elapsedSeconds}s`];
+  const details: string[] = [phase === 'retrying' ? `in ${elapsedSeconds}s` : `${elapsedSeconds}s`];
+  if (phase === 'retrying' && retry) details.push(`attempt ${retry.attempt}/${retry.maxRetries}`);
   if (phase === 'tool_call' && argumentChars != null) details.push(`${argumentChars} chars`);
   if (hasRate) details.push(formatTokensPerSecond(tokensPerSecond));
 

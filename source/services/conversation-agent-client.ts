@@ -24,6 +24,7 @@ import type {
   SessionRolloverRequest,
   SessionRolloverRequestOutcome,
 } from '../contracts/session-rollover.js';
+import type { ProviderRetryInfo } from '../providers/retrying-model.js';
 
 export type AgentClientRunOptions = {
   /** Shared automatic retry/recovery capability for this logical turn. */
@@ -180,7 +181,7 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   supportsConversationChaining?(): boolean;
   setProvider?(provider: string): void;
   setReasoningEffort?(effort?: ReasoningEffortSetting): void;
-  setRetryCallback?(callback: () => void): void;
+  setRetryCallback?(callback: (info?: ProviderRetryInfo) => void): void;
   setTemperature?(temperature?: number): void;
   /**
    * Force the next request to the standard (non-flex) service tier. The

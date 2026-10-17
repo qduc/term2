@@ -85,6 +85,7 @@ export class RetryEventPresenter {
           maxRetries: maxTransientRetries,
           errorMessage,
           retryType,
+          ...(failure.delayMs !== undefined ? { delayMs: failure.delayMs } : {}),
         };
         const logMessage = isConnectionInterrupted
           ? 'Connection interrupted before a terminal response event, rebuilding full history'

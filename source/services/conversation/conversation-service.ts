@@ -55,6 +55,7 @@ import { isClassifiedCancellation } from '../retry/provider-failure-classificati
 import type { AutomaticMemoryCanary } from '../memory/automatic-memory-canary.js';
 import type { SessionRolloverConsumption } from '../../contracts/session-rollover.js';
 import type { SessionRolloverEvent } from '../logging/conversation-log-events.js';
+import type { ProviderRetryInfo } from '../../providers/retrying-model.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -487,9 +488,9 @@ export class ConversationService {
     this.#runtime.settings.setTemperature(temperature);
   }
 
-  #retryCallback: (() => void) | null = null;
+  #retryCallback: ((info?: ProviderRetryInfo) => void) | null = null;
 
-  setRetryCallback(callback: () => void): void {
+  setRetryCallback(callback: (info?: ProviderRetryInfo) => void): void {
     this.#retryCallback = callback;
     this.#runtime.settings.setRetryCallback(callback);
   }

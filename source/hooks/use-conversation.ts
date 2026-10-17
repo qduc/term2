@@ -161,6 +161,7 @@ export const useConversation = ({
   );
   const {
     thinkingStartedAt,
+    retryCountdown,
     toolCallStreamingInfo,
     liveStreamingSpeed,
     lastUsage,
@@ -329,7 +330,15 @@ export const useConversation = ({
       return;
     }
 
-    conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
+    conversationService.setRetryCallback((info) => {
+      addSystemMessage('Retrying due to upstream error...');
+      if (info && info.delayMs > 0) {
+        dispatch({
+          type: 'streaming/retry_countdown',
+          countdown: { until: Date.now() + info.delayMs, attempt: info.attempt, maxRetries: info.maxRetries },
+        });
+      }
+    });
   }, [conversationService, addSystemMessage]);
 
   // ── Orchestrator instantiation (lazy, once) ─────────────────────────────
@@ -380,6 +389,7 @@ export const useConversation = ({
         onStreamingThinkingStarted: (timestamp) => dispatch({ type: 'streaming/thinking_started', timestamp }),
         onStreamingThinkingCleared: () => dispatch({ type: 'streaming/thinking_cleared' }),
         onStreamingToolInfo: (info) => dispatch({ type: 'streaming/tool_info', info }),
+        onRetryCountdown: (countdown) => dispatch({ type: 'streaming/retry_countdown', countdown }),
         onStreamingSpeedUpdate: (speed) => dispatch({ type: 'streaming/speed_updated', speed }),
         onAskUserAnswerSubmitted: () => {},
         onAskUserAdvanceToNext: () => {},
@@ -716,6 +726,7 @@ export const useConversation = ({
     setWaitingForAskUserAnswer,
     isProcessing,
     thinkingStartedAt,
+    retryCountdown,
     toolCallStreamingInfo,
     liveStreamingSpeed,
     backgroundSubagentTasks: backgroundSubagentTaskState.tasks,

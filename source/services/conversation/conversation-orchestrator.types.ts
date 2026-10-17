@@ -42,6 +42,8 @@ export interface UIPort {
   onResetAll(): void;
   onStreamingThinkingStarted(timestamp: number): void;
   onStreamingThinkingCleared(): void;
+  /** A retry is backing off until `until`; null once output resumes. */
+  onRetryCountdown?(countdown: { until: number; attempt: number; maxRetries: number } | null): void;
   onStreamingToolInfo(info: { toolName?: string; argumentCharCount?: number } | null): void;
   onStreamingSpeedUpdate?(speed: { tps: number; ttftMs?: number } | null): void;
   /** @deprecated ask_user answers now live in PendingInteractionState. */

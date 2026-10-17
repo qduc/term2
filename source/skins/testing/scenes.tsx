@@ -552,6 +552,31 @@ export const SCENES: readonly Scene[] = [
     mustContain: ['steer', 'queue'],
   },
   {
+    id: 'live-waiting',
+    description: 'The live region while a model request has produced no output yet.',
+    node: () => (
+      <InputProvider>
+        <BottomArea {...bottomAreaProps({ isProcessing: true })} />
+      </InputProvider>
+    ),
+    mustContain: ['Waiting for model'],
+  },
+  {
+    id: 'live-retrying',
+    description: 'The live region during the backoff before an automatic retry.',
+    node: () => (
+      <InputProvider>
+        <BottomArea
+          {...bottomAreaProps({
+            isProcessing: true,
+            retryCountdown: { until: Date.now() + 12_500, attempt: 2, maxRetries: 3 },
+          })}
+        />
+      </InputProvider>
+    ),
+    mustContain: ['Retrying', '2/3'],
+  },
+  {
     id: 'live-tool-call',
     description: 'The live region while a tool call is being streamed.',
     node: () => (

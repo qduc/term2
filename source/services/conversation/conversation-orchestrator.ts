@@ -1628,6 +1628,23 @@ export class ConversationOrchestrator {
         }
       }
 
+      if (eventType === 'retry') {
+        // The failed attempt's tool and thinking state belong to output the
+        // retry discards; the backoff is the only thing happening now.
+        this.config.ui.onStreamingToolInfo(null);
+        this.config.ui.onStreamingThinkingCleared();
+        this.config.ui.onStreamingSpeedUpdate?.(null);
+        if (event.delayMs != null && event.delayMs > 0) {
+          this.config.ui.onRetryCountdown?.({
+            until: (this.config.now ?? Date.now)() + event.delayMs,
+            attempt: event.attempt,
+            maxRetries: event.maxRetries,
+          });
+        }
+      } else if (this.clearsThinkingIndicator(eventType) || eventType === 'reasoning_delta') {
+        this.config.ui.onRetryCountdown?.(null);
+      }
+
       if (eventType === 'reasoning_delta') {
         this.config.ui.onStreamingThinkingStarted((this.config.now ?? Date.now)());
       } else if (this.clearsThinkingIndicator(eventType)) {

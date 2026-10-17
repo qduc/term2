@@ -212,6 +212,7 @@ export const useStandaloneModelPicker = (deps: {
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
+    setScrollOffset(0);
     if (filteredModels.length === 0) {
       setSelectedIndex(0);
       return;
@@ -237,13 +238,10 @@ export const useStandaloneModelPicker = (deps: {
       }
     }
 
-    setSelectedIndex((prev) => Math.min(prev, filteredModels.length - 1));
+    // Retaining a lower selection would make auto-scroll undo the reset.
+    setSelectedIndex(0);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [filteredModels, loading, settingsService]);
-
-  useEffect(() => {
-    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [query]);
 
   useEffect(() => {
     const maxHeight = 10;

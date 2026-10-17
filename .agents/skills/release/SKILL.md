@@ -9,6 +9,16 @@ Follow the repository's release workflow in `scripts/release.sh`. The script is 
 
 ## Workflow
 
+Before preparing the release changelog, complete the documentation step below.
+
+### Update documentation
+
+Review changes since the previous release against `README.md`, the documentation website under `website/`, and affected configuration, CLI, and contract docs. Update documentation for changed user-facing behavior, settings, commands, and compatibility requirements; verify claims against the implementation rather than copying commit subjects. Follow the `writing-docs` skill and run the relevant documentation checks (including the website build when website content changes). If no updates are needed, report that explicitly with the scope inspected.
+
+Commit documentation updates before invoking `scripts/release.sh`: its working-tree guard allows only `package.json` and `CHANGELOG.md` to be dirty. Ensure the documentation commit is integrated into `main` and pushed before the release script's remote-main check. Do not move an already-published release tag to include a later documentation correction.
+
+### Release execution
+
 1. **Inspect state.** Read `git status --short`, current branch, latest release tag, `package.json`, `CHANGELOG.md`, and `scripts/release.sh`. Identify unrelated or user-owned changes. Release only from the intended branch and establish what version the user wants; if they have not specified a bump, infer the smallest appropriate semver bump from unreleased changes, but ask if that choice is materially ambiguous.
 2. **Prepare the changelog.** Write the release entry in `CHANGELOG.md` yourself, using the existing format and verified changes since the previous release. Group user-facing changes accurately and avoid claiming unverified fixes. The `term2 -l` generation inside the script is a fallback for human-driven releases, not the normal agent workflow. If changelog generation fails, inspect the error and continue with an accurate hand-written entry rather than repeatedly retrying a broken generator.
 3. **Check and execute.** Review `scripts/release.sh --help` and choose flags that match the user's requested outcome. Run the repository's prescribed release checks; the script performs its own build gate. Keep release changes limited to the version/changelog files expected by the script. Use an explicit version when resuming an existing partial release.

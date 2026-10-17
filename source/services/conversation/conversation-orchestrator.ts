@@ -1611,8 +1611,23 @@ export class ConversationOrchestrator {
   }
 
   private createOnEventHandler(baseOnEvent: (event: ConversationEvent) => void): (event: ConversationEvent) => void {
+    // Calls whose results have not arrived yet. The indicator has start events
+    // for each step but the next step's first event can be a slow provider
+    // round-trip away, so the tool step must end on its own result; otherwise
+    // the wait for the model reads as the tool still running.
+    const pendingToolCallIds = new Set<string>();
     return (event: ConversationEvent) => {
       const eventType = event.type;
+      if (eventType === 'tool_started') {
+        pendingToolCallIds.add(event.toolCallId);
+      } else if (eventType === 'command_message') {
+        if (event.message.callId) pendingToolCallIds.delete(event.message.callId);
+        if (pendingToolCallIds.size === 0) {
+          this.config.ui.onStreamingToolInfo(null);
+          this.config.ui.onStreamingThinkingCleared();
+        }
+      }
+
       if (eventType === 'reasoning_delta') {
         this.config.ui.onStreamingThinkingStarted((this.config.now ?? Date.now)());
       } else if (this.clearsThinkingIndicator(eventType)) {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
 import type { ISettingsService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -133,6 +133,35 @@ export const formatReadFileCommandMessage: FormatCommandMessage = (item, index, 
 
 import { ExecutionContext } from '../../services/execution-context.js';
 
+/**
+ * The exact value a script receives from a read: the raw-text envelope, the
+ * empty string an empty file has always returned, or the content-part array an
+ * image read returns. Media payloads are replaced by an inert reference marker
+ * (or an omission notice) before a script sees them, so a text part, that
+ * marker, and a string are the only reachable array elements.
+ */
+const readFileScriptedReturnSchema = z.union([
+  z
+    .object({
+      path: z.string(),
+      totalLines: z.number(),
+      fromLine: z.number(),
+      toLine: z.number(),
+      content: z.string(),
+      truncated: z.boolean(),
+      fullOutputPath: z.string().optional(),
+    })
+    .strict(),
+  z.array(
+    z.union([
+      z.object({ type: z.literal('text'), text: z.string() }).strict(),
+      z.object({ __term2_run_code_media_reference__: z.string() }).strict(),
+      z.string(),
+    ]),
+  ),
+  z.string(),
+]);
+
 export const createReadFileToolDefinition = (
   deps: {
     executionContext?: ExecutionContext;
@@ -147,7 +176,7 @@ export const createReadFileToolDefinition = (
     /** Optional override for the result byte cap (tests). */
     maxResultBytes?: number;
   } = {},
-): ToolDefinition<typeof readFileParametersSchema> => {
+): ScriptedToolDefinition<typeof readFileParametersSchema> => {
   const {
     executionContext,
     allowOutsideWorkspace = false,
@@ -166,6 +195,7 @@ export const createReadFileToolDefinition = (
       : allowOutsideWorkspace
       ? READ_FILE_DESCRIPTION_OUTSIDE
       : READ_FILE_DESCRIPTION,
+    scriptedReturnSchema: readFileScriptedReturnSchema,
     parameters: readFileParametersSchema,
     canRequireApproval: true,
     parallelSafe: true,

@@ -77,7 +77,7 @@ export const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index,
  */
 export function createGoalCheckToolDefinition(deps: {
   getGoal: () => DurableGoal | undefined;
-}): ToolDefinition<typeof goalCheckParameters> {
+}): ToolDefinition<typeof goalCheckParameters, typeof TOOL_NAME_GOAL_CHECK> {
   return {
     name: TOOL_NAME_GOAL_CHECK,
     description: GOAL_CHECK_DESCRIPTION,

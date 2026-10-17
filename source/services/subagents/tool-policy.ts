@@ -5,7 +5,14 @@ import type { ToolInvocationContext } from '../agent-runtime/tool-invocation-con
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentDefinition, ValidationEvidence } from './types.js';
-import type { AnyToolDefinition, CommandMessage, SchemaToolDefinition, ToolRegistry } from '../../tools/types.js';
+import type {
+  AnyToolDefinition,
+  CommandMessage,
+  RegistryToolDefinition,
+  SchemaToolDefinition,
+  ScriptedToolDefinition,
+  ToolRegistry,
+} from '../../tools/types.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { z, ZodTypeAny } from 'zod';
 import { parse } from 'unbash';
@@ -608,13 +615,13 @@ export class SubagentToolPolicy {
     }
   }
 
-  wrapShellTool<S extends ZodTypeAny>(
-    definition: SchemaToolDefinition<S>,
+  wrapShellTool<S extends ZodTypeAny, TName extends string>(
+    definition: SchemaToolDefinition<S, TName>,
     cwd: string,
     filesChanged: string[],
     taskContext: string,
     validationCapture?: ValidationCapture,
-  ): SchemaToolDefinition<S> {
+  ): SchemaToolDefinition<S, TName> {
     const originalExecute = definition.execute.bind(definition);
     const originalNeedsApproval = definition.needsApproval.bind(definition);
     return {
@@ -697,7 +704,10 @@ export class SubagentToolPolicy {
     };
   }
 
-  wrapNestedShellTool<S extends ZodTypeAny>(definition: SchemaToolDefinition<S>, cwd: string): SchemaToolDefinition<S> {
+  wrapNestedShellTool<S extends ZodTypeAny, TName extends string>(
+    definition: SchemaToolDefinition<S, TName>,
+    cwd: string,
+  ): SchemaToolDefinition<S, TName> {
     const originalExecute = definition.execute.bind(definition);
     const originalNeedsApproval = definition.needsApproval.bind(definition);
     return {
@@ -759,7 +769,9 @@ export class SubagentToolPolicy {
     };
   }
 
-  wrapReadOnlyShellTool<S extends ZodTypeAny>(definition: SchemaToolDefinition<S>): SchemaToolDefinition<S> {
+  wrapReadOnlyShellTool<S extends ZodTypeAny, TName extends string>(
+    definition: SchemaToolDefinition<S, TName>,
+  ): SchemaToolDefinition<S, TName> {
     const originalExecute = definition.execute.bind(definition);
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     return {
@@ -792,13 +804,13 @@ export class SubagentToolPolicy {
   }
 
   wrapWriteTool<S extends ZodTypeAny>(
-    definition: SchemaToolDefinition<S>,
+    definition: ScriptedToolDefinition<S>,
     cwd: string,
     filesChanged: string[],
     extractPaths: (params: z.infer<S>) => string[],
     nestedApprovals = false,
     diffDeltas?: Map<string, { added: number; deleted: number }>,
-  ): SchemaToolDefinition<S> {
+  ): ScriptedToolDefinition<S> {
     const originalExecute = definition.execute.bind(definition);
     const originalNeedsApproval = definition.needsApproval.bind(definition);
 
@@ -875,10 +887,10 @@ export class SubagentToolPolicy {
    * Uses symlink-safe realpath resolution.
    */
   wrapReadToolWithScope<S extends ZodTypeAny>(
-    definition: SchemaToolDefinition<S>,
+    definition: ScriptedToolDefinition<S>,
     scopePatterns: string[] | undefined,
     extractPath: (params: z.infer<S>) => string | undefined,
-  ): SchemaToolDefinition<S> {
+  ): ScriptedToolDefinition<S> {
     // No scope defined — no fine-grained restriction
     if (scopePatterns === undefined) return definition;
 
@@ -907,10 +919,10 @@ export class SubagentToolPolicy {
    * ancestor to detect symlink escapes.
    */
   wrapWriteToolWithScope<S extends ZodTypeAny>(
-    definition: SchemaToolDefinition<S>,
+    definition: ScriptedToolDefinition<S>,
     scopePatterns: string[] | undefined,
     extractPaths: (params: z.infer<S>) => string[],
-  ): SchemaToolDefinition<S> {
+  ): ScriptedToolDefinition<S> {
     if (scopePatterns === undefined) return definition;
 
     const originalExecute = definition.execute.bind(definition);
@@ -938,10 +950,10 @@ export class SubagentToolPolicy {
    * finite filesystem scope is defined, the shell tool is rejected with
    * a typed permission error.
    */
-  wrapShellToolWithScope<S extends ZodTypeAny>(
-    definition: SchemaToolDefinition<S>,
+  wrapShellToolWithScope<S extends ZodTypeAny, TName extends string>(
+    definition: SchemaToolDefinition<S, TName>,
     scopePatterns: string[] | undefined,
-  ): SchemaToolDefinition<S> {
+  ): SchemaToolDefinition<S, TName> {
     if (scopePatterns !== undefined) {
       return {
         ...definition,
@@ -974,10 +986,10 @@ export class SubagentToolPolicy {
    * `['*']` (all hosts). The caller receives a typed permission error.
    */
   wrapNetworkToolWithScope<S extends ZodTypeAny>(
-    definition: SchemaToolDefinition<S>,
+    definition: ScriptedToolDefinition<S>,
     hostPatterns: string[] | undefined,
     extractUrl: (params: z.infer<S>) => string | undefined,
-  ): SchemaToolDefinition<S> {
+  ): ScriptedToolDefinition<S> {
     if (hostPatterns === undefined) return definition;
 
     // Empty host patterns = explicitly no network authority
@@ -1086,7 +1098,7 @@ export class SubagentToolFactory {
     askOrchestrator?: (question: string) => Promise<string>,
     options?: { executionContext?: ExecutionContext },
   ): AnyToolDefinition[] {
-    const tools: AnyToolDefinition[] = [];
+    const tools: RegistryToolDefinition[] = [];
     const executionContext = options?.executionContext ?? this.#executionContext;
     const cwd = executionContext?.getCwd() ?? process.cwd();
     const isRemote = executionContext?.isRemote() ?? false;

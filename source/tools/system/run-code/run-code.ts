@@ -406,7 +406,7 @@ export const formatRunCodeCommandMessage: FormatCommandMessage = (item, index, t
 
 export function createRunCodeToolDefinition(
   options: CreateRunCodeToolOptions,
-): SchemaToolDefinition<typeof runCodeParametersSchema> {
+): SchemaToolDefinition<typeof runCodeParametersSchema, 'run_code'> {
   const { loggingService, getCwd = () => options.executionContext?.getCwd() || process.cwd() } = options;
   const approvalRegistry = options.approvalPolicyRegistry;
 
@@ -457,7 +457,7 @@ export function createRunCodeToolDefinition(
       ...(options.agentSpecBridge ? { agentBridge: options.agentSpecBridge } : {}),
     });
 
-  const definition: SchemaToolDefinition<typeof runCodeParametersSchema> = {
+  const definition: SchemaToolDefinition<typeof runCodeParametersSchema, 'run_code'> = {
     name: TOOL_NAME_RUN_CODE,
     // Read late, after bindRunCodeRegistry, so the model is told which tools
     // the script can actually reach rather than a guess made before wrapping.

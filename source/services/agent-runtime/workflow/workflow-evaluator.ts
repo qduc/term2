@@ -30,7 +30,12 @@ const WORKFLOW_READ_INTERFACES = new Set([
 ]);
 const WORKFLOW_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 const WORKFLOW_WEB_TOOLS = new Set(['web_search', 'web_fetch']);
-export const WORKFLOW_PROHIBITED_TOOLS = new Set(['ask_user', 'run_subagent', 'run_agent_workflow']);
+/**
+ * Workflow policy names, kept as literals so `run_code`'s prohibited-name
+ * union can be checked against them at compile time.
+ */
+export const WORKFLOW_PROHIBITED_TOOL_NAMES = ['ask_user', 'run_subagent', 'run_agent_workflow'] as const;
+export const WORKFLOW_PROHIBITED_TOOLS: Set<string> = new Set<string>(WORKFLOW_PROHIBITED_TOOL_NAMES);
 
 export interface WorkflowEvaluatorDeps {
   runtime: Pick<AgentRuntime, 'agent'>;

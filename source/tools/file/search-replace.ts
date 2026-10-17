@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import {
@@ -274,7 +274,7 @@ export function createSearchReplaceToolDefinition(deps: {
   executionContext?: ExecutionContext;
   sessionAccess?: SessionAccessState;
   editHealing?: typeof healSearchReplaceParams;
-}): ToolDefinition<typeof searchReplaceParametersSchema> {
+}): ScriptedToolDefinition<typeof searchReplaceParametersSchema> {
   const {
     loggingService,
     settingsService,
@@ -291,6 +291,7 @@ export function createSearchReplaceToolDefinition(deps: {
       'string: one status line per operation, newline-joined — "Updated <path> (N match)" | "Created <path> (new file)" | "Error: \u2026"',
     effect: 'mutating',
     canRequireApproval: true,
+    scriptedReturnSchema: z.string(),
     parameters: searchReplaceParametersSchema,
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {

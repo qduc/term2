@@ -50,7 +50,7 @@ export const formatAskMentorCommandMessage: FormatCommandMessage = (item, index,
 
 export const createAskMentorToolDefinition = (
   askMentor: (question: string) => Promise<string>,
-): ToolDefinition<typeof askMentorSchema> => ({
+): ToolDefinition<typeof askMentorSchema, 'ask_mentor'> => ({
   name: 'ask_mentor',
   description: ASK_MENTOR_DESCRIPTION,
   parameters: askMentorSchema,

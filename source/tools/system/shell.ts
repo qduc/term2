@@ -9,7 +9,12 @@ import { logValidationError as logValidationErrorUtil } from '../../utils/shell/
 import { executeShellCommand } from '../../utils/shell/execute-shell.js';
 import type { ShellChildRegistry } from '../../utils/shell/shell-child-registry.js';
 import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
-import type { PostExecutePauseDescriptor, SchemaToolDefinition, FormatCommandMessage } from '../types.js';
+import type {
+  PostExecutePauseDescriptor,
+  SchemaToolDefinition,
+  ScriptedToolDefinition,
+  FormatCommandMessage,
+} from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import {
   coerceToText,
@@ -135,7 +140,7 @@ export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandb
   background?: boolean;
 };
 export type ShellToolDefinition = Omit<
-  SchemaToolDefinition<typeof shellParametersSchema>,
+  SchemaToolDefinition<typeof shellParametersSchema, 'shell'>,
   'execute' | 'needsApproval' | 'postExecutePause'
 > & {
   needsApproval: (params: ShellToolParams, context?: unknown) => Promise<boolean> | boolean;
@@ -170,10 +175,10 @@ const cancelShellMonitorParameters = z.object({
 });
 
 export interface BackgroundShellJobToolDefinitions {
-  get: SchemaToolDefinition<typeof getBackgroundShellJobParameters>;
-  cancel: SchemaToolDefinition<typeof getBackgroundShellJobParameters>;
-  monitor?: SchemaToolDefinition<typeof monitorShellJobParameters>;
-  cancelMonitor?: SchemaToolDefinition<typeof cancelShellMonitorParameters>;
+  get: ScriptedToolDefinition<typeof getBackgroundShellJobParameters>;
+  cancel: ScriptedToolDefinition<typeof getBackgroundShellJobParameters>;
+  monitor?: ScriptedToolDefinition<typeof monitorShellJobParameters>;
+  cancelMonitor?: ScriptedToolDefinition<typeof cancelShellMonitorParameters>;
 }
 
 function backgroundShellJobResponse(job: BackgroundShellJob<BackgroundShellExecutionResult>) {
@@ -397,6 +402,7 @@ export function createBackgroundShellJobToolDefinitions(
         'JSON string (JSON.parse first): { jobId, status: job lifecycle | "background_job_active" | "not_found", command?, output?, tail?, error?, message? }',
       description:
         'Get the non-blocking status and bounded output of a background shell job. Do not use this to poll a running job; completion is delivered automatically.',
+      scriptedReturnSchema: z.string(),
       parameters: getBackgroundShellJobParameters,
       parallelSafe: true,
       needsApproval: () => false,
@@ -413,6 +419,7 @@ export function createBackgroundShellJobToolDefinitions(
       scriptedReturnShape:
         'JSON string (JSON.parse first): { jobId, status: job lifecycle | "not_found", command?, output?, error? }',
       description: 'Request cancellation of a running background shell job without waiting for it to exit.',
+      scriptedReturnSchema: z.string(),
       parameters: getBackgroundShellJobParameters,
       needsApproval: () => false,
       execute: ({ job_id }) => {
@@ -433,6 +440,7 @@ export function createBackgroundShellJobToolDefinitions(
         'JSON string (JSON.parse first): { watchId, jobId, status: "monitoring"|"not_found"|"error", error? } — stop it with tools.cancel_shell_monitor({ watch_id })',
       description:
         "Attach a watch to a running background shell job. The watch replays the job's retained output, and each time a complete line in the selected stream matches `pattern` (or any line arrives when `pattern` is absent) and the output has been quiet for `idle_ms`, a `shell_output` notification carrying the matched lines is delivered through the conversation; the job keeps running. Returns a watchId; inside run_code, stop the watch with tools.cancel_shell_monitor(...). Each notification includes the number of distinct lines coalesced into it (`coalescedCount`) and the inclusive seq range (`seqRange`), so bursts hidden by `idle_ms` are visible.",
+      scriptedReturnSchema: z.string(),
       parameters: monitorShellJobParameters,
       needsApproval: () => false,
       execute: ({ job_id, pattern, stream, idle_ms, notify_limit, once }) => {
@@ -473,6 +481,7 @@ export function createBackgroundShellJobToolDefinitions(
       name: 'cancel_shell_monitor',
       scriptedReturnShape: 'JSON string (JSON.parse first): { watchId, status: "cancelled"|"not_found" }',
       description: 'Stop a shell monitor watch so it stops delivering shell_output notifications.',
+      scriptedReturnSchema: z.string(),
       parameters: cancelShellMonitorParameters,
       needsApproval: () => false,
       execute: ({ watch_id }) => {

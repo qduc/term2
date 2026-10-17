@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FormatCommandMessage, ToolDefinition } from '../types.js';
+import type { FormatCommandMessage, ScriptedToolDefinition } from '../types.js';
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../format-helpers.js';
 
 const ASK_ORCHESTRATOR_DESCRIPTION =
@@ -37,10 +37,11 @@ export const formatAskOrchestratorCommandMessage: FormatCommandMessage = (item, 
 /** A subagent-only bridge to its owning async orchestrator. */
 export function createAskOrchestratorToolDefinition(
   askOrchestrator: (question: string) => Promise<string>,
-): ToolDefinition<typeof askOrchestratorSchema> {
+): ScriptedToolDefinition<typeof askOrchestratorSchema> {
   return {
     name: 'ask_orchestrator',
     description: ASK_ORCHESTRATOR_DESCRIPTION,
+    scriptedReturnSchema: z.string(),
     parameters: askOrchestratorSchema,
     needsApproval: () => false,
     execute: ({ question }) => askOrchestrator(question),

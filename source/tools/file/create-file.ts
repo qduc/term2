@@ -4,7 +4,7 @@ import { access, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_CREATE_FILE } from '../tool-names.js';
 import type { ILoggingService, ISettingsService, ISSHService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -73,7 +73,7 @@ export function createCreateFileToolDefinition(deps: {
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
   sessionAccess?: SessionAccessState;
-}): ToolDefinition<typeof createFileParametersSchema> {
+}): ScriptedToolDefinition<typeof createFileParametersSchema> {
   const { loggingService, settingsService, executionContext, sessionAccess } = deps;
   const pendingOverwrites = new Map<string, PendingOverwrite>();
   const pendingOverwriteTtlMs = 10 * 60 * 1000;
@@ -111,6 +111,7 @@ export function createCreateFileToolDefinition(deps: {
       'string status: "Created <path>" | "Overwrote <path>" on success; "Error: \u2026" on failure (approval denials reject instead)',
     effect: 'mutating',
     canRequireApproval: true,
+    scriptedReturnSchema: z.string(),
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
       if (sessionAccess?.isReadOnly) return false;

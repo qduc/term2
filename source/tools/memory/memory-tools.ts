@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FormatCommandMessage, SchemaToolDefinition, ToolDefinition } from '../types.js';
+import type { AnyScriptedToolDefinition, FormatCommandMessage, ScriptedToolDefinition } from '../types.js';
 import {
   createBaseMessage,
   getCallIdFromItem,
@@ -157,11 +157,15 @@ function definition<S extends z.ZodObject<any>>(
   parameters: S,
   execute: (params: z.infer<S>, context?: unknown) => Promise<unknown>,
   needsApproval: boolean | (() => boolean) = false,
-): SchemaToolDefinition<S> {
+): ScriptedToolDefinition<S> {
   return {
     name,
     description,
     scriptedReturnShape: MEMORY_SCRIPTED_RETURN_SHAPES[name],
+    // Every memory tool serializes its envelope to a JSON string on every path,
+    // success or failure, so the script-visible value is a string and the
+    // envelope above stays guidance rather than a machine-readable contract.
+    scriptedReturnSchema: z.string(),
     parameters,
     preserveSerializedOutput: ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'].includes(name),
     needsApproval: typeof needsApproval === 'function' ? needsApproval : () => needsApproval,
@@ -174,7 +178,7 @@ function definition<S extends z.ZodObject<any>>(
 export function createMemoryToolDefinitions(
   input: MemoryStore | MemoryStores,
   options?: { settingsService?: ISettingsService },
-): ToolDefinition[] {
+): AnyScriptedToolDefinition[] {
   const stores = normalizeStores(input);
   const configuredLimits = stores.global.searchLimits?.() ?? {
     defaultLimit: DEFAULT_RESULT_LIMIT,

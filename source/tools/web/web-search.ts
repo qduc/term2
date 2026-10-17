@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import {
   getOutputText,
   normalizeToolArguments,
@@ -115,7 +115,7 @@ export const formatWebSearchCommandMessage: FormatCommandMessage = (item, index,
 export const createWebSearchToolDefinition = (deps: {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
-}): ToolDefinition<typeof webSearchSchema> => {
+}): ScriptedToolDefinition<typeof webSearchSchema> => {
   const { settingsService, loggingService } = deps;
 
   return {
@@ -123,6 +123,7 @@ export const createWebSearchToolDefinition = (deps: {
     description: WEB_SEARCH_DESCRIPTION,
     scriptedReturnShape:
       'string: markdown-formatted search results; "Error: \u2026" when no provider is configured or the search fails',
+    scriptedReturnSchema: z.string(),
     parameters: webSearchSchema,
     parallelSafe: true,
     needsApproval: () => false, // Web search is read-only, safe operation

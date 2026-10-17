@@ -50,7 +50,7 @@ export type AskUserParams = z.infer<typeof askUserSchema>;
 
 export const createAskUserToolDefinition = (
   getAskUserAnswer: (callId?: string) => string | undefined,
-): ToolDefinition => ({
+): ToolDefinition<typeof askUserSchema, typeof TOOL_NAME_ASK_USER> => ({
   name: TOOL_NAME_ASK_USER,
   description: ASK_USER_DESCRIPTION,
   parameters: askUserSchema,

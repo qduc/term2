@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import path from 'path';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import {
   getOutputText,
   normalizeToolArguments,
@@ -141,7 +141,7 @@ export const createFindFilesToolDefinition = (
     /** YOLO (autoApproveMode 'always') read bypass. */
     settingsService?: ISettingsService;
   } = {},
-): ToolDefinition<typeof findFilesParametersSchema> => {
+): ScriptedToolDefinition<typeof findFilesParametersSchema> => {
   const {
     executionContext,
     allowOutsideWorkspace = false,

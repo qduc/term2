@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
-import type { ToolDefinition } from '../types.js';
+import type { ScriptedToolDefinition } from '../types.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
 import {
   getCallIdFromItem,
@@ -21,7 +21,7 @@ const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo
 
 export const createActivateSkillToolDefinition = (
   skillsService: SkillsService,
-): ToolDefinition<typeof activateSkillSchema> => {
+): ScriptedToolDefinition<typeof activateSkillSchema> => {
   const availableSkills = skillsService.getAvailableSkillsForModel();
   const skillNames = availableSkills.map((s) => s.name);
 
@@ -39,6 +39,7 @@ export const createActivateSkillToolDefinition = (
     description: ACTIVATE_SKILL_DESCRIPTION,
     scriptedReturnShape:
       'string: the activated skill\u2019s instructions wrapped in <skill_content>; "Error: Skill \u0027<name>\u0027 not found." on failure',
+    scriptedReturnSchema: z.string(),
     parameters: activateSkillSchema,
     parallelSafe: true,
     needsApproval: () => false, // Safe operation

@@ -4,7 +4,7 @@ import path from 'path';
 import { applyDiff } from '../../utils/apply-diff.js';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import {
@@ -230,7 +230,7 @@ export function createApplyPatchToolDefinition(deps: {
   executionContext?: ExecutionContext;
   sessionAccess?: SessionAccessState;
   patchHealing?: typeof healPatchOperation;
-}): ToolDefinition<typeof applyPatchParametersSchema> {
+}): ScriptedToolDefinition<typeof applyPatchParametersSchema> {
   const { loggingService, settingsService, executionContext, sessionAccess, patchHealing = healPatchOperation } = deps;
 
   return {

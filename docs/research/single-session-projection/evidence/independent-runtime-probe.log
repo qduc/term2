@@ -1,0 +1,30 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs source/services/session/projection-independent.tmp.test.ts --reporter=verbose
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/single-session-projection
+
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/single-session-projection
+
+stdout | source/services/session/projection-independent.tmp.test.ts > independent real run-loop projection with recovery=false
+{"recover":false,"requests":3,"commands":2,"resets":1,"projectionInstances":1,"usage":{"prompt_tokens":30,"completion_tokens":6,"total_tokens":36},"persistedBytes":5015,"evidenceRoot":"/tmp/term2-projection-independent-pgPx83"}
+
+ ✓ source/services/session/projection-independent.tmp.test.ts > independent real run-loop projection with recovery=false 46ms
+stdout | source/services/session/projection-independent.tmp.test.ts > independent real run-loop projection with recovery=true
+{"recover":true,"requests":4,"commands":2,"resets":2,"projectionInstances":1,"usage":{"prompt_tokens":20,"completion_tokens":4,"total_tokens":24},"persistedBytes":4802,"evidenceRoot":"/tmp/term2-projection-independent-3Ge8Kn"}
+
+ ✓ source/services/session/projection-independent.tmp.test.ts > independent real run-loop projection with recovery=true 520ms
+stdout | source/services/session/projection-independent.tmp.test.ts > independent real run-loop projection with recovery=prepareFailure
+{"scenario":"prepareFailure","initialRecoveryCalls":1,"projectionInstances":1,"source":"startStream"}
+
+ ✓ source/services/session/projection-independent.tmp.test.ts > independent real run-loop projection with recovery=prepareFailure 493ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  22:33:57
+   Duration  3.94s (transform 1.88s, setup 40ms, import 2.54s, tests 1.06s, environment 0ms)
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  22:33:57
+   Duration  3.94s (transform 1.88s, setup 40ms, import 2.54s, tests 1.06s, environment 0ms)

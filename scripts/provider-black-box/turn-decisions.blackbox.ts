@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
-it('resumes an answered question once and settles a cancelled question before accepting the next turn', async () => {
+it('resumes repeated questions once per decision and settles cancellation before the next turn', async () => {
   const requests: Record<string, unknown>[] = [];
   const pending: ServerResponse[] = [];
   const server = createServer(async (request, response) => {
@@ -83,30 +83,40 @@ it('resumes an answered question once and settles a cancelled question before ac
     expect(outputs(1, 'answered-question')).toHaveLength(1);
     expect(String(outputs(1, 'answered-question')[0]!.output)).toContain('Violet');
     expect(requests[1]!.previous_response_id).toBe('question-response-0');
-    complete(1, [message('ANSWER_SETTLED')]);
+    complete(1, [question('second-answered-question', 'SELECT_A_SECOND_COLOR')]);
+    await child.waitForVisibleOutput('SELECT_A_SECOND_COLOR');
+    await child.write('1');
+    await child.waitForState(() => requests.length === 3);
+    expect(outputs(2, 'second-answered-question')).toHaveLength(1);
+    expect(String(outputs(2, 'second-answered-question')[0]!.output)).toContain('Amber');
+    expect(requests[2]!.previous_response_id).toBe('question-response-1');
+    expect(outputs(2, 'answered-question')).toHaveLength(0);
+    complete(2, [message('ANSWER_SETTLED')]);
     await child.waitForVisibleOutput('ANSWER_SETTLED');
     await child.waitForIdleInput({ after: firstIdle });
 
     const beforeCancel = child.readIdleGeneration();
     await writePtyTextAndSubmit(child, 'CANCEL_A_QUESTION');
-    await child.waitForState(() => requests.length === 3);
-    complete(2, [question('cancelled-question', 'CANCEL_THIS_QUESTION')]);
+    await child.waitForState(() => requests.length === 4);
+    complete(3, [question('cancelled-question', 'CANCEL_THIS_QUESTION')]);
     await child.waitForVisibleOutput('CANCEL_THIS_QUESTION');
     await child.write('\u001b');
     await child.waitForIdleInput({ after: beforeCancel });
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(4);
 
     await writePtyTextAndSubmit(child, 'AFTER_CANCELLED_QUESTION');
-    await child.waitForState(() => requests.length === 4);
-    expect(JSON.stringify(requests[3]!.input)).toContain('AFTER_CANCELLED_QUESTION');
-    complete(3, [message('QUESTION_SUCCESSOR_DONE')]);
+    await child.waitForState(() => requests.length === 5);
+    expect(JSON.stringify(requests[4]!.input)).toContain('AFTER_CANCELLED_QUESTION');
+    complete(4, [message('QUESTION_SUCCESSOR_DONE')]);
     await child.waitForVisibleOutput('QUESTION_SUCCESSOR_DONE');
     await child.waitForIdleInput({ after: beforeCancel + 1 });
-    expect(requests).toHaveLength(4);
+    expect(requests).toHaveLength(5);
     const files = (await readdir(lease.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
     const history = (
       await Promise.all(files.map((file) => readFile(join(lease.paths.conversationsDir, file), 'utf8')))
     ).join('\n');
+    expect(history).toContain('answered-question');
+    expect(history).toContain('second-answered-question');
     expect(history).toContain('cancelled-question');
     expect(history).toContain('User did not provide an answer.');
   } finally {

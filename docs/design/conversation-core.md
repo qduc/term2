@@ -39,6 +39,16 @@ The same runtime loop owns session recovery: a policy callback permits recovery 
 
 `SessionTurnAdapter` prepares session input, projects events and supplies decisions. An approval answer resolves a promise awaited by the runtime; it does not launch another stream. `TurnCoordinator` owns admission, public status and hooks. `TurnWorkflow` has been removed.
 
+Session projection follows the same lifetime. `SessionTurnAdapter` creates one
+`TurnProjectionState` before the first stream and processes every segment through
+`#projectStream`: consume events, finalize history, report compaction, and build
+the result. Approval binds a decision to that existing state; it does not copy
+accumulated projection facts into a continuation state. Command deduplication and
+latest cumulative usage remain in the state, while the existing turn accumulator
+and conversation store retain accepted items and history. A recovery resets
+attempt-specific projection facts on that same object before replaying; retry
+input and policy remain separate in `TurnAttempt` and the recovery handlers.
+
 Each feature has a place around this flow:
 
 | Feature | Where the reader goes | What it does |

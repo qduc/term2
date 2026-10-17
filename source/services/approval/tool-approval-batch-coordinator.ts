@@ -12,7 +12,7 @@ import {
 import { supportsFolderSessionRead } from '../../contracts/conversation.js';
 import { resolveSessionReadFolder } from './session-read-grant-target.js';
 import type { ContinuationPlanApplier } from '../session/continuation-plan-applier.js';
-import type { ContinuationState } from '../session/continuation-state.js';
+import type { TurnProjectionState } from '../session/turn-projection-state.js';
 import {
   asRecord,
   getCallIdFromObject,
@@ -56,7 +56,7 @@ export interface ToolApprovalBatchCoordinatorDeps {
 }
 
 export interface ToolApprovalBatchStageInput {
-  state: ContinuationState;
+  state: TurnProjectionState;
   interruptions?: unknown[];
   policy: ApprovalDecisionPolicy;
   token: number;
@@ -245,18 +245,13 @@ export class ToolApprovalBatchCoordinator {
       decidedPending.interruptions ??= siblings;
       decidedPending.decisionsByCallId ??= new Map();
       decidedPending.decisionsByCallId.set(callId, decision === 'approve' ? 'approved' : 'rejected');
-      yield* this.deps.planApplier.applyNextPlan(
-        nextPlan,
-        input.state,
-        input.state.previouslyEmittedIds,
-        decision === 'approve',
-      );
+      yield* this.deps.planApplier.applyNextPlan(nextPlan, input.state, decision === 'approve');
     }
 
     return { kind: 'ready' };
   }
 
-  #interruptionsFor(state: ContinuationState, fallback: unknown[] | undefined): unknown[] | undefined {
+  #interruptionsFor(state: TurnProjectionState, fallback: unknown[] | undefined): unknown[] | undefined {
     const getInterruptions = getMethod<[], unknown>(state.currentState, 'getInterruptions');
     const interruptions = getInterruptions?.();
     return Array.isArray(interruptions) ? interruptions : fallback;

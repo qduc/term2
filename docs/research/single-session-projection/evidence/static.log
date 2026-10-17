@@ -1,0 +1,9 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/single-session-projection
+
+
+ Test Files  7 passed (7)
+      Tests  28 passed (28)
+   Start at  22:35:45
+   Duration  2.27s (transform 1.58s, setup 137ms, import 145ms, tests 3.06s, environment 1ms)

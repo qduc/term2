@@ -1,0 +1,9 @@
+$ cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/single-session-projection
+
+[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l
+ Test Files  15 passed | 1 skipped (16)
+      Tests  121 passed | 1 skipped (122)
+   Start at  22:34:51
+   Duration  64.62s (transform 6.55s, setup 321ms, import 17.53s, tests 122.92s, environment 3ms)

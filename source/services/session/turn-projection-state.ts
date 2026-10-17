@@ -1,12 +1,9 @@
 import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { CommandMessage } from '../../tools/types.js';
 import { type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { StreamHistorySource } from './session-stream-processor.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
-import type { GenerationToken } from '../generation-guard.js';
-import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
 import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
@@ -15,14 +12,9 @@ export interface PreparedContinuation {
   state: ContinuationHandle;
   interruption: unknown;
   toolCallArgumentsById: Map<string, unknown>;
-  previouslyEmittedCommandIds: Set<string>;
   toolStartedEvent?: ConversationEvent;
   source: StreamHistorySource;
-  token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';
-  cumulativeUsage?: NormalizedUsage;
-  cumulativeCommandMessages?: CommandMessage[];
-  cumulativeTurnItems?: PersistedAssistantTurnItem[];
 }
 
 export type ContinuationInit =
@@ -45,13 +37,13 @@ export type ContinuationInit =
     };
 
 /**
- * Projection and recovery facts for one live operation. This object does not
+ * Session projection and recovery facts for one whole turn. This object does not
  * encode a waiting position: ApplicationRunLoop retains that position on its async
  * stack, including across manual decisions. The handle addresses that task;
  * emitted ids, usage and journal snapshots reconcile its public stream views.
  */
-export class ContinuationState {
-  token: number;
+export class TurnProjectionState {
+  readonly token: number;
   currentState: ContinuationHandle;
   currentCallIds: string[];
   source: StreamHistorySource;
@@ -59,8 +51,6 @@ export class ContinuationState {
   journalSnapshot: AssistantJournalItemLogEvent[];
   inputMode: 'delta' | 'full_history';
   cumulativeUsage?: NormalizedUsage;
-  cumulativeCommandMessages: CommandMessage[];
-  cumulativeTurnItems?: PersistedAssistantTurnItem[];
   retryCounts: RetryCounts;
   lastStream: AgentStream | null;
   currentResumePreviousResponseId: string | null | undefined;
@@ -72,11 +62,10 @@ export class ContinuationState {
     this.recoveryBudget = recoveryBudget ?? new RetryRecoveryBudget();
     this.currentState = { kind: 'continuation' };
     this.currentCallIds = [];
-    this.source = 'continueRunStream';
+    this.source = 'startStream';
     this.previouslyEmittedIds = new Set();
     this.journalSnapshot = [];
     this.inputMode = 'delta';
-    this.cumulativeCommandMessages = [];
     this.retryCounts = {
       transientRetryCount: 0,
       serviceTierFallbackCount: 0,
@@ -87,30 +76,42 @@ export class ContinuationState {
     this.currentResumePreviousResponseId = undefined;
   }
 
-  initializeFrom(prepared: PreparedContinuation, currentCallIds: string[]): void {
+  /** A recovery may rebuild the attempt; it retains this projection object's identity. */
+  resetForAttempt(inputMode: 'delta' | 'full_history'): void {
+    this.currentState = { kind: 'continuation' };
+    this.currentCallIds = [];
+    this.source = 'startStream';
+    this.previouslyEmittedIds = new Set();
+    this.journalSnapshot = [];
+    this.inputMode = inputMode;
+    this.cumulativeUsage = undefined;
+    this.retryCounts = {
+      transientRetryCount: 0,
+      serviceTierFallbackCount: 0,
+      modelRetryCount: 0,
+      transportDowngradeCount: 0,
+    };
+    this.lastStream = null;
+    this.currentResumePreviousResponseId = undefined;
+  }
+
+  /** Bind the pending decision without replacing accumulated projection facts. */
+  bindDecision(prepared: PreparedContinuation, currentCallIds: string[]): void {
     this.currentState = prepared.state;
     this.currentCallIds = currentCallIds;
     this.source = prepared.source;
-    this.previouslyEmittedIds = prepared.previouslyEmittedCommandIds;
-    this.inputMode = prepared.inputMode ?? 'delta';
-    this.cumulativeUsage = prepared.cumulativeUsage;
-    this.cumulativeCommandMessages = prepared.cumulativeCommandMessages ? [...prepared.cumulativeCommandMessages] : [];
-    this.cumulativeTurnItems = prepared.cumulativeTurnItems;
-    this.token = prepared.token ?? this.token;
+    this.inputMode = prepared.inputMode ?? this.inputMode;
   }
 
   advanceFromPlan(
     nextState: ContinuationHandle,
-    _nextInterruption: unknown,
     nextInputMode: 'delta' | 'full_history' | undefined,
-    mergedEmittedIds: Set<string>,
     journalSnapshot: AssistantJournalItemLogEvent[],
     currentCallIds: string[],
   ): void {
     this.currentState = nextState;
     this.currentCallIds = currentCallIds;
     this.source = 'continueRunStream';
-    this.previouslyEmittedIds = mergedEmittedIds;
     this.journalSnapshot = journalSnapshot;
     this.inputMode = nextInputMode ?? this.inputMode;
   }
@@ -121,14 +122,6 @@ export class ContinuationState {
 
   setCumulativeUsage(usage: NormalizedUsage | undefined): void {
     this.cumulativeUsage = usage;
-  }
-
-  setCumulativeCommandMessages(messages: CommandMessage[]): void {
-    this.cumulativeCommandMessages = messages;
-  }
-
-  setCumulativeTurnItems(items: PersistedAssistantTurnItem[] | undefined): void {
-    this.cumulativeTurnItems = items;
   }
 
   setRetryCounts(counts: RetryCounts): void {

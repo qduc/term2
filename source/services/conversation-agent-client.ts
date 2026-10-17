@@ -99,7 +99,16 @@ export interface SubagentEventSinkHost {
   cancelSubagentRuns?(): void;
 }
 
+/** Session projection and policy operations; execution stays in ApplicationRunLoop. */
+export interface ConversationTurnSession {
+  prepare(signal: AbortSignal): Promise<{ input: ProviderInput; options: AgentClientRunOptions } | undefined>;
+  consume(stream: AgentStream): Promise<void>;
+  interrupted(): Promise<AgentClientRunOptions>;
+  recover(error: unknown): Promise<boolean>;
+}
+
 export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
+  runTurn(session: ConversationTurnSession): Promise<void>;
   setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   answerBackgroundSubagentQuestion?(runId: string, messageId: string, answer: string): boolean;
   startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;

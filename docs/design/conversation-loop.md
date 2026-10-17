@@ -5,7 +5,7 @@ the [ownership-first experiment](../../experiments/conversation-actor/v2/DESIGN.
 around the human's model: ask the model; execute requested tools and return their
 outputs; repeat; finish when the model has no tools. Start with the
 [short explanation](conversation-core.md). Implementation and verification details
-are retained in [WORK.md](../research/conversation-loop-runtime/WORK.md).
+are retained in [WORK.md](../research/single-turn-owner/WORK.md).
 
 ## The design decision
 
@@ -120,12 +120,12 @@ of the same advancement decision, not erasing necessary execution or journal dat
 
 ## Where the current implementation maps
 
-The shared loop, conversation workflow and input projections have different jobs:
+The runtime loop and session projections have different jobs:
 
 | Owner | Production responsibility | Removed coordination / retained boundary |
 | --- | --- | --- |
-| `ApplicationRunLoop.#runTurn` | `prepareRequest` → `askModel` → `recordResponse` → `executeTools` → explicit `finishTurn` | Request retry stays inside `askModel`; approval/budget waits resume the same task. The old request-boundary resume checkpoint is gone. |
-| `TurnWorkflow.#runConversationTurn` | One conversation operation, observed by initial/approval/post-execute APIs | Manual approvals suspend the current operation rather than reconstructing `ContinuationState`. That state retains projection/recovery facts, not a program counter. |
+| `ApplicationRunLoop.#runTurn` | `prepareRequest` → `askModel` → `recordResponse` → `executeTools` → explicit `finishTurn` | Safe request retry stays inside `askModel`; session recovery returns a decision to this loop. Approval/budget waits resume this same task. The old request-boundary resume checkpoint is gone. |
+| `SessionTurnAdapter` | Bounded input preparation, event projection, approval decisions and recovery policy callbacks | It starts one `AgentClient.runTurn` task. Answers resolve its wait; no adapter method dispatches an initial or continuation stream. `ContinuationState` retains projection/recovery facts, not an execution position. |
 | `TurnCoordinator` and `TurnStatusMachine` | Admission lease, public busy/waiting status, hooks and terminal handling | Status remains a presentation/admission constraint. It does not choose the next model round. |
 | `ConversationAdapter.#submissions` and `submitMessage` | Latest payload, pending stage, mutation and steer-to-queue fallback | Separate pending-steer id set and UI edited/retracted steer stores are gone. `sendMessage` remains the direct queue API for gateway/automatic callers. |
 | `QueueController` | Queue ordering, capacity, preflight, retained pause, active execution identity and text-only restart projection | Queue text is a projection, not the in-process executable payload. Existing lease and persistence contracts remain. |

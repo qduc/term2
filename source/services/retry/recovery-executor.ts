@@ -26,17 +26,6 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
   apply(input: RecoveryExecutorInput): RecoveryResult {
     const { plan, state, retryCounts, maxModelRetries } = input;
     switch (plan.kind) {
-      case 'resume_stream': {
-        const instruction: NextRunInstruction = {
-          skipUserMessage: true,
-          retryCounts,
-          maxModelRetries,
-          resumeState: plan.state,
-          resumePreviousResponseId: plan.previousResponseId,
-        };
-        return { kind: 'run', instruction, events: [] };
-      }
-
       case 'replay_turn': {
         this.deps.providerContinuity.clear();
         this.deps.toolTracker.import(journalSnapshotToLedger(state.journalSnapshot));

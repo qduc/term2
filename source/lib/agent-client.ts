@@ -1,3 +1,5 @@
+import type { ApplicationRunLoopOptions } from '../services/agent-runtime/application-run-loop.js';
+import type { ConversationTurnSession } from '../services/conversation-agent-client.js';
 import {
   isProviderContextOverflow,
   ProviderContextOverflowError,
@@ -1433,7 +1435,51 @@ export class AgentClient {
     };
   }
 
-  async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
+  #applicationOptions(options: ChainedRunOptions): ApplicationRunLoopOptions {
+    const provider = this.#agentConfig.getProvider();
+    const supportsChaining = this.supportsConversationChaining();
+    const requestPreparation = this.#openAIRequestPreparation(options);
+    const boundaryCompaction = this.#boundaryCompaction();
+    const runBudget = this.#runBudgetPolicy();
+    const goalStopCheck = this.#goalStopCheck();
+    return {
+      requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
+      ...(boundaryCompaction ? { boundaryCompaction } : {}),
+      ...(requestPreparation ? { requestPreparation } : {}),
+      ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
+        ? { previousResponseId: options.previousResponseId }
+        : {}),
+      ...(options.providerHistorySnapshot ? { compactionHistory: options.providerHistorySnapshot.history } : {}),
+      ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
+      ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
+      providerId: provider,
+      supportsConversationChaining: supportsChaining,
+      sessionId: options.sessionId,
+      turnId: options.hookTurnId,
+      hookScope: this.#hookScope,
+      ...(options.sessionId ? { context: { sessionId: options.sessionId } } : {}),
+      maxTurns: this.#maxTurns,
+      runBudget,
+      ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
+      ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
+      onRequestBoundary: (history, onReminder, observation) => {
+        if (observation.compactionSkipReason) {
+          this.#logger.debug('Automatic context compaction skipped without aligned chained history', {
+            reason: observation.compactionSkipReason,
+            measuredInputTokens: observation.lastCompletedInputTokens ?? 0,
+          });
+        }
+        return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
+      },
+      ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
+      ...(goalStopCheck ? { onNormalStop: goalStopCheck } : {}),
+    };
+  }
+
+  async #prepareApplicationTurn(
+    userInput: ProviderInput,
+    options: ChainedRunOptions = {},
+  ): Promise<{ agent: ApplicationAgent; input: ProviderInput; options: ApplicationRunLoopOptions }> {
     this.#subagentBridge?.resetAbortController();
     // Stop whatever is streaming without judging the turn's fate: a retry
     // restarts the stream of the turn already in progress, and the turn-ending
@@ -1451,56 +1497,38 @@ export class AgentClient {
       if (startController.signal.aborted) {
         throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
       }
-      const provider = this.#agentConfig.getProvider();
       this.#agentConfig.beginTurn();
-      const supportsChaining = this.supportsConversationChaining();
-      const baseAgent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
-      const agent = baseAgent;
-      const requestPreparation = this.#openAIRequestPreparation(options);
-      const boundaryCompaction = this.#boundaryCompaction();
-      const runBudget = this.#runBudgetPolicy();
-      const goalStopCheck = this.#goalStopCheck();
-      const run = () => {
-        return this.#applicationRunLoop.startStream(agent, userInput, {
-          requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
-          ...(boundaryCompaction ? { boundaryCompaction } : {}),
-          ...(requestPreparation ? { requestPreparation } : {}),
-          ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
-            ? { previousResponseId: options.previousResponseId }
-            : {}),
-          ...(options.providerHistorySnapshot ? { compactionHistory: options.providerHistorySnapshot.history } : {}),
-          ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
-          ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
-          providerId: provider,
-          supportsConversationChaining: supportsChaining,
-          sessionId: options.sessionId,
-          turnId: options.hookTurnId,
-          hookScope: this.#hookScope,
-          ...(options.sessionId ? { context: { sessionId: options.sessionId } } : {}),
-          maxTurns: this.#maxTurns,
-          runBudget,
-          ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
-          ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
-          onRequestBoundary: (history, onReminder, observation) => {
-            if (observation.compactionSkipReason) {
-              this.#logger.debug('Automatic context compaction skipped without aligned chained history', {
-                reason: observation.compactionSkipReason,
-                measuredInputTokens: observation.lastCompletedInputTokens ?? 0,
-              });
-            }
-            return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
-          },
-          ...(goalStopCheck ? { onNormalStop: goalStopCheck } : {}),
-        });
-      };
-      const stream = run();
+      const agent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
       this.#activeStartController = null;
-      this.#observeCompletion(stream, userInput, provider, this.#agentConfig.getModel());
-      return stream;
+      return { agent, input: userInput, options: this.#applicationOptions(options) };
     } catch (error) {
       if (this.#activeStartController === startController) this.#activeStartController = null;
       throw error;
     }
+  }
+
+  async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
+    const start = await this.#prepareApplicationTurn(userInput, options);
+    const stream = this.#applicationRunLoop.startStream(start.agent, start.input, start.options);
+    this.#observeCompletion(stream, userInput, this.#agentConfig.getProvider(), this.#agentConfig.getModel());
+    return stream;
+  }
+
+  async runTurn(session: ConversationTurnSession): Promise<void> {
+    await this.#applicationRunLoop.runTurn({
+      prepare: async (signal) => {
+        const start = await session.prepare(signal);
+        if (!start) return undefined;
+        const prepared = await this.#prepareApplicationTurn(start.input, start.options);
+        return prepared;
+      },
+      consume: async (stream) => {
+        this.#observeCompletion(stream, stream.state, this.#agentConfig.getProvider(), this.#agentConfig.getModel());
+        await session.consume(stream);
+      },
+      interrupted: async () => this.#applicationOptions(await session.interrupted()),
+      recover: (error) => session.recover(error),
+    });
   }
 
   async continueRunStream(state: ContinuationHandle, options: ChainedRunOptions = {}): Promise<AgentStream> {
@@ -1510,42 +1538,7 @@ export class AgentClient {
     this.#abortActiveWork(() => undefined);
     const provider = this.#agentConfig.getProvider();
     if (options.sessionId) this.#lastLogicalSessionId = options.sessionId;
-    const supportsChaining = this.supportsConversationChaining();
-    const requestPreparation = this.#openAIRequestPreparation(options);
-    const boundaryCompaction = this.#boundaryCompaction();
-    const runBudget = this.#runBudgetPolicy();
-    const goalStopCheck = this.#goalStopCheck();
-    const stream = this.#applicationRunLoop.continueRunStream(state, {
-      requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
-      ...(boundaryCompaction ? { boundaryCompaction } : {}),
-      ...(requestPreparation ? { requestPreparation } : {}),
-      ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
-        ? { previousResponseId: options.previousResponseId }
-        : {}),
-      ...(options.providerHistorySnapshot ? { compactionHistory: options.providerHistorySnapshot.history } : {}),
-      ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
-      ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
-      providerId: provider,
-      supportsConversationChaining: supportsChaining,
-      sessionId: options.sessionId,
-      turnId: options.hookTurnId,
-      hookScope: this.#hookScope,
-      maxTurns: this.#maxTurns,
-      runBudget,
-      ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
-      ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
-      onRequestBoundary: (history, onReminder, observation) => {
-        if (observation.compactionSkipReason) {
-          this.#logger.debug('Automatic context compaction skipped without aligned chained history', {
-            reason: observation.compactionSkipReason,
-            measuredInputTokens: observation.lastCompletedInputTokens ?? 0,
-          });
-        }
-        return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
-      },
-      ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
-      ...(goalStopCheck ? { onNormalStop: goalStopCheck } : {}),
-    });
+    const stream = this.#applicationRunLoop.continueRunStream(state, this.#applicationOptions(options));
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());
     return stream;
   }

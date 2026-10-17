@@ -175,9 +175,11 @@ change — `NODE_ENV=test pnpm test:provider-black-box`.
 All minimum-matrix cells are covered, including the former B1 gap: a real
 post-execute approval pause whose resumed stream completes with an
 auto-approvable shell interruption now settles with initial-path parity
-(`turn-workflow.ts` `#continuePostExecuteRun` drives the same auto-approval
-continuation the initial path uses; proof at
-`turn-workflow.outcome-contract.test.ts:190`).
+(historical unit-suite proof at `turn-workflow.outcome-contract.test.ts:190`,
+tag `unit-suite-baseline`). The current `ApplicationRunLoop.#runTurn` remains
+alive through post-execute gates; `SessionTurnAdapter.continuePostExecute`
+observes that task and its interruption callback supplies any later approval
+decision. There is no `TurnWorkflow` execution owner.
 
 The Phase 0 Seam 1 command named only valid paths but under-covered this
 contract; that historical scope limitation is not a product or coverage gap.

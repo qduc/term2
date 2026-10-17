@@ -1,0 +1,48 @@
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/single-turn-owner
+
+ ❯ source/services/session/turn-owner-verifier.tmp.test.ts (3 tests | 2 failed | 1 skipped) 206ms
+   × closes a public turn observer during streaming and permits its successor 121ms
+   × closes a public turn observer during approval and permits its successor 84ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  source/services/session/turn-owner-verifier.tmp.test.ts > closes a public turn observer during streaming and permits its successor
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ source/services/session/turn-owner-verifier.tmp.test.ts:73:47
+     71|     ]);
+     72|     expect(returned?.done).toBe(true);
+     73|     if (mode === 'streaming') expect(aborted).toBe(true);
+       |                                               ^
+     74|     const successor = [];
+     75|     for await (const next of runtime.turns.start('second')) successor.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  source/services/session/turn-owner-verifier.tmp.test.ts > closes a public turn observer during approval and permits its successor
+Error: A conversation turn is already active
+ ❯ SessionTurnAdapter.executeInitial source/services/session/session-turn-adapter.ts:197:30
+    195|     options: InitialTurnRunOptions = {},
+    196|   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    197|     if (this.#liveRun) throw new Error('A conversation turn is already…
+       |                              ^
+    198|     this.#syncPolicyRegistry();
+    199|     this.#input = input;
+ ❯ TurnCoordinator.#forwardOwned source/services/session/turn-coordinator.ts:286:33
+ ❯ TurnCoordinator.start source/services/session/turn-coordinator.ts:70:37
+ ❯ source/services/session/turn-owner-verifier.tmp.test.ts:75:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 skipped (3)
+   Start at  22:09:59
+   Duration  7.49s (transform 5.14s, setup 58ms, import 6.82s, tests 206ms, environment 0ms)

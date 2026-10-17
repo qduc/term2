@@ -1,4 +1,3 @@
-import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
@@ -37,7 +36,6 @@ export type ClassifiedFailure =
 // ── Recovery Plan ──────────────────────────────────────────────
 
 export type RecoveryPlan =
-  | { kind: 'resume_stream'; state: ContinuationHandle; previousResponseId: string | null }
   | { kind: 'replay_turn'; inputMode: 'full_history'; rollbackUserMessage: boolean; errorContext?: string }
   | {
       kind: 'retry_fresh';
@@ -107,8 +105,6 @@ export type NextRunInstruction = {
   skipUserMessage: boolean;
   retryCounts: RetryCounts;
   maxModelRetries?: number;
-  resumeState?: ContinuationHandle;
-  resumePreviousResponseId?: string | null;
   disableChainingForAttempt?: boolean;
 };
 

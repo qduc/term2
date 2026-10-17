@@ -30,7 +30,6 @@ export type ContinuationRecoveryHandlerDeps = {
 export type ContinuationRecoveryResult =
   | { kind: 'stale' }
   | { kind: 'terminated' }
-  | { kind: 'resume' }
   | {
       kind: 'fresh_start';
       retryCounts: RetryCounts;
@@ -204,18 +203,6 @@ export class ContinuationRecoveryHandler {
 
     if (recoveryResult.kind === 'terminated') {
       return { kind: 'terminated' };
-    }
-
-    if (recoveryResult.instruction.resumeState) {
-      if (typeof transientDelayMs === 'number' && transientDelayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, transientDelayMs));
-        if (!this.deps.generationGuard.isCurrent(state.token)) {
-          return { kind: 'stale' };
-        }
-      }
-      state.currentState = recoveryResult.instruction.resumeState;
-      state.setResumePreviousResponseId(recoveryResult.instruction.resumePreviousResponseId);
-      return { kind: 'resume' };
     }
 
     return {

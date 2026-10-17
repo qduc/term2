@@ -16,7 +16,7 @@ Before extracting, ask what deleting the new module would cost:
 
 ## Where things belong
 
-Keep orchestration where the domain lifecycle is owned. `TurnWorkflow` may be internally complex as long as it keeps the turn lifecycle local and testable through its public methods.
+Keep execution advancement in `ApplicationRunLoop.#runTurn`. `SessionTurnAdapter` supplies bounded preparation, event projection, decisions and recovery policy; it must not start continuation streams or add another turn-driving loop.
 
 Keep policy in the policy modules:
 

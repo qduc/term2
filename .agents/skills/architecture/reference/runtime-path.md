@@ -10,13 +10,13 @@ layer. File paths below reflect the current locations.
 2. `use-conversation.ts` owns a `ConversationOrchestrator` (`services/conversation/conversation-orchestrator.ts`), which turns `ConversationEvent`s into UI message-list state, and calls `ConversationService.sendMessage()` (`services/conversation/conversation-service.ts`).
 3. `ConversationService` delegates terminal execution to the `ConversationAdapter` (`services/conversation/conversation-adapter.ts`), built via `createConversationRuntime()` (`conversation-runtime-factory.ts`), which calls `createSessionRuntime()` — the composition root in `services/session/session-composition.ts`.
 4. `ConversationAdapter` establishes logging/traffic context, collects terminal events, and routes through `QueueController` (`services/queue/queue-controller.ts`) to manage turn admission.
-5. `TurnCoordinator.start()` (`services/session/turn-coordinator.ts`) guards turn admission with `TurnStatusMachine`, checks stale/aborted approval state through `ApprovalFlowCoordinator` (`services/approval/approval-flow-coordinator.ts`), and delegates to `TurnWorkflow.executeInitial()`.
-6. `TurnWorkflow` (`services/session/turn-workflow.ts`) prepares input through `InitialInputPreparer` and `SessionInputPlanner`, drives the agent client, feeds events to `SessionStreamProcessor` (`services/session/session-stream-processor.ts`), and returns a turn outcome.
+5. `TurnCoordinator.start()` (`services/session/turn-coordinator.ts`) guards turn admission with `TurnStatusMachine`, checks stale/aborted approval state through `ApprovalFlowCoordinator` (`services/approval/approval-flow-coordinator.ts`), and delegates to `SessionTurnAdapter.executeInitial()`.
+6. `SessionTurnAdapter` (`services/session/session-turn-adapter.ts`) starts one `AgentClient.runTurn` task and supplies bounded callbacks: prepare input through `InitialInputPreparer`/`SessionInputPlanner`, project streams through `SessionStreamProcessor`, supply decisions, and consult recovery policy. `ApplicationRunLoop.#runTurn` owns execution and recovery repetition.
 7. The agent client selects a provider through the provider registry and streams the response.
 8. Tool requests are validated by `ApprovalFlowCoordinator` and paused for user approval; `TurnStatusMachine` transitions to `awaiting_approval`.
 9. Approval/rejection follows the same facade and adapter path, then `ConversationAdapter` calls `TurnCoordinator.continueAfterApproval()` directly.
-10. `TurnCoordinator` delegates approved continuation to `TurnWorkflow.executeContinuation()`, which applies the decision, streams tool/model work, and returns `response`, `approval_required`, `fresh_start_required`, or `stale`.
-11. `services/retry/` classifies errors and handles recovery. `fresh_start_required` lets `TurnWorkflow` re-drive initial execution from history.
+10. `TurnCoordinator` routes the answer to `SessionTurnAdapter.executeContinuation()`. It resolves the pending decision and observes the same runtime task; it does not start a continuation stream.
+11. `services/retry/` classifies errors and handles recovery policy. The session callback returns recovery authorization to the existing runtime loop, which prepares the next attempt.
 12. `ConversationAdapter` collects the terminal result, `ConversationOrchestrator` applies it, and it renders in the message list.
 
 ## Steering: input submitted while a turn runs
@@ -30,11 +30,7 @@ after the round's tool results are in history, before the next request is built
 steering notice from `prompts/steering-notice.ts`. Nothing is cancelled, and a
 running tool is never interrupted.
 
-The loop answers `false` when that turn has no further request boundary (it is
-finishing, or parked on an approval). The message then goes to `QueueController`
-as a `steer` command: its own turn, ahead of follow-ups queued earlier. That
-fallback — not cancellation — is why a steer sometimes only lands after the
-current turn ends.
+A steer can remain pending through approval. If the active turn releases it without consumption, the conversation submission record applies queue fallback. Editing and retracting update that same record; the UI does not resubmit released input.
 
 `source/services/agent-runtime/` is not a parallel path — it is the shared engine. `ApplicationRunLoop` (`application-run-loop.ts`) does the actual model streaming and tool dispatch for *every* caller: step 7 above reaches it via `AgentClient`, and the mentor/nested subagent runners construct it directly. The directory also owns agent/model/tool/skill resolution, execution budgeting, and structured output.
 

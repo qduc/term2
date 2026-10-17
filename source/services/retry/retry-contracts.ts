@@ -1,6 +1,5 @@
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 
 // ── Classification ─────────────────────────────────────────────
 
@@ -93,8 +92,8 @@ export type RecoveryContext = {
 // ── Recovery State ─────────────────────────────────────────────
 
 export type RecoveryState = {
-  /** Durable assistant-output journal events; replaces the legacy ledger snapshot. */
-  journalSnapshot: AssistantJournalItemLogEvent[];
+  /** Which Record-owned preparation boundary to recover from. */
+  baseline: 'initial' | 'decision';
   addedUserMessage: boolean;
   stream: AgentStream | null;
 };

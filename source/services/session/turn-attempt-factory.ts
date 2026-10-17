@@ -53,6 +53,7 @@ export class TurnAttemptFactory {
     const token = options.token ?? this.deps.generationGuard.capture();
     if (!this.deps.generationGuard.isCurrent(token)) return { kind: 'stale' };
 
+    this.deps.record.beginAttempt();
     return {
       kind: 'created',
       attempt: new TurnAttempt({
@@ -60,7 +61,6 @@ export class TurnAttemptFactory {
         submittedTurn: normalized,
         token,
         initialRetryCounts: this.#normalizeRetryCounts(options.retries),
-        initialJournalSnapshot: this.deps.record.getJournalEvents(),
         maxTransientRetries: this.deps.resolveRetryLimit(),
         maxModelRetries: options.maxModelRetries,
         recoveryBudget: options.recoveryBudget,

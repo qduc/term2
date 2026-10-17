@@ -8,11 +8,22 @@ export class SessionToolTracker {
   private emittedSubagentToolStartedIds = new Set<string>();
   private emittedCommandMessageIdsByCallId = new Map<string, string[]>();
 
-  get argumentsById(): Map<string, unknown> {
-    return this.toolCallArgumentsById;
+  snapshotArguments(): Map<string, unknown> {
+    return new Map(this.toolCallArgumentsById);
   }
-  get invalidPackets(): Set<string> {
-    return this.emittedInvalidToolCallPackets;
+
+  /** Work on a detached segment view; only a current generation commits it. */
+  beginProjection(preserveArguments: boolean) {
+    const argumentsById = preserveArguments ? this.snapshotArguments() : new Map<string, unknown>();
+    const invalidPackets = new Set(this.emittedInvalidToolCallPackets);
+    return {
+      argumentsById,
+      invalidPackets,
+      commit: () => {
+        this.toolCallArgumentsById = new Map(argumentsById);
+        for (const packet of invalidPackets) this.emittedInvalidToolCallPackets.add(packet);
+      },
+    };
   }
 
   /** A settled result allows a later provider reuse of the call id to render anew. */
@@ -62,18 +73,6 @@ export class SessionToolTracker {
 
   clearArguments(): void {
     this.toolCallArgumentsById.clear();
-  }
-
-  /**
-   * Restore tool-call arguments from a saved map.
-   */
-  restoreArguments(savedArgs: Map<string, unknown>): void {
-    this.toolCallArgumentsById.clear();
-    if (savedArgs?.size) {
-      for (const [key, value] of savedArgs.entries()) {
-        this.toolCallArgumentsById.set(key, value);
-      }
-    }
   }
 
   /**

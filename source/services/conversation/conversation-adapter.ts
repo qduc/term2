@@ -11,7 +11,7 @@ import { userTurnToProviderItem } from './user-turn-item.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../../core/session-runtime.js';
 import { getProfileLabel } from '../profiles/labels.js';
-import type { SessionManager } from '../session/session-manager.js';
+import type { SessionLifecycle } from '../session/session-lifecycle.js';
 import type { PendingInteractionState } from '../session/pending-interaction-state.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
 import type { SessionIdentity } from '../session/session-identity.js';
@@ -182,7 +182,7 @@ export class ConversationAdapter {
   #logger: ILoggingService;
   #settingsService?: ISettingsService;
   #sessionContextService: ISessionContextService;
-  #userTurns: Pick<SessionManager, 'listUserTurns'>;
+  #userTurns: Pick<SessionLifecycle, 'listUserTurns'>;
   #logs: SessionLogs;
   #approval: SessionApprovalQuery;
   #pendingInteraction: Pick<PendingInteractionState, 'present' | 'clear' | 'getSnapshot'> | null;
@@ -230,7 +230,7 @@ export class ConversationAdapter {
     logger: ILoggingService;
     settingsService?: ISettingsService;
     sessionContextService: ISessionContextService;
-    userTurns: Pick<SessionManager, 'listUserTurns'>;
+    userTurns: Pick<SessionLifecycle, 'listUserTurns'>;
     logs: SessionLogs;
     approval: SessionApprovalQuery;
     /** Session-owned interaction projection; omitted by low-level legacy tests. */

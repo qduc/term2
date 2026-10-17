@@ -10,8 +10,6 @@ export type PendingApprovalContext = {
   interruptions?: unknown[];
   decisionsByCallId?: Map<string, ApprovalBatchDecision>;
   promptedCallId?: string;
-  emittedCommandIds: Set<string>;
-  toolCallArgumentsById: Map<string, unknown>;
   owner: ToolOwner;
   token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';
@@ -23,8 +21,6 @@ export type AbortedApprovalContext = {
   interruptions?: unknown[];
   decisionsByCallId?: Map<string, ApprovalBatchDecision>;
   promptedCallId?: string;
-  emittedCommandIds: Set<string>;
-  toolCallArgumentsById: Map<string, unknown>;
   owner: ToolOwner;
   token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';
@@ -58,8 +54,6 @@ export class ApprovalState {
       interruptions: this.pending.interruptions,
       decisionsByCallId: this.pending.decisionsByCallId,
       promptedCallId: this.pending.promptedCallId,
-      emittedCommandIds: this.pending.emittedCommandIds,
-      toolCallArgumentsById: this.pending.toolCallArgumentsById,
       owner: this.pending.owner,
       token: this.pending.token,
       inputMode: this.pending.inputMode,

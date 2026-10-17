@@ -1,20 +1,16 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
-import type { ILoggingService } from '../service-interfaces.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
 import type { ContinuationInit, TurnProjectionState, PreparedContinuation } from './turn-projection-state.js';
 import type { ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import type { ApprovalContext } from '../approval/approval-decision-policy.js';
 import type { ConversationRecord } from '../conversation/conversation-record.js';
-import type { SessionIdSource } from './session-identity.js';
 
 export type ContinuationPlanApplierDeps = {
   approvalFlow: ApprovalFlowCoordinator;
   toolTracker: SessionToolTracker;
-  logger: ILoggingService;
-  sessionId: SessionIdSource;
   record: ConversationRecord;
 };
 
@@ -22,6 +18,9 @@ export class ContinuationPlanApplier {
   constructor(private readonly deps: ContinuationPlanApplierDeps) {}
 
   prepareInit(init: ContinuationInit): PreparedContinuation {
+    this.deps.record.beginDecisionResolution(
+      init.kind === 'abort_resolution' ? 'abortResolution' : 'continueRunStream',
+    );
     if (init.kind === 'approval_decision') {
       const plan = this.deps.approvalFlow.prepareContinuation(init.answer, init.rejectionReason);
       if (!plan) {
@@ -35,9 +34,6 @@ export class ContinuationPlanApplier {
         if (init.answer === 'y') plan.pendingApprovalContext.state.approve?.(plan.pendingApprovalContext.interruption);
         else plan.pendingApprovalContext.state.reject?.(plan.pendingApprovalContext.interruption);
         return {
-          state: plan.pendingApprovalContext.state,
-          interruption: plan.pendingApprovalContext.interruption,
-          toolCallArgumentsById: plan.pendingApprovalContext.toolCallArgumentsById,
           toolStartedEvent: undefined,
           source: 'continueRunStream',
           inputMode: plan.pendingApprovalContext.inputMode,
@@ -53,9 +49,6 @@ export class ContinuationPlanApplier {
       }
 
       return {
-        state: plan.pendingApprovalContext.state,
-        interruption: plan.pendingApprovalContext.interruption,
-        toolCallArgumentsById: plan.pendingApprovalContext.toolCallArgumentsById,
         toolStartedEvent: plan.toolStartedEvent,
         source: 'continueRunStream',
         inputMode: plan.pendingApprovalContext.inputMode,
@@ -66,32 +59,17 @@ export class ContinuationPlanApplier {
     this.deps.approvalFlow.prepareAbortResolution(abortedContext, init.userText);
 
     return {
-      state: abortedContext.state,
-      interruption: abortedContext.interruption,
-      toolCallArgumentsById: abortedContext.toolCallArgumentsById,
       toolStartedEvent: undefined,
       source: 'abortResolution',
       inputMode: abortedContext.inputMode,
     };
   }
 
-  async *applyInitialSetup(
-    prepared: PreparedContinuation,
-    state: TurnProjectionState,
-  ): AsyncGenerator<ConversationEvent, void, void> {
+  async *applyInitialSetup(prepared: PreparedContinuation): AsyncGenerator<ConversationEvent, void, void> {
     if (prepared.toolStartedEvent) {
       const filtered = this.deps.toolTracker.dedupeToolStarted(prepared.toolStartedEvent);
       if (filtered) yield filtered;
     }
-
-    this.deps.toolTracker.clearArguments();
-    if (prepared.toolCallArgumentsById?.size) {
-      for (const [key, value] of prepared.toolCallArgumentsById.entries()) {
-        this.deps.toolTracker.argumentsById.set(key, value);
-      }
-    }
-
-    state.setJournalSnapshot(this.deps.record.getJournalEvents());
   }
 
   recordPendingApproval(context: ApprovalContext): void {
@@ -126,18 +104,8 @@ export class ContinuationPlanApplier {
       if (filtered) yield filtered;
     }
 
-    this.deps.toolTracker.clearArguments();
-    if (nextPlan.pendingApprovalContext.toolCallArgumentsById?.size) {
-      for (const [key, value] of nextPlan.pendingApprovalContext.toolCallArgumentsById.entries()) {
-        this.deps.toolTracker.argumentsById.set(key, value);
-      }
-    }
-
-    state.advanceFromPlan(
-      nextPlan.pendingApprovalContext.state,
-      nextPlan.pendingApprovalContext.inputMode,
-      this.deps.record.getJournalEvents(),
-      this.deps.record.activeCallIdsForCurrentTurn(),
-    );
+    state.source = 'continueRunStream';
+    state.inputMode = nextPlan.pendingApprovalContext.inputMode ?? state.inputMode;
+    this.deps.record.beginDecisionResolution();
   }
 }

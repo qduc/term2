@@ -88,7 +88,7 @@ export class ToolApprovalBatchCoordinator {
       return { kind: 'ready' };
     }
 
-    const siblings = input.interruptions ?? this.#interruptionsFor(input.state, pending?.interruptions);
+    const siblings = input.interruptions ?? this.#interruptionsFor(pending.state, pending.interruptions);
     if (!Array.isArray(siblings) || siblings.length === 0) {
       return { kind: 'ready' };
     }
@@ -98,7 +98,7 @@ export class ToolApprovalBatchCoordinator {
       pending.decisionsByCallId ??= new Map();
     }
 
-    const runContext = asRecord(asRecord(input.state.currentState)?._context);
+    const runContext = asRecord(asRecord(pending.state)?._context);
 
     for (const interruption of siblings) {
       if (this.deps.isCurrent && !this.deps.isCurrent(input.token)) {
@@ -251,8 +251,8 @@ export class ToolApprovalBatchCoordinator {
     return { kind: 'ready' };
   }
 
-  #interruptionsFor(state: TurnProjectionState, fallback: unknown[] | undefined): unknown[] | undefined {
-    const getInterruptions = getMethod<[], unknown>(state.currentState, 'getInterruptions');
+  #interruptionsFor(state: unknown, fallback: unknown[] | undefined): unknown[] | undefined {
+    const getInterruptions = getMethod<[], unknown>(state, 'getInterruptions');
     const interruptions = getInterruptions?.();
     return Array.isArray(interruptions) ? interruptions : fallback;
   }

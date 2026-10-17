@@ -111,7 +111,7 @@ export class InitialTurnRecoveryHandler {
       const recoveryResult = this.deps.recoveryExecutor.apply({
         plan,
         state: {
-          journalSnapshot: attempt.initialJournalSnapshot,
+          baseline: 'initial',
           addedUserMessage: attempt.addedUserMessage,
           stream,
         },
@@ -198,7 +198,7 @@ export class InitialTurnRecoveryHandler {
       freshStartRetriesAllowed: this.deps.freshStartRetriesAllowed,
     });
     const recoveryState: RecoveryState = {
-      journalSnapshot: attempt.initialJournalSnapshot,
+      baseline: 'initial',
       addedUserMessage: attempt.addedUserMessage,
       stream,
     };

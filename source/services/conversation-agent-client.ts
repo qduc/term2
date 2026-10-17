@@ -36,8 +36,6 @@ export type AgentClientRunOptions = {
   sessionId?: string;
   /** Stable root prompt-cache affinity, independent of a rolled-over sessionId. */
   promptCacheKey?: string;
-  toolResultCallIds?: readonly string[];
-  knownToolCallIds?: readonly string[];
   /** Immutable, out-of-band authoritative history for provider compatibility seams. */
   providerHistorySnapshot?: ProviderHistorySnapshot;
   /** Provider continuity epoch frozen while this request is planned. */

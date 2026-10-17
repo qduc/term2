@@ -2,7 +2,6 @@ import type { AgentStream } from '../agent-stream.js';
 import type { ProviderInput } from '../../contracts/provider-input.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
-import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 import type { SessionInputPlan } from './session-input-planner.js';
 import type { GenerationToken } from '../generation-guard.js';
 import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
@@ -13,7 +12,6 @@ export class TurnAttempt {
   readonly #submittedTurn: UserTurn;
   readonly #token: GenerationToken;
   readonly #initialRetryCounts: RetryCounts;
-  readonly #initialJournalSnapshot: AssistantJournalItemLogEvent[];
   readonly #maxTransientRetries: number;
   readonly #maxModelRetries?: number;
   readonly #recoveryBudget: RetryRecoveryBudget;
@@ -36,7 +34,6 @@ export class TurnAttempt {
     submittedTurn?: UserTurn;
     token: GenerationToken;
     initialRetryCounts: RetryCounts;
-    initialJournalSnapshot: AssistantJournalItemLogEvent[];
     maxTransientRetries: number;
     maxModelRetries?: number;
     recoveryBudget?: RetryRecoveryBudget;
@@ -47,7 +44,6 @@ export class TurnAttempt {
     this.#submittedTurn = options.submittedTurn ?? options.turn;
     this.#token = options.token;
     this.#initialRetryCounts = options.initialRetryCounts;
-    this.#initialJournalSnapshot = options.initialJournalSnapshot;
     this.#maxTransientRetries = options.maxTransientRetries;
     this.#maxModelRetries = options.maxModelRetries;
     this.#recoveryBudget = options.recoveryBudget ?? new RetryRecoveryBudget();
@@ -84,10 +80,6 @@ export class TurnAttempt {
 
   get initialRetryCounts(): RetryCounts {
     return this.#initialRetryCounts;
-  }
-
-  get initialJournalSnapshot(): AssistantJournalItemLogEvent[] {
-    return this.#initialJournalSnapshot;
   }
 
   get maxTransientRetries(): number {

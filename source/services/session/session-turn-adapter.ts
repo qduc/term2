@@ -8,7 +8,7 @@ import type { AgentClientRunOptions, ConversationAgentClient } from '../conversa
 import type { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import { TurnAttempt } from './turn-attempt.js';
-import { getMethod, getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
+import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { InitialTurnRunOptions, TurnAttemptFactory } from './turn-attempt-factory.js';
 import type { InitialInputPreparer } from './initial-input-preparer.js';
@@ -16,7 +16,6 @@ import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler
 import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
 import type { StreamAccumulator } from '../stream-event-processor.js';
-import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import type { TurnOutcome } from './turn-status-machine.js';
 import type { ConversationTerminal } from '../../contracts/conversation.js';
 
@@ -28,7 +27,7 @@ import { isClassifiedCancellation } from '../retry/provider-failure-classificati
 import { extractUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
-import { TurnProjectionState, type ContinuationInit, type PreparedContinuation } from './turn-projection-state.js';
+import { TurnProjectionState, type ContinuationInit } from './turn-projection-state.js';
 import { ToolApprovalBatchCoordinator } from '../approval/tool-approval-batch-coordinator.js';
 import {
   createApprovalRequiredTerminal,
@@ -39,11 +38,6 @@ import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionStreamProcessor } from './session-stream-processor.js';
 import { type AgentStream } from '../agent-stream.js';
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
-import {
-  collectKnownToolCallIds,
-  resolveAbortedApprovalCallIds,
-  resolveResponseCycleCallIds,
-} from './continuation-call-id-resolver.js';
 import { LiveRun } from './live-run.js';
 import type { PostExecutePendingRegistry, PostExecutePendingEntry } from './post-execute-pending-registry.js';
 import type { SessionAccessState } from './session-access-state.js';
@@ -72,7 +66,6 @@ export interface SessionTurnAdapterDeps {
   streamProcessor: SessionStreamProcessor;
   recoveryHandler: InitialTurnRecoveryHandler;
   record: ConversationRecord;
-  openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
 
   inputPlanner: SessionInputPlanner;
   approvalFlow: ApprovalFlowCoordinator;
@@ -110,6 +103,8 @@ export class SessionTurnAdapter {
   #emit: (event: ConversationEvent) => void = () => undefined;
   #pendingDecision:
     | {
+        address: unknown;
+        generation: number;
         resolve: (decision: { init: ContinuationInit; policy?: ApprovalDecisionPolicy }) => void;
         reject: (error: unknown) => void;
       }
@@ -245,6 +240,14 @@ export class SessionTurnAdapter {
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     const pending = this.#pendingDecision;
     if (!pending) throw new Error('No conversation decision is waiting');
+    const address = init.kind === 'approval_decision' ? init.decisionAddress : init.abortedContext.interruption;
+    if (
+      address !== pending.address ||
+      init.generation !== pending.generation ||
+      !this.deps.generationGuard.isCurrent(pending.generation)
+    ) {
+      throw new Error('Conversation decision is stale');
+    }
     this.#pendingDecision = undefined;
     this.#liveRun?.resume();
     pending.resolve({ init, policy });
@@ -364,22 +367,17 @@ export class SessionTurnAdapter {
     const promptCacheKey = resolvePromptCacheKey(this.deps.sessionId);
     const options: AgentClientRunOptions = {
       recoveryBudget: attempt.recoveryBudget,
-      previousResponseId: this.#options.disableChainingForAttempt
-        ? undefined
-        : attempt.inputMode === 'delta'
-        ? this.deps.providerContinuity.previousResponseId
-        : null,
       sessionId,
       ...(promptCacheKey !== sessionId ? { promptCacheKey } : {}),
       providerHistorySnapshot: attempt.providerHistorySnapshot,
       hookTurnId: this.#hookTurnId,
       ...(this.#options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
     };
-    Object.defineProperty(options, 'providerContinuityLineage', {
-      value: this.deps.providerContinuity.lineage,
-      enumerable: this.deps.providerContinuity.lineage !== 0,
+    return this.deps.providerContinuity.prepareRequest(options, {
+      kind: 'initial',
+      inputMode: attempt.inputMode!,
+      disableChaining: this.#options.disableChainingForAttempt,
     });
-    return options;
   }
 
   #acceptEvent(event: ApplicationRunEvent): void {
@@ -389,30 +387,17 @@ export class SessionTurnAdapter {
     if (event.type === 'reasoning_delta') this.deps.record.recordReasoningDelta(event.text);
     if (event.type === 'model_attempt_rollback') this.deps.record.rollbackReasoning(event.reasoningCharacters);
     if (event.type !== 'item') return;
-    this.deps.record.acceptObservedItem(event.item, { persistToolResult: state.source !== 'startStream' });
+    this.deps.record.acceptObservedItem(event.item);
     if (state.source === 'startStream') this.#attempt?.markModelEventSeen();
   }
 
   #acceptSegment(stream: AgentStream): void {
     const state = this.#state!;
     if (!this.deps.generationGuard.isCurrent(state.token)) return;
-    const receipt = this.deps.record.acceptSegment(stream, state.inputMode, state.source, {
+    this.deps.record.acceptSegment(stream, state.inputMode, {
       logger: this.deps.logger,
       sessionId: this.deps.sessionId,
     });
-    if (receipt.kind === 'committed') {
-      const candidateWasObserved = this.deps.providerContinuity.checkpoint?.state === 'candidate';
-      const promoted = this.deps.providerContinuity.publishTerminalResponse(
-        receipt.lastResponseId,
-        receipt.historyCommitted,
-        receipt.snapshot,
-      );
-      if (candidateWasObserved)
-        this.deps.openAIRootCheckpointLifecycleObserver?.publication(
-          !receipt.historyCommitted ? 'history_not_committed' : promoted ? 'promoted' : 'candidate_not_promoted',
-        );
-    } else this.deps.providerContinuity.update(receipt.lastResponseId);
-    this.deps.providerContinuity.replaceOutstandingToolCallIds(this.deps.record.unsettledToolCallIdsForCurrentTurn());
   }
 
   /** Presentation only: no history acceptance or execution decision is produced here. */
@@ -446,6 +431,8 @@ export class SessionTurnAdapter {
         reject(Object.assign(new Error('Operation aborted'), { name: 'AbortError' }));
       };
       this.#pendingDecision = {
+        address: this.deps.approvalFlow.getPendingInterruption(),
+        generation: this.#state!.token,
         resolve: (value) => {
           signal?.removeEventListener('abort', abort);
           resolve(value);
@@ -467,9 +454,9 @@ export class SessionTurnAdapter {
   async #applyDecision(init: ContinuationInit, policy?: ApprovalDecisionPolicy): Promise<void> {
     const prepared = this.deps.planApplier.prepareInit(init);
     const state = this.#state!;
-    state.bindDecision(prepared, this.#activeCallIdsForInit(init, prepared));
+    state.bindDecision(prepared);
     this.#policy = policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
-    await this.#project(this.deps.planApplier.applyInitialSetup(prepared, state));
+    await this.#project(this.deps.planApplier.applyInitialSetup(prepared));
   }
 
   async #resolveInteraction(stream: AgentStream): Promise<AgentClientRunOptions> {
@@ -481,7 +468,7 @@ export class SessionTurnAdapter {
     if (state.source === 'startStream') {
       if (outcome.kind === 'auto_approve') {
         if (outcome.advisory?.source === 'llm') this.#toolCallMarkers.markToolCallAsLlmAutoApproved(outcome.callId);
-        init = { kind: 'approval_decision', answer: 'y', generation: this.#attempt!.token };
+        init = this.deps.approvalFlow.buildApprovalDecision('y');
         await this.#applyDecision(init);
       } else {
         this.deps.planApplier.recordPendingApproval(outcome.result.approval);
@@ -528,23 +515,13 @@ export class SessionTurnAdapter {
     const promptCacheKey = resolvePromptCacheKey(this.deps.sessionId);
     const options: AgentClientRunOptions = {
       recoveryBudget: state.recoveryBudget,
-      previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
       sessionId,
       ...(promptCacheKey !== sessionId ? { promptCacheKey } : {}),
-      toolResultCallIds: state.currentCallIds,
-      knownToolCallIds: collectKnownToolCallIds(
-        this.deps.record.getHistory(),
-        this.deps.record.activeCallIdsForCurrentTurn(),
-      ),
       providerHistorySnapshot: this.deps.record.getProviderHistorySnapshot(),
       hookTurnId: this.#hookTurnId,
       ...(stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     };
-    Object.defineProperty(options, 'providerContinuityLineage', {
-      value: this.deps.providerContinuity.lineage,
-      enumerable: this.deps.providerContinuity.lineage !== 0,
-    });
-    return options;
+    return this.deps.providerContinuity.prepareRequest(options, { kind: 'continuation' });
   }
 
   async #recover(error: unknown): Promise<boolean> {
@@ -693,16 +670,6 @@ export class SessionTurnAdapter {
     if (result.kind === 'stale') {
       return { kind: 'stale' };
     }
-    if (result.kind === 'ready') {
-      const pending = this.deps.approvalFlow.getPending?.();
-      state.currentCallIds = resolveResponseCycleCallIds({
-        interruptionCallIds: this.#interruptionCallIds(state.currentState, pending?.interruption),
-        completedResultCallIds: this.deps.record.completedResultCallIdsForCurrentTurn(),
-        fallbackCallIds: state.currentCallIds,
-        conversationHistory: this.deps.record.getHistory(),
-        preserveFallback: true,
-      });
-    }
     return result;
   }
 
@@ -834,7 +801,7 @@ export class SessionTurnAdapter {
         reasoningOutputOverride: acc?.reasoningOutput || undefined,
         emittedCommandIds: state.previouslyEmittedIds,
         usage: acc?.latestUsage,
-        toolCallArgumentsById: this.deps.toolTracker.argumentsById,
+        toolCallArgumentsById: this.deps.toolTracker.snapshotArguments(),
         turnItems: this.deps.turnAccumulator.getTurnItems(),
         token: state.token,
         inputMode: state.inputMode,
@@ -849,40 +816,6 @@ export class SessionTurnAdapter {
         toolCallMarkers: this.#toolCallMarkers,
       },
     );
-  }
-
-  #activeCallIdsForInit(init: ContinuationInit, prepared: PreparedContinuation): string[] {
-    if (init.kind === 'abort_resolution') {
-      return resolveAbortedApprovalCallIds({
-        interruptionCallIds: this.#interruptionCallIds(init.abortedContext.state, init.abortedContext.interruption),
-        completedResultCallIds: this.deps.record.completedResultCallIdsForCurrentTurn(),
-      });
-    }
-    return resolveResponseCycleCallIds({
-      interruptionCallIds: this.#interruptionCallIds(prepared.state, prepared.interruption),
-      completedResultCallIds: this.deps.record.completedResultCallIdsForCurrentTurn(),
-      fallbackCallIds: this.deps.record.activeCallIdsForCurrentTurn(),
-      conversationHistory: this.deps.record.getHistory(),
-    });
-  }
-
-  #interruptionCallIds(state: unknown, primaryInterruption: unknown): string[] {
-    const callIds = new Set<string>();
-    const interruptions = getMethod<[], unknown>(state, 'getInterruptions')?.();
-    if (Array.isArray(interruptions)) {
-      for (const interruption of interruptions) {
-        const callId = getCallIdFromObject(interruption);
-        if (callId) {
-          callIds.add(callId);
-        }
-      }
-    }
-
-    const primaryCallId = getCallIdFromObject(primaryInterruption);
-    if (primaryCallId) {
-      callIds.add(primaryCallId);
-    }
-    return [...callIds];
   }
 
   #recordSuccess(state: TurnProjectionState, previousInputForSurge?: unknown): void {

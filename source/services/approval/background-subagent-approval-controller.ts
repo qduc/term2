@@ -93,8 +93,6 @@ export class BackgroundSubagentApprovalController {
     const pending: PendingApprovalContext = {
       state: application.handle,
       interruption: application.interruption,
-      emittedCommandIds: new Set(),
-      toolCallArgumentsById: new Map(),
       owner: { kind: 'subagent', agentId: application.runId, role },
     };
     this.#executor.resolve({

@@ -1,0 +1,10 @@
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/loop-runtime
+
+ ✓ scripts/provider-black-box/conversation-loop.blackbox.ts > edits and retracts pending steering while one turn crosses two manual approvals, then handles release and cancellation without duplicate fallback 7113ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  21:44:02
+   Duration  7.31s (transform 59ms, setup 0ms, import 92ms, tests 7.11s, environment 0ms)
+

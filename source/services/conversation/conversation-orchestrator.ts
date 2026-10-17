@@ -30,7 +30,6 @@ import {
 import {
   formatUserTurnForDisplay,
   hasUserTurnContent,
-  injectSkillIntoTurn,
   normalizeUserTurn,
   type UserTurn,
 } from '../../types/user-turn.js';
@@ -451,14 +450,6 @@ export class ConversationOrchestrator {
    */
   readonly #deferredTurnActivators = new Map<string, () => void>();
   /**
-   * A pending steer retracted through the id-addressed mutation path. The
-   * adapter intentionally keeps the shared steer API boolean, so this marker
-   * distinguishes a deliberate retraction from an ordinary failed steer.
-   */
-  readonly #retractedSteerIds = new Set<string>();
-  /** Latest user turn for a pending steer edited before admission. */
-  readonly #editedSteerTurns = new Map<string, UserTurn>();
-  /**
    * Turns this orchestrator currently owns. Count only executions that have
    * actually started (direct submit or queue-start activation), never merely
    * queued awaits.
@@ -586,8 +577,6 @@ export class ConversationOrchestrator {
     if (!options.preserveBackgroundNotificationDedup) {
       this.#displayedBackgroundNotificationMessageIds.clear();
     }
-    this.#retractedSteerIds.clear();
-    this.#editedSteerTurns.clear();
     this.#outstandingSubmissions.clear();
     this.#reportedStrandedCallIds.clear();
   }
@@ -630,8 +619,6 @@ export class ConversationOrchestrator {
     }
     this.#directlyAppendedMessageIds.clear();
     this.#displayedBackgroundNotificationMessageIds.clear();
-    this.#retractedSteerIds.clear();
-    this.#editedSteerTurns.clear();
     this.#reportedStrandedCallIds.clear();
   }
 
@@ -658,8 +645,6 @@ export class ConversationOrchestrator {
       this.config.ui.onResetTransient();
       this.#directlyAppendedMessageIds.clear();
       this.#displayedBackgroundNotificationMessageIds.clear();
-      this.#retractedSteerIds.clear();
-      this.#editedSteerTurns.clear();
       this.config.conversationService.backgroundSubagentNotifications?.drain();
     } finally {
       this.#stoppingByUser = false;
@@ -694,10 +679,6 @@ export class ConversationOrchestrator {
     const result = await service.retractSubmission(id);
     if (result.kind === 'applied') {
       this.#outstandingSubmissions.delete(id);
-      if (result.stage === 'pending_steer') {
-        this.#retractedSteerIds.add(id);
-        this.#editedSteerTurns.delete(id);
-      }
       this.config.ui.onQueuedMessageRemoved?.(id);
     }
     return result;
@@ -708,9 +689,7 @@ export class ConversationOrchestrator {
     if (typeof service.editSubmission !== 'function') return { kind: 'unknown_id' };
 
     const editedTurn = normalizeUserTurn(turn);
-    // The adapter consumes executable text; keep the raw skill attachment for
-    // display and any later steer release so it is expanded once per delivery.
-    const result = await service.editSubmission(id, editedTurn.skill ? injectSkillIntoTurn(editedTurn) : editedTurn);
+    const result = await service.editSubmission(id, editedTurn);
     if (result.kind === 'applied') {
       const outstanding = this.#outstandingSubmissions.get(id);
       if (outstanding)
@@ -718,9 +697,6 @@ export class ConversationOrchestrator {
           ...outstanding,
           text: formatUserTurnForDisplay(editedTurn),
         });
-      if (result.stage === 'pending_steer') {
-        this.#editedSteerTurns.set(id, structuredClone(editedTurn));
-      }
       this.config.ui.onQueuedMessageEdited?.(id, editedTurn);
     }
     return result;
@@ -826,7 +802,7 @@ export class ConversationOrchestrator {
       onSteerSettled?: (steered: boolean) => void;
     },
   ): Promise<void> {
-    let turn = normalizeUserTurn(input);
+    const turn = normalizeUserTurn(input);
     if (!hasUserTurnContent(turn)) {
       return;
     }
@@ -845,7 +821,7 @@ export class ConversationOrchestrator {
       ...(options?.presentation ? { presentation: options.presentation } : {}),
     };
     let admissionReported = false;
-    let releasedSteerFollowUp = false;
+    const steering = options?.busyMode === 'steer';
     const reportAdmission = (delivery: 'started' | 'queued' | 'steering') => {
       if (admissionReported) return;
       admissionReported = true;
@@ -887,90 +863,8 @@ export class ConversationOrchestrator {
         stage: delivery === 'steer' ? 'pending_steer' : 'queued',
       });
 
-      // A steer belongs to the turn already running: hand it to that turn so
-      // the model reads it at its next request, rather than making the user
-      // wait for the whole turn to end. The message joins the transcript at the
-      // moment the turn takes it, which is when the model actually sees it.
-      if (delivery === 'steer' && this.config.conversationService.steerActiveTurn) {
-        // Show "Steering" while the active turn may still be waiting for its
-        // next request boundary. A follow-up (Alt+Enter) is the only case that
-        // should read as "Queued" here.
-        this.config.ui.onQueuedMessagePending?.(userMessage.id, turn, delivery);
-        reportAdmission('steering');
-        // Diagnostics for "my steer just queued". The three fields below
-        // separate the ways delivery can fail, which otherwise look identical
-        // in the UI because the queued label is drawn before this even runs:
-        //   queueActive=false            → refused by the adapter's predicate;
-        //     the queue owns the submission but is not in a state that offers
-        //     steering (awaiting_preflight, paused, idle with retained work).
-        //   queueActive=true, waited≈0ms → refused synchronously downstream:
-        //     awaiting an approval, or no run in flight at the run loop.
-        //   queueActive=true, waited>0ms → held as pending and released when
-        //     the run ended: the turn never reached another request boundary.
-        //   steered=true                 → admitted; waitedMs is how long the
-        //     user waited for the turn to reach that boundary.
-        const queueActive = this.config.conversationService.isQueueActive?.() ?? false;
-        const queueStateKind = this.config.conversationService.queueStateKind?.() ?? 'unknown';
-        const steerStartedAt = Date.now();
-        const steerGeneration = this.#lifecycleGeneration;
-        const steered = await this.config.conversationService
-          .steerActiveTurn(turn.skill ? injectSkillIntoTurn(turn) : turn, { id: userMessage.id })
-          .catch((error) => {
-            this.logError('Error steering the active turn', error);
-            return false;
-          });
-        this.config.loggingService.info('Steer attempt resolved', {
-          steered,
-          queueActive,
-          queueStateKind,
-          waitedMs: Date.now() - steerStartedAt,
-          messageId: userMessage.id,
-        });
-        if (steerGeneration !== this.#lifecycleGeneration) {
-          // The session was reset while this steer waited for a request
-          // boundary (e.g. /clear). The released steer belongs to the
-          // discarded session: reclassifying or re-sending it would deliver
-          // discarded text into the replacement session.
-          this.#outstandingSubmissions.delete(userMessage.id);
-          this.#editedSteerTurns.delete(userMessage.id);
-          options?.onSteerSettled?.(false);
-          return;
-        }
-        options?.onSteerSettled?.(steered);
-        // An edit belongs to this submission even when the active turn releases
-        // it. Both admission and the queued fallback must use the latest payload.
-        turn = this.#editedSteerTurns.get(userMessage.id) ?? turn;
-        this.#editedSteerTurns.delete(userMessage.id);
-        const { skill: _originalSkill, ...messageWithoutSkill } = userMessage;
-        userMessage = {
-          ...messageWithoutSkill,
-          text: formatUserTurnForDisplay(turn),
-          ...(turn.skill ? { skill: turn.skill } : {}),
-        };
-        if (steered) {
-          this.#outstandingSubmissions.delete(userMessage.id);
-          this.config.ui.onQueuedMessageStarted?.(userMessage.id);
-          this.config.messages.appendMessages([userMessage]);
-          this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
-          return;
-        }
-        if (this.#retractedSteerIds.delete(userMessage.id)) {
-          return;
-        }
-        this.#outstandingSubmissions.set(userMessage.id, {
-          id: userMessage.id,
-          text: userMessage.text,
-          stage: 'queued',
-        });
-        this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
-        // The running turn ended without taking this steer, so it will start a
-        // fresh turn of its own — the one case that must carry the ask_user
-        // cancellation context if the user just cancelled.
-        releasedSteerFollowUp = true;
-      } else {
-        this.config.ui.onQueuedMessagePending?.(userMessage.id, turn, delivery);
-        reportAdmission('queued');
-      }
+      this.config.ui.onQueuedMessagePending?.(userMessage.id, turn, delivery);
+      reportAdmission(steering ? 'steering' : 'queued');
     } else {
       // No turn is in flight — append directly. The queue observer will also
       // fire when the turn starts, but the dedup guard in
@@ -978,7 +872,9 @@ export class ConversationOrchestrator {
       this.config.messages.appendMessages([userMessage]);
       this.#directlyAppendedMessageIds.add(userMessage.id);
     }
-    this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
+    if (!queueOwnsSubmission || !steering) {
+      this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
+    }
 
     // Streaming callbacks are bound at submit time, but deferred submissions
     // must not count as active turns until the queue starts them. Otherwise
@@ -998,21 +894,53 @@ export class ConversationOrchestrator {
     }
 
     try {
-      const baseTurn = turn.skill ? injectSkillIntoTurn(turn) : turn;
-      const cancelNotice = releasedSteerFollowUp ? this.#takeAskUserCancelNotice() : null;
-      const turnToSend = cancelNotice
-        ? { ...baseTurn, text: withAskUserCancelNotice(cancelNotice, baseTurn.text) }
-        : baseTurn;
-      const sendPromise = this.config.conversationService.sendMessage(turnToSend, {
-        onEvent: this.createOnEventHandler(applyConversationEvent),
-        inputSurgeApproval: options?.inputSurgeApproval,
-        busyMode: options?.busyMode,
-        preferredMessageId: userMessage.id,
-      });
+      const submissionGeneration = this.#lifecycleGeneration;
+      const result = await this.config.conversationService.submitMessage(
+        turn,
+        {
+          onEvent: this.createOnEventHandler(applyConversationEvent),
+          inputSurgeApproval: options?.inputSurgeApproval,
+          busyMode: options?.busyMode,
+          preferredMessageId: userMessage.id,
+        },
+        {
+          onSteerSettled: (admitted, latestInput) => {
+            if (submissionGeneration !== this.#lifecycleGeneration) return;
+            options?.onSteerSettled?.(admitted);
+            const latest = normalizeUserTurn(latestInput);
+            userMessage = {
+              ...userMessage,
+              text: formatUserTurnForDisplay(latest),
+              skill: latest.skill,
+            };
+            this.config.loggingService.info('Steer attempt resolved', {
+              steered: admitted,
+              messageId: userMessage.id,
+            });
+            if (admitted) {
+              this.#outstandingSubmissions.delete(userMessage.id);
+              this.config.ui.onQueuedMessageStarted?.(userMessage.id);
+              this.config.messages.appendMessages([userMessage]);
+            } else {
+              this.#outstandingSubmissions.set(userMessage.id, {
+                id: userMessage.id,
+                text: userMessage.text,
+                stage: 'queued',
+              });
+              this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
+            }
+            this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
+          },
+          prepareFollowUp: (latestInput) => {
+            const latest = normalizeUserTurn(latestInput);
+            return { ...latest, text: withAskUserCancelNotice(this.#takeAskUserCancelNotice(), latest.text) };
+          },
+        },
+      );
       reportAdmission(queueOwnsSubmission ? 'queued' : 'started');
-      const result = await sendPromise;
+      if (result.kind === 'steered') return;
 
-      this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
+      this.#settleTurn(applyConversationEvent, botResponseUpdater, result.terminal, streamingState);
     } catch (error) {
       this.logError('Error in sendUserMessage', error);
 

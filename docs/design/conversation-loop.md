@@ -1,10 +1,11 @@
 # Design the architecture around `runTurn`
 
-**Proposed revision, not a production implementation.** This revises the
-[ownership-first design](../../experiments/conversation-actor/v2/DESIGN.md) around
-the human's model: ask the model; execute requested tools and return their outputs;
-repeat; finish when the model has no tools. Start with the
-[short explanation](conversation-core.md).
+The production loop lives in `ApplicationRunLoop.#runTurn`. This design revises
+the [ownership-first experiment](../../experiments/conversation-actor/v2/DESIGN.md)
+around the human's model: ask the model; execute requested tools and return their
+outputs; repeat; finish when the model has no tools. Start with the
+[short explanation](conversation-core.md). Implementation and verification details
+are retained in [WORK.md](../research/conversation-loop-runtime/WORK.md).
 
 ## The design decision
 
@@ -17,7 +18,7 @@ round is required. They do not call one another to start model rounds.
 This is a different choice from the v2 actor's explicit phase/token dispatch. In
 that experiment, a reader must reconstruct the loop from result handlers. Its
 race simulations still teach useful ownership rules; its control structure is no
-longer the proposed human-facing architecture.
+longer the production control structure.
 
 | Alternative | What a caller must understand | Decision |
 | --- | --- | --- |
@@ -25,14 +26,14 @@ longer the proposed human-facing architecture.
 | Conversation reducer stores a phase and resumes on each event | Phase transitions, event routing and continuation tokens to reconstruct one model–tool cycle | Retain as experimental evidence; its explicit continuation is useful when a process must durably resume at arbitrary await points, which current restart policy does not promise. |
 
 The earlier async alternative was rejected because it introduced a second owner
-beside the conversation's workflow state. This proposal gives that continuation
+beside the conversation's workflow state. The production implementation gives that continuation
 to the single live function and removes the mirrored phase machine. An async
 function alone does not guarantee simplicity; retaining both would defeat the
 change.
 
 ## Read one turn from top to bottom
 
-The short page's pseudocode is the proposed central order. These are domain
+The short page's pseudocode is the central order. These are domain
 operations, not a requirement to create five services or five wrapper classes.
 Keep cohesive code local unless extraction hides a real contract. The central
 function owns repetition and terminal choice; operation implementations own how
@@ -40,8 +41,8 @@ their individual steps work.
 
 | Operation | Receives / returns | What it hides | What it may not do |
 | --- | --- | --- | --- |
-| `prepareRequest` | Live turn → frozen logical request | Eligible steer admission, canonical history projection, request budget decision, compaction and prompt/context preparation | Start the model or consume the same submission again on request retry. |
-| `askModel` | Turn + logical request → accepted response candidate with ordered calls | Transport serialization/reuse, streaming, request execution ownership, safe attempt retry and accounting | Execute tools, silently restart the turn, or classify incomplete/failed transport as a final answer. |
+| `prepareRequest` | Live turn → request boundary ready or terminal | Eligible steer admission, request budget decisions and compaction | Start the model or consume the same submission again on request retry. |
+| `askModel` | Prepared turn → response candidate with ordered calls | Fresh instructions/tool snapshot per attempt, request construction, transport serialization/reuse, streaming, safe attempt retry and accounting | Execute tools, silently restart the turn, or classify incomplete/failed transport as a final answer. |
 | `recordResponse` | Candidate → accepted transcript/tool-plan facts | Current-turn authority check and journal acceptance; retain committed partial output on failure | Accept a revoked turn's late output or report a failed write as durable success. |
 | `executeTools` | Accepted ordered call plan → settled tool round | Authority-bound approvals, ask-user, safe parallel dispatch, outcome recording, uncertain-effect reconciliation, foreground/background ownership | Ask the model, restart the tool plan after a partial failure, or silently redispatch an ambiguous effect. |
 | `finishTurn` | No-tool response → `done` or explicit `continue` | Required post-execution decisions and existing completion policy; final receipt settlement on `done` | Hide another model request, treat a pause as completion, or consume follow-up input as an implicit new turn. |
@@ -119,18 +120,19 @@ of the same advancement decision, not erasing necessary execution or journal dat
 
 ## Where the current implementation maps
 
-Source baseline for this comparison: `1d53249f`. These symbols locate behavior;
-they are not a claim that extracting a method completes the migration.
+The shared loop, conversation workflow and input projections have different jobs:
 
-| Current owner | Proposed destination | State or coordination to remove | Guarantee that must survive |
-| --- | --- | --- | --- |
-| `ApplicationRunLoop.#execute` in `source/services/agent-runtime/application-run-loop.ts` | The recognizable model–tool loop and its deep operations | Request preparation, transport attempts and approval recovery interleaved through the main cycle; no second outer model–tool loop | Streaming/partial commits, completion and budget interventions, ordered tool settlement, nested callers. |
-| `TurnWorkflow.executeInitial`, `executeContinuation` and `TurnCoordinator.start`, `continueAfterApproval` | One logical turn task, with approval resuming the pending operation | Root-specific re-entry paths that exist to reconstruct the same waiting turn; independent continuing/running decisions | Same turn identity, budgets and approval authority; post-execute and terminal cleanup semantics. |
-| `QueueController`, `ConversationAdapter.#messagesById`, `#pendingSteerIds`, `TurnInputMailbox.admitAtRequestBoundary` | Conversation submission records + `prepareRequest` boundary | Payload transfers, mirrored pending identities and cross-store edit rollback | Submission contract, rich payload, ordering, preflight, receipts, retained pauses, persistence and gateway leases. |
-| `ToolCallExecution.plan`, `settle`, `resolveApproval` in `source/services/agent-runtime/tool-call-execution.ts` | Deep implementation of `executeTools` | Root lifecycle decisions surrounding tool-plan continuation; keep the actual ordered plan | Approval identity, partial batches, parallel-safe eligibility, unknown effects and no duplicate dispatch. |
-| `ProviderContinuity` and provider adapters | Logical request preparation + transport attempt implementation | Competing resumption flags where they describe one request constraint | Complete-history fallback, call debt, provider/model/socket affinity and opaque provenance. |
-| Existing cancellation proof and background owners | Conversation task cancellation + owned execution contracts | Duplicate decisions about logical revocation and same-execution settlement | Actual process/child quiescence, output retrieval, source-specific cleanup and exact-execution transfer. |
-| UI orchestrator | Command client and event/snapshot projection | Domain scheduling fallbacks and lifecycle repair in presentation | Visible ordering, approval presentation, errors, queue editing and receipt identity. |
+| Owner | Production responsibility | Removed coordination / retained boundary |
+| --- | --- | --- |
+| `ApplicationRunLoop.#runTurn` | `prepareRequest` → `askModel` → `recordResponse` → `executeTools` → explicit `finishTurn` | Request retry stays inside `askModel`; approval/budget waits resume the same task. The old request-boundary resume checkpoint is gone. |
+| `TurnWorkflow.#runConversationTurn` | One conversation operation, observed by initial/approval/post-execute APIs | Manual approvals suspend the current operation rather than reconstructing `ContinuationState`. That state retains projection/recovery facts, not a program counter. |
+| `TurnCoordinator` and `TurnStatusMachine` | Admission lease, public busy/waiting status, hooks and terminal handling | Status remains a presentation/admission constraint. It does not choose the next model round. |
+| `ConversationAdapter.#submissions` and `submitMessage` | Latest payload, pending stage, mutation and steer-to-queue fallback | Separate pending-steer id set and UI edited/retracted steer stores are gone. `sendMessage` remains the direct queue API for gateway/automatic callers. |
+| `QueueController` | Queue ordering, capacity, preflight, retained pause, active execution identity and text-only restart projection | Queue text is a projection, not the in-process executable payload. Existing lease and persistence contracts remain. |
+| `TurnInputMailbox` | Admit provider-input projections at request boundaries | Edits/retractions route through the conversation record and update the pending projection synchronously. The mailbox still owns turn-scope release. |
+| `ToolCallExecution` | Ordered plan, partial approvals, safe parallelism and tool result settlement | Its actual plan remains local to `executeTools`; it is not replaced with a second generic task machine. |
+| `ProviderContinuity`, provider adapters, execution/background owners | History compatibility, wire protocols, effects and physical-stop proof | Existing owners remain. A cancelled observer is not evidence that an execution stopped. |
+| `ConversationOrchestrator` | Submit commands and project notifications/events | It no longer retries a released steer as a new submission or owns its latest executable payload. |
 
 Shared `ApplicationRunLoop` callers include child/subagent paths. Root queue and
 session policy cannot be pushed into them while removing root coordination.
@@ -161,20 +163,20 @@ second continuation store now.
 
 ## Ownership invariants and failure cases
 
-These are proposed requirements, not claims enforced by new production code.
-Existing v2 evidence applies only to its fake actor and is not proof for the
-proposed async implementation.
+These requirements guide the implementation. Existing v2 evidence applies only
+to its fake actor; production evidence and remaining limits are recorded in
+[WORK.md](../research/conversation-loop-runtime/WORK.md).
 
-| Invariant | Enforcing owner in the proposal | Failure if omitted / evidence status |
+| Invariant | Production owner | Failure if omitted / evidence status |
 | --- | --- | --- |
-| Only the central loop advances between model rounds | `runTurn` | Hidden request loops recreate distributed control. Proposed; source inspection must establish it after migration. |
+| Only the central loop advances between model rounds | `runTurn` | Hidden request loops recreate distributed control. The shared source contains the model-round loop; nested callers use stream views of it. |
 | A submission is consumed once at an eligible boundary | Conversation records, admitted by `prepareRequest` | Lost/duplicate input or stale edits. V2 exercises a simplified payload; production Contracts 01 and 12 remain acceptance obligations. |
 | Pausing retains the same turn and accounting | The active task + pending operation | Approval/retry restarts reset budgets or duplicate work. Existing production continuation behavior must be preserved in real workflows. |
 | Revocation prevents further dispatch and fact acceptance | Turn authority checked by operations and journal acceptance | A late reply can run tools or change the successor. V2 cancellation races establish the rule, not this implementation. |
 | Stop evidence is independent of outcome | Execution owner, enforced at replacement admission | Effects can overlap after Stop. V2 demonstrates both arrival orders; real adapter proof remains required. |
 | Known pre-revocation outcomes survive settlement | Journal/effect settlement | Cancellation erases knowledge of an already completed effect. V2 has a red/green reproduction; async terminal paths must reuse that knowledge. |
 | A tool effect is not repeated by model-request recovery | Tool plan + retry policy | Duplicate writes. Production tool-effect and provider-continuity contracts remain load-bearing. |
-| A final answer is accepted only after valid completion | `askModel` validation + explicit `finishTurn` | Empty/incomplete streams become success or pending policy is bypassed. Existing `#execute` rejects empty incomplete streams; retain supported tool-only fixture behavior. |
+| A final answer is accepted only after valid completion | `askModel` validation + explicit `finishTurn` | Empty/incomplete streams become success or pending policy is bypassed. `askModel`/`recordResponse` reject empty incomplete streams; retain supported tool-only fixture behavior. |
 
 Concern dispositions:
 
@@ -195,20 +197,19 @@ Concern dispositions:
   Keep existing behavior and owners until each replacement passes the workflows
   below; an illustrative loop is insufficient evidence to delete them.
 
-## Migration and acceptance
+## Migration rationale and acceptance
 
-First make the current cycle recognizable inside the shared run-loop boundary:
+The migration sequence was to first make the cycle recognizable inside the shared run-loop boundary:
 separate request preparation, model exchange and tool settlement while preserving
 its current public callers and observable behavior. Avoid adding a new coordinator
 around the old one. Extract only enough to make those operations deep and clear;
 keep completion interventions explicit in the central flow. This is an internal
 control-flow cut, not submission or persistence migration.
 
-Next move root approval/retry re-entry onto one owned logical turn, preserving
-all identity, accounting, cancellation and post-execute contracts. Only remove the
-old continuation state after a pending operation can resume without it. Then
-consolidate submission ownership as a whole, retaining rich payload, preflight,
-queue pause/recovery and receipt semantics. Execution-registry consolidation and
+Root approval/retry re-entry now observes one owned logical turn. The same
+continuation frame survives manual decisions; its state retains accounting and
+projection facts. Submission ownership then moves into conversation records,
+retaining rich payload, preflight, queue pause/recovery and receipt semantics. Execution-registry consolidation and
 provider-reuse changes are separate proofs, not prerequisites for a readable loop.
 
 This revises v2's submission-first priority: the human's clarified goal makes the
@@ -221,12 +222,12 @@ and post-execute decisions; edit/retract/steer while paused; request retry and
 invalid-chain recovery; Stop during each await with late results; safe parallel
 batches; foreground/background child ownership; rollover; compaction; retained
 queue restart and persistence failure. Use the repository's verification and
-provider-testing policies when implementation begins. The v2 fake harness cannot
+provider-testing policies for each cut. The v2 fake harness cannot
 substitute for these workflows.
 
 The human-readability checkpoint is concrete: open the central function and trace
 model → tools → model without following event handlers. For each surrounding
 feature, identify its one operation or outer owner and predict the next step in
 the worked example. Do not claim a comprehension improvement from shorter code
-or a passing fixture suite. Actual reader evidence and production implementation
-remain pending.
+or a passing fixture suite. Independent source reading and production workflows can assess this structure;
+a fresh human comprehension trial remains outstanding.

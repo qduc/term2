@@ -1,3 +1,4 @@
+import { injectSkillIntoTurn } from '../../types/user-turn.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import type { ApprovalRequiredEvent, ConversationEvent, ConversationEventSink } from './conversation-events.js';
 import type { CommandMessage } from '../../tools/types.js';
@@ -39,7 +40,7 @@ export type SendMessageOptions = {
   preferredMessageId?: string;
   /** The turn is model input only and must not be projected as a user message in the UI. */
   suppressUserMessageDisplay?: boolean;
-  /** A busy-input steer supersedes the active foreground turn. */
+  /** Busy input joins the next model boundary, or queues if that turn releases it. */
   busyMode?: 'steer' | 'follow_up';
 };
 
@@ -83,11 +84,13 @@ export type SubmissionMutation =
   | { readonly kind: 'too_late'; readonly stage: 'started' }
   | { readonly kind: 'unknown_id' };
 
-type QueuedMessage = {
-  readonly input: string | UserTurn;
-  readonly options: SendMessageOptions;
-  readonly resolve: (terminal: ConversationTerminal) => void;
-  readonly reject: (error: unknown) => void;
+type Submission = {
+  stage: SubmissionStage;
+  prepareInput?: (input: string | UserTurn) => string | UserTurn;
+  input: string | UserTurn;
+  options: SendMessageOptions;
+  resolve: (terminal: ConversationTerminal) => void;
+  reject: (error: unknown) => void;
 };
 
 type QueuedMessageSnapshot = { readonly requestId: string; readonly recovered?: boolean };
@@ -184,15 +187,8 @@ export class ConversationAdapter {
   #approval: SessionApprovalQuery;
   #pendingInteraction: Pick<PendingInteractionState, 'present' | 'clear' | 'getSnapshot'> | null;
   #turnFlow: TurnFlow;
-  readonly #messagesById = new Map<string, QueuedMessage>();
-  /**
-   * Ids currently handed to `turnFlow.steer` and not yet settled. Populated
-   * right before the call and cleared when that steer's promise resolves
-   * (admitted, released, or retracted) — this is what lets
-   * `retractSubmission`/`editSubmission` tell a pending steer apart from a
-   * queued item sharing the same id space, per `## The three stages`.
-   */
-  readonly #pendingSteerIds = new Set<string>();
+  /** Executable payload and lifecycle; queue/mailbox entries are projections. */
+  readonly #submissions = new Map<string, Submission>();
   readonly #queue: QueueController<QueuedMessageSnapshot, ConversationTerminal> | null;
   #nextQueuedMessageId = 1;
   #nextActionId = 1;
@@ -288,7 +284,7 @@ export class ConversationAdapter {
       this.#queue = new QueueController({
         driver,
         snapshotFactory: (item) => {
-          const message = this.#messagesById.get(item.id);
+          const message = this.#submissions.get(item.id);
           return message ? { requestId: item.id } : { requestId: item.id, recovered: true };
         },
         capacity: deps.queueCapacity,
@@ -410,24 +406,23 @@ export class ConversationAdapter {
     );
   }
 
-  /**
-   * Deliver a user message into the turn already running, as a user message the
-   * model reads after the tool results of the round in flight.
-   *
-   * Resolves true once the running turn has taken it. Resolves false when that
-   * turn offers no further request boundary — it is finishing, or parked on an
-   * approval — leaving the caller to send the message as its own turn.
-   *
-   * `options.id` is the submission's address (see `## The three stages`):
-   * while this call is outstanding, `id` is tracked in `#pendingSteerIds` so
-   * `retractSubmission`/`editSubmission` can route to it. Omitted by the one
-   * caller that has no such id — background subagent notifications, via
-   * `injectIntoActiveTurn` directly — which can never be retracted or edited.
-   */
+  /** Compatibility view of mailbox admission; submitMessage also owns fallback. */
   async steerActiveTurn(input: string | UserTurn, options?: { id?: string }): Promise<boolean> {
     const turn = normalizeUserTurn(input);
     if (!turn.text.trim() && !turn.images?.length) return false;
-    return this.injectIntoActiveTurn([userTurnToProviderItem(turn, { steering: true })], options);
+    const id = options?.id;
+    // Addressed legacy callers share the registry; normal submissions already
+    // own their record before asking the mailbox to admit its projection.
+    const record: Submission | undefined =
+      id && !this.#submissions.has(id)
+        ? { stage: 'pending_steer', input: turn, options: {}, resolve: () => undefined, reject: () => undefined }
+        : undefined;
+    if (id && record) this.#submissions.set(id, record);
+    try {
+      return await this.injectIntoActiveTurn([userTurnToProviderItem(turn, { steering: true })], options);
+    } finally {
+      if (id && record && this.#submissions.get(id) === record) this.#submissions.delete(id);
+    }
   }
 
   /**
@@ -448,34 +443,13 @@ export class ConversationAdapter {
     if (!this.#turnFlow.steer || items.length === 0) return false;
     if (!this.isQueueActive()) return false;
     const id = options?.id;
-    if (id) this.#pendingSteerIds.add(id);
-    try {
-      const outcome = await this.#turnFlow.steer(items, id ? { id } : undefined);
-      return outcome === 'admitted';
-    } finally {
-      if (id) this.#pendingSteerIds.delete(id);
-    }
+    const outcome = await this.#turnFlow.steer(items, id ? { id } : undefined);
+    return outcome === 'admitted';
   }
 
-  /**
-   * Retract a submission before it reaches the model, addressed by the id
-   * `sendMessage`/`steerActiveTurn` were given (`preferredMessageId`), which
-   * is the same id the UI already keys `pendingQueuedMessages` on.
-   *
-   * Routes by stage (`## The three stages`): a still-waiting steer goes to
-   * `retractSteer` on the run loop; a queued item goes to the controller's
-   * `remove_queued`.
-   *
-   * A pending steer has no matching `#messagesById` entry to settle — its
-   * caller (`steerActiveTurn`) awaits the `turnFlow.steer` promise directly,
-   * not a queued `sendMessage`. `retractSteer` resolves that promise itself
-   * (with `'retracted'`), which `injectIntoActiveTurn` reports as `false` to
-   * that caller. A queued item, by contrast, *does* have a `sendMessage`
-   * promise parked in `#messagesById`, which this settles with an
-   * `AbortError` — the same shape `removeLastQueuedItem` already used.
-   */
+  /** Mutate only the owner's still-pending record and its queue/mailbox projection. */
   async retractSubmission(id: string): Promise<SubmissionMutation> {
-    if (this.#pendingSteerIds.has(id)) {
+    if (this.#submissions.get(id)?.stage === 'pending_steer') {
       if (!this.#turnFlow.retractSteer) {
         throw new Error(
           `ConversationAdapter.retractSubmission: pending steer '${id}' has no turnFlow.retractSteer to route to`,
@@ -483,7 +457,7 @@ export class ConversationAdapter {
       }
       const retracted = this.#turnFlow.retractSteer(id);
       if (!retracted) return { kind: 'too_late', stage: 'started' };
-      this.#pendingSteerIds.delete(id);
+      this.#submissions.delete(id);
       return { kind: 'applied', stage: 'pending_steer' };
     }
     if (this.#queue) {
@@ -496,46 +470,42 @@ export class ConversationAdapter {
         return { kind: 'applied', stage: 'queued' };
       }
     }
-    if (this.#messagesById.has(id)) return { kind: 'too_late', stage: 'started' };
+    if (this.#submissions.has(id)) return { kind: 'too_late', stage: 'started' };
     return { kind: 'unknown_id' };
   }
 
-  /**
-   * Replace a submission's content in place, without changing its stage or
-   * position — a pending steer stays a steer at its slot, a queued item keeps
-   * its queue index and steer-ahead-of-follow-ups priority.
-   *
-   * **The trap**: the controller queue stores display `text` only.
-   * `#runQueuedTurn` executes `message.input` from `#messagesById`, so
-   * issuing `edit_queued` alone redraws the new text but sends the old turn.
-   * This replaces the `#messagesById` entry's `input` first, keeping the
-   * `QUEUED_NON_TEXT_PLACEHOLDER` substitution `sendMessage` applies to the
-   * controller's display copy.
-   */
+  /** Keep the executable payload and display projection in the same mutation. */
   async editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
-    if (this.#pendingSteerIds.has(id)) {
+    if (this.#submissions.get(id)?.stage === 'pending_steer') {
       if (!this.#turnFlow.editSteer) {
         throw new Error(
           `ConversationAdapter.editSubmission: pending steer '${id}' has no turnFlow.editSteer to route to`,
         );
       }
-      const item = userTurnToProviderItem(normalizeUserTurn(turn), { steering: true });
+      const submission = this.#submissions.get(id)!;
+      const item = userTurnToProviderItem(normalizeUserTurn(submission.prepareInput?.(turn) ?? turn), {
+        steering: true,
+      });
       const edited = this.#turnFlow.editSteer(id, [item]);
-      return edited ? { kind: 'applied', stage: 'pending_steer' } : { kind: 'too_late', stage: 'started' };
+      if (!edited) return { kind: 'too_late', stage: 'started' };
+      submission.input = structuredClone(turn);
+      const { inputSurgeApproval: _approval, ...options } = submission.options;
+      submission.options = options;
+      return { kind: 'applied', stage: 'pending_steer' };
     }
     if (this.#queue) {
       const inQueue = this.#queue.state().queue.some((item) => item.id === id);
       if (inQueue) {
-        const message = this.#messagesById.get(id);
+        const message = this.#submissions.get(id);
         if (!message) return { kind: 'unknown_id' };
         const { inputSurgeApproval: _invalidatedApproval, ...options } = message.options;
-        this.#messagesById.set(id, { ...message, input: structuredClone(turn), options });
+        this.#submissions.set(id, { ...message, input: structuredClone(turn), options });
         const displayText = normalizeUserTurn(turn).text;
         const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
         const result = await this.#queue.command({ kind: 'edit_queued', itemId: id as ItemId, text: controllerText });
         if (result.kind !== 'accepted') {
-          if (this.#messagesById.has(id)) {
-            this.#messagesById.set(id, message);
+          if (this.#submissions.has(id)) {
+            this.#submissions.set(id, message);
           }
           return { kind: 'too_late', stage: 'started' };
         }
@@ -543,11 +513,78 @@ export class ConversationAdapter {
         return { kind: 'applied', stage: 'queued' };
       }
     }
-    if (this.#messagesById.has(id)) return { kind: 'too_late', stage: 'started' };
+    if (this.#submissions.has(id)) return { kind: 'too_late', stage: 'started' };
     return { kind: 'unknown_id' };
   }
 
-  async sendMessage(
+  /** Own steer admission and fallback with the same id and latest payload. */
+  async submitMessage(
+    input: string | UserTurn,
+    options: SendMessageOptions = {},
+    delivery?: {
+      onSteerSettled(admitted: boolean, input: string | UserTurn): void;
+      prepareFollowUp?(input: string | UserTurn): string | UserTurn;
+    },
+  ): Promise<{ kind: 'steered' } | { kind: 'turn'; terminal: ConversationTerminal }> {
+    const id = options.preferredMessageId ?? String(this.#nextQueuedMessageId++);
+    if (this.#submissions.has(id)) throw new Error(`A submission already uses request id ${id}`);
+    const submission: Submission = {
+      stage: 'pending_steer',
+      prepareInput: (value) => (typeof value === 'string' ? value : injectSkillIntoTurn(value)),
+      input: structuredClone(input),
+      options,
+      resolve: () => undefined,
+      reject: () => undefined,
+    };
+    if (options.busyMode !== 'steer' || !this.isQueueOwningSubmissions()) {
+      return {
+        kind: 'turn',
+        terminal: await this.#sendMessage(
+          submission.input,
+          {
+            ...options,
+            preferredMessageId: id,
+          },
+          submission,
+        ),
+      };
+    }
+    this.#submissions.set(id, submission);
+    const epoch = this.#cancellationEpoch;
+    try {
+      const admitted = await this.steerActiveTurn(submission.prepareInput!(submission.input), { id });
+      if ((!admitted && epoch !== this.#cancellationEpoch) || this.#submissions.get(id) !== submission) {
+        throw queueCancellationError('Pending submission was cancelled');
+      }
+      delivery?.onSteerSettled(admitted, submission.input);
+      if (admitted) {
+        this.#submissions.delete(id);
+        return { kind: 'steered' };
+      }
+      submission.input = delivery?.prepareFollowUp?.(submission.input) ?? submission.input;
+      return {
+        kind: 'turn',
+        terminal: await this.#sendMessage(
+          submission.input,
+          {
+            ...submission.options,
+            preferredMessageId: id,
+          },
+          submission,
+        ),
+      };
+    } finally {
+      if (this.#submissions.get(id) === submission && submission.stage === 'pending_steer') {
+        this.#submissions.delete(id);
+      }
+    }
+  }
+
+  sendMessage(input: string | UserTurn, options: SendMessageOptions = {}): Promise<ConversationTerminal> {
+    return this.#sendMessage(input, options);
+  }
+
+  async #sendMessage(
     input: string | UserTurn,
     {
       onAdmission,
@@ -562,10 +599,11 @@ export class ConversationAdapter {
       busyMode,
       suppressUserMessageDisplay,
     }: SendMessageOptions = {},
+    existing?: Submission,
   ): Promise<ConversationTerminal> {
     const queue = this.#queue;
     if (!queue) {
-      return this.#executeMessage(input, {
+      return this.#executeMessage(existing?.prepareInput?.(input) ?? input, {
         onTextChunk,
         onReasoningChunk,
         onCommandMessage,
@@ -581,11 +619,13 @@ export class ConversationAdapter {
     }
     return new Promise<ConversationTerminal>((resolve, reject) => {
       const requestId = preferredMessageId ?? String(this.#nextQueuedMessageId++);
-      if (this.#messagesById.has(requestId)) {
+      if (this.#submissions.has(requestId) && this.#submissions.get(requestId) !== existing) {
         reject(new Error(`A queued message already uses request id ${requestId}`));
         return;
       }
-      const message = {
+      const message: Submission = {
+        stage: 'queued',
+        prepareInput: existing?.prepareInput,
         input: typeof input === 'string' ? input : structuredClone(input),
         options: {
           onTextChunk,
@@ -601,7 +641,8 @@ export class ConversationAdapter {
         resolve,
         reject,
       };
-      this.#messagesById.set(requestId, message);
+      if (existing) Object.assign(existing, message);
+      this.#submissions.set(requestId, existing ?? message);
       const displayText = normalizeUserTurn(input).text;
       const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
       void queue
@@ -785,7 +826,7 @@ export class ConversationAdapter {
         };
         void proof.completion.then(settle, settle);
       }
-      if (this.#cancellationProven && activeRequestId && this.#messagesById.has(activeRequestId)) {
+      if (this.#cancellationProven && activeRequestId && this.#submissions.has(activeRequestId)) {
         this.#settleFailure(activeRequestId, queueCancellationError('Active turn was cancelled'));
       }
       if (this.#cancellationProven && this.#activeRequestId === activeRequestId) {
@@ -802,9 +843,10 @@ export class ConversationAdapter {
   #startQueuedTurn(execution: ActiveExecution<QueuedMessageSnapshot>): void {
     // Notify the orchestrator/UI before kicking off the run so that the user
     // message can be appended to the message list with the correct timeline.
-    // Recovered items have no #messagesById entry; still fire so a delivered
+    // Recovered items have no #submissions entry; still fire so a delivered
     // row cannot stay in the pending list after the queue has started it.
-    const message = this.#messagesById.get(execution.snapshot.requestId);
+    const message = this.#submissions.get(execution.snapshot.requestId);
+    if (message) message.stage = 'started';
     if (this.#queuedTurnStartObserver) {
       try {
         this.#queuedTurnStartObserver({
@@ -835,7 +877,7 @@ export class ConversationAdapter {
    * of the active turn is the same shape with `reason: 'manual'`.
    */
   async #runQueuedTurn(execution: ActiveExecution<QueuedMessageSnapshot>): Promise<void> {
-    const message = this.#messagesById.get(execution.snapshot.requestId);
+    const message = this.#submissions.get(execution.snapshot.requestId);
     try {
       const recoveredInput =
         execution.item.text === QUEUED_NON_TEXT_PLACEHOLDER || execution.item.text === LEGACY_QUEUED_MESSAGE_PLACEHOLDER
@@ -845,7 +887,7 @@ export class ConversationAdapter {
         throw new Error('Recovered queued message has no executable text input');
       }
       const result = await this.#executeMessage(
-        message?.input ?? recoveredInput!,
+        message ? message.prepareInput?.(message.input) ?? message.input : recoveredInput!,
         message?.options ?? {},
         execution.snapshot.requestId,
       );
@@ -907,16 +949,16 @@ export class ConversationAdapter {
   }
 
   #settleSuccess(requestId: string, terminal: ConversationTerminal): void {
-    const message = this.#messagesById.get(requestId);
+    const message = this.#submissions.get(requestId);
     if (!message) return;
-    this.#messagesById.delete(requestId);
+    this.#submissions.delete(requestId);
     message.resolve(terminal);
   }
 
   #settleFailure(requestId: string, error: unknown): void {
-    const message = this.#messagesById.get(requestId);
+    const message = this.#submissions.get(requestId);
     if (!message) return;
-    this.#messagesById.delete(requestId);
+    this.#submissions.delete(requestId);
     message.reject(error);
   }
 

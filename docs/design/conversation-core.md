@@ -1,7 +1,8 @@
 # Follow the model–tool loop
 
-**Proposed design; production has not been migrated.** A turn starts with accepted
-input and runs this loop:
+The production entry point is `ApplicationRunLoop.#runTurn` in
+[`application-run-loop.ts`](../../source/services/agent-runtime/application-run-loop.ts).
+A turn starts with accepted input and runs this loop:
 
 ```mermaid
 flowchart TD
@@ -14,8 +15,8 @@ flowchart TD
     Calls -->|no| Finish[Finish the turn]
 ```
 
-The central implementation should read like that diagram. In illustrative
-pseudocode, including an explicit completion-policy extension:
+The central function follows that diagram. In illustrative pseudocode, including
+the explicit completion-policy extension:
 
 ```text
 async runTurn(turn):
@@ -31,18 +32,18 @@ async runTurn(turn):
                 return
 ```
 
-Ordinarily, no tool calls means the turn ends. `finishTurn` may wait for a required
+Ordinarily, no tool calls means the turn ends. Tool execution may wait for a required
 post-execution decision. If existing completion policy requests another model
-round, it returns `continue` to this loop; it cannot secretly start another loop.
+round, `finishTurn` returns `continue` to this loop; it cannot secretly start another loop.
 Errors and Stop exit through the turn owner's cleanup boundary.
 
 Each feature has a place around this flow:
 
 | Feature | Where the reader goes | What it does |
 | --- | --- | --- |
-| Follow-ups, editing, retracting | Conversation inbox, outside `runTurn` | Keep accepted input editable until consumed; start the next eligible turn after this one settles. |
+| Follow-ups, editing, retracting | `ConversationAdapter.submitMessage` and its submission records, outside `runTurn` | Keep accepted input editable until consumed; start the next eligible turn after this one settles. |
 | Steering | `prepareRequest` | Consume eligible steer input at the next request boundary; unconsumed steers return to queue policy when the turn ends. |
-| Prompts, modes, skills and tool availability | `prepareRequest` | Assemble instructions and the request's tool snapshot; execution still checks tool authority. |
+| Prompts, modes, skills and tool availability | Conversation submission preparation and `askModel` request snapshot | Assemble instructions and the request's tool snapshot; execution still checks tool authority. |
 | Context limits and compaction | `prepareRequest` | Build a valid request from accepted history, applying context policy before dispatch. |
 | Streaming and provider protocols | `askModel` | Publish incremental output, retain committed facts, and translate the provider's response into the loop's common form. |
 | Retry | Inside `askModel`, under retry policy | Retry a safe request attempt using the same turn budget; uncertain tool work is never replayed by request retry. |
@@ -70,5 +71,7 @@ The [detailed design](conversation-loop.md) defines these operations, shows a wo
 turn, maps current owners, and specifies what must disappear during migration.
 The [v2 experiment](../../experiments/conversation-actor/v2/DESIGN.md) remains
 historical evidence about ownership and cancellation rules. Its event-driven actor
-is not the proposed central implementation. Human readability and production
-parity still need to be demonstrated.
+is not the production central implementation. The
+[implementation evidence](../research/conversation-loop-runtime/WORK.md) records
+verification and its limits. Source readability can be inspected directly; a
+human comprehension improvement has not been measured.

@@ -1,0 +1,10 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/loop-runtime
+
+
+ Test Files  7 passed (7)
+      Tests  28 passed (28)
+   Start at  21:46:17
+   Duration  4.15s (transform 2.90s, setup 238ms, import 183ms, tests 5.63s, environment 2ms)
+

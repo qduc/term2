@@ -8,9 +8,14 @@ original proposal and appended corrections with one authoritative sequence.
 **Milestone 1 is merged** (`82a756a7`, with `08a71cf7` and `96e65d4e`). Do not
 re-implement it.
 
+Shell is now intentionally available both directly and through `tools.shell`.
+The runtime owns scripted post-execute approval waits; the factory keeps the
+root post-execute policy for direct calls. See the shell section in
+[the lifecycle contract](run-code-codemode-improvements.md).
+
 **M4 hide-direct is merged to main** (surface+copy `c9ae6a49`; P1/K1 evidence
-`56e7fd88`). Predicate: `isDirectlyCallable` is `RUN_CODE_PROHIBITED_TOOLS`
-only; scriptable tools stay bound in the wrapped registry and are called as
+`56e7fd88`). Original predicate: `isDirectlyCallable` was `RUN_CODE_PROHIBITED_TOOLS`
+only; shell now also remains directly callable; scriptable tools stay bound in the wrapped registry and are called as
 `tools.*` from scripts. P1 lives in
 `scripts/provider-black-box/nested-hide.blackbox.ts` (scripted adapter +
 production `buildAgentTools` hide + result-chain identity). K1 lives in
@@ -128,7 +133,7 @@ counterexample.
 
 ## Product contract and settled decisions
 
-When `run_code` exists, the final direct surface contains `run_code` and tools
+When `run_code` exists, the final direct surface contains `run_code`, `shell`, and tools
 structurally prohibited inside scripts. Other resolved tools are available
 through `tools.<name>(params)`, including file/search/edit/web tools. Profiles
 without `run_code` retain their direct surface.
@@ -152,14 +157,15 @@ same script. Denial is catchable and earlier effects are never replayed.
   the VM is not an OS security boundary.
 - For the initial nested-approval rollout, shell/bash, agent/workflow control,
   mentor, user interaction, rollover and nested worktree transitions were
-  prohibited inside scripts. The Henshin phase-2 decision now permits **agent
-  execution only**, through host-owned script capabilities. This enables
+  prohibited inside scripts. The Henshin phase-2 decision permitted **agent
+  execution**, through host-owned script capabilities. This enables
   composition of independent `AgentSpec` executions; it does not grant the
   script approval authority or expand the parent's tool permissions. The host
   must validate/narrow child permissions, route child tool approvals through
   the existing approval owner, and bound/adopt async runs. Mentor, direct user
-  interaction, rollover, shell/bash, and script-side worktree transitions
-  remain prohibited. A host-side per-run worktree pin is part of agent
+  interaction, rollover, bash, and script-side worktree transitions
+  remain prohibited. Shell now uses the wrapped executor from either surface,
+  with nested approval and sandbox-denial recovery owned by `run_code`. A host-side per-run worktree pin is part of agent
   execution, not a script-side worktree transition. Workflow control remains a
   separate decision. See `henshin-run-code-subagents.md`.
 - No replay, checkpoint format, escrow tool, blanket trusted-script mode, or
@@ -387,6 +393,10 @@ own invocation and effective prompt policy.
 
 ### Amendment 4 — M2 does not reopen script-only shell
 
+Historical M2 restriction: the later user-authorized shell integration described
+above supersedes the shell prohibition, retaining the approval and lifecycle
+requirements that motivated it.
+
 The original text said M2 "removes the grounds" for closing the script-only
 configuration. Overstated. Shell and bash remain structurally prohibited in this
 plan and in the live `run_code` namespace (`run-code.ts:60-69,279-280`);
@@ -532,7 +542,8 @@ and no automatic replay.
 
 Keep direct fallbacks through Milestones 1–3. After their gates pass, bind the
 complete wrapped registry before filtering the direct surface. Visibility depends
-on structural prohibition, not `canRequireApproval`. `run_code` stays direct and
+on structural prohibition, not `canRequireApproval`, with shell retained on
+both surfaces. `run_code` stays direct and
 cannot recursively call itself through its namespace.
 
 Hide editors only after approval-required nested edits work. Test removal of

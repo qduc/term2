@@ -202,6 +202,15 @@ export function buildAgentTools({
       const wrappedDefinition: AnyToolDefinition = {
         ...definition,
         canonicalParameters,
+        postExecutePause: definition.postExecutePause
+          ? {
+              ...definition.postExecutePause,
+              describe: (...args) =>
+                shouldBypassToolApproval(definition.name, deps.settings.get('shell.autoApproveMode'))
+                  ? null
+                  : definition.postExecutePause!.describe(...args),
+            }
+          : undefined,
         parameters:
           useStrictToolSchema && isZodToolParameterSchema(providerParameters)
             ? // Strict-schema path: `parameters` is replaced at runtime by its JSON
@@ -245,7 +254,8 @@ export function buildAgentTools({
           const result = await executeOriginal();
           const postExecute =
             definition.postExecute ??
-            (shouldBypassToolApproval(definition.name, deps.settings.get('shell.autoApproveMode'))
+            (isScriptedToolCall(_context) ||
+            shouldBypassToolApproval(definition.name, deps.settings.get('shell.autoApproveMode'))
               ? undefined
               : deps.postExecutePauseCapability?.forTool(definition));
           const finalResult = postExecute
@@ -397,8 +407,8 @@ export function buildAgentTools({
   bindRunCodeRegistry(tools);
 
   // Profiles without run_code keep their existing direct surface. When the
-  // script path exists, the model-facing list is only run_code plus tools
-  // structurally prohibited inside scripts.
+  // script path exists, shell remains on both surfaces; the other direct
+  // tools are structurally prohibited inside scripts.
   if (!hasRunCode) return tools;
   return tools.filter(isDirectlyCallable);
 }

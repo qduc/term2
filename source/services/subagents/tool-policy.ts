@@ -9,7 +9,6 @@ import type {
   AnyToolDefinition,
   CommandMessage,
   RegistryToolDefinition,
-  SchemaToolDefinition,
   ScriptedToolDefinition,
   ToolRegistry,
 } from '../../tools/types.js';
@@ -616,12 +615,12 @@ export class SubagentToolPolicy {
   }
 
   wrapShellTool<S extends ZodTypeAny, TName extends string>(
-    definition: SchemaToolDefinition<S, TName>,
+    definition: ScriptedToolDefinition<S, TName>,
     cwd: string,
     filesChanged: string[],
     taskContext: string,
     validationCapture?: ValidationCapture,
-  ): SchemaToolDefinition<S, TName> {
+  ): ScriptedToolDefinition<S, TName> {
     const originalExecute = definition.execute.bind(definition);
     const originalNeedsApproval = definition.needsApproval.bind(definition);
     return {
@@ -705,9 +704,9 @@ export class SubagentToolPolicy {
   }
 
   wrapNestedShellTool<S extends ZodTypeAny, TName extends string>(
-    definition: SchemaToolDefinition<S, TName>,
+    definition: ScriptedToolDefinition<S, TName>,
     cwd: string,
-  ): SchemaToolDefinition<S, TName> {
+  ): ScriptedToolDefinition<S, TName> {
     const originalExecute = definition.execute.bind(definition);
     const originalNeedsApproval = definition.needsApproval.bind(definition);
     return {
@@ -770,8 +769,8 @@ export class SubagentToolPolicy {
   }
 
   wrapReadOnlyShellTool<S extends ZodTypeAny, TName extends string>(
-    definition: SchemaToolDefinition<S, TName>,
-  ): SchemaToolDefinition<S, TName> {
+    definition: ScriptedToolDefinition<S, TName>,
+  ): ScriptedToolDefinition<S, TName> {
     const originalExecute = definition.execute.bind(definition);
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     return {
@@ -951,9 +950,9 @@ export class SubagentToolPolicy {
    * a typed permission error.
    */
   wrapShellToolWithScope<S extends ZodTypeAny, TName extends string>(
-    definition: SchemaToolDefinition<S, TName>,
+    definition: ScriptedToolDefinition<S, TName>,
     scopePatterns: string[] | undefined,
-  ): SchemaToolDefinition<S, TName> {
+  ): ScriptedToolDefinition<S, TName> {
     if (scopePatterns !== undefined) {
       return {
         ...definition,

@@ -97,7 +97,7 @@ describe('P1 nested hide result chain', () => {
     });
     const directNames = tools.map((tool) => tool.name);
     expect(directNames).toContain('run_code');
-    expect(directNames.every((name) => RUN_CODE_PROHIBITED_TOOLS.has(name))).toBe(true);
+    expect(directNames.every((name) => name === 'shell' || RUN_CODE_PROHIBITED_TOOLS.has(name))).toBe(true);
     for (const name of HIDDEN_EDITORS) {
       expect(raw.tools.some((tool) => tool.name === name)).toBe(true);
       expect(directNames).not.toContain(name);
@@ -207,7 +207,7 @@ describe('P1 nested hide result chain', () => {
       for (const name of [...HIDDEN_EDITORS, 'apply_patch']) {
         expect(advertised).not.toContain(name);
       }
-      expect(advertised.some((name) => !RUN_CODE_PROHIBITED_TOOLS.has(name))).toBe(false);
+      expect(advertised.some((name) => name !== 'shell' && !RUN_CODE_PROHIBITED_TOOLS.has(name))).toBe(false);
       expect(providerRequests[0]!.tools.some((tool) => tool.type === 'custom')).toBe(false);
 
       const toolResult = providerRequests[1]!.input.find((item) => item.type === 'tool_result');

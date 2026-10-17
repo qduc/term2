@@ -1,85 +1,51 @@
-# What Is This
+# Project Context
 
-A terminal-based AI assistant built with React (Ink), an application-owned agent runtime, TypeScript, and Node.js. It lets users chat with an AI agent in real time; the agent can execute shell commands and modify files, with interactive approval prompts for safety.
+## Purpose and architecture
 
-# Orientation
+Term2 is a terminal AI assistant built with React (Ink), TypeScript, Node.js,
+and an application-owned agent runtime. It supports interactive conversations,
+non-interactive runs, shell execution, file changes, and approval prompts.
 
-Application code lives under `source/`. The non-obvious entry points:
+Application code lives under `source/`. The important boundaries are:
 
-- `cli.tsx` assembles the application; `app.tsx` owns the interactive Ink UI; `non-interactive.ts` runs the same conversation system without the UI.
-- `agent.ts` defines the agent and registers its tools.
-- `source/services/conversation/conversation-service.ts` is the public conversation facade for conversation behavior.
-- `source/prompts/prompt-constructor.ts` assembles system prompts from a base profile plus conditional fragments; `prompt-profiles.ts` maps models to bases. Because this project *is* an agent harness, `source/prompts/` and tool `description` fields are product behavior, not documentation — treat edits there as behavior changes.
+- `cli.tsx` assembles the app; `app.tsx` owns the interactive Ink UI;
+  `non-interactive.ts` runs the conversation system without that UI.
+- `agent.ts` defines the agent and registers tools.
+- `source/services/conversation/conversation-service.ts` is the public
+  conversation facade.
+- `source/prompts/prompt-constructor.ts` assembles prompts; `prompt-profiles.ts`
+  maps models to base profiles. Prompts and tool descriptions are product behavior.
 
-## How to read the docs in this repo
+## Current constraints and trade-offs
 
-**Docs are hints; code wins.** Use docs for orientation, rationale, and rejected approaches, then verify the specific claim you will act on. Check absolutes against every relevant implementation; prefer symbol names to drifting line-number citations.
+The [evidence-driven development experiment](docs/experiments/evidence-driven-development/README.md)
+is active. Its repository-specific verification policy takes precedence over
+conflicting testing guidance: permanent unit tests are prohibited; integration,
+e2e, provider black-box tests, and existing static guards remain. Temporary tests
+are allowed. High-risk changes require an independent verifier. Completed tasks
+and escaped defects are recorded in the experiment's JSONL ledgers. The experiment
+README contains the full policy and decision criteria; historical unit-test
+references point to tag `unit-suite-baseline`.
 
-Everything else is discoverable by reading the tree. Skills carry the depth — activate the matching skill before touching these areas.
+Several agents share the primary checkout. Bug fixes and features use worktrees
+under `.worktrees/` because sibling checkouts fall outside the shell sandbox's
+write scope. Each worktree needs its own `pnpm install`; symlinked `node_modules`
+previously broke command resolution. Keep the primary branch in place and preserve
+other agents' uncommitted work. The [isolation procedure](docs/agent-context.md#parallel-work-isolation)
+covers integration and cleanup.
 
-# Verification policy: evidence-driven development experiment
+UI components use `useTheme()` for colours and `useSkin()` for layout. Skins live
+under `source/skins/<name>/`; component colour literals bypass this boundary.
 
-This repository is running an [evidence-driven development experiment](docs/experiments/evidence-driven-development/README.md). Its rules override the global `tdd` skill and any doc that asks for unit tests.
+## Evidence and institutional knowledge
 
-- **Do not commit permanent unit tests.** CI and the pre-commit hook reject them (`scripts/check-no-unit-tests.mjs`). Temporary tests and scripts are allowed while you work; keep them untracked and delete them when done. The removed suite is at tag `unit-suite-baseline`.
-- **Verify every change in proportion to its risk, using methods you choose.** Follow the `verification` skill: state the claims and risks, gather observable evidence, and report what remains uncertain. Reading the code is not evidence for a behavioral change. If you cannot verify a claim with confidence, report the uncertainty rather than claiming success.
-- **High-risk changes need an independent verifier,** a separate agent that did not implement the change. The `verification` skill defines high risk.
-- **Integration, e2e, provider black-box tests and the static repository guards stay.** Tier commands and standards are in the `testing` skill. Do not disguise a unit test as an integration or e2e test.
-- **Record each completed task** in `docs/experiments/evidence-driven-development/tasks.jsonl`, and each defect found after completion in `defects.jsonl`. Do not weaken verification to improve the numbers.
-- **Docs that cite unit test files as evidence** point to the tag, not the current tree.
+Repository docs provide orientation and rationale; the relevant implementation
+establishes current behavior. Area-specific plans and service contracts are indexed
+in [agent context](docs/agent-context.md#plans-and-area-specific-context).
+Consult the relevant area documents before changing that area. The repository's
+`verification` and `testing` skills describe evidence standards, risk levels,
+and available test tiers for the experiment.
 
-# Plans and area-specific context
-
-Read the relevant documents before touching these areas, starting with **Resume here** where present. Keep milestone status, measurements, and implementation history in the linked documents, not this index.
-
-- **Gateway:** [Web client gateway](docs/plans/web-client-gateway-completion.md)
-- **`run_code` runtime:** [Lifecycle and contracts](docs/plans/run-code-codemode-improvements.md)
-- **Nested approval:** [Inline approval](docs/plans/run-code-nested-approval.md)
-- **Sandboxed execution:** [Shared code host](docs/plans/sandboxed-code-host.md)
-- **Code-tool diagnostics:** [Authoring friction](docs/plans/run-code-authoring-friction.md)
-- **TypeScript support:** [Deferred decision and telemetry](docs/plans/run-code-typescript.md)
-- **Settings value entry:** [Field editor](docs/plans/settings-field-editor.md)
-- **Settings infrastructure:** [Legacy debt](docs/plans/settings-legacy-debt.md)
-- **Session queries/persistence:** [SQLite index](docs/plans/session-query-index.md)
-- **Session retrieval UX:** [Observed usage](docs/research/session-retrieval-observed-usage.md), [seek/tail cell](docs/research/session-retrieval-seek-cell.md), [paired protocol](docs/research/session-retrieval-paired-protocol.md), and [cursor format](docs/plans/memory-progressive-disclosure.md)
-- **Modes:** [Profile architecture](docs/profiles/README.md)
-- **Model/effort step-down:** [Benchmark](docs/plans/model-effort-step-down-benchmark.md) and [cache economics](docs/research/model-effort-step-down-cache-economics.md)
-- **Audited tests:** [Test suite audit](docs/plans/test-suite-audit.md) and `docs/test-audit/graph.yaml` — historical; most audited files were removed with the unit suite (tag `unit-suite-baseline`)
-- **Service contracts:** [Boundary completion](docs/plans/service-boundary-contract-completion.md) and [contracts](docs/contracts/)
-- **UI/business ownership:** [Separation map](docs/plans/ui-business-layer-separation/MAP.md)
-- **OAuth:** [Provider independence](docs/plans/provider-oauth-independence.md)
-- **Live provider canaries:** Deferred pending CI, secret/billing, and OAuth-storage decisions; no plan doc
-- **Candidate gates:** [Decision portal](scripts/candidate-gates.ts) — dormant; see its file header before extending
-- **Shell deadlines:** [Evidence-backed timeouts](docs/plans/evidence-backed-shell-timeouts.md)
-- **Rollover:** [Session handoff](docs/plans/session-rollover-handoff.md)
-- **Grok Responses/credits:** [Provider plan](docs/plans/grok-responses-and-credits.md)
-- **Run budgets:** [Stall escalation](docs/plans/run-budget-stall-escalation.md) and [review](docs/plans/run-budget-stall-escalation-review.md)
-- **Tool dispatch:** [Parallel-safe dispatch](docs/plans/parallel-safe-tool-dispatch.md)
-- **Menu input:** [Exclusive ownership](docs/plans/exclusive-menu-input.md)
-- **Chat-completions reasoning:** [Roundtrip](docs/plans/chat-completions-reasoning-roundtrip.md)
-- **Background work:** [Control map](docs/plans/background-work-control/MAP.md)
-- **Compaction:** [Provider-neutral](docs/plans/provider-neutral-context-compaction.md) and [OpenAI](docs/plans/openai-context-compaction.md)
-- **Tool effects/output:** [Safety contract](docs/plans/tool-output-and-effect-safety.md)
-- **Background shell output:** [Monitor map](docs/plans/background-shell-monitor/MAP.md)
-- **Queued/in-flight input:** [Queue editing](docs/plans/queue-editing.md) and [mid-turn injection](docs/plans/mid-turn-injection.md)
-- **Provider continuity:** [Chain settlement](docs/plans/chain-settlement.md)
-- **MCP servers:** [MCP as `run_code` functions](docs/plans/mcp-code-mode.md)
-- **UI themes and skins:** [Palettes, background detection, layout skins](docs/plans/theme-system.md) — components take colours from `useTheme()` and layout from `useSkin()`; never write a hex literal or named colour in one, and add a skin only inside `source/skins/<name>/`
-
-# Parallel Work Isolation
-
-Several agents share the primary checkout, so concurrent edits pile into one `git status` with no way to tell whose work is whose.
-
-Do each bug fix or feature in its own worktree: `git worktree add .worktrees/<slug> -b <slug>`. Commit inside it, merge back with `git merge --no-ff <slug>` from the primary checkout, then `git worktree remove` and `git branch -d`. Trivial single-file edits can stay in place.
-
-- Create worktrees under `.worktrees/`, never as a sibling directory like `../term2-<slug>`. The shell sandbox only grants writes to the workspace root and the temp dir (`allowWrite` in `source/utils/shell/sandbox/sandbox-policy.ts`), so a sibling checkout fails to write — sometimes half-created, with `.git/worktrees/<slug>/` metadata but no checkout.
-- Run `pnpm install` directly in each worktree. pnpm links from its global content-addressable store, so this does not duplicate disk space. Do not symlink `node_modules` from the primary checkout — that caused broken `pnpm exec` resolution in the past.
-- Never `git checkout` another branch in the primary checkout — other agents have HEAD-dependent work in flight.
-- Git refuses a merge that would clobber another agent's uncommitted edits. Coordinate; don't stash their files aside.
-
-# Shell Safety For Agents
-
-- Never put a destructive payload in an ad-hoc shell probe: `rm`, `find -exec`, `sed -i`, `git checkout` / `reset --hard`, or a redirection that writes over an existing file. Shell quoting mistakes can turn test fixtures into real commands.
-- Ordinary composition is fine. Pipes, `&&`, `2>/dev/null`, and command substitution are how you run tests and read their output — the hazard is the payload, not the syntax.
-- When testing command parsing or safety classification, put cases in a test file or another quoted fixture file and run the test harness. Do not pass dangerous command examples through `node -e`, `tsx -e`, `sh -c`, command substitution, or inline shell one-liners. Keep dangerous strings as data, never as shell syntax.
-- Before running anything that could modify or delete files outside the intended edit set, stop and use a read-only inspection path or ask for explicit approval.
+For shell probes and command-safety classification work, read
+[Shell Safety For Agents](docs/agent-context.md#shell-safety-for-agents) before
+executing probes; it preserves the repository's explicit safety constraints.

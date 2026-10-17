@@ -8,8 +8,14 @@ import { MARKER_COLUMNS, useZenStyles } from './style.js';
 /** Short waits stay calm: a count only appears once the wait is long enough to wonder about. */
 const SHOW_ELAPSED_AFTER_SECONDS = 10;
 
-const labelFor = ({ phase, toolName }: Pick<WorkingIndicatorView, 'phase' | 'toolName'>): string => {
+const labelFor = ({
+  phase,
+  toolName,
+  elapsedSeconds,
+}: Pick<WorkingIndicatorView, 'phase' | 'toolName' | 'elapsedSeconds'>): string => {
   switch (phase) {
+    case 'retrying':
+      return `retrying in ${elapsedSeconds}s`;
     case 'thinking':
       return 'thinking';
     case 'generating':
@@ -17,7 +23,7 @@ const labelFor = ({ phase, toolName }: Pick<WorkingIndicatorView, 'phase' | 'too
     case 'tool_call':
       return toolName ? `using ${toolName}` : 'calling a tool';
     default:
-      return 'working';
+      return 'waiting for the model';
   }
 };
 
@@ -39,7 +45,9 @@ export const ZenWorkingIndicator: FC<WorkingIndicatorView> = (view) => {
     <Box paddingLeft={MARKER_COLUMNS}>
       <Text {...faint}>
         <Text color={theme.accent}>◆</Text> {labelFor(view)} <BreathingDots />
-        {view.elapsedSeconds >= SHOW_ELAPSED_AFTER_SECONDS ? ` ${view.elapsedSeconds}s` : ''}
+        {view.phase !== 'retrying' && view.elapsedSeconds >= SHOW_ELAPSED_AFTER_SECONDS
+          ? ` ${view.elapsedSeconds}s`
+          : ''}
       </Text>
     </Box>
   );

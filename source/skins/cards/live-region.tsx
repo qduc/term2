@@ -24,13 +24,16 @@ export const CardsWorkingIndicator: FC<WorkingIndicatorView> = ({
   tokensPerSecond,
   toolName,
   argumentChars,
+  retry,
 }) => {
   const theme = useTheme();
   const hasRate = tokensPerSecond != null && tokensPerSecond > 0;
   const rate = hasRate ? formatTokensPerSecond(tokensPerSecond) : '';
 
   let label: React.ReactNode;
-  if (phase === 'tool_call') {
+  if (phase === 'retrying') {
+    label = `Retrying in ${elapsedSeconds}s${retry ? ` · attempt ${retry.attempt}/${retry.maxRetries}` : ''}`;
+  } else if (phase === 'tool_call') {
     label = (
       <>
         Calling tool {toolName ? <Text bold>{toolName}</Text> : ''}
@@ -47,7 +50,7 @@ export const CardsWorkingIndicator: FC<WorkingIndicatorView> = ({
       </>
     );
   } else {
-    label = hasRate ? `Generating · ${elapsedSeconds}s (${rate})` : `Processing · ${elapsedSeconds}s`;
+    label = hasRate ? `Generating · ${elapsedSeconds}s (${rate})` : `Waiting for model · ${elapsedSeconds}s`;
   }
 
   return (

@@ -3,6 +3,7 @@ import type { ReasoningEffortSetting } from '../../contracts/conversation.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { getMethod } from '../interruption-info.js';
 import type { SessionLifecycle } from './session-lifecycle.js';
+import type { ProviderRetryInfo } from '../../providers/retrying-model.js';
 
 /**
  * Manages runtime settings that affect the agent client's behavior:
@@ -44,7 +45,7 @@ export class SessionRuntimeController {
     setTemperature.call(this.#agentClient, temperature);
   }
 
-  setRetryCallback(callback: () => void): void {
+  setRetryCallback(callback: (info?: ProviderRetryInfo) => void): void {
     if (typeof this.#agentClient.setRetryCallback === 'function') {
       this.#agentClient.setRetryCallback(callback);
     }

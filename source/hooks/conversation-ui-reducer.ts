@@ -81,6 +81,8 @@ export interface ConversationUIState {
   thinkingStartedAt: number | null;
   toolCallStreamingInfo: { toolName?: string; argumentCharCount?: number } | null;
   liveStreamingSpeed: { tps: number; ttftMs?: number } | null;
+  /** Backoff before an automatic retry; the countdown is timed from `until`. */
+  retryCountdown: RetryCountdown | null;
 
   // Usage (included here so reset_all can clear them atomically)
   lastUsage: NormalizedUsage | null;
@@ -120,6 +122,7 @@ export type ConversationUIAction =
   // --- Streaming indicators ---
   | { type: 'streaming/thinking_started'; timestamp: number }
   | { type: 'streaming/thinking_cleared' }
+  | { type: 'streaming/retry_countdown'; countdown: RetryCountdown | null }
   | { type: 'streaming/tool_info'; info: ConversationUIState['toolCallStreamingInfo'] }
   | { type: 'streaming/speed_updated'; speed: ConversationUIState['liveStreamingSpeed'] }
 
@@ -183,12 +186,20 @@ export type ConversationUIAction =
 // Initial state factory
 // ---------------------------------------------------------------------------
 
+export interface RetryCountdown {
+  /** Epoch ms at which the retry request is sent. */
+  until: number;
+  attempt: number;
+  maxRetries: number;
+}
+
 export function createInitialUIState(initialUsage: NormalizedUsage | null): ConversationUIState {
   return {
     turnPhase: { kind: 'idle' },
     pendingInteraction: null,
     composerEntryMode: 'none',
     thinkingStartedAt: null,
+    retryCountdown: null,
     toolCallStreamingInfo: null,
     liveStreamingSpeed: null,
     lastUsage: initialUsage,
@@ -339,6 +350,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         ...state,
         turnPhase: { kind: 'processing' },
         thinkingStartedAt: null,
+        retryCountdown: null,
         toolCallStreamingInfo: null,
         liveStreamingSpeed: null,
       };
@@ -359,6 +371,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         ...state,
         turnPhase: nextPhase,
         thinkingStartedAt: null,
+        retryCountdown: null,
         liveStreamingSpeed: null,
       };
     }
@@ -373,6 +386,11 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
 
     case 'streaming/thinking_cleared':
       return { ...state, thinkingStartedAt: null };
+
+    case 'streaming/retry_countdown':
+      // Cleared on every streamed delta; skip the re-render when there is nothing to clear.
+      if (action.countdown === null && state.retryCountdown === null) return state;
+      return { ...state, retryCountdown: action.countdown };
 
     case 'streaming/tool_info':
       return { ...state, toolCallStreamingInfo: action.info };
@@ -512,6 +530,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         ...state,
         turnPhase: { kind: 'processing' },
         thinkingStartedAt: null,
+        retryCountdown: null,
         toolCallStreamingInfo: null,
       };
 
@@ -520,6 +539,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         ...state,
         turnPhase: { kind: 'idle' },
         thinkingStartedAt: null,
+        retryCountdown: null,
         toolCallStreamingInfo: null,
       };
 
@@ -611,6 +631,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         pendingInteraction: null,
         composerEntryMode: 'none',
         thinkingStartedAt: null,
+        retryCountdown: null,
         toolCallStreamingInfo: null,
         liveStreamingSpeed: null,
         queueSnapshot: null,

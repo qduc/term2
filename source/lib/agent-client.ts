@@ -97,6 +97,7 @@ import type {
   SessionRolloverRequest,
   SessionRolloverRequestOutcome,
 } from '../contracts/session-rollover.js';
+import type { ProviderRetryInfo } from '../providers/retrying-model.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -148,7 +149,7 @@ export class AgentClient {
   #unavailableCodexCompaction = new WeakSet<StreamedModelTurn>();
   #maxTurns: number;
   #retryAttempts: number;
-  #retryCallback: (() => void) | null = null;
+  #retryCallback: ((info?: ProviderRetryInfo) => void) | null = null;
   #currentCorrelationId: string | null = null;
   #activeStartController: AbortController | null = null;
   #chatService: AgentChatService;
@@ -216,7 +217,7 @@ export class AgentClient {
       settingsService: this.#settings,
       loggingService: this.#logger,
       sessionContextService: this.#sessionContextService,
-      onRetry: () => this.#retryCallback?.(),
+      onRetry: (info) => this.#retryCallback?.(info),
       retryAttempts: this.#retryAttempts,
       requestCapture: this.#requestCapture,
       contextCompactionSessionState: this.#contextCompactionSessionState,
@@ -990,7 +991,7 @@ export class AgentClient {
     this.#agentConfig.refreshAgent();
   }
 
-  setRetryCallback(callback: () => void): void {
+  setRetryCallback(callback: (info?: ProviderRetryInfo) => void): void {
     this.#retryCallback = callback;
   }
 

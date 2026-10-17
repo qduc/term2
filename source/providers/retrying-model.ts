@@ -20,12 +20,15 @@ import {
   type RetryRecoveryBudget,
 } from '../services/retry/retry-recovery-budget.js';
 
+/** A provider-level retry about to back off for `delayMs` before attempt `attempt` of `maxRetries`. */
+export type ProviderRetryInfo = { attempt: number; maxRetries: number; delayMs: number };
+
 type RetryingModelOptions = {
   retryAttempts: number;
   loggingService?: Pick<ILoggingService, 'warn' | 'info'>;
   sleep?: (delayMs: number) => Promise<void>;
   random?: () => number;
-  onRetry?: (info?: { attempt: number; delayMs: number; error: unknown }) => void;
+  onRetry?: (info?: ProviderRetryInfo & { error: unknown }) => void;
 };
 
 /** Watches a signal and rejects with an AbortError when it fires. */
@@ -88,7 +91,7 @@ export class RetryingModel implements StreamedModelTurn {
   }
 
   /** Rebind the request-scoped retry observer when a cached provider is reused. */
-  setRetryCallback(callback?: () => void): void {
+  setRetryCallback(callback?: (info?: ProviderRetryInfo) => void): void {
     this.options.onRetry = callback;
   }
 
@@ -166,7 +169,7 @@ export class RetryingModel implements StreamedModelTurn {
       delayMs,
       error: describeError(error),
     });
-    this.options.onRetry?.({ attempt: attemptNumber, delayMs, error });
+    this.options.onRetry?.({ attempt: attemptNumber, maxRetries: this.options.retryAttempts, delayMs, error });
     await sleepOrAbort(this.#sleep, delayMs, signal);
   }
 

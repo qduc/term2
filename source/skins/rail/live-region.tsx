@@ -25,8 +25,15 @@ interface WorkingLabel {
 
 /** What the agent is doing, as the text of one line: `Thinking… 12s`. */
 function workingLabel(view: WorkingIndicatorView): WorkingLabel {
-  const { phase, elapsedSeconds, tokensPerSecond, toolName, argumentChars } = view;
+  const { phase, elapsedSeconds, tokensPerSecond, toolName, argumentChars, retry } = view;
   const rate = tokensPerSecond != null && tokensPerSecond > 0 ? formatTokensPerSecond(tokensPerSecond) : undefined;
+
+  if (phase === 'retrying') {
+    return {
+      before: `Retrying in ${elapsedSeconds}s${retry ? ` (attempt ${retry.attempt}/${retry.maxRetries})` : ''}`,
+      after: '',
+    };
+  }
 
   if (phase === 'tool_call') {
     const detail = [argumentChars != null ? `${argumentChars} chars` : undefined, rate].filter(Boolean).join(' · ');
@@ -38,7 +45,7 @@ function workingLabel(view: WorkingIndicatorView): WorkingLabel {
   }
   if (phase === 'thinking') return { before: `Thinking… ${elapsedSeconds}s${rate ? ` (${rate})` : ''}`, after: '' };
   if (rate) return { before: `Generating… ${elapsedSeconds}s (${rate})`, after: '' };
-  return { before: `Processing… ${elapsedSeconds}s`, after: '' };
+  return { before: `Waiting for model… ${elapsedSeconds}s`, after: '' };
 }
 
 /**

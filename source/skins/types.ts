@@ -89,8 +89,12 @@ export interface ToolGroupSummaryView {
 // --- Live region ------------------------------------------------------------
 
 export interface WorkingIndicatorView {
-  phase: 'thinking' | 'generating' | 'processing' | 'tool_call';
+  /** `processing` is a model request with no output yet; `retrying` is the backoff before an automatic retry. */
+  phase: 'thinking' | 'generating' | 'processing' | 'tool_call' | 'retrying';
+  /** Seconds spent in the phase; for `retrying`, seconds left until the retry is sent. */
   elapsedSeconds: number;
+  /** Present in the `retrying` phase. */
+  retry?: { attempt: number; maxRetries: number };
   tokensPerSecond: number | undefined;
   /** Present while the model is streaming a tool call's arguments. */
   toolName: string | undefined;

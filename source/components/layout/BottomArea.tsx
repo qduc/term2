@@ -11,6 +11,7 @@ import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt
 import QueuePausedPrompt from '../prompt/QueuePausedPrompt.js';
 import { useSkin } from '../../skins/SkinContext.js';
 import type { WorkingIndicatorView } from '../../skins/types.js';
+import type { RetryCountdown } from '../../hooks/conversation-ui-reducer.js';
 import type { PendingModeSwitch } from '../../commands/mode-commands.js';
 import type { HandoffState } from '../../hooks/use-handoff-flow.js';
 import type { SlashCommand } from '../../slash-commands.js';
@@ -57,6 +58,7 @@ export type BottomAreaProps = {
   /** True while a second Escape would interrupt the in-flight turn. */
   interruptConfirmVisible?: boolean;
   thinkingStartedAt?: number | null;
+  retryCountdown?: RetryCountdown | null;
   toolCallStreamingInfo?: { toolName?: string; argumentCharCount?: number } | null;
   liveStreamingSpeed?: { tps: number; ttftMs?: number } | null;
   isShellMode?: boolean;
@@ -149,6 +151,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   isProcessing,
   interruptConfirmVisible = false,
   thinkingStartedAt = null,
+  retryCountdown = null,
   toolCallStreamingInfo = null,
   liveStreamingSpeed = null,
   isShellMode = false,
@@ -253,13 +256,34 @@ const BottomArea: FC<BottomAreaProps> = ({
     return () => clearInterval(interval);
   }, [isProcessing]);
 
-  const workingPhase: WorkingIndicatorView['phase'] = toolCallStreamingInfo
-    ? 'tool_call'
-    : thinkingStartedAt != null
-    ? 'thinking'
-    : liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-    ? 'generating'
-    : 'processing';
+  const retrySecondsLeft = (until: number) => Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  const [retryRemainingSeconds, setRetryRemainingSeconds] = useState(() =>
+    retryCountdown == null ? 0 : retrySecondsLeft(retryCountdown.until),
+  );
+  useEffect(() => {
+    if (retryCountdown == null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- no backoff in progress
+      setRetryRemainingSeconds(0);
+      return;
+    }
+    const update = () => setRetryRemainingSeconds(retrySecondsLeft(retryCountdown.until));
+    update();
+    const interval = setInterval(update, 250);
+    return () => clearInterval(interval);
+  }, [retryCountdown]);
+
+  // Once the backoff ends the retry request is in flight, which is the plain
+  // waiting-for-model state until its output arrives.
+  const workingPhase: WorkingIndicatorView['phase'] =
+    retryCountdown != null && retryRemainingSeconds > 0
+      ? 'retrying'
+      : toolCallStreamingInfo
+      ? 'tool_call'
+      : thinkingStartedAt != null
+      ? 'thinking'
+      : liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
+      ? 'generating'
+      : 'processing';
   // The clock times the current step, not the turn: a turn-long count under
   // "Calling tool X" or "Processing" blames the slow part on the wrong step.
   const workingStepKey =
@@ -371,23 +395,24 @@ const BottomArea: FC<BottomAreaProps> = ({
         {/* Working status sits above the divider so it is not boxed in with the task panel. */}
         {!hasBlockingPrompt && (
           <>
-            {isProcessing && toolCallStreamingInfo && (
-              <WorkingIndicator
-                phase="tool_call"
-                elapsedSeconds={workingElapsedSeconds}
-                tokensPerSecond={liveStreamingSpeed?.tps}
-                toolName={toolCallStreamingInfo.toolName}
-                argumentChars={toolCallStreamingInfo.argumentCharCount}
-                dotCount={dotCount}
-              />
-            )}
-            {isProcessing && !toolCallStreamingInfo && (
+            {isProcessing && (
               <WorkingIndicator
                 phase={workingPhase}
-                elapsedSeconds={thinkingStartedAt != null ? thinkingElapsedSeconds : workingElapsedSeconds}
-                tokensPerSecond={liveStreamingSpeed?.tps}
-                toolName={undefined}
-                argumentChars={undefined}
+                elapsedSeconds={
+                  workingPhase === 'retrying'
+                    ? retryRemainingSeconds
+                    : workingPhase === 'thinking'
+                    ? thinkingElapsedSeconds
+                    : workingElapsedSeconds
+                }
+                tokensPerSecond={workingPhase === 'retrying' ? undefined : liveStreamingSpeed?.tps}
+                toolName={workingPhase === 'tool_call' ? toolCallStreamingInfo?.toolName : undefined}
+                argumentChars={workingPhase === 'tool_call' ? toolCallStreamingInfo?.argumentCharCount : undefined}
+                retry={
+                  workingPhase === 'retrying' && retryCountdown
+                    ? { attempt: retryCountdown.attempt, maxRetries: retryCountdown.maxRetries }
+                    : undefined
+                }
                 dotCount={dotCount}
               />
             )}

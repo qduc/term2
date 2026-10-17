@@ -273,6 +273,7 @@ const App: FC<AppProps> = ({
     currentAskUserQuestionIndex,
     isProcessing,
     thinkingStartedAt,
+    retryCountdown,
     toolCallStreamingInfo,
     liveStreamingSpeed,
     backgroundSubagentTasks,
@@ -1520,6 +1521,7 @@ const App: FC<AppProps> = ({
             isProcessing={effectiveIsProcessing}
             interruptConfirmVisible={interruptConfirmVisible}
             thinkingStartedAt={thinkingStartedAt}
+            retryCountdown={retryCountdown}
             toolCallStreamingInfo={toolCallStreamingInfo}
             liveStreamingSpeed={liveStreamingSpeed}
             isShellMode={isShellMode}

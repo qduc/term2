@@ -20,9 +20,18 @@ export const ClassicWorkingIndicator: FC<WorkingIndicatorView> = ({
   toolName,
   argumentChars,
   dotCount,
+  retry,
 }) => {
   const theme = useTheme();
   const hasRate = tokensPerSecond != null && tokensPerSecond > 0;
+
+  if (phase === 'retrying') {
+    return (
+      <Text color={theme.textSubtle}>
+        Retrying in {elapsedSeconds}s{retry ? ` · attempt ${retry.attempt}/${retry.maxRetries}` : ''}
+      </Text>
+    );
+  }
 
   if (phase === 'tool_call') {
     return (
@@ -49,7 +58,7 @@ export const ClassicWorkingIndicator: FC<WorkingIndicatorView> = ({
     <Text color={theme.textSubtle}>
       {hasRate
         ? `Generating · ${elapsedSeconds}s (${formatTokensPerSecond(tokensPerSecond)})`
-        : `Processing · ${elapsedSeconds}s`}
+        : `Waiting for model · ${elapsedSeconds}s`}
     </Text>
   );
 };

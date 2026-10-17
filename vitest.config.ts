@@ -17,6 +17,7 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/*.e2e.*', '**/*.integration.*', 'scripts/provider-black-box/**'],
     environment: 'node',
     globals: false,
+    globalSetup: ['./source/test-helpers/vitest-cache-global-setup.ts'],
     setupFiles: ['./source/test-helpers/vitest-network-guard.ts', './source/test-helpers/vitest-cache-isolation.ts'],
     restoreMocks: true,
     testTimeout: 10_000,

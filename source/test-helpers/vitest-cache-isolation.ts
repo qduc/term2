@@ -9,9 +9,19 @@
 // cacheDir args) still win; this only changes the default. An explicitly set
 // TERM2_CACHE_DIR is left alone.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { inject } from 'vitest';
+
+declare module 'vitest' {
+  export interface ProvidedContext {
+    term2TestCacheRoot: string;
+  }
+}
 
 if (!process.env.TERM2_CACHE_DIR) {
-  process.env.TERM2_CACHE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-cache-'));
+  // The runner owns this root and disposes it after workers finish, including
+  // collection errors that skip suite hooks. Keep each file's cache isolated.
+  const root = inject('term2TestCacheRoot');
+  if (!root) throw new Error('Vitest cache isolation requires vitest-cache-global-setup.ts');
+  process.env.TERM2_CACHE_DIR = fs.mkdtempSync(path.join(root, 'suite-'));
 }

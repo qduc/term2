@@ -31,6 +31,7 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 - **Nested Tool Invocation**: Inside a `run_code` script, the agent can call other tools programmatically via `await tools.<toolName>(args)`.
 - **Tool Approvals in Code**: Nested read-only tool calls run automatically, while actions requiring approval prompt the user before continuing.
 - **Script Isolation**: Scripts execute in an isolated environment without access to process globals or host credentials.
+- **Nested Shell Commands**: Scripts can invoke `tools.shell` with the same sandbox constraints, approvals, timeouts, and job tracking as top-level shell calls.
 - **JSON Inputs**: Pass structured data separately from the script source with the `inputs` parameter; values are available through the script's `inputs` binding.
 - **Result Contracts**: Every scriptable tool declares its scripted return contract. Compact entries include return-shape guidance, and `tools.describe` exposes the full contract before invocation.
 - **Nested Trace**: Tool calls made by a script are shown in the conversation and remain subject to the active approval policy.

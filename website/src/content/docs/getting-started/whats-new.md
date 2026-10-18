@@ -7,6 +7,15 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 0.33.0 - October 18, 2026
+
+- `tools.shell` is available inside `run_code` scripts with shared sandbox enforcement, approvals, timeouts, monitors, and job tracking.
+- The interactive model picker shows providers in a grouped leading column across unified and favorites views.
+- Custom catalogs (including OrcaRouter) isolate catalog adapters and filter unsupported generation models.
+- Provider policies are kept in owning adapters, and the conversation engine consolidates turns and submissions under a single loop runner and session projection.
+
+See the [0.33.0 changelog](https://github.com/qduc/term2/blob/v0.33.0/CHANGELOG.md) for details.
+
 ## 0.32.2 - October 17, 2026
 
 - Gemini tool continuations preserve thought signatures during replay, and rate-limit retries honor supported provider delays within the retry policy's bounds.

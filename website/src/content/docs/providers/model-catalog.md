@@ -60,5 +60,6 @@ Ctrl+T
 ## Favorites & Nicknames
 
 In the interactive model picker (`Ctrl+O`):
+- **Grouped Provider Column**: The unified model list and favorites tab display providers in a grouped leading column to make scanning models across providers easy.
 - **Favorites (`Ctrl+F`)**: Mark frequently used models as favorites. Favorited models appear at the top of the picker and resolve instantly.
 - **Nicknames (`Ctrl+N`)**: Assign a short name to a model (e.g. `sonnet` -> `openrouter/anthropic/claude-3.7-sonnet`). Passing the nickname to `-m` resolves immediately without waiting for catalog lookups.

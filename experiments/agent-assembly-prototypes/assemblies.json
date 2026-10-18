@@ -1,0 +1,22 @@
+[
+  {
+    "name": "main",
+    "pieces": ["memory", "redact", "rewrite", "approval", "cache"],
+    "bindings": { "storage": "disk" },
+    "hookOrder": {
+      "request.prepare": ["memory"],
+      "tool.execute": ["rewrite", "approval", "cache"],
+      "memory.beforeSave": ["redact"]
+    }
+  },
+  {
+    "name": "explorer",
+    "pieces": [],
+    "bindings": {},
+    "hookOrder": {
+      "request.prepare": [],
+      "tool.execute": [],
+      "memory.beforeSave": []
+    }
+  }
+]

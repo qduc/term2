@@ -1,0 +1,15 @@
+{
+  "backend": "awilix",
+  "scenario": "custom",
+  "reports": [],
+  "startupError": "Error: redact requires memory: select the piece or bind a service",
+  "traces": [
+    {
+      "type": "assembly.error",
+      "detail": "Error: redact requires memory: select the piece or bind a service"
+    },
+    {
+      "type": "host.closed"
+    }
+  ]
+}

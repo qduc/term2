@@ -1,0 +1,15 @@
+{
+  "backend": "fastify",
+  "scenario": "custom",
+  "reports": [],
+  "startupError": "Error: Unknown piece",
+  "traces": [
+    {
+      "type": "assembly.error",
+      "detail": "Error: Unknown piece"
+    },
+    {
+      "type": "host.closed"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import {readFile, writeFile, mkdir, rm} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {createAwilixHost, createFastifyHost, blueprint, ready} from './assemblies.js';
+import {catalog,FileStorage} from './pieces.js';
+import {tapOrder,type Catalog,type Trace,type RunContext} from './contracts.js';
+import {runAgent} from './loop.js';
+const out='evidence/independent-cli';
+const notes:any[]=[];
+for (const backend of ['awilix','fastify']) {
+ const load=async(s:string)=>JSON.parse(await readFile(`${out}/${backend}/${s}/result.json`,'utf8'));
+ for(const scenario of ['approved','denied','cancelled','order','missing','dependency-order','isolation']) {
+  const result=await load(scenario); const types=result.traces.map((t:Trace)=>t.type);
+  if(['approved','denied','cancelled'].includes(scenario)) assert(!types.includes('physical.execute'));
+  if(scenario==='approved') {assert.equal(result.reports[0].answer,'cached:HELLO');assert.equal(result.traces.find((t:Trace)=>t.type==='interaction.start').detail,'Allow echo(HELLO)?');assert(result.traces.some((t:Trace)=>t.type==='memory.saved' && t.detail==='remember secret=[redacted]'));assert.equal(await readFile(`${out}/${backend}/approved/disk/main`,'utf8'),'remember next');}
+  if(scenario==='order') {assert.equal(result.reports[0].answer,'executed:HELLO');assert.deepEqual(result.traces.filter((t:Trace)=>t.type.startsWith('hook.')).map((t:Trace)=>t.type),['hook.cache','hook.rewrite','hook.approval']);}
+  if(scenario==='denied') assert.equal(result.reports[0].answer,'Denied');
+  if(scenario==='cancelled') {assert.equal(result.reports[0].status,'cancelled');for(const part of ['interaction','tool','step','run'])assert.equal(types.filter((t:string)=>t===`${part}.start`).length,types.filter((t:string)=>t===`${part}.end`).length);}
+  if(scenario==='missing') {assert(result.startupError);assert(!types.includes('model.start'));}
+  if(scenario==='isolation') {assert.equal(result.assemblyFacts.sameStorage,true);assert.equal(result.assemblyFacts.separateMemory,true);assert.equal(result.assemblyFacts.agents[2].memory,false);assert.equal(await readFile(`${out}/${backend}/isolation/disk/main`,'utf8'),'remember secret=[redacted]');assert.equal(await readFile(`${out}/${backend}/isolation/disk/peer`,'utf8'),'remember secret=token');}
+ }
+ const configs=JSON.parse(await readFile('assemblies.json','utf8'));
+ configs[0].bindings.storage='alternate';
+ await writeFile('.independent-config.json',JSON.stringify(configs));
+ const cli=(label:string)=>execFileSync('pnpm',['demo','--backend',backend,'--scenario','custom','--config','.independent-config.json','--out',`evidence/independent-${label}`],{encoding:'utf8'});
+ notes.push({backend,alternate:cli('alternate')});
+ assert.equal(await readFile(`evidence/independent-alternate/${backend}/custom/alternate/main`,'utf8'),'remember secret=[redacted]');
+ for(const [label,mutate] of [
+ ['duplicate-order',()=>configs[0].hookOrder['tool.execute'].push('rewrite')],
+ ['missing-order',()=>configs[0].hookOrder['tool.execute']=['rewrite','approval']],
+ ['unknown-piece',()=>configs[0].pieces.push('unknown')],
+ ['dangling-dependency',()=>{configs[0].pieces=configs[0].pieces.filter((x:string)=>x!=='memory');configs[0].hookOrder['request.prepare']=[];}],
+ ] as const) {
+  const saved=JSON.stringify(configs);mutate();await writeFile('.independent-config.json',JSON.stringify(configs));notes.push({backend,label,output:cli(label)});
+  const r=JSON.parse(await readFile(`evidence/independent-${label}/${backend}/custom/result.json`,'utf8'));assert(r.startupError);assert(!r.traces.some((x:Trace)=>x.type==='model.start'));Object.assign(configs,JSON.parse(saved));
+ }
+ const create=backend==='awilix'?createAwilixHost:createFastifyHost;
+ const external:Catalog={...catalog, stamp:{requires:['memory'],hooks:['memory.beforeSave'],create:({memory}:any)=>({install(_hooks,bp){memory.beforeSave.tap(tapOrder(bp,'memory.beforeSave','stamp'),(text:string)=>`${text} [review stamp]`);}})}};
+ const disk=new FileStorage(`evidence/independent-extension/${backend}`);
+ const host=create({disk},external);const bp=blueprint('external',['memory','stamp']);bp.hookOrder['memory.beforeSave']=['stamp'];
+ const assembly=await host.create(bp);await ready(host);
+ const traces:Trace[]=[];const contexts:any[]=[];const run:RunContext={signal:new AbortController().signal,emit:(type,detail)=>traces.push({type,detail}),ask:async()=>true};
+ const original=assembly.agent.model;assembly.agent.model=async(request,ctx)=>{contexts.push(request.messages.filter(x=>x.role==='context'));return original(request,ctx);};
+ assert.equal((await runAgent(assembly.agent,'first',run)).status,'completed');assert.equal(await disk.get('external'),'first [review stamp]');
+ assert.equal((await runAgent(assembly.agent,'second',run)).status,'completed');assert(contexts.slice(2).every(x=>x[0].text==='first [review stamp]'));await host.close();
+ notes.push({backend,externalCatalog:'new memory stamp piece saved via filesystem, second run observed previous context',contexts,traces});
+ // Fault injection crosses the storage boundary rather than replacing loop internals.
+ const badHost=create({disk:{get:async()=>{throw Error('read fault');},put:async()=>{throw Error('write fault');}}});const bad=await badHost.create(blueprint('bad',['memory']));await ready(badHost);
+ const faults:Trace[]=[];const report=await runAgent(bad.agent,'fails',{...run,emit:(type,detail)=>faults.push({type,detail})});assert.equal(report.status,'failed');assert(!faults.some(x=>x.type==='model.start'));assert.equal(faults.filter(x=>x.type==='run.end').length,1);await badHost.close();notes.push({backend,storageReadFailure:report,traces:faults});
+ const writeHost=create({disk:{get:async()=>undefined,put:async()=>{throw Error('write fault');}}});const write=await writeHost.create(blueprint('bad-write',['memory']));await ready(writeHost);const wf:Trace[]=[];const wr=await runAgent(write.agent,'fails',{...run,emit:(type,detail)=>wf.push({type,detail})});assert.equal(wr.status,'failed');assert(wf.some(x=>x.type==='run.error'&&String(x.detail).includes('end hook')));await writeHost.close();notes.push({backend,storageWriteFailure:wr,traces:wf});
+}
+await mkdir('evidence',{recursive:true});await writeFile('evidence/independent-probes.json',JSON.stringify(notes,null,2)+'\n');await rm('.independent-config.json');console.log('PASS: CLI artifacts, alternate binding, malformed order, dependency rejection, extension, memory reuse, and storage read/write failures for both adapters');

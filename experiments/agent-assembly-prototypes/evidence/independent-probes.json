@@ -1,0 +1,776 @@
+[
+  {
+    "backend": "awilix",
+    "alternate": "awilix   custom            completed: cached:HELLO | completed: executed: hello \nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-alternate\n"
+  },
+  {
+    "backend": "awilix",
+    "label": "duplicate-order",
+    "output": "awilix   custom            STARTUP REJECTED: Error: tool.execute: order must list each selected handler exactly once\nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-duplicate-order\n"
+  },
+  {
+    "backend": "awilix",
+    "label": "missing-order",
+    "output": "awilix   custom            STARTUP REJECTED: Error: tool.execute: order must list each selected handler exactly once\nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-missing-order\n"
+  },
+  {
+    "backend": "awilix",
+    "label": "unknown-piece",
+    "output": "awilix   custom            STARTUP REJECTED: Error: Unknown piece\nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-unknown-piece\n"
+  },
+  {
+    "backend": "awilix",
+    "label": "dangling-dependency",
+    "output": "awilix   custom            STARTUP REJECTED: Error: redact requires memory: select the piece or bind a service\nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-dangling-dependency\n"
+  },
+  {
+    "backend": "awilix",
+    "externalCatalog": "new memory stamp piece saved via filesystem, second run observed previous context",
+    "contexts": [
+      [
+        {
+          "role": "context",
+          "text": "second [review stamp]"
+        }
+      ],
+      [
+        {
+          "role": "context",
+          "text": "second [review stamp]"
+        }
+      ],
+      [
+        {
+          "role": "context",
+          "text": "first [review stamp]"
+        }
+      ],
+      [
+        {
+          "role": "context",
+          "text": "first [review stamp]"
+        }
+      ]
+    ],
+    "traces": [
+      {
+        "type": "run.start",
+        "detail": "external"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "call",
+            "call": {
+              "name": "echo",
+              "text": " hello "
+            }
+          }
+        }
+      },
+      {
+        "type": "tool.start",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "tool.dispatch",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "physical.execute",
+        "detail": " hello "
+      },
+      {
+        "type": "tool.result",
+        "detail": {
+          "text": "executed: hello ",
+          "source": "executed"
+        }
+      },
+      {
+        "type": "tool.end",
+        "detail": "executed"
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "answer",
+            "text": "executed: hello "
+          }
+        }
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "memory.saved",
+        "detail": "first [review stamp]"
+      },
+      {
+        "type": "run.end",
+        "detail": "completed"
+      },
+      {
+        "type": "run.start",
+        "detail": "external"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "call",
+            "call": {
+              "name": "echo",
+              "text": " hello "
+            }
+          }
+        }
+      },
+      {
+        "type": "tool.start",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "tool.dispatch",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "physical.execute",
+        "detail": " hello "
+      },
+      {
+        "type": "tool.result",
+        "detail": {
+          "text": "executed: hello ",
+          "source": "executed"
+        }
+      },
+      {
+        "type": "tool.end",
+        "detail": "executed"
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "answer",
+            "text": "executed: hello "
+          }
+        }
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "memory.saved",
+        "detail": "second [review stamp]"
+      },
+      {
+        "type": "run.end",
+        "detail": "completed"
+      }
+    ]
+  },
+  {
+    "backend": "awilix",
+    "storageReadFailure": {
+      "status": "failed",
+      "input": "fails"
+    },
+    "traces": [
+      {
+        "type": "run.start",
+        "detail": "bad"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "step.end",
+        "detail": "failed"
+      },
+      {
+        "type": "run.error",
+        "detail": "Error: read fault"
+      },
+      {
+        "type": "run.end",
+        "detail": "failed"
+      }
+    ]
+  },
+  {
+    "backend": "awilix",
+    "storageWriteFailure": {
+      "status": "failed",
+      "input": "fails"
+    },
+    "traces": [
+      {
+        "type": "run.start",
+        "detail": "bad-write"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "call",
+            "call": {
+              "name": "echo",
+              "text": " hello "
+            }
+          }
+        }
+      },
+      {
+        "type": "tool.start",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "tool.dispatch",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "physical.execute",
+        "detail": " hello "
+      },
+      {
+        "type": "tool.result",
+        "detail": {
+          "text": "executed: hello ",
+          "source": "executed"
+        }
+      },
+      {
+        "type": "tool.end",
+        "detail": "executed"
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "answer",
+            "text": "executed: hello "
+          }
+        }
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "run.error",
+        "detail": "end hook: Error: write fault"
+      },
+      {
+        "type": "run.end",
+        "detail": "failed"
+      }
+    ]
+  },
+  {
+    "backend": "fastify",
+    "alternate": "fastify  custom            completed: cached:HELLO | completed: executed: hello \nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-alternate\n"
+  },
+  {
+    "backend": "fastify",
+    "label": "duplicate-order",
+    "output": "fastify  custom            STARTUP REJECTED: Error: tool.execute: order must list each selected handler exactly once\nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-duplicate-order\n"
+  },
+  {
+    "backend": "fastify",
+    "label": "missing-order",
+    "output": "fastify  custom            STARTUP REJECTED: Error: tool.execute: order must list each selected handler exactly once\nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-missing-order\n"
+  },
+  {
+    "backend": "fastify",
+    "label": "unknown-piece",
+    "output": "fastify  custom            STARTUP REJECTED: Error: Unknown piece\nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-unknown-piece\n"
+  },
+  {
+    "backend": "fastify",
+    "label": "dangling-dependency",
+    "output": "fastify  custom            STARTUP REJECTED: Error: redact requires memory: select the piece or bind a service\nArtifacts: /home/qduc/term2/.worktrees/agent-assembly-prototypes/experiments/agent-assembly-prototypes/evidence/independent-dangling-dependency\n"
+  },
+  {
+    "backend": "fastify",
+    "externalCatalog": "new memory stamp piece saved via filesystem, second run observed previous context",
+    "contexts": [
+      [
+        {
+          "role": "context",
+          "text": "second [review stamp]"
+        }
+      ],
+      [
+        {
+          "role": "context",
+          "text": "second [review stamp]"
+        }
+      ],
+      [
+        {
+          "role": "context",
+          "text": "first [review stamp]"
+        }
+      ],
+      [
+        {
+          "role": "context",
+          "text": "first [review stamp]"
+        }
+      ]
+    ],
+    "traces": [
+      {
+        "type": "run.start",
+        "detail": "external"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "call",
+            "call": {
+              "name": "echo",
+              "text": " hello "
+            }
+          }
+        }
+      },
+      {
+        "type": "tool.start",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "tool.dispatch",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "physical.execute",
+        "detail": " hello "
+      },
+      {
+        "type": "tool.result",
+        "detail": {
+          "text": "executed: hello ",
+          "source": "executed"
+        }
+      },
+      {
+        "type": "tool.end",
+        "detail": "executed"
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "answer",
+            "text": "executed: hello "
+          }
+        }
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "memory.saved",
+        "detail": "first [review stamp]"
+      },
+      {
+        "type": "run.end",
+        "detail": "completed"
+      },
+      {
+        "type": "run.start",
+        "detail": "external"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "call",
+            "call": {
+              "name": "echo",
+              "text": " hello "
+            }
+          }
+        }
+      },
+      {
+        "type": "tool.start",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "tool.dispatch",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "physical.execute",
+        "detail": " hello "
+      },
+      {
+        "type": "tool.result",
+        "detail": {
+          "text": "executed: hello ",
+          "source": "executed"
+        }
+      },
+      {
+        "type": "tool.end",
+        "detail": "executed"
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "answer",
+            "text": "executed: hello "
+          }
+        }
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "memory.saved",
+        "detail": "second [review stamp]"
+      },
+      {
+        "type": "run.end",
+        "detail": "completed"
+      }
+    ]
+  },
+  {
+    "backend": "fastify",
+    "storageReadFailure": {
+      "status": "failed",
+      "input": "fails"
+    },
+    "traces": [
+      {
+        "type": "run.start",
+        "detail": "bad"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "step.end",
+        "detail": "failed"
+      },
+      {
+        "type": "run.error",
+        "detail": "Error: read fault"
+      },
+      {
+        "type": "run.end",
+        "detail": "failed"
+      }
+    ]
+  },
+  {
+    "backend": "fastify",
+    "storageWriteFailure": {
+      "status": "failed",
+      "input": "fails"
+    },
+    "traces": [
+      {
+        "type": "run.start",
+        "detail": "bad-write"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "call",
+            "call": {
+              "name": "echo",
+              "text": " hello "
+            }
+          }
+        }
+      },
+      {
+        "type": "tool.start",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "tool.dispatch",
+        "detail": {
+          "name": "echo",
+          "text": " hello "
+        }
+      },
+      {
+        "type": "physical.execute",
+        "detail": " hello "
+      },
+      {
+        "type": "tool.result",
+        "detail": {
+          "text": "executed: hello ",
+          "source": "executed"
+        }
+      },
+      {
+        "type": "tool.end",
+        "detail": "executed"
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "step.start"
+      },
+      {
+        "type": "request.prepare"
+      },
+      {
+        "type": "hook.memory"
+      },
+      {
+        "type": "model.start"
+      },
+      {
+        "type": "model.end",
+        "detail": {
+          "status": "completed",
+          "response": {
+            "kind": "answer",
+            "text": "executed: hello "
+          }
+        }
+      },
+      {
+        "type": "step.end",
+        "detail": "completed"
+      },
+      {
+        "type": "run.error",
+        "detail": "end hook: Error: write fault"
+      },
+      {
+        "type": "run.end",
+        "detail": "failed"
+      }
+    ]
+  }
+]

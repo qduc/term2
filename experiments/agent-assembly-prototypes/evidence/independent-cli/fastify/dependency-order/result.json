@@ -1,0 +1,15 @@
+{
+  "backend": "fastify",
+  "scenario": "dependency-order",
+  "reports": [],
+  "startupError": "FastifyError [FST_ERR_PLUGIN_DEPENDENCY_NOT_REGISTERED]: The dependency 'memory' of plugin 'redact' is not registered",
+  "traces": [
+    {
+      "type": "assembly.error",
+      "detail": "FastifyError [FST_ERR_PLUGIN_DEPENDENCY_NOT_REGISTERED]: The dependency 'memory' of plugin 'redact' is not registered"
+    },
+    {
+      "type": "host.closed"
+    }
+  ]
+}

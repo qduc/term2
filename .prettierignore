@@ -18,3 +18,4 @@ web-client/**
 docs/test-audit/**/*.yaml
 docs/research/**/evidence.json
 docs/research/**/receipt.json
+experiments/agent-assembly-prototypes/evidence/**

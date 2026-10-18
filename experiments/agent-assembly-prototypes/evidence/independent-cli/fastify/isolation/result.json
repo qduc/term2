@@ -1,0 +1,331 @@
+{
+  "backend": "fastify",
+  "scenario": "isolation",
+  "reports": [
+    {
+      "status": "completed",
+      "input": "remember secret=token",
+      "answer": "executed: hello "
+    },
+    {
+      "status": "completed",
+      "input": "remember secret=token",
+      "answer": "executed: hello "
+    },
+    {
+      "status": "completed",
+      "input": "remember secret=token",
+      "answer": "executed: hello "
+    }
+  ],
+  "assemblyFacts": {
+    "agents": [
+      {
+        "name": "main",
+        "memory": true,
+        "saved": "remember secret=[redacted]"
+      },
+      {
+        "name": "peer",
+        "memory": true,
+        "saved": "remember secret=token"
+      },
+      {
+        "name": "explorer",
+        "memory": false
+      }
+    ],
+    "sameStorage": true,
+    "separateMemory": true
+  },
+  "traces": [
+    {
+      "type": "session.start",
+      "detail": "fastify"
+    },
+    {
+      "type": "run.start",
+      "detail": "main"
+    },
+    {
+      "type": "step.start"
+    },
+    {
+      "type": "request.prepare"
+    },
+    {
+      "type": "hook.memory"
+    },
+    {
+      "type": "model.start"
+    },
+    {
+      "type": "model.end",
+      "detail": {
+        "status": "completed",
+        "response": {
+          "kind": "call",
+          "call": {
+            "name": "echo",
+            "text": " hello "
+          }
+        }
+      }
+    },
+    {
+      "type": "tool.start",
+      "detail": {
+        "name": "echo",
+        "text": " hello "
+      }
+    },
+    {
+      "type": "tool.dispatch",
+      "detail": {
+        "name": "echo",
+        "text": " hello "
+      }
+    },
+    {
+      "type": "physical.execute",
+      "detail": " hello "
+    },
+    {
+      "type": "tool.result",
+      "detail": {
+        "text": "executed: hello ",
+        "source": "executed"
+      }
+    },
+    {
+      "type": "tool.end",
+      "detail": "executed"
+    },
+    {
+      "type": "step.end",
+      "detail": "completed"
+    },
+    {
+      "type": "step.start"
+    },
+    {
+      "type": "request.prepare"
+    },
+    {
+      "type": "hook.memory"
+    },
+    {
+      "type": "model.start"
+    },
+    {
+      "type": "model.end",
+      "detail": {
+        "status": "completed",
+        "response": {
+          "kind": "answer",
+          "text": "executed: hello "
+        }
+      }
+    },
+    {
+      "type": "step.end",
+      "detail": "completed"
+    },
+    {
+      "type": "memory.saved",
+      "detail": "remember secret=[redacted]"
+    },
+    {
+      "type": "run.end",
+      "detail": "completed"
+    },
+    {
+      "type": "run.start",
+      "detail": "peer"
+    },
+    {
+      "type": "step.start"
+    },
+    {
+      "type": "request.prepare"
+    },
+    {
+      "type": "hook.memory"
+    },
+    {
+      "type": "model.start"
+    },
+    {
+      "type": "model.end",
+      "detail": {
+        "status": "completed",
+        "response": {
+          "kind": "call",
+          "call": {
+            "name": "echo",
+            "text": " hello "
+          }
+        }
+      }
+    },
+    {
+      "type": "tool.start",
+      "detail": {
+        "name": "echo",
+        "text": " hello "
+      }
+    },
+    {
+      "type": "tool.dispatch",
+      "detail": {
+        "name": "echo",
+        "text": " hello "
+      }
+    },
+    {
+      "type": "physical.execute",
+      "detail": " hello "
+    },
+    {
+      "type": "tool.result",
+      "detail": {
+        "text": "executed: hello ",
+        "source": "executed"
+      }
+    },
+    {
+      "type": "tool.end",
+      "detail": "executed"
+    },
+    {
+      "type": "step.end",
+      "detail": "completed"
+    },
+    {
+      "type": "step.start"
+    },
+    {
+      "type": "request.prepare"
+    },
+    {
+      "type": "hook.memory"
+    },
+    {
+      "type": "model.start"
+    },
+    {
+      "type": "model.end",
+      "detail": {
+        "status": "completed",
+        "response": {
+          "kind": "answer",
+          "text": "executed: hello "
+        }
+      }
+    },
+    {
+      "type": "step.end",
+      "detail": "completed"
+    },
+    {
+      "type": "memory.saved",
+      "detail": "remember secret=token"
+    },
+    {
+      "type": "run.end",
+      "detail": "completed"
+    },
+    {
+      "type": "run.start",
+      "detail": "explorer"
+    },
+    {
+      "type": "step.start"
+    },
+    {
+      "type": "request.prepare"
+    },
+    {
+      "type": "model.start"
+    },
+    {
+      "type": "model.end",
+      "detail": {
+        "status": "completed",
+        "response": {
+          "kind": "call",
+          "call": {
+            "name": "echo",
+            "text": " hello "
+          }
+        }
+      }
+    },
+    {
+      "type": "tool.start",
+      "detail": {
+        "name": "echo",
+        "text": " hello "
+      }
+    },
+    {
+      "type": "tool.dispatch",
+      "detail": {
+        "name": "echo",
+        "text": " hello "
+      }
+    },
+    {
+      "type": "physical.execute",
+      "detail": " hello "
+    },
+    {
+      "type": "tool.result",
+      "detail": {
+        "text": "executed: hello ",
+        "source": "executed"
+      }
+    },
+    {
+      "type": "tool.end",
+      "detail": "executed"
+    },
+    {
+      "type": "step.end",
+      "detail": "completed"
+    },
+    {
+      "type": "step.start"
+    },
+    {
+      "type": "request.prepare"
+    },
+    {
+      "type": "model.start"
+    },
+    {
+      "type": "model.end",
+      "detail": {
+        "status": "completed",
+        "response": {
+          "kind": "answer",
+          "text": "executed: hello "
+        }
+      }
+    },
+    {
+      "type": "step.end",
+      "detail": "completed"
+    },
+    {
+      "type": "run.end",
+      "detail": "completed"
+    },
+    {
+      "type": "session.end"
+    },
+    {
+      "type": "host.closed"
+    }
+  ]
+}

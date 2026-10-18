@@ -1,0 +1,4 @@
+$ pnpm check:no-unit-tests
+$ node scripts/check-no-unit-tests.mjs
+
+exit=0

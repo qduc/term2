@@ -7,18 +7,19 @@ export interface CostTrailerCapture {
   cost?: string;
 }
 
-function isCostOnlyTrailer(chunk: any): boolean {
+function isCostOnlyTrailer(chunk: any, isProviderTrailer?: (chunk: any) => boolean): boolean {
   if (!chunk || typeof chunk !== 'object') return false;
   const hasEmptyChoices = !chunk.choices || (Array.isArray(chunk.choices) && chunk.choices.length === 0);
   if (!hasEmptyChoices) return false;
   if (chunk.usage != null) return false;
-  return typeof chunk.cost === 'string' || typeof chunk['x-opencode-type'] === 'string';
+  return typeof chunk.cost === 'string' || isProviderTrailer?.(chunk) === true;
 }
 
 function createNormalizedReasoningStream(
   stream: AsyncIterable<any>,
   loggingService?: ILoggingService,
   costCapture?: CostTrailerCapture,
+  isProviderTrailer?: (chunk: any) => boolean,
 ): AsyncIterable<any> {
   const iterator = stream[Symbol.asyncIterator]();
   return {
@@ -26,7 +27,7 @@ function createNormalizedReasoningStream(
       return {
         async next() {
           let result = await iterator.next();
-          while (!result.done && isCostOnlyTrailer(result.value)) {
+          while (!result.done && isCostOnlyTrailer(result.value, isProviderTrailer)) {
             // Intercept the provider-reported USD charge as billing metadata
             // while keeping the trailer out of the SDK usage accumulator.
             if (typeof result.value?.cost === 'string' && costCapture) {
@@ -77,6 +78,7 @@ export function applyClientResponseNormalization(
   client: OpenAI,
   loggingService?: ILoggingService,
   costCapture?: CostTrailerCapture,
+  isProviderTrailer?: (chunk: any) => boolean,
 ): void {
   const originalCreate = client.chat.completions.create.bind(client.chat.completions) as (...args: any[]) => any;
 
@@ -89,7 +91,7 @@ export function applyClientResponseNormalization(
     if (Array.isArray(result.choices)) return result;
 
     if (typeof result[Symbol.asyncIterator] === 'function') {
-      return createNormalizedReasoningStream(result, loggingService, costCapture);
+      return createNormalizedReasoningStream(result, loggingService, costCapture, isProviderTrailer);
     }
 
     return result;

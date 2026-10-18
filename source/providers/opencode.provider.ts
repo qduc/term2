@@ -26,3 +26,8 @@ export function resolveOpencodeRuntimeConfig(
     apiKey: apiKey ?? process.env.OPENCODE_API_KEY,
   };
 }
+
+/** OpenCode can send a marker-only trailer after the terminal chat chunk. */
+export function isOpencodeTrailer(chunk: Record<string, unknown>): boolean {
+  return typeof chunk['x-opencode-type'] === 'string';
+}

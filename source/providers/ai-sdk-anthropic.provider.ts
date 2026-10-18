@@ -1,9 +1,14 @@
+import type { SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { createAnthropic, type AnthropicProviderSettings } from '@ai-sdk/anthropic';
 import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
-import { forwardExplicitProviderSettings, withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
+import {
+  forwardExplicitProviderSettings,
+  withForwardedProviderSettings,
+  resolveThinkingBudget,
+} from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
-import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 
 type AiSdkAnthropicModelLike = LanguageModelV3;
 
@@ -177,7 +182,21 @@ export class AiSdkAnthropicProvider {
 
     return createAiSdkStreamedModel(
       withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
-      'anthropic',
+      resolveReasoningOptions,
     );
   }
+}
+
+/** Apply anthropic's reasoning options before crossing the SDK boundary. */
+function resolveReasoningOptions(request: StreamedModelTurnRequest): SharedV3ProviderOptions | undefined {
+  const budget = resolveThinkingBudget(request.reasoning?.effort);
+  if (budget === undefined) return request.providerOptions as SharedV3ProviderOptions | undefined;
+  const providerOptions: SharedV3ProviderOptions = {
+    ...(request.providerOptions as SharedV3ProviderOptions | undefined),
+  };
+  providerOptions.anthropic = {
+    ...(providerOptions.anthropic ?? {}),
+    thinking: providerOptions.anthropic?.thinking ?? { type: 'enabled', budgetTokens: budget },
+  };
+  return providerOptions;
 }

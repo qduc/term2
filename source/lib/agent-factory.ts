@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { getAgentDefinition } from '../agent.js';
-import { getProvider } from '../providers/index.js';
+import { getProvider, type ProviderDefinition } from '../providers/index.js';
 import { createEditorImpl } from './editor-impl.js';
 import { bindRunCodeRegistry, isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../tools/system/run-code/index.js';
 import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
@@ -136,23 +136,10 @@ export interface AgentBuildResult {
 
 const READ_ONLY_FILE_MUTATING_TOOLS = new Set(['apply_patch', 'create_file', 'search_replace']);
 
-type ProviderCapabilities = {
-  supportsConversationChaining: boolean;
-  supportsContextCompaction?: boolean;
-  supportsPromptCacheKey?: boolean;
-  usesStrictToolSchema?: boolean;
-  nativePatchModelPrefixes?: readonly string[];
-};
+type ProviderCapabilities = NonNullable<ProviderDefinition['capabilities']>;
 
 function getProviderCapabilities(providerId: string): ProviderCapabilities {
-  const providerDef = getProvider(providerId);
-  return {
-    supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
-    supportsContextCompaction: providerDef?.capabilities?.supportsContextCompaction,
-    supportsPromptCacheKey: providerDef?.capabilities?.supportsPromptCacheKey,
-    usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,
-    nativePatchModelPrefixes: providerDef?.capabilities?.nativePatchModelPrefixes,
-  };
+  return getProvider(providerId)?.capabilities ?? { supportsConversationChaining: false };
 }
 
 /** SDK-facing shim props attached to wrapped definitions by the factory; not part of the application contract. */
@@ -468,7 +455,7 @@ function buildModelSettings({
   if (
     useFlexServiceTier &&
     deps.serviceTierOverrideForNextRequest !== 'standard' &&
-    (deps.providerId === 'openai' || deps.providerId === 'openrouter')
+    getProviderCapabilities(deps.providerId).supportsFlexServiceTier === true
   ) {
     modelSettings.providerData = {
       ...(modelSettings.providerData || {}),
@@ -508,10 +495,7 @@ function buildModelSettings({
     };
   }
 
-  if (deps.providerId === 'codex') {
-    modelSettings.store = false;
-    modelSettings.include = ['reasoning.encrypted_content'];
-  }
+  Object.assign(modelSettings, getProvider(deps.providerId)?.defaultModelSettings?.());
 
   return modelSettings;
 }
@@ -598,9 +582,8 @@ export function buildAgent(
   const isDefaultSetting = deps.settings.get('agent.reasoningEffort') === 'default';
   if (isDefaultSetting && (!effectiveReasoningEffort || effectiveReasoningEffort === 'default')) {
     const defaultReasoningLevel =
-      deps.providerId === 'codex'
-        ? getModelDefaultReasoningLevel('codex', resolvedModel)
-        : getProviderDefaultReasoningLevel(deps.providerId);
+      getModelDefaultReasoningLevel(deps.providerId, resolvedModel) ??
+      getProviderDefaultReasoningLevel(deps.providerId);
     if (defaultReasoningLevel) {
       effectiveReasoningEffort = defaultReasoningLevel as ReasoningEffortSetting;
     }

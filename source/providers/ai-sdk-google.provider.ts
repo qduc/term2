@@ -1,8 +1,13 @@
+import type { SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { createGoogleGenerativeAI, type GoogleGenerativeAIProviderSettings } from '@ai-sdk/google';
 import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider';
-import { forwardExplicitProviderSettings, withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
+import {
+  forwardExplicitProviderSettings,
+  withForwardedProviderSettings,
+  resolveThinkingBudget,
+} from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
-import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 
 export type AiSdkGoogleConfig = Pick<
   GoogleGenerativeAIProviderSettings,
@@ -36,7 +41,7 @@ export class AiSdkGoogleProvider {
           forwardExplicitProviderSettings(options, 'google'),
         ),
       ),
-      'google',
+      resolveReasoningOptions,
     );
   }
 }
@@ -60,4 +65,18 @@ function withFallbackResponseId(model: LanguageModelV3): LanguageModelV3 {
 async function* withResponseId(stream: Awaited<ReturnType<LanguageModelV3['doStream']>>['stream']) {
   yield { type: 'response-metadata' as const, id: 'FAKE_ID' };
   yield* stream;
+}
+
+/** Apply google's reasoning options before crossing the SDK boundary. */
+function resolveReasoningOptions(request: StreamedModelTurnRequest): SharedV3ProviderOptions | undefined {
+  const budget = resolveThinkingBudget(request.reasoning?.effort);
+  if (budget === undefined) return request.providerOptions as SharedV3ProviderOptions | undefined;
+  const providerOptions: SharedV3ProviderOptions = {
+    ...(request.providerOptions as SharedV3ProviderOptions | undefined),
+  };
+  providerOptions.google = {
+    ...(providerOptions.google ?? {}),
+    thinkingConfig: providerOptions.google?.thinkingConfig ?? { thinkingBudget: budget, includeThoughts: true },
+  };
+  return providerOptions;
 }

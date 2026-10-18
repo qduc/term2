@@ -1,5 +1,6 @@
 import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from './registry.js';
 import type { CustomProviderConfig } from './openai-compatible.provider.js';
+import { neuralwattDefaultReasoningLevel } from './neuralwatt.provider.js';
 import { resolveProviderCredentialValue } from '../utils/ai/provider-credentials.js';
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
@@ -10,6 +11,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     id: providerId,
     label,
     isRuntimeDefined: true,
+    defaultReasoningLevel: neuralwattDefaultReasoningLevel(providerId),
     createStreamedModel: async (model, { settingsService, loggingService, sessionContextService }) => {
       const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
       const list = settingsService.getDynamic('providers');

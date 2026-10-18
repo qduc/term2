@@ -1,24 +1,22 @@
 import OpenAI from 'openai';
 import { RetryingModel } from './retrying-model.js';
-import type { ISettingsService, ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
+import type { ISettingsService } from '../services/service-interfaces.js';
 import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from './registry.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
-import { createProviderFetch } from './fetch/composer.js';
-import type { FetchMiddleware } from './fetch/compose.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
-import type { StreamedModelTurn, StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
-import { isOpencodeProvider, resolveOpencodeRuntimeConfig } from './opencode.provider.js';
+import { isOpencodeProvider, isOpencodeTrailer, resolveOpencodeRuntimeConfig } from './opencode.provider.js';
 import { resolveProviderCredentialValue } from '../utils/ai/provider-credentials.js';
-import { generateOpencodeSessionId } from './opencode-session.js';
+import { OpencodeAnthropicFormatProvider } from './opencode-model-provider.js';
+import { createOpencodeSessionMiddleware } from './opencode-middleware.js';
+import { createAnthropicChatCachingMiddleware } from './anthropic-chat-caching.js';
+import { createLlamaCppMiddleware } from './llama-cpp.provider.js';
 import {
-  findKnownOpencodeModelTransport,
-  selectOpencodeModelTransport,
-  shouldApplyOpencodeAnthropicPromptCaching,
-} from './opencode-routing.js';
-import { CachedOpencodeTransportDiscovery, type OpencodeTransportDiscovery } from './opencode-transport-discovery.js';
-import { createAnthropicMiddleware } from './anthropic-middleware.js';
+  buildProviderFetch,
+  type CustomProviderConfig,
+  type CustomProviderRuntimeDeps,
+} from './custom-provider-runtime.js';
+export type { CustomProviderConfig, CustomProviderRuntimeDeps } from './custom-provider-runtime.js';
 import {
   createOpenAICompatibleMiddleware,
   createOpenAIResponsesMiddleware,
@@ -26,21 +24,13 @@ import {
 } from './openai-compatible-middleware.js';
 import { applyClientResponseNormalization, type CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import { getModelListItems, mapModelListItem } from './openai-compatible-models.js';
+import { neuralwattDefaultReasoningLevel } from './neuralwatt.provider.js';
 import { isOrcaRouterBaseUrl, parseOrcaRouterModels } from './orcarouter-models.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
-import { OpenAIResponsesModelWithPromptCacheKey } from './openai-responses-model.js';
 import {
   decodeStoredCustomProviderConfigs,
   normalizeProviderIdentifier,
 } from '../services/settings/custom-provider-normalization.js';
-
-export type CustomProviderConfig = {
-  name: string;
-  label?: string;
-  type?: string;
-  baseUrl?: string;
-  apiKey?: string;
-};
 
 // The tag carried on `provider_opaque` items so a later turn can prove the
 // continuity metadata it is about to splice came from *this* endpoint. It must
@@ -61,16 +51,6 @@ const DEFAULT_ENV_API_KEYS: Record<string, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   opencode: 'OPENCODE_API_KEY',
-};
-
-export type CustomProviderRuntimeDeps = {
-  defaultModel: string;
-  fetch?: typeof fetch;
-  loggingService?: ILoggingService;
-  sessionContextService?: ISessionContextService;
-  settingsService?: ISettingsService;
-  /** Resolves unknown Zen model IDs from the cached official endpoint table. */
-  opencodeTransportDiscovery?: OpencodeTransportDiscovery;
 };
 
 function findConfigFromSettings(settingsService: ISettingsService, providerId: string): CustomProviderConfig | null {
@@ -96,171 +76,6 @@ function toLabel(name: string): string {
 }
 
 export { sanitizeResponsesApiBody };
-
-function buildProviderFetch(
-  config: CustomProviderConfig,
-  deps: CustomProviderRuntimeDeps,
-  middlewares: FetchMiddleware[],
-): typeof fetch {
-  const sessionContextService = deps.sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE;
-  return createProviderFetch({
-    providerId: config.name,
-    defaultModel: (deps.defaultModel || '').trim(),
-    deps: {
-      loggingService:
-        deps.loggingService ||
-        ({
-          debug: () => {},
-          error: () => {},
-          getCorrelationId: () => undefined,
-          info: () => {},
-          warn: () => {},
-          security: () => {},
-          setCorrelationId: () => {},
-          clearCorrelationId: () => {},
-        } as ILoggingService),
-      sessionContextService,
-    },
-    middlewares,
-    fetchImpl: deps.fetch,
-  });
-}
-
-export class OpencodeAnthropicFormatProvider {
-  private readonly fallbackSessionId: string | undefined;
-  private readonly transportDiscovery: OpencodeTransportDiscovery;
-
-  constructor(private readonly config: CustomProviderConfig, private readonly deps: CustomProviderRuntimeDeps) {
-    const isOpencode = isOpencodeProvider(this.config);
-    // The streamed provider factory may recreate this wrapper for each turn.
-    // Derive its fallback from the active conversation so recreation preserves
-    // the OpenCode session without sharing identity across conversations.
-    const conversationSessionId = this.deps.sessionContextService?.getContext()?.sessionId;
-    this.fallbackSessionId = isOpencode ? generateOpencodeSessionId(conversationSessionId) : undefined;
-    this.transportDiscovery =
-      this.deps.opencodeTransportDiscovery ?? new CachedOpencodeTransportDiscovery({ fetchImpl: this.deps.fetch });
-  }
-
-  private resolveRuntimeConfig(): { baseUrl: string; apiKey: string | undefined } {
-    return isOpencodeProvider(this.config)
-      ? resolveOpencodeRuntimeConfig(this.config.baseUrl, this.config.apiKey)
-      : { baseUrl: this.config.baseUrl ?? '', apiKey: this.config.apiKey };
-  }
-
-  private buildAnthropicStreamedModel(
-    resolvedModel: string,
-    runtimeConfig: { baseUrl: string; apiKey: string | undefined },
-  ): StreamedModelTurn {
-    const anthropicProvider = new AiSdkAnthropicProvider({
-      defaultModel: resolvedModel,
-      shouldApplyPromptCaching: shouldApplyOpencodeAnthropicPromptCaching,
-      resolveConfig: () => ({
-        baseURL: runtimeConfig.baseUrl ? normalizeBaseUrl(runtimeConfig.baseUrl) : undefined,
-        apiKey: runtimeConfig.apiKey,
-        fetch: buildProviderFetch(this.config, this.deps, [
-          createAnthropicMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
-            sessionContextService: this.deps.sessionContextService,
-            fallbackSessionIdOverride: this.fallbackSessionId,
-          }),
-        ]),
-        name: this.config.name,
-        headers: { 'anthropic-version': '2023-06-01' },
-      }),
-    });
-    return anthropicProvider.getStreamedModel(resolvedModel);
-  }
-
-  private buildOpenAIResponsesModel(
-    resolvedModel: string,
-    runtimeConfig: { baseUrl: string; apiKey: string | undefined },
-  ): StreamedModelTurn {
-    const openAIClient = new OpenAI({
-      baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
-      apiKey: runtimeConfig.apiKey || 'no-key',
-      maxRetries: this.deps.settingsService?.get('agent.retryAttempts') ?? 2,
-      fetch: buildProviderFetch(this.config, this.deps, [
-        createOpenAIResponsesMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
-          sessionContextService: this.deps.sessionContextService,
-          fallbackSessionIdOverride: this.fallbackSessionId,
-        }),
-      ]),
-    });
-    return new OpenAIResponsesModelWithPromptCacheKey(openAIClient, resolvedModel);
-  }
-
-  private buildOpenAICompatibleModel(
-    resolvedModel: string,
-    runtimeConfig: { baseUrl: string; apiKey: string | undefined },
-  ): StreamedModelTurn {
-    const openAIClient = new OpenAI({
-      baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
-      apiKey: runtimeConfig.apiKey || 'no-key',
-      maxRetries: this.deps.settingsService?.get('agent.retryAttempts') ?? 2,
-      fetch: buildProviderFetch(this.config, this.deps, [
-        createOpenAICompatibleMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
-          sessionContextService: this.deps.sessionContextService,
-          fallbackSessionIdOverride: this.fallbackSessionId,
-        }),
-      ]),
-    });
-    const costCapture: CostTrailerCapture = {};
-    applyClientResponseNormalization(openAIClient, this.deps.loggingService, costCapture);
-    return new OpenAIChatCompletionsModel(openAIClient, resolvedModel, costCapture, opaqueProviderTag(this.config));
-  }
-
-  getStreamedModel(modelName?: string): StreamedModelTurn {
-    const resolvedModel = (modelName || this.deps.defaultModel || '').trim();
-    const runtimeConfig = this.resolveRuntimeConfig();
-    const knownTransport = findKnownOpencodeModelTransport(resolvedModel);
-    if (knownTransport) return this.buildForTransport(knownTransport, resolvedModel, runtimeConfig);
-
-    if (!isOpencodeZenBaseUrl(runtimeConfig.baseUrl)) {
-      return this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
-    }
-
-    return deferredOpencodeTransportModel(
-      async (signal) =>
-        (await this.transportDiscovery.resolve(resolvedModel, signal)) ?? selectOpencodeModelTransport(resolvedModel),
-      (transport) => this.buildForTransport(transport, resolvedModel, runtimeConfig),
-    );
-  }
-
-  private buildForTransport(
-    transport: ReturnType<typeof selectOpencodeModelTransport>,
-    resolvedModel: string,
-    runtimeConfig: { baseUrl: string; apiKey: string | undefined },
-  ): StreamedModelTurn {
-    switch (transport) {
-      case 'anthropic-messages':
-        return this.buildAnthropicStreamedModel(resolvedModel, runtimeConfig);
-      case 'openai-responses':
-        return this.buildOpenAIResponsesModel(resolvedModel, runtimeConfig);
-      case 'openai-chat-completions':
-        return this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
-    }
-  }
-}
-
-function deferredOpencodeTransportModel(
-  resolveTransport: (signal: AbortSignal | undefined) => Promise<ReturnType<typeof selectOpencodeModelTransport>>,
-  buildModel: (transport: ReturnType<typeof selectOpencodeModelTransport>) => StreamedModelTurn,
-): StreamedModelTurn {
-  return {
-    async *stream(request: StreamedModelTurnRequest) {
-      const model = buildModel(await resolveTransport(request.signal));
-      yield* model.stream(request);
-    },
-  };
-}
-
-function isOpencodeZenBaseUrl(baseUrl: string): boolean {
-  try {
-    const url = new URL(baseUrl);
-    return url.hostname === 'opencode.ai' && url.pathname.startsWith('/zen/');
-  } catch {
-    return false;
-  }
-}
 
 export function createCustomProviderModelProvider(config: CustomProviderConfig, deps: CustomProviderRuntimeDeps): any {
   const normalizedDeps = { ...deps, defaultModel: (deps.defaultModel || '').trim() };
@@ -293,9 +108,12 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
         resolveConfig: () => ({
           ...resolveConfig(),
           fetch: buildProviderFetch(config, normalizedDeps, [
-            createAnthropicMiddleware(config.type || 'anthropic', config.baseUrl, {
-              sessionContextService: normalizedDeps.sessionContextService,
-            }),
+            createOpencodeSessionMiddleware(
+              { type: config.type || 'anthropic', baseUrl: config.baseUrl },
+              {
+                sessionContextService: normalizedDeps.sessionContextService,
+              },
+            ),
           ]),
           headers: {
             'anthropic-version': '2023-06-01',
@@ -325,13 +143,24 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
         apiKey: runtimeConfig.apiKey || 'no-key',
         maxRetries: normalizedDeps.settingsService?.get('agent.retryAttempts') ?? 2,
         fetch: buildProviderFetch(config, normalizedDeps, [
-          createOpenAICompatibleMiddleware(providerType, runtimeConfig.baseUrl, {
-            sessionContextService: normalizedDeps.sessionContextService,
-          }),
+          createOpenAICompatibleMiddleware(),
+          createAnthropicChatCachingMiddleware(),
+          createLlamaCppMiddleware(providerType),
+          createOpencodeSessionMiddleware(
+            { type: providerType, baseUrl: runtimeConfig.baseUrl },
+            {
+              sessionContextService: normalizedDeps.sessionContextService,
+            },
+          ),
         ]),
       });
       const costCapture: CostTrailerCapture = {};
-      applyClientResponseNormalization(openAIClient, normalizedDeps.loggingService, costCapture);
+      applyClientResponseNormalization(
+        openAIClient,
+        normalizedDeps.loggingService,
+        costCapture,
+        isOpencode ? isOpencodeTrailer : undefined,
+      );
       return new OpenAIChatCompletionsModel(
         openAIClient,
         normalizedDeps.defaultModel,
@@ -350,6 +179,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     id: providerId,
     label,
     isRuntimeDefined: true,
+    defaultReasoningLevel: neuralwattDefaultReasoningLevel(providerId),
     createStreamedModel: (model, deps) => {
       const resolved = findConfigFromSettings(deps.settingsService, providerId);
       if (!resolved) {

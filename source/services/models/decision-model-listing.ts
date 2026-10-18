@@ -1,40 +1,14 @@
 import { SETTING_KEYS } from '../settings/settings-schema.js';
 
-/**
- * Listing of OpenRouter models served by the alpha Decisions endpoint
- * (`output_modalities` contains `decisions`). Chat models on
- * `/api/v1/chat/completions` are NOT valid here: the Decisions endpoint only
- * answers typed questions about a state, so the catalog filter — not the
- * chat-model catalog — defines what the decision model setting
- * may be set to. The endpoint is public and needs no API key.
- */
+import { fetchOpenRouterDecisionModels, type DecisionModelInfo } from '../../providers/openrouter-decision-models.js';
+export type { DecisionModelInfo } from '../../providers/openrouter-decision-models.js';
 
-export type DecisionModelInfo = {
-  id: string;
-  name?: string;
-};
-
-const DECISION_MODELS_URL = 'https://openrouter.ai/api/v1/models?output_modalities=decisions';
 const DEFAULT_TTL_MS = 60 * 60 * 1000;
 
 let cache: { models: DecisionModelInfo[]; timestamp: number } | undefined;
 
 export function clearDecisionModelListCache(): void {
   cache = undefined;
-}
-
-function parseDecisionModels(payload: unknown): DecisionModelInfo[] | null {
-  if (typeof payload !== 'object' || payload === null) return null;
-  const data = (payload as { data?: unknown }).data;
-  if (!Array.isArray(data)) return null;
-  const models: DecisionModelInfo[] = [];
-  for (const entry of data) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const { id, name } = entry as { id?: unknown; name?: unknown };
-    if (typeof id !== 'string' || id.length === 0) continue;
-    models.push({ id, ...(typeof name === 'string' && name.length > 0 ? { name } : {}) });
-  }
-  return models;
 }
 
 /**
@@ -59,16 +33,7 @@ export async function fetchDecisionModels(opts?: {
     cache = undefined;
   }
 
-  let payload: unknown;
-  try {
-    const response = await fetchImpl(DECISION_MODELS_URL);
-    if (!response.ok) return null;
-    payload = await response.json();
-  } catch {
-    return null;
-  }
-
-  const models = parseDecisionModels(payload);
+  const models = await fetchOpenRouterDecisionModels(fetchImpl);
   if (models === null) return null;
 
   cache = { models, timestamp: now() };

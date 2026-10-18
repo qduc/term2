@@ -30,6 +30,7 @@ export {
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 const OPENAI_CAPABILITIES = {
+  supportsFlexServiceTier: true,
   supportsConversationChaining: true,
   supportsContextCompaction: true,
   supportsPromptCacheKey: true,

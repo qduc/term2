@@ -47,3 +47,9 @@ export function forwardExplicitProviderSettings(
 type ExplicitProviderData = SharedV3ProviderOptions & {
   providerOptions?: SharedV3ProviderOptions;
 };
+
+/** Translate the application's named effort into the shared SDK thinking-token scale. */
+export function resolveThinkingBudget(effort: string | null | undefined): number | undefined {
+  const budgets: Record<string, number> = { minimal: 1024, low: 2048, medium: 4096, high: 8192, xhigh: 16384 };
+  return effort ? budgets[effort] : undefined;
+}

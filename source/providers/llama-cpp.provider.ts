@@ -1,3 +1,5 @@
+import type { FetchMiddleware } from './fetch/compose.js';
+
 function applyLlamaCppReasoningControls(target: Record<string, any>, reasoningEffort: string | undefined): void {
   const budgets: Record<string, number> = {
     low: 1024,
@@ -34,4 +36,19 @@ export function applyLlamaCppRequestTransform(body: Record<string, any>, provide
   delete body.reasoning_effort;
   applyLlamaCppReasoningControls(body, reasoningEffort);
   return true;
+}
+
+/** Translate explicit reasoning effort only for llama.cpp endpoints. */
+export function createLlamaCppMiddleware(providerType: string): FetchMiddleware {
+  return async (ctx, next) => {
+    if (typeof ctx.init?.body !== 'string') return next(ctx);
+    let body: any;
+    try {
+      body = JSON.parse(ctx.init.body);
+    } catch {
+      return next(ctx);
+    }
+    if (!applyLlamaCppRequestTransform(body, providerType)) return next(ctx);
+    return next({ ...ctx, init: { ...ctx.init, body: JSON.stringify(body) } });
+  };
 }

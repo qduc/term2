@@ -17,7 +17,7 @@ import { readFixtureEnvelope } from './fixture-envelope.js';
 import { fixtureRequest, fixtureTool, multiTurnFixture } from './provider-wire-fixtures.js';
 
 type Protocol = 'chat-completions' | 'responses' | 'anthropic' | 'google';
-type RuntimeProviderType = 'openai-compatible' | 'anthropic' | 'google' | 'opencode';
+type RuntimeProviderType = 'openai-compatible' | 'anthropic' | 'google' | 'opencode' | 'llama.cpp';
 
 interface ProviderCase {
   name: string;
@@ -90,6 +90,98 @@ afterEach(async () => {
 });
 
 describe('provider boundary contracts through the registry', () => {
+  it.each(['llama.cpp', 'openai-compatible'] as const)(
+    '%s keeps reasoning translation scoped to its adapter',
+    async (runtimeType) => {
+      const providerCase: ProviderCase = { ...providerCases[1]!, runtimeType };
+      server = await startFakeProviderHttpServer({ scenario: 'success', protocol: 'chat-completions' });
+      const settings = createSettings(providerCase);
+      registerRuntimeProvider(providerCase, settings);
+      const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+        settingsService: settings,
+        loggingService: quietLogging,
+      });
+      const events = await collect(model.stream({ ...requestFor(providerCase), reasoning: { effort: 'minimal' } }));
+      const request = server.requests.at(-1)!;
+      const body = request.body as Record<string, any>;
+      expect(events.at(-1)).toMatchObject({ type: 'completion' });
+      expect(request.headers['x-opencode-session']).toBeUndefined();
+      if (runtimeType === 'llama.cpp') {
+        expect(body.reasoning_effort).toBeUndefined();
+        expect(body.chat_template_kwargs).toEqual({
+          reasoning_effort: 'low',
+          enable_thinking: false,
+          thinking_mode: 'disabled',
+          reasoning_budget: 0,
+        });
+      } else {
+        expect(body.reasoning_effort).toBe('minimal');
+        expect(body.chat_template_kwargs).toBeUndefined();
+      }
+    },
+  );
+
+  it.each([
+    { protocol: 'chat-completions' as const, model: 'deepseek-fixture' },
+    { protocol: 'responses' as const, model: 'gpt-fixture' },
+    { protocol: 'anthropic' as const, model: 'qwen-fixture' },
+  ])('OpenCode $protocol preserves session affinity across recreated models', async ({ protocol, model }) => {
+    const providerCase: ProviderCase = {
+      ...providerCases[1]!,
+      protocol,
+      model,
+      runtimeType: 'opencode',
+      basePath: '/zen/go/v1',
+    };
+    server = await startFakeProviderHttpServer({ scenario: 'success', protocol });
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    for (let turn = 0; turn < 2; turn++) {
+      const streamedModel = await getProvider(providerCase.registryId)!.createStreamedModel!(model, {
+        settingsService: settings,
+        loggingService: quietLogging,
+        sessionContextService: { getContext: () => ({ sessionId: 'adapter-fixture-session' }) } as any,
+      });
+      const events = await collect(streamedModel.stream(requestFor(providerCase)));
+      expect(events.at(-1)).toMatchObject({ type: 'completion' });
+    }
+    expect(server.requests).toHaveLength(2);
+    const session = server.requests[0]!.headers['x-opencode-session'];
+    expect(session).toMatch(/^ses_/);
+    expect(server.requests[1]!.headers['x-opencode-session']).toBe(session);
+  });
+
+  it.each([
+    {
+      index: 2,
+      options: { anthropic: { thinking: { type: 'enabled', budgetTokens: 6000 } } },
+      expected: { thinking: { type: 'enabled', budget_tokens: 6000 } },
+    },
+    {
+      index: 3,
+      options: { google: { thinkingConfig: { thinkingBudget: 6000, includeThoughts: false } } },
+      expected: { generationConfig: { thinkingConfig: { thinkingBudget: 6000, includeThoughts: false } } },
+    },
+    { index: 4, options: { openrouter: { reasoning: { effort: 'low' } } }, expected: { reasoning: { effort: 'low' } } },
+  ])(
+    'SDK adapter $index preserves explicit reasoning settings over selected effort',
+    async ({ index, options, expected }) => {
+      const providerCase = providerCases[index]!;
+      server = await startFakeProviderHttpServer({ scenario: 'success', protocol: providerCase.protocol });
+      const settings = createSettings(providerCase);
+      registerRuntimeProvider(providerCase, settings);
+      const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+        settingsService: settings,
+        loggingService: quietLogging,
+      });
+      const events = await collect(
+        model.stream({ ...requestFor(providerCase), providerOptions: options, reasoning: { effort: 'high' } }),
+      );
+      expect(events.at(-1)).toMatchObject({ type: 'completion' });
+      expect(server.requests.at(-1)!.body).toMatchObject(expected);
+    },
+  );
+
   it.each([
     { retryDelay: '39.676606339s', expected: 39677 },
     { retryDelay: '59.999s', expected: 59999 },

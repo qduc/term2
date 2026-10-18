@@ -1,3 +1,16 @@
+## [0.33.0] - 2026-10-18
+
+### Features
+- `tools.shell` is now available inside `run_code` scripts with shared sandbox policy, approval prompts, timeouts, output monitors, and background job tracking.
+
+### Improvements
+- The interactive model picker (`Ctrl+O`) displays providers in a grouped leading column on the unified models and favorites tabs.
+- Model catalogs for custom OpenAI-compatible providers and OrcaRouter filter out models that do not support text generation.
+
+### Internal/Chores
+- Isolated provider policies and catalog adapters into their owning modules.
+- Refactored the core conversation engine around a single model-tool execution loop, consolidating turn execution, session projection, and conversation acceptance in `ConversationRecord`.
+
 ## [0.32.2] - 2026-10-17
 
 ### Bug Fixes

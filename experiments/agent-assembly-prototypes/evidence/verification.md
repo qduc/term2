@@ -34,7 +34,9 @@ provider, settings, persistence or tool-execution path changed.
 - Repository `pnpm lint`: exit 0, `root-lint.log`; 31 warnings from unchanged
   production files, no ESLint errors, formatting passed.
 - Repository `pnpm check:no-unit-tests`: exit 0, `no-unit-tests.log`.
-- `git diff --check`: exit 0.
+- `git diff 18c7a93e HEAD --check -- . ':!experiments/agent-assembly-prototypes/evidence/**'`:
+  exit 0 for source/configuration. Raw CLI evidence retains trailing spaces from
+  observed echo arguments and is excluded from this whitespace check.
 - Independent verdict: accept the bounded comparison, `independent-review.md`.
 
 The standalone package has its own lockfile/workspace and dependencies. The root

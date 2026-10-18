@@ -90,7 +90,7 @@ let testDir = '';
  * reached the wire.
  */
 async function startModelMock(
-  modelIds: string[],
+  modelIds: Array<string | Record<string, unknown>>,
   /** SSE data payloads for the n-th chat request (1-based); defaults to a plain "ok" reply. */
   script?: (n: number) => unknown[],
 ): Promise<{
@@ -104,7 +104,12 @@ async function startModelMock(
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url?.includes('/models')) {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ object: 'list', data: modelIds.map((id) => ({ id })) }));
+      res.end(
+        JSON.stringify({
+          object: 'list',
+          data: modelIds.map((item) => (typeof item === 'string' ? { id: item } : item)),
+        }),
+      );
       return;
     }
     let body = '';
@@ -156,6 +161,68 @@ function writeSettings(homeDir: string, settings: Record<string, unknown>): stri
   fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
   return settingsFile;
 }
+
+it('CLI model listing filters generation endpoints and replaces pre-filter disk catalogs', async () => {
+  const advertised = [
+    { id: 'fixture-chat', supported_endpoint_types: ['openai'] },
+    {
+      id: 'fixture-vision',
+      supported_endpoint_types: ['openai', 'gemini'],
+      architecture: { input_modalities: ['text', 'image', 'video'], output_modalities: ['text'] },
+    },
+    { id: 'fixture-minimal' },
+    { id: 'fixture-image', supported_endpoint_types: ['image-generation'] },
+    { id: 'fixture-video', supported_endpoint_types: ['openai-video'] },
+    { id: 'fixture-embedding', supported_endpoint_types: ['embeddings'] },
+    { id: 'fixture-unadvertised', supported_endpoint_types: null },
+    { id: 'fixture-empty', supported_endpoint_types: [] },
+    { id: 'fixture-other-protocol', supported_endpoint_types: ['gemini'] },
+    {
+      id: 'fixture-mixed-output',
+      supported_endpoint_types: ['openai'],
+      architecture: { output_modalities: ['text', 'image'] },
+    },
+  ];
+  const mock = await startModelMock(advertised);
+  const cacheDir = path.join(testDir, 'cache');
+  const cacheFile = path.join(cacheDir, 'models', 'fixture.json');
+  fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+  fs.writeFileSync(
+    cacheFile,
+    JSON.stringify({
+      version: 1,
+      provider: 'fixture',
+      timestamp: Date.now(),
+      models: advertised.map(({ id }) => ({ id, provider: 'fixture' })),
+    }),
+  );
+  writeSettings(testDir, {
+    agent: { modelSelection: { provider: 'fixture', model: 'fixture-chat' } },
+    providers: [{ name: 'fixture', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+  const env = createTestChildEnv({ HOME: testDir, TERM2_CACHE_DIR: cacheDir, DISABLE_LOGGING: '1' });
+  try {
+    // The first run must bypass the old cache; refresh must not restore it
+    // through the degraded-catalog fallback when the new list is smaller.
+    for (const args of [[], ['--refresh']]) {
+      const result = await spawnCli([cliPath(), '--list-models', '--provider', 'fixture', ...args], env);
+      expect(result.status, result.stderr).toBe(0);
+      for (const id of ['fixture-chat', 'fixture-vision', 'fixture-minimal']) {
+        expect(result.stdout).toContain(id);
+      }
+      for (const item of advertised.slice(3)) {
+        expect(result.stdout).not.toContain(item.id);
+      }
+    }
+    const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+    expect(saved.version).toBe(2);
+    expect(saved.models.map((model: { id: string }) => model.id).sort()).toEqual(
+      ['fixture-chat', 'fixture-minimal', 'fixture-vision'].sort(),
+    );
+  } finally {
+    await mock.close();
+  }
+});
 
 beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-'));

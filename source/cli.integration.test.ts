@@ -162,7 +162,7 @@ function writeSettings(homeDir: string, settings: Record<string, unknown>): stri
   return settingsFile;
 }
 
-it('CLI model listing filters generation endpoints and replaces pre-filter disk catalogs', async () => {
+it('CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs', async () => {
   const advertised = [
     { id: 'fixture-chat', supported_endpoint_types: ['openai'] },
     {
@@ -190,10 +190,10 @@ it('CLI model listing filters generation endpoints and replaces pre-filter disk 
   fs.writeFileSync(
     cacheFile,
     JSON.stringify({
-      version: 1,
+      version: 2,
       provider: 'fixture',
       timestamp: Date.now(),
-      models: advertised.map(({ id }) => ({ id, provider: 'fixture' })),
+      models: [{ id: 'fixture-chat', provider: 'fixture' }],
     }),
   );
   writeSettings(testDir, {
@@ -202,23 +202,18 @@ it('CLI model listing filters generation endpoints and replaces pre-filter disk 
   });
   const env = createTestChildEnv({ HOME: testDir, TERM2_CACHE_DIR: cacheDir, DISABLE_LOGGING: '1' });
   try {
-    // The first run must bypass the old cache; refresh must not restore it
-    // through the degraded-catalog fallback when the new list is smaller.
+    // A non-OrcaRouter endpoint must retain every model, even if it returns
+    // similarly named capability fields with different vendor semantics.
     for (const args of [[], ['--refresh']]) {
       const result = await spawnCli([cliPath(), '--list-models', '--provider', 'fixture', ...args], env);
       expect(result.status, result.stderr).toBe(0);
-      for (const id of ['fixture-chat', 'fixture-vision', 'fixture-minimal']) {
-        expect(result.stdout).toContain(id);
-      }
-      for (const item of advertised.slice(3)) {
-        expect(result.stdout).not.toContain(item.id);
+      for (const item of advertised) {
+        expect(result.stdout).toContain(item.id);
       }
     }
     const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-    expect(saved.version).toBe(2);
-    expect(saved.models.map((model: { id: string }) => model.id).sort()).toEqual(
-      ['fixture-chat', 'fixture-minimal', 'fixture-vision'].sort(),
-    );
+    expect(saved.version).toBe(3);
+    expect(saved.models.map((model: { id: string }) => model.id).sort()).toEqual(advertised.map(({ id }) => id).sort());
   } finally {
     await mock.close();
   }

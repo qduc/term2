@@ -1,6 +1,6 @@
 import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createIsolatedWorkspaceLease,
@@ -219,7 +219,7 @@ describe('provider black-box harness', () => {
           await waitForOwnerReady(owner);
           const ptyChildPid = Number((await readFile(pidPath, 'utf8')).trim());
           expect(Number.isInteger(ptyChildPid)).toBe(true);
-          expect(isProcessAlive(ptyChildPid)).toBe(true);
+          expect(isProcessRunning(ptyChildPid)).toBe(true);
 
           owner.kill('SIGTERM');
 
@@ -416,18 +416,28 @@ function waitForOwnerReady(owner: ChildProcess, timeoutMs = 15_000): Promise<voi
 
 async function waitForProcessToExit(pid: number, timeoutMs = 2_000): Promise<void> {
   const startedAt = Date.now();
-  while (isProcessAlive(pid)) {
+  while (isProcessRunning(pid)) {
     if (Date.now() - startedAt >= timeoutMs) throw new Error(`Process ${pid} remained alive after ${timeoutMs}ms.`);
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
 
-function isProcessAlive(pid: number): boolean {
+function isProcessRunning(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    throw error;
+  }
+
+  try {
+    const state = execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return state.length > 0 && !/^[ZX]/.test(state);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException & { status?: number }).status === 1) return false;
     throw error;
   }
 }

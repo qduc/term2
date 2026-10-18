@@ -17,7 +17,7 @@ export type ModelInfo = {
 };
 
 export type DiskModelCacheEntry = {
-  version: 2;
+  version: 3;
   provider: string;
   timestamp: number;
   models: ModelInfo[];
@@ -98,9 +98,9 @@ function readDiskCache(
     if (!parsed || typeof parsed !== 'object') {
       return null;
     }
-    // Older catalogs predate endpoint/output eligibility filtering. Reusing
-    // them (including as last-known-good) can restore unsupported models.
-    if (parsed.version !== 2) {
+    // Older catalogs used broader eligibility rules. Refetch rather than
+    // preserve entries produced by an obsolete provider adapter policy.
+    if (parsed.version !== 3) {
       return null;
     }
     if (parsed.provider !== provider) {
@@ -182,7 +182,7 @@ function writeDiskCache(
     fs.mkdirSync(dir, { recursive: true });
     const now = nowFn ?? testClock ?? Date.now;
     const payload: DiskModelCacheEntry = {
-      version: 2,
+      version: 3,
       provider,
       timestamp: now(),
       models,

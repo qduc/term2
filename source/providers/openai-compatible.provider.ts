@@ -26,6 +26,7 @@ import {
 } from './openai-compatible-middleware.js';
 import { applyClientResponseNormalization, type CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import { getModelListItems, mapModelListItem } from './openai-compatible-models.js';
+import { isOrcaRouterBaseUrl, parseOrcaRouterModels } from './orcarouter-models.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
 import { OpenAIResponsesModelWithPromptCacheKey } from './openai-responses-model.js';
 import {
@@ -417,6 +418,9 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       }
 
       const body = await response.json();
+      if (isOrcaRouterBaseUrl(baseUrl)) {
+        return parseOrcaRouterModels(resolved.type, body);
+      }
       const raw = getModelListItems(resolved.type, body);
 
       return raw.map((item: any) => mapModelListItem(resolved.type, item)).filter(Boolean) as Array<{

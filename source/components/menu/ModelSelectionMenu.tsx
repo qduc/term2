@@ -1,7 +1,7 @@
 import React, { FC, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { ModelInfo } from '../../services/model-service.js';
-import { getAllProviders } from '../../providers/index.js';
+import { getAllProviders, getProvider } from '../../providers/index.js';
 import {
   getAvailableProviderIds,
   hasProviderCredentials,
@@ -73,6 +73,12 @@ const ModelSelectionMenu: FC<Props> = ({
   const isFavoritesTab = modelTab === 'favorites' || provider === FAVORITES_TAB_ID;
   const isNicknamesTab = modelTab === 'nicknames';
   const isUnified = provider == null;
+  const showProviderColumn = isFavoritesTab || isUnified;
+  const providerLabels = useMemo(
+    () => new Map(items.map((item) => [item.provider, getProvider(item.provider)?.label ?? item.provider])),
+    [items],
+  );
+  const providerColumnWidth = Math.max(0, ...Array.from(providerLabels.values(), (label) => label.length)) + 2;
   // The footer renders from declared binding tables (menu-bindings.ts), so a
   // hint cannot drift from the behavior the owning session implements. While
   // a nickname draft is open the draft editor owns the input row and only the
@@ -220,20 +226,37 @@ const ModelSelectionMenu: FC<Props> = ({
         }
         footer={<MenuFooter hints={bindingHints(footerBindings)} />}
         footerOutsideBorder={true}
-        renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => {
+        renderItem={(item: ModelInfo, actualIndex: number, isSelected: boolean) => {
           const isFavorited = favoriteKeys.has(serializeFavorite(item.provider, item.id));
           const nickname = nicknameLabels?.get(serializeFavorite(item.provider, item.id));
-          // One paragraph, not sibling Texts: siblings shrink and wrap
-          // independently, which drops characters and scrambles reading order
-          // on narrow terminals. Nested Texts wrap as a unit, so the id,
-          // provider, nickname, and display name stay intact and in order.
+          // Repeat the group label when scrolling starts partway through it.
+          const startsVisibleGroup = actualIndex === scrollOffset || items[actualIndex - 1]?.provider !== item.provider;
+          // Keep model details in one paragraph so they wrap in reading order.
           return (
             <Box key={`${item.provider}/${item.id}`} width="100%">
+              {showProviderColumn && (
+                <Box
+                  width={providerColumnWidth}
+                  maxWidth="35%"
+                  flexShrink={0}
+                  paddingRight={1}
+                  marginRight={1}
+                  borderStyle="single"
+                  borderTop={false}
+                  borderBottom={false}
+                  borderLeft={false}
+                  borderColor={theme.border}
+                >
+                  <Text color={theme.text} bold wrap="truncate">
+                    {startsVisibleGroup ? providerLabels.get(item.provider) : ' '}
+                  </Text>
+                </Box>
+              )}
               <SelectionMarker selected={isSelected} />
-              {isFavorited && (
+              {favoriteKeys.size > 0 && (
                 <Box width={2} flexShrink={0}>
                   <Text color={theme.accent} wrap="truncate">
-                    {GLYPH_FAVORITE}{' '}
+                    {isFavorited ? `${GLYPH_FAVORITE} ` : '  '}
                   </Text>
                 </Box>
               )}
@@ -243,7 +266,6 @@ const ModelSelectionMenu: FC<Props> = ({
                     {item.id}
                   </Text>
                   {nickname && <Text color={theme.accent}> — aka "{nickname}"</Text>}
-                  {(isFavoritesTab || isUnified) && <Text color={theme.textSubtle}> ({item.provider})</Text>}
                   {item.unavailableReason === 'missing-codex-login' ? (
                     <Text color={theme.warning}>
                       {' '}

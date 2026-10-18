@@ -19,7 +19,11 @@ export function parseOrcaRouterModels(
   body: unknown,
 ): Array<{ id: string; name?: string }> {
   const endpointType = providerType === 'anthropic' ? 'anthropic' : providerType === 'google' ? 'gemini' : 'openai';
-  return getModelListItems(providerType, body).flatMap((item) => {
+  const items = getModelListItems(providerType, body);
+  if (!items) {
+    return [];
+  }
+  return items.flatMap((item) => {
     // Output modalities describe generation, not vision/video input support.
     const outputs = item?.architecture?.output_modalities;
     if (Array.isArray(outputs) && (outputs.length !== 1 || outputs[0] !== 'text')) {

@@ -2,7 +2,7 @@ import { createOpenRouter, type OpenRouterProviderSettings } from '@openrouter/a
 import type { JSONValue, LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
-import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 
 export type AiSdkOpenRouterConfig = Pick<
   OpenRouterProviderSettings,
@@ -37,6 +37,7 @@ export class AiSdkOpenRouterProvider {
 
     return createAiSdkStreamedModel(
       withForwardedProviderSettings(provider(modelName || this.#defaultModel), forwardOpenRouterSettings),
+      resolveReasoningOptions,
     );
   }
 }
@@ -71,4 +72,20 @@ function forwardOpenRouterSettings(options: OpenRouterCallOptions): OpenRouterCa
       },
     },
   };
+}
+
+/** Preserve explicit OpenRouter reasoning configuration before applying the chosen effort. */
+function resolveReasoningOptions(request: StreamedModelTurnRequest): SharedV3ProviderOptions {
+  const effort = request.reasoning?.effort;
+  const providerOptions: SharedV3ProviderOptions = {
+    ...(request.providerOptions as SharedV3ProviderOptions | undefined),
+  };
+  const existing = (providerOptions.openrouter as { reasoning?: JSONValue } | undefined)?.reasoning;
+  if (existing || (effort && effort !== 'default')) {
+    providerOptions.openrouter = {
+      ...((providerOptions.openrouter ?? {}) as Record<string, JSONValue>),
+      reasoning: existing ?? { effort },
+    };
+  }
+  return providerOptions;
 }

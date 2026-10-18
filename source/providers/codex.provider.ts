@@ -754,6 +754,8 @@ registerProvider(
       if (cacheKey) streamedProviders.set(cacheKey, { fingerprint, provider });
       return provider.getStreamedModel(model || defaultModel);
     },
+    defaultModelSettings: () => ({ store: false, include: ['reasoning.encrypted_content'] }),
+    useModelReasoningDefault: true,
     fetchModels: fetchCodexModels,
     clearConversations: undefined,
     sensitiveSettingKeys: [],

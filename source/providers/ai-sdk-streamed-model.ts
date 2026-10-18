@@ -8,7 +8,6 @@ import type {
   LanguageModelV3ToolChoice,
   LanguageModelV3ToolResultOutput,
   SharedV3ProviderOptions,
-  JSONValue,
   JSONSchema7,
 } from '@ai-sdk/provider';
 import { withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
@@ -39,14 +38,14 @@ type UnaryGenerateResult = Awaited<ReturnType<LanguageModelV3['doGenerate']>> & 
 /** Adapts one AI SDK LanguageModelV3 stream to the application-owned turn protocol. */
 export function createAiSdkStreamedModel(
   model: LanguageModelV3,
-  providerFamily: 'anthropic' | 'google' | undefined = undefined,
+  resolveProviderOptions: (request: StreamedModelTurnRequest) => SharedV3ProviderOptions | undefined = (request) =>
+    request.providerOptions as SharedV3ProviderOptions | undefined,
 ): StreamedModelTurn {
   const normalizedModel = withMergedAssistantMessages(model);
-  const reasoningProvider = providerFamily ?? model.provider;
   return {
     async getResponse(request: StreamedModelTurnRequest) {
       const result = (await normalizedModel.doGenerate(
-        toCallOptions(request, reasoningProvider),
+        toCallOptions(request, resolveProviderOptions(request)),
       )) as UnaryGenerateResult;
       const output: StreamedModelTurnOutput[] = [];
       if (typeof result.reasoning === 'string' && result.reasoning) {
@@ -75,7 +74,7 @@ export function createAiSdkStreamedModel(
       };
     },
     async *stream(request) {
-      const result = await normalizedModel.doStream(toCallOptions(request, reasoningProvider));
+      const result = await normalizedModel.doStream(toCallOptions(request, resolveProviderOptions(request)));
       let responseId: string | undefined;
       let completionMetadata: Record<string, unknown> | undefined;
       const output: StreamedModelTurnOutput[] = [];
@@ -261,53 +260,10 @@ export function createAiSdkStreamedModel(
 
 type CallOptionsWithReasoning = LanguageModelV3CallOptions;
 
-const reasoningBudgets = {
-  minimal: 1024,
-  low: 2048,
-  medium: 4096,
-  high: 8192,
-  xhigh: 16384,
-} as const;
-
-function reasoningProviderOptions(
+function toCallOptions(
   request: StreamedModelTurnRequest,
-  provider: string,
-): SharedV3ProviderOptions | undefined {
-  const effort = request.reasoning?.effort;
-  const budget =
-    effort && effort !== 'none' && effort !== 'default'
-      ? reasoningBudgets[effort as keyof typeof reasoningBudgets]
-      : undefined;
-  const providerOptions: SharedV3ProviderOptions = {
-    ...(request.providerOptions as SharedV3ProviderOptions | undefined),
-  };
-  if (provider.startsWith('openrouter')) {
-    const existing = (providerOptions.openrouter as { reasoning?: JSONValue } | undefined)?.reasoning;
-    if (existing || (effort && effort !== 'default')) {
-      providerOptions.openrouter = {
-        ...((providerOptions.openrouter ?? {}) as Record<string, JSONValue>),
-        reasoning: existing ?? { effort },
-      };
-    }
-    return providerOptions;
-  }
-  if (budget === undefined) return request.providerOptions as SharedV3ProviderOptions | undefined;
-
-  if (provider.startsWith('anthropic')) {
-    providerOptions.anthropic = {
-      ...(providerOptions.anthropic ?? {}),
-      thinking: providerOptions.anthropic?.thinking ?? { type: 'enabled', budgetTokens: budget },
-    };
-  } else if (provider.startsWith('google')) {
-    providerOptions.google = {
-      ...(providerOptions.google ?? {}),
-      thinkingConfig: providerOptions.google?.thinkingConfig ?? { thinkingBudget: budget, includeThoughts: true },
-    };
-  }
-  return providerOptions;
-}
-
-function toCallOptions(request: StreamedModelTurnRequest, provider: string): CallOptionsWithReasoning {
+  providerOptions: SharedV3ProviderOptions | undefined,
+): CallOptionsWithReasoning {
   const toolNames = new Map(
     request.input.filter((item) => item.type === 'tool_call').map((item) => [item.id, item.name]),
   );
@@ -340,9 +296,7 @@ function toCallOptions(request: StreamedModelTurnRequest, provider: string): Cal
           },
         }
       : {}),
-    ...(reasoningProviderOptions(request, provider)
-      ? { providerOptions: reasoningProviderOptions(request, provider) }
-      : {}),
+    ...(providerOptions ? { providerOptions } : {}),
     ...(request.signal ? { abortSignal: request.signal } : {}),
   };
 }
@@ -517,19 +471,6 @@ function extractAiSdkCostUsd(providerMetadata?: Record<string, unknown>, usage?:
 
   if (!providerMetadata || typeof providerMetadata !== 'object') return undefined;
 
-  const openrouter = asRecord(providerMetadata.openrouter);
-  if (openrouter) {
-    const openrouterUsage = asRecord(openrouter.usage);
-    const costDetails = asRecord(openrouterUsage?.costDetails) ?? asRecord(openrouterUsage?.cost_details);
-    const cost = parseCostValue(
-      openrouterUsage?.cost ??
-        openrouter.cost ??
-        costDetails?.upstreamInferenceCost ??
-        costDetails?.upstream_inference_cost,
-    );
-    if (cost !== undefined) return cost;
-  }
-
   for (const [key, value] of Object.entries(providerMetadata)) {
     if (key === 'model' || key === 'responseId') continue;
     const record = asRecord(value);
@@ -552,16 +493,6 @@ function extractAiSdkCostUsd(providerMetadata?: Record<string, unknown>, usage?:
  */
 export function extractAiSdkUpstreamProvider(providerMetadata?: Record<string, unknown>): string | undefined {
   if (!providerMetadata || typeof providerMetadata !== 'object') return undefined;
-
-  const openrouter = asRecord(providerMetadata.openrouter);
-  if (openrouter) {
-    if (typeof openrouter.provider === 'string' && openrouter.provider.trim().length > 0) {
-      return openrouter.provider.trim();
-    }
-    if (typeof openrouter.provider_name === 'string' && openrouter.provider_name.trim().length > 0) {
-      return openrouter.provider_name.trim();
-    }
-  }
 
   if (typeof providerMetadata.provider === 'string' && providerMetadata.provider.trim().length > 0) {
     return providerMetadata.provider.trim();

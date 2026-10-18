@@ -203,9 +203,7 @@ export class AgentChatService {
         let effectiveEffort = tempEffort;
         if (isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
           const defaultReasoningLevel =
-            tempProvider === 'codex'
-              ? getModelDefaultReasoningLevel('codex', tempModel)
-              : getProviderDefaultReasoningLevel(tempProvider);
+            getModelDefaultReasoningLevel(tempProvider, tempModel) ?? getProviderDefaultReasoningLevel(tempProvider);
           if (defaultReasoningLevel) {
             effectiveEffort = defaultReasoningLevel as ReasoningEffortSetting;
           }
@@ -287,9 +285,7 @@ export class AgentChatService {
       let effectiveEffort = tempEffort;
       if (isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
         const defaultReasoningLevel =
-          tempProvider === 'codex'
-            ? getModelDefaultReasoningLevel('codex', tempModel)
-            : getProviderDefaultReasoningLevel(tempProvider);
+          getModelDefaultReasoningLevel(tempProvider, tempModel) ?? getProviderDefaultReasoningLevel(tempProvider);
         if (defaultReasoningLevel) {
           effectiveEffort = defaultReasoningLevel as ReasoningEffortSetting;
         }

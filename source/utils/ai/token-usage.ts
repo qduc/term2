@@ -206,15 +206,15 @@ export function extractUsage(payload: unknown): NormalizedUsage | undefined {
     if (self) results.push(self);
 
     const providerMetadata = asUsageContainer(record.providerMetadata);
-    const openrouterMeta = asUsageContainer(providerMetadata?.openrouter);
-    const openrouterProvider =
-      typeof openrouterMeta?.provider === 'string' && openrouterMeta.provider.trim().length > 0
-        ? openrouterMeta.provider.trim()
-        : typeof providerMetadata?.provider === 'string' && providerMetadata.provider.trim().length > 0
-        ? providerMetadata.provider.trim()
-        : undefined;
-    if (openrouterProvider) {
-      results.push({ upstream_provider: openrouterProvider });
+    // SDK metadata is namespaced by adapter; normalize the same wire fields
+    // for every namespace instead of recognizing one vendor here.
+    const metadataRecords = [providerMetadata, ...Object.values(providerMetadata ?? {}).map(asUsageContainer)];
+    for (const metadataRecord of metadataRecords) {
+      const upstreamProvider = metadataRecord?.provider ?? metadataRecord?.provider_name;
+      if (typeof upstreamProvider === 'string' && upstreamProvider.trim().length > 0) {
+        results.push({ upstream_provider: upstreamProvider.trim() });
+        break;
+      }
     }
   };
 

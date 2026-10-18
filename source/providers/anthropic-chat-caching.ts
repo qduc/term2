@@ -1,3 +1,5 @@
+import type { FetchMiddleware } from './fetch/compose.js';
+
 function applyCacheControlToMessage(msg: any): void {
   if (!msg) return;
   if (typeof msg.content === 'string') {
@@ -48,4 +50,20 @@ export function addCacheControlToLastTwoMessages(messages: any[], modelId?: stri
       break;
     }
   }
+}
+
+/** Apply Anthropic-compatible cache breakpoints at the chat-completions boundary. */
+export function createAnthropicChatCachingMiddleware(): FetchMiddleware {
+  return async (ctx, next) => {
+    if (typeof ctx.init?.body !== 'string') return next(ctx);
+    let body: any;
+    try {
+      body = JSON.parse(ctx.init.body);
+    } catch {
+      return next(ctx);
+    }
+    if (!Array.isArray(body?.messages)) return next(ctx);
+    addCacheControlToLastTwoMessages(body.messages, body.model);
+    return next({ ...ctx, init: { ...ctx.init, body: JSON.stringify(body) } });
+  };
 }

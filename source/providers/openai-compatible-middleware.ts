@@ -1,9 +1,5 @@
-import type { ISessionContextService } from '../services/service-interfaces.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { mergeAssistantMessages } from './ai-sdk-message-normalizer.js';
-import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
-import { applyLlamaCppRequestTransform } from './llama-cpp.provider.js';
-import { createOpencodeSessionInjector } from './opencode-session.js';
 
 function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {
   return messages.map((message) => {
@@ -71,74 +67,32 @@ export function sanitizeResponsesApiBody(body: any): any {
   };
 }
 
-export function createOpenAICompatibleMiddleware(
-  providerType: string,
-  baseUrl?: string,
-  options?: {
-    sessionContextService?: ISessionContextService;
-    fallbackSessionIdOverride?: string;
-  },
-): FetchMiddleware {
-  const injectSession = createOpencodeSessionInjector({ type: providerType, baseUrl }, options);
-
+/** Normalize Chat Completions messages without applying vendor policy. */
+export function createOpenAICompatibleMiddleware(): FetchMiddleware {
   return async (ctx, next) => {
-    if (typeof ctx.init?.body === 'string') {
-      try {
-        const body = JSON.parse(ctx.init.body);
-        let changed = false;
-
-        if (Array.isArray(body?.messages)) {
-          body.messages = sanitizeOpenAICompatibleMessages(mergeAssistantMessages(body.messages));
-          addCacheControlToLastTwoMessages(body.messages, body.model);
-          changed = true;
-        }
-
-        if (applyLlamaCppRequestTransform(body, providerType)) {
-          changed = true;
-        }
-
-        if (changed || injectSession) {
-          let newInit: RequestInit = { ...ctx.init, body: JSON.stringify(body) };
-          if (injectSession) {
-            const sessionInit = injectSession(newInit);
-            if (sessionInit) newInit = sessionInit;
-          }
-          return next({ url: ctx.url, init: newInit });
-        }
-      } catch {
-        return next(ctx);
-      }
+    if (typeof ctx.init?.body !== 'string') return next(ctx);
+    let body: any;
+    try {
+      body = JSON.parse(ctx.init.body);
+    } catch {
+      return next(ctx);
     }
-
-    return next(ctx);
+    if (!Array.isArray(body?.messages)) return next(ctx);
+    body.messages = sanitizeOpenAICompatibleMessages(mergeAssistantMessages(body.messages));
+    return next({ ...ctx, init: { ...ctx.init, body: JSON.stringify(body) } });
   };
 }
 
-export function createOpenAIResponsesMiddleware(
-  providerType?: string,
-  baseUrl?: string,
-  options?: {
-    sessionContextService?: ISessionContextService;
-    fallbackSessionIdOverride?: string;
-  },
-): FetchMiddleware {
-  const injectSession = createOpencodeSessionInjector({ type: providerType, baseUrl }, options);
-
+/** Normalize Responses input without applying vendor policy. */
+export function createOpenAIResponsesMiddleware(): FetchMiddleware {
   return async (ctx, next) => {
-    if (typeof ctx.init?.body === 'string') {
-      try {
-        const body = sanitizeResponsesApiBody(JSON.parse(ctx.init.body));
-        let newInit: RequestInit = { ...ctx.init, body: JSON.stringify(body) };
-        if (injectSession) {
-          const sessionInit = injectSession(newInit);
-          if (sessionInit) newInit = sessionInit;
-        }
-        return next({ url: ctx.url, init: newInit });
-      } catch {
-        return next(ctx);
-      }
+    if (typeof ctx.init?.body !== 'string') return next(ctx);
+    let body: any;
+    try {
+      body = sanitizeResponsesApiBody(JSON.parse(ctx.init.body));
+    } catch {
+      return next(ctx);
     }
-
-    return next(ctx);
+    return next({ ...ctx, init: { ...ctx.init, body: JSON.stringify(body) } });
   };
 }

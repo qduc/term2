@@ -45,6 +45,15 @@ export interface ProviderDefinition {
     fetchImpl?: ProviderFetch,
   ) => Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>>;
 
+  /** Fresh provider-owned defaults merged into application model settings. */
+  defaultModelSettings?: () => Record<string, unknown>;
+
+  /** Fallback reasoning effort owned by the provider adapter. */
+  defaultReasoningLevel?: string;
+
+  /** Apply catalog reasoning defaults when the user selects default effort. */
+  useModelReasoningDefault?: boolean;
+
   /** Optional function to clear conversation state for this provider */
   clearConversations?: () => void;
 
@@ -57,6 +66,7 @@ export interface ProviderDefinition {
     /** Supports the OpenAI Responses API's server-side context_management parameter. */
     supportsContextCompaction?: boolean;
     supportsPromptCacheKey?: boolean;
+    supportsFlexServiceTier?: boolean;
     /**
      * Where the prompt cache key belongs on the wire, which follows the
      * adapter rather than the provider name. `responses-extra-body` is read by

@@ -1,5 +1,9 @@
 import OpenAI from 'openai';
 import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
+import envPaths from 'env-paths';
+import { execFile } from 'node:child_process';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
@@ -25,10 +29,86 @@ const DEFAULT_GROK_MODEL = 'grok-4.6';
 
 /**
  * The proxy hard-rejects requests whose client version it does not recognise
- * (HTTP 426), so this header is required, not cosmetic. Raise it when the proxy
- * starts refusing this floor.
+ * (HTTP 426, "Your Grok CLI version is outdated"), so the version header is
+ * required, not cosmetic, and the accepted floor moves with each Grok CLI
+ * release. Even an installed `grok` can lag that floor, so we ask the same
+ * channel pointer the official installer uses for the current stable version.
+ * Order: fresh cache, online, stale cache, installed binary, then this
+ * constant, which is only the last resort and can go stale.
  */
-export const GROK_CLIENT_VERSION = '1.0.5';
+export const GROK_CLIENT_VERSION_FALLBACK = '1.0.62';
+
+const GROK_STABLE_VERSION_URLS = [
+  'https://x.ai/cli/stable',
+  'https://storage.googleapis.com/grok-build-public-artifacts/cli/stable',
+];
+const GROK_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const GROK_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+let clientVersionPromise: Promise<string> | undefined;
+
+function grokVersionCachePath(cacheDir?: string): string {
+  return path.join(cacheDir || process.env.TERM2_CACHE_DIR || envPaths('term2').cache, 'grok-client-version.json');
+}
+
+function readGrokVersionCache(cachePath: string): { version: string; fresh: boolean } | null {
+  try {
+    const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    if (typeof cached.version !== 'string' || !GROK_VERSION_PATTERN.test(cached.version)) return null;
+    return { version: cached.version, fresh: Date.now() - Number(cached.timestamp) < GROK_VERSION_CACHE_TTL_MS };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchLatestGrokVersion(fetchImpl: ProviderFetch): Promise<string | null> {
+  for (const url of GROK_STABLE_VERSION_URLS) {
+    try {
+      const response = await fetchImpl(url, { signal: AbortSignal.timeout(3000) });
+      if (!response.ok) continue;
+      const version = (await response.text()).trim();
+      if (GROK_VERSION_PATTERN.test(version)) return version;
+    } catch {
+      // try the next mirror
+    }
+  }
+  return null;
+}
+
+function getInstalledGrokVersion(): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile('grok', ['--version'], { timeout: 3000 }, (err, stdout) => {
+      resolve((!err && String(stdout).match(/\b(\d+\.\d+\.\d+)\b/)?.[1]) || null);
+    });
+  });
+}
+
+export async function lookupGrokClientVersion(options?: {
+  fetchImpl?: ProviderFetch;
+  cacheDir?: string;
+}): Promise<string> {
+  const cachePath = grokVersionCachePath(options?.cacheDir);
+  const cached = readGrokVersionCache(cachePath);
+  if (cached?.fresh) return cached.version;
+
+  const latest = await fetchLatestGrokVersion(options?.fetchImpl ?? globalThis.fetch);
+  if (latest) {
+    try {
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+      fs.writeFileSync(cachePath, JSON.stringify({ version: latest, timestamp: Date.now() }));
+    } catch {
+      // cache is best-effort
+    }
+    return latest;
+  }
+  return cached?.version ?? (await getInstalledGrokVersion()) ?? GROK_CLIENT_VERSION_FALLBACK;
+}
+
+/** Resolved once per process. */
+export function resolveGrokClientVersion(): Promise<string> {
+  clientVersionPromise ??= lookupGrokClientVersion();
+  return clientVersionPromise;
+}
 
 /**
  * The proxy serves `/v1/responses`, but as a Zero Data Retention org: a
@@ -75,14 +155,15 @@ function grokAuthMiddleware(
 }
 
 function grokHeadersMiddleware(sessionContextService?: ISessionContextService): FetchMiddleware {
-  return (ctx, next) => {
+  return async (ctx, next) => {
+    const clientVersion = await resolveGrokClientVersion();
     const context = sessionContextService?.getContext();
     const sessionId = context?.sessionId;
     const cacheAffinity =
       context?.providerHistoryKey ??
       (context?.evaluator ? String(sessionId) + ':evaluator' : context?.promptCacheKey ?? sessionId);
     const headers = injectHeaders(ctx.init?.headers, {
-      'x-grok-client-version': GROK_CLIENT_VERSION,
+      'x-grok-client-version': clientVersion,
       'x-grok-client-identifier': 'term2',
       'User-Agent': `term2/${installationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`,
       // xAI pins a conversation to one server by this header, and prompt-cache
@@ -119,7 +200,7 @@ export async function fetchGrokModels(
   const response = await fetchImpl(`${GROK_BASE_URL}/models`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'x-grok-client-version': GROK_CLIENT_VERSION,
+      'x-grok-client-version': await resolveGrokClientVersion(),
       'x-grok-client-identifier': 'term2',
     },
     ...(deps.signal ? { signal: deps.signal } : {}),

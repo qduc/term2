@@ -41,6 +41,7 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 - **`ask_user`**: Asks clarifying questions to the user with an interactive prompt and selectable choices.
 - **`ask_mentor`**: Consults the higher-tier mentor model for architectural guidance or code review.
 - **`activate_skill`**: Loads specialized instruction sets and workflows for domain-specific tasks.
+- **`list_models`**: Discovers available models and registered providers with pagination, credential readiness, and local session usage stats.
 
 ## Web Research
 

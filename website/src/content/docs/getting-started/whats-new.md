@@ -7,6 +7,16 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 0.34.0 - October 19, 2026
+
+- Adaptive independent verification for durable goals: `goal_check` proposals can be gated by an independent verifier before goals are closed (`agent.completionVerification`).
+- Reworked interactive settings menu: `/settings` categorizes settings into curated tabs (Models, Providers, Context, Safety, Tools, UI, Hooks) with human-readable labels, dollar-denominated budget editing, masked API keys, and in-place boolean toggling.
+- Declarative provider preset inventory: provider configuration leverages presets for straightforward setup and connection management.
+- Runtime agent model discovery: agents and `run_code` scripts can query models and providers via `list_models` with filtering, pagination, and credential readiness.
+- Grok client version resolution: resolves the CLI client version dynamically to avoid API version floor rejections.
+
+See the [0.34.0 changelog](https://github.com/qduc/term2/blob/v0.34.0/CHANGELOG.md) for details.
+
 ## 0.33.0 - October 18, 2026
 
 - `tools.shell` is available inside `run_code` scripts with shared sandbox enforcement, approvals, timeouts, monitors, and job tracking.
@@ -78,4 +88,4 @@ This documentation site builds from `main`, so it can describe work ahead of the
 
 The `web-client/` application is separate from this documentation site and connects through the private `term2 serve` gateway. Follow [gateway setup](/term2/remote/web-gateway/) for integration requirements.
 
-For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 0.32.2, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v0.32.2...main).
+For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 0.34.0, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v0.34.0...main).

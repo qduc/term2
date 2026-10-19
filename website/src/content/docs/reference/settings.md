@@ -43,10 +43,10 @@ term2 settings can be configured via:
 | `agent.maxModelRequestDurationMs` | `number` | `0` | ✓ Yes | — | Optional total wall-clock ceiling for one model request, in milliseconds (0 disables; opt-in backstop) |
 | `agent.maxModelStreamIdleMs` | `number` | `600000` | No | — | Abort a request that streams no output for this many milliseconds; re-arms on each streamed delta so long reasoning survives (0 disables) |
 | `agent.retryAttempts` | `number` | `2` | ✓ Yes | — | Number of retry attempts for failed requests |
-| `agent.transport` | `websocket \\| http` | `"websocket"` | ✓ Yes | — | Network transport mechanism (websocket\|http) |
+| `agent.transport` | `websocket \\| http` | `"websocket"` | ✓ Yes | — | How term2 connects to model providers: a persistent WebSocket or plain HTTP requests (websocket\|http) |
 | `agent.maxParallelToolCalls` | `number` | `3` | ✓ Yes | — | Maximum number of tool calls allowed to run at the same time |
-| `agent.backgroundCheckIn.enabled` | `boolean` | `true` | ✓ Yes | — | Proactive check-ins on a still-running background shell job or subagent while the session is otherwise idle |
-| `agent.backgroundCheckIn.intervalMs` | `number` | `300000` | ✓ Yes | — | Proactive check-ins on a still-running background shell job or subagent while the session is otherwise idle |
+| `agent.backgroundCheckIn.enabled` | `boolean` | `true` | ✓ Yes | — | Wake the agent periodically to check on a still-running background shell job or subagent while idle |
+| `agent.backgroundCheckIn.intervalMs` | `number` | `300000` | ✓ Yes | — | How often to check in on a still-running background task |
 | `agent.openrouter.apiKey` | `string` | — | ✓ Yes | `OPENROUTER_API_KEY` | OpenRouter API key |
 | `agent.openai.apiKey` | `string` | — | ✓ Yes | `OPENAI_API_KEY` | OpenAI API key |
 | `agent.openrouter.baseUrl` | `string` | — | No | `OPENROUTER_BASE_URL` | OpenRouter base URL |
@@ -60,24 +60,26 @@ term2 settings can be configured via:
 | `agent.useFlexServiceTier` | `boolean` | `false` | ✓ Yes | — | Use OpenAI Flex Service Tier to reduce costs (OpenAI only) |
 | `agent.autoApproveReasoningEffort` | `none \\| minimal \\| low \\| medium \\| high \\| xhigh` | `"low"` | ✓ Yes | — | Reasoning effort for risky shell auto-approval reviews |
 | `agent.decisionModel` | `string` | — | ✓ Yes | — | OpenRouter Decisions model shared by the approval fast path and failure-triage comparisons. For approval, only low/medium-risk, explicit/implied decisions at confidence 0.8 or higher can authorize execution; every other outcome falls back to the chore reviewer. Sends approval context plus failure evidence. Adds API charges |
+| `agent.completionVerification` | `boolean` | `true` | ✓ Yes | — | Verify durable-goal completion before marking achieved (true\|false). Disable for operational rollback; applies at the next completion boundary. |
+| `agent.verificationMaxRepairs` | `number` | `3` | ✓ Yes | — | Maximum autonomous completion-verification repairs per new task (0-10). Existing persisted tasks retain their original budget. |
 
 ## Run Budget & Safeguards
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `agent.runBudget.maxUsdMicros` | `number` | `5000000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.maxUnpricedTokens` | `number` | `5000000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.maxActiveTimeMs` | `number` | `3600000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.warningHeadroomUsdMicros` | `number` | `1000000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.warningHeadroomUnpricedTokens` | `number` | `1000000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.warningHeadroomActiveTimeMs` | `number` | `900000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.softHeadroomUsdMicros` | `number` | `250000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.softHeadroomUnpricedTokens` | `number` | `250000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.softHeadroomActiveTimeMs` | `number` | `300000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.turnBackstop` | `number` | `150` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.extensionPercent` | `number` | `50` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.maxParentExtensions` | `number` | `2` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.identicalToolCallThreshold` | `number` | `3` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.maxUsdMicros` | `number` | `5000000` | ✓ Yes | — | Spending limit for one run, counted on requests with a known price |
+| `agent.runBudget.maxUnpricedTokens` | `number` | `5000000` | ✓ Yes | — | Token limit for one run when the provider reports no price; cache reads count a tenth and subscription providers are exempt |
+| `agent.runBudget.maxActiveTimeMs` | `number` | `3600000` | ✓ Yes | — | Active-time limit for one run; time spent waiting for your approval does not count |
+| `agent.runBudget.warningHeadroomUsdMicros` | `number` | `1000000` | ✓ Yes | — | Warn when this much of the run cost limit is left |
+| `agent.runBudget.warningHeadroomUnpricedTokens` | `number` | `1000000` | ✓ Yes | — | Warn when this many tokens of the run token limit are left |
+| `agent.runBudget.warningHeadroomActiveTimeMs` | `number` | `900000` | ✓ Yes | — | Warn when this much of the run time limit is left |
+| `agent.runBudget.softHeadroomUsdMicros` | `number` | `250000` | ✓ Yes | — | Nudge the agent to wrap up when this much of the run cost limit is left |
+| `agent.runBudget.softHeadroomUnpricedTokens` | `number` | `250000` | ✓ Yes | — | Nudge the agent to wrap up when this many tokens of the run token limit are left |
+| `agent.runBudget.softHeadroomActiveTimeMs` | `number` | `300000` | ✓ Yes | — | Nudge the agent to wrap up when this much of the run time limit is left |
+| `agent.runBudget.turnBackstop` | `number` | `150` | ✓ Yes | — | Stop a run that reaches this many turns — a safety net against infinite loops, not a budget |
+| `agent.runBudget.extensionPercent` | `number` | `50` | ✓ Yes | — | Size of each budget extension, as a percentage of the original limit |
+| `agent.runBudget.maxParentExtensions` | `number` | `2` | ✓ Yes | — | Budget extensions a parent agent may grant a subagent before asking you |
+| `agent.runBudget.identicalToolCallThreshold` | `number` | `3` | ✓ Yes | — | Identical tool calls in a row, with no edit in between, that count as a stall |
 | `agent.runBudget.escalation` | `warn \\| contain \\| pause \\| disabled` | `"warn"` | ✓ Yes | — | warn is advisory; contain pauses at exhaustion; pause also stops on warning/stall; disabled emits no evidence |
 
 ## Subagents & Roles
@@ -102,20 +104,20 @@ term2 settings can be configured via:
 | `sandbox.enabled` | `boolean` | `true` | ✓ Yes | — | Enable sandbox mode for safer command execution (true\|false) |
 | `sandbox.readPolicy` | `standard \\| strict` | `"standard"` | ✓ Yes | — | File read policy for sandbox (standard\|strict) |
 | `sandbox.allowReadExtra` | `array` | `[]` | ✓ Yes | — | Additional paths allowed for sandbox file reads (comma-separated) |
-| `sandbox.dockerHostControlProjects` | `array` | `[]` | ✓ Yes | — | Projects with persistent Docker host-control grants; remove a path here to revoke it (JSON array) |
+| `sandbox.dockerHostControlProjects` | `array` | `[]` | ✓ Yes | — | Projects you allowed to control Docker on the host; remove a path to revoke its access (JSON array) |
 | `sandbox.allowNetworking` | `boolean` | `false` | ✓ Yes | — | Allow sandboxed commands to access the network (true\|false) |
 
 ## Context & Compaction
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `agent.sessionRollover.enabled` | `boolean` | `true` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
-| `agent.sessionRollover.milestones` | `array` | `[200000,300000,400000]` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
-| `agent.sessionRollover.autoBrief` | `boolean` | `true` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
-| `agent.contextCompaction.enabled` | `boolean` | `true` | ✓ Yes | — | Native and application-owned context compaction settings |
-| `agent.contextCompaction.mode` | `native \\| auto \\| local` | `"auto"` | ✓ Yes | — | Native and application-owned context compaction settings |
-| `agent.contextCompaction.compactThreshold` | `number` | `0.8` | ✓ Yes | — | Native and application-owned context compaction settings |
-| `agent.contextCompaction.compactThresholdTokens` | `number` | `null` | ✓ Yes | — | Native and application-owned context compaction settings |
+| `agent.sessionRollover.enabled` | `boolean` | `true` | ✓ Yes | — | Remind the agent when context reaches milestones so it can plan a session rollover (true\|false) |
+| `agent.sessionRollover.milestones` | `array` | `[200000,300000,400000]` | ✓ Yes | — | Context token milestones that trigger session rollover reminders (e.g. 200000, 300000, 400000) |
+| `agent.sessionRollover.autoBrief` | `boolean` | `true` | ✓ Yes | — | Automatically pass the handoff brief into the new session upon rollover (true\|false) |
+| `agent.contextCompaction.enabled` | `boolean` | `true` | ✓ Yes | — | Enable context compaction (true\|false) |
+| `agent.contextCompaction.mode` | `native \\| auto \\| local` | `"auto"` | ✓ Yes | — | Context compaction strategy: native uses provider support only; auto prefers native then falls back to local; local always uses the application summarizer (native\|auto\|local; default auto) |
+| `agent.contextCompaction.compactThreshold` | `number` | `0.8` | ✓ Yes | — | Context-window ratio for automatic context compaction (0-1, 0%-100%) |
+| `agent.contextCompaction.compactThresholdTokens` | `number` | `null` | ✓ Yes | — | Optional raw-token ceiling for automatic context compaction (null or integer >=1000) |
 
 ## Tools & Permissions
 
@@ -125,16 +127,16 @@ term2 settings can be configured via:
 | `tools.enableEditHealing` | `boolean` | `true` | No | — | Use AI to automatically correct failed search_replace operations |
 | `tools.shell.enabled` | `boolean` | `true` | ✓ Yes | — | Enable shell tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.web.enabled` | `boolean` | `true` | ✓ Yes | — | Enable web_search and web_fetch tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
-| `tools.fileRead.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file read tools (read_file, grep, glob) for the main agent (true\|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request. |
-| `tools.fileWrite.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file edit tools (apply_patch / create_file / search_replace) for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
-| `tools.memory.enabled` | `boolean` | `true` | ✓ Yes | — | Enable memory tools (memory_*) for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
-| `tools.sessions.enabled` | `boolean` | `true` | ✓ Yes | — | Enable prior-session tools (session_list, session_search, session_read, session_rollover) for the main agent (true\|false). Applies on the next model request. |
+| `tools.fileRead.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file read tools for the main agent (true\|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request. |
+| `tools.fileWrite.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file edit tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
+| `tools.memory.enabled` | `boolean` | `true` | ✓ Yes | — | Enable memory tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
+| `tools.sessions.enabled` | `boolean` | `true` | ✓ Yes | — | Enable prior-session tools for the main agent (true\|false). Applies on the next model request. |
 | `tools.skills.enabled` | `boolean` | `true` | ✓ Yes | — | Enable the activate_skill tool and skill catalog for the main agent (true\|false). Applies on the next model request. |
 | `tools.mentor.enabled` | `boolean` | `true` | ✓ Yes | — | Enable the ask_mentor tool for the main agent (true\|false). Also requires a configured mentor model; applies on the next model request. |
-| `tools.subagents.enabled` | `boolean` | `true` | ✓ Yes | — | Enable subagent delegation tools (run_subagent and its async controls) for the main agent (true\|false). Does not restrict the subagents themselves; applies on the next model request. |
-| `tools.backgroundTasks.enabled` | `boolean` | `true` | ✓ Yes | — | Enable background task tools (get_shell_job, cancel_shell_job, configure_task_check_in) for the main agent (true\|false). Applies on the next model request. |
+| `tools.subagents.enabled` | `boolean` | `true` | ✓ Yes | — | Enable subagent delegation tools for the main agent (true\|false). Does not restrict the subagents themselves; applies on the next model request. |
+| `tools.backgroundTasks.enabled` | `boolean` | `true` | ✓ Yes | — | Enable background task tools for the main agent (true\|false). Applies on the next model request. |
 | `tools.userInteraction.enabled` | `boolean` | `true` | ✓ Yes | — | Enable the ask_user tool for the main agent (true\|false). Applies on the next model request. |
-| `tools.codeContext.enabled` | `boolean` | `true` | ✓ Yes | — | Enable code-context tools (read_code_outline, code_context_search) for the main agent (true\|false). Applies on the next model request. |
+| `tools.codeContext.enabled` | `boolean` | `true` | ✓ Yes | — | Enable code-context tools for the main agent (true\|false). Applies on the next model request. |
 
 ## UI & Terminal
 

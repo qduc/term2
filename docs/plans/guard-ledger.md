@@ -1,5 +1,33 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Agent model discovery pages (2026-10-19)
+
+Harm prevented: a discovery query injecting hundreds of verbose catalog rows into
+agent context (live baseline: 638 models / 86,280 characters). Class: context
+presentation bound with explicit retrieval, not execution admission. Owner:
+`source/tools/agent/list-models.ts`; caller owns continuation via `nextOffset`.
+Direct signal: filtered model-row count. Large legitimate catalogs are expected;
+no model or catalog work is cancelled because of size. Default page is 50, offset
+zero; per-call positive integer `limit` overrides the default without a hidden
+maximum. There are no setting/env/role overrides, persisted migration, or clamping.
+Names are opt-in; IDs and totals remain present. Omitted rows remain retrievable
+with the same filters/sort and returned offset. Pages are live, not snapshot-bound,
+so changes may reorder rows. No automatic retries, history cache, provider
+substitution or new request timeout. Runtime cancellation reaches catalog fetches.
+Observability: `totalModels`, `offset`, `nextOffset`, per-provider catalog status,
+and explicit history status; no credentials, raw errors or conversation content.
+Rollback: revert discovery pagination and its documentation/tests together.
+
+Red evidence: the pre-optimization executor returned all 300 fixture models and
+60,333 characters for every measured mode. The same local-I/O harness after the
+change returns a 50-row page, approximately 5.8KB, without losing retrieval.
+Filesystem-backed integration checks retrieve 50/50/20 rows for a 120-row catalog,
+verify uniqueness and total, empty terminal pages, an explicit larger limit,
+and null continuation at completion. Typecheck, lint, three focused integrations,
+28 static guards and 215 provider black-box checks pass (one skipped). Independent
+fresh-agent real-use recheck accepted; durable trace and limitations are recorded
+in the agent-model-discovery design doc.
+
 ## Gemini rate-limit retry hints (2026-10-17)
 
 Incident: the 17:08 local log records Gemini asking for 39.676606339 seconds,

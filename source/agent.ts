@@ -14,6 +14,8 @@ import type { BackgroundShellOutputBundle } from './services/shell/background-sh
 import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
 import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
 import { createRunSubagentToolDefinition, type ForegroundRunSubagentParams } from './tools/agent/run-subagent.js';
+import { createListModelsToolDefinition } from './tools/agent/list-models.js';
+import { SessionIndexService } from './services/conversation/session-index/session-index-service.js';
 import {
   createGetSubagentResultToolDefinition,
   createGetSubagentStatusToolDefinition,
@@ -526,6 +528,25 @@ export const getAgentDefinition = (
   }
 
   if (hasCapability('memory')) tools.push(...memoryCapability.tools);
+  if (hasCapability('subagents')) {
+    tools.push(
+      createListModelsToolDefinition({
+        settingsService,
+        loggingService,
+        getHistory:
+          hasCapability('sessions') && !executionContext?.isRemote()
+            ? async () => {
+                const index = new SessionIndexService();
+                try {
+                  return await index.list({ projectPath: executionContext?.getCwd() ?? process.cwd() });
+                } finally {
+                  await index.close();
+                }
+              }
+            : undefined,
+      }),
+    );
+  }
   if (hasCapability('sessions') && sessionBrowser) tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
   if (hasCapability('sessions') && requestSessionRollover)
     tools.push(createSessionRolloverToolDefinition(requestSessionRollover));

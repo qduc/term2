@@ -316,7 +316,7 @@ it.sequential('accepting /settings opens the settings successor menu', async () 
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('type search all');
+  expect(lastFrame()).toContain('type search');
 });
 
 it.sequential('accepting a /settings prefix opens the settings successor menu', async () => {
@@ -329,7 +329,7 @@ it.sequential('accepting a /settings prefix opens the settings successor menu', 
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('type search all');
+  expect(lastFrame()).toContain('type search');
 });
 
 it.sequential('typing the /settings autocomplete trigger opens the settings menu', async () => {
@@ -340,7 +340,7 @@ it.sequential('typing the /settings autocomplete trigger opens the settings menu
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('type search all');
+  expect(lastFrame()).toContain('type search');
 });
 
 it.sequential('shows the typed settings query above the filtered menu', async () => {
@@ -399,7 +399,7 @@ it.sequential(
     expect(controller.getSnapshot().editor).toMatchObject({ text: '/settings shell.time', cursor: 20 });
   },
 );
-it.sequential('a settings_value frame labels its line with the setting key instead of "Filter:"', async () => {
+it.sequential('a settings_value frame labels its line with the setting name instead of "Filter:"', async () => {
   const controller = new MenuControllerImpl();
   const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
 
@@ -410,7 +410,7 @@ it.sequential('a settings_value frame labels its line with the setting key inste
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings_value');
 
   const output = lastFrame() ?? '';
-  expect(output).toContain('shell.timeout =');
+  expect(output).toContain('Shell timeout =');
   expect(output).not.toContain('Filter: ');
 });
 

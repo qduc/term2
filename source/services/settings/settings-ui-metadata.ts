@@ -42,37 +42,37 @@ export const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS]: 'Model request time limit',
   [SETTING_KEYS.AGENT_MAX_MODEL_STREAM_IDLE_MS]: 'Model stream idle limit',
   [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Retry attempts',
-  [SETTING_KEYS.AGENT_TRANSPORT]: 'Transport',
+  [SETTING_KEYS.AGENT_TRANSPORT]: 'Model connection',
   [SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS]: 'Max parallel tool calls',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]: 'Run budget (USD)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]: 'Run budget (tokens)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]: 'Run budget (active time)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]: 'Warning headroom (USD)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS]: 'Warning headroom (tokens)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS]: 'Warning headroom (time)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS]: 'Soft headroom (USD)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS]: 'Soft headroom (tokens)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS]: 'Soft headroom (time)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP]: 'Turn backstop',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT]: 'Budget extension percent',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS]: 'Max parent extensions',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]: 'Identical tool-call threshold',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]: 'Budget escalation',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]: 'Run cost limit',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]: 'Run token limit',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]: 'Run time limit',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]: 'Warn at USD left',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS]: 'Warn at tokens left',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS]: 'Warn at time left',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS]: 'Wrap-up nudge at USD left',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS]: 'Wrap-up nudge at tokens left',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS]: 'Wrap-up nudge at time left',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP]: 'Runaway turn limit',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT]: 'Extension size',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS]: 'Extensions before asking',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]: 'Stall: repeated calls',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]: 'At a run limit',
   [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED]: 'Background check-ins',
   [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS]: 'Check-in interval',
   [SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED]: 'Session rollover',
-  [SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES]: 'Rollover milestones',
+  [SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES]: 'Rollover reminder points',
   [SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF]: 'Auto-pass rollover brief',
   [SETTING_KEYS.AGENT_OPENROUTER_API_KEY]: 'OpenRouter API key',
   [SETTING_KEYS.AGENT_OPENAI_API_KEY]: 'OpenAI API key',
   [SETTING_KEYS.AGENT_OPENROUTER_BASE_URL]: 'OpenRouter base URL',
   [SETTING_KEYS.AGENT_OPENROUTER_REFERRER]: 'OpenRouter referrer',
   [SETTING_KEYS.AGENT_OPENROUTER_TITLE]: 'OpenRouter title',
-  [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]: 'Codex first-frame timeout',
-  [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]: 'Codex inter-frame timeout',
+  [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]: 'Codex first-reply timeout',
+  [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]: 'Codex stream-gap timeout',
   [SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT]: 'Mentor reasoning effort',
   [SETTING_KEYS.AGENT_MENTOR_SAMPLES]: 'Mentor samples',
-  [SETTING_KEYS.AGENT_MENTOR_POOL]: 'Mentor pool',
+  [SETTING_KEYS.AGENT_MENTOR_POOL]: 'Mentor models',
   [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]: 'Flex service tier',
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED]: 'Context compaction',
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE]: 'Compaction mode',
@@ -86,10 +86,10 @@ export const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.SANDBOX_ENABLED]: 'Sandbox',
   [SETTING_KEYS.SANDBOX_READ_POLICY]: 'Sandbox read policy',
   [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Sandbox extra read paths',
-  [SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]: 'Docker host-control projects',
+  [SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]: 'Docker access grants',
   [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Sandbox networking',
-  [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]: 'Auto-approval reasoning effort',
-  [SETTING_KEYS.AGENT_DECISION_MODEL]: 'Decision model',
+  [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]: 'Approval review effort',
+  [SETTING_KEYS.AGENT_DECISION_MODEL]: 'Fast approval model',
   [SETTING_KEYS.AGENT_COMPLETION_VERIFICATION]: 'Completion verification',
   [SETTING_KEYS.AGENT_VERIFICATION_MAX_REPAIRS]: 'Max verification repairs',
   [SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT]: 'Explorer subagent effort',
@@ -116,7 +116,7 @@ export const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.APP_NOTIFICATIONS]: 'Notifications',
   [SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL]: 'Approval notifications',
   [SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE]: 'Completion notifications',
-  [SETTING_KEYS.APP_SEARCH_VIA_SHELL]: 'Search via shell',
+  [SETTING_KEYS.APP_SEARCH_VIA_SHELL]: 'Code search via shell',
   [SETTING_KEYS.TOOLS_LOG_FILE_OPS]: 'Log file operations',
   [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Edit healing',
   [SETTING_KEYS.TOOLS_SHELL_ENABLED]: 'Shell tools',
@@ -129,7 +129,7 @@ export const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.TOOLS_MENTOR_ENABLED]: 'Mentor tool',
   [SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED]: 'Subagent tools',
   [SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED]: 'Background task tools',
-  [SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED]: 'ask_user tool',
+  [SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED]: 'Ask-user tool',
   [SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED]: 'Code context tools',
   [SETTING_KEYS.DEBUG_BASH_TOOL]: 'Bash tool debugging',
   [SETTING_KEYS.SSH_ENABLED]: 'SSH',
@@ -232,38 +232,36 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
     'Abort a request that streams no output for this many milliseconds; re-arms on each streamed delta so long reasoning survives (0 disables)',
   [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',
   [SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS]: 'Maximum number of tool calls allowed to run at the same time',
-  [SETTING_KEYS.AGENT_TRANSPORT]: 'Network transport mechanism (websocket|http)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]:
-    'Per-run priced-request budget in USD micros (1,000,000 = $1; default $5)',
+  [SETTING_KEYS.AGENT_TRANSPORT]:
+    'How term2 connects to model providers: a persistent WebSocket or plain HTTP requests (websocket|http)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]: 'Spending limit for one run, counted on requests with a known price',
   [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]:
-    'Per-run token budget used when request pricing is unavailable; cache reads count a tenth, and subscription providers are exempt (default 5,000,000)',
+    'Token limit for one run when the provider reports no price; cache reads count a tenth and subscription providers are exempt',
   [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]:
-    'Per-run active-time budget in milliseconds; approval wait time is excluded (default 1 hour)',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]:
-    'Priced-budget headroom that triggers a warning escalation (USD micros)',
+    'Active-time limit for one run; time spent waiting for your approval does not count',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]: 'Warn when this much of the run cost limit is left',
   [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS]:
-    'Unpriced-token headroom that triggers a warning escalation',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS]:
-    'Active-time headroom that triggers a warning escalation, in milliseconds',
+    'Warn when this many tokens of the run token limit are left',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS]: 'Warn when this much of the run time limit is left',
   [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS]:
-    'Priced-budget headroom that injects a soft wrap-up nudge (USD micros)',
+    'Nudge the agent to wrap up when this much of the run cost limit is left',
   [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS]:
-    'Unpriced-token headroom that injects a soft wrap-up nudge',
+    'Nudge the agent to wrap up when this many tokens of the run token limit are left',
   [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS]:
-    'Active-time headroom that injects a soft wrap-up nudge, in milliseconds',
+    'Nudge the agent to wrap up when this much of the run time limit is left',
   [SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP]:
-    'High turn-count backstop that detects an infinite loop without setting the operating budget',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT]: 'Budget percentage granted for each finite continuation extension',
+    'Stop a run that reaches this many turns — a safety net against infinite loops, not a budget',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT]:
+    'Size of each budget extension, as a percentage of the original limit',
   [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS]:
-    'Maximum finite extensions a parent may grant before escalation reaches the human',
+    'Budget extensions a parent agent may grant a subagent before asking you',
   [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]:
-    'Identical tool calls without an intervening mutation required to report stall evidence',
+    'Identical tool calls in a row, with no edit in between, that count as a stall',
   [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]:
-    'warn is advisory; contain pauses at budget exhaustion; pause also stops on warning/stall; disabled emits no evidence',
+    'warn shows a status-bar warning; contain pauses when a limit is reached; pause also stops on warnings and stalls; disabled turns run limits off',
   [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED]:
     'Wake the agent periodically to check on a still-running background shell job or subagent while idle',
-  [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS]:
-    'How often to check in on a still-running background task, in milliseconds (default 5 minutes)',
+  [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS]: 'How often to check in on a still-running background task',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]:
     'Codex WebSocket timeout before the first response frame, in milliseconds',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]:
@@ -337,7 +335,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SANDBOX_READ_POLICY]: 'File read policy for sandbox (standard|strict)',
   [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Additional paths allowed for sandbox file reads (comma-separated)',
   [SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]:
-    'Projects with persistent Docker host-control grants; remove a path here to revoke it (JSON array)',
+    'Projects you allowed to control Docker on the host; remove a path to revoke its access (JSON array)',
   [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Allow sandboxed commands to access the network (true|false)',
   [SETTING_KEYS.MEMORY_ENABLED]: 'Enable persistent memory across sessions (true|false)',
   [SETTING_KEYS.MEMORY_DIRECTORY]: 'Directory where memory files are stored (path)',
@@ -433,10 +431,14 @@ export function getSettingMetadata(key: string): SettingUIMetadata | undefined {
   // 1. Leaf schema .description
   // 2. Unwrapped leaf .description
   // 3. Leaf .def.description
-  // 4. Parent schema .description (for wrappers like tools.shell.enabled -> tools.shell)
-  // 5. Fallback dictionary
+  // 4. Fallback dictionary (written per key, so it beats a shared parent text)
+  // 5. Parent schema .description (for wrappers like tools.shell.enabled -> tools.shell)
   let description =
-    schema.description ?? unwrapped?.description ?? schema.def?.description ?? unwrapped?.def?.description;
+    schema.description ??
+    unwrapped?.description ??
+    schema.def?.description ??
+    unwrapped?.def?.description ??
+    FALLBACK_SETTING_DESCRIPTIONS[key];
 
   if (!description && key.includes('.')) {
     const parentKey = key.split('.').slice(0, -1).join('.');
@@ -447,10 +449,6 @@ export function getSettingMetadata(key: string): SettingUIMetadata | undefined {
       unwrappedParent?.description ??
       parentSchema?.def?.description ??
       unwrappedParent?.def?.description;
-  }
-
-  if (!description) {
-    description = FALLBACK_SETTING_DESCRIPTIONS[key];
   }
 
   const isSecret =
@@ -526,4 +524,18 @@ export function isDurationSetting(key: string): boolean {
 /** Numeric settings stored in USD micros (1,000,000 = $1); the UI accepts `$5`. */
 export function isUsdMicrosSetting(key: string): boolean {
   return key.endsWith('UsdMicros') && isNumberSetting(key);
+}
+
+/**
+ * True for keys a user can set one value on: the registered setting keys, any
+ * other leaf schema path, and the dynamic per-provider credential keys
+ * (`agent.<provider>.apiKey`). A group such as `sandbox` is not one, and
+ * neither is text that merely looks like a key (a search word).
+ */
+export function isKnownSettingKey(key: string): boolean {
+  if (!key) return false;
+  if ((Object.values(SETTING_KEYS) as string[]).includes(key)) return true;
+  if (/^agent\.[^.]+\.apiKey$/.test(key)) return true;
+  const schema = resolveSettingAtPath(key);
+  return Boolean(schema) && getSettingValueType(schema) !== 'object';
 }

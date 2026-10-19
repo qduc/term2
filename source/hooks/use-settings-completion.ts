@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SETTING_KEYS, type SettingsService } from '../services/settings/settings-service.js';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
+import { SETTING_ENV_VARIABLES } from '../services/settings/settings-env.js';
 import {
   SETTINGS_CATEGORIES,
   SETTING_DESCRIPTIONS,
@@ -16,7 +17,26 @@ import {
   getSettingCategory,
 } from './settings-completion-logic.js';
 
-const MAX_RESULTS = 10;
+/**
+ * Rows the settings list may use: the terminal height minus the chrome around
+ * the list (prompt, tab bar, detail block, hints, status line).
+ */
+export function getSettingsVisibleCount(rows: number = process.stdout.rows ?? 24): number {
+  return Math.max(5, Math.min(20, rows - 14));
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  // An empty string, an absent value, and the literal "default" (reasoning
+  // efforts) all mean "not set".
+  const isUnset = (value: unknown) => value === undefined || value === '' || value === 'default';
+  if (isUnset(a) && isUnset(b)) return true;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Get the current value of a setting for display in the menu
@@ -34,6 +54,24 @@ function getSettingSource(settingsService: SettingsService, key: string): Settin
     return settingsService.getSource(key);
   } catch {
     return undefined;
+  }
+}
+
+function getStartupOverride(settingsService: SettingsService, key: string): SettingCompletionItem['startupOverride'] {
+  try {
+    const source = settingsService.getStartupOverride(key);
+    if (!source) return undefined;
+    return { source, name: source === 'env' ? SETTING_ENV_VARIABLES[key] : undefined };
+  } catch {
+    return undefined;
+  }
+}
+
+function isModifiedFromDefault(settingsService: SettingsService, key: string, value: unknown): boolean {
+  try {
+    return !sameValue(value, settingsService.getDefault(key));
+  } catch {
+    return false;
   }
 }
 
@@ -95,6 +133,8 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     ).map((item) => ({
       ...item,
       source: getSettingSource(settingsService, item.key),
+      isModified: isModifiedFromDefault(settingsService, item.key, item.currentValue),
+      startupOverride: getStartupOverride(settingsService, item.key),
       requiresRestart: !isRuntimeModifiable(settingsService, item.key),
     }));
     // settingsVersion is a signal dep — incrementing it triggers re-computation
@@ -104,7 +144,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
   }, [settingsService, settingsVersion]);
 
   const categories = useMemo(() => {
-    const presentCategoryIds = new Set(allSettings.map((item) => getSettingCategory(item.key).id));
+    const presentCategoryIds = new Set(allSettings.map((item) => getSettingCategory(item.key)?.id));
     return SETTINGS_CATEGORIES.filter((category) => presentCategoryIds.has(category.id));
   }, [allSettings]);
 
@@ -157,13 +197,14 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     [categories, resolvedActiveCategoryId, setSelectedIndex],
   );
 
+  const visibleCount = getSettingsVisibleCount();
   useEffect(() => {
     if (selectedIndex < scrollOffset) {
       setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
-    } else if (selectedIndex >= scrollOffset + MAX_RESULTS) {
-      setScrollOffset(selectedIndex - MAX_RESULTS + 1);
+    } else if (selectedIndex >= scrollOffset + visibleCount) {
+      setScrollOffset(selectedIndex - visibleCount + 1);
     }
-  }, [selectedIndex, scrollOffset]);
+  }, [selectedIndex, scrollOffset, visibleCount]);
 
   // Effect to select a target key once it appears in filteredEntries
   useEffect(() => {
@@ -183,7 +224,8 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       const editor = controller.getSnapshot().editor;
       controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
       if (initialSelectionKey) {
-        setActiveCategoryId(getSettingCategory(initialSelectionKey).id);
+        const category = getSettingCategory(initialSelectionKey);
+        if (category) setActiveCategoryId(category.id);
         setTargetKey(initialSelectionKey);
       } else {
         setSelectedIndex(0);
@@ -212,6 +254,8 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     isSearchingAll,
     categories,
     activeCategoryId: resolvedActiveCategoryId,
+    visibleCount,
+    getDefaultValue: (key: string) => settingsService.getDefault(key),
     open,
     close,
     // updateQuery,

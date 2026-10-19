@@ -1,4 +1,5 @@
 import { MODEL_SETTING_TRIGGERS } from '../../utils/ai/model-settings.js';
+import { isKnownSettingKey } from '../../services/settings/settings-ui-metadata.js';
 import type { SlashCommand, SlashCommandCompletion } from '../../slash-commands.js';
 import { findPathTrigger } from './triggers.js';
 
@@ -62,8 +63,11 @@ export const determineActiveMenu = (value: string, cursorOffset: number, command
     if (value.startsWith(completion.trigger)) {
       const end = Math.min(cursorOffset, value.length);
       const afterPrefix = value.slice(completion.trigger.length, end);
+      // `/settings <key> <value>` only when the first word is a real setting
+      // key. Otherwise the space belongs to a multi-word search ("log level"),
+      // which must keep filtering the list instead of editing a key named "log".
       const keyAndSpaceMatch = afterPrefix.match(/^(\S+)\s+/);
-      if (keyAndSpaceMatch) {
+      if (keyAndSpaceMatch && isKnownSettingKey(keyAndSpaceMatch[1] ?? '')) {
         const key = keyAndSpaceMatch[1] ?? '';
         const startIndex = completion.trigger.length + (keyAndSpaceMatch[0]?.length ?? 0);
         return { type: 'settings_value', key, startIndex, origin: 'settings-list' };

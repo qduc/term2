@@ -5,6 +5,7 @@ import type { MenuController, MenuFrame, MenuInteractionRegistry } from './menu-
 import { MenuStackHost } from './MenuStackHost.js';
 import type { MenuServices } from './menu-registry.js';
 import { useTheme } from '../theme.js';
+import { getSettingLabel, isSecretSetting } from '../../services/settings/settings-ui-metadata.js';
 
 const isFocusReportingSequence = (input: string): boolean =>
   input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
@@ -45,9 +46,18 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
   const filterFrame = isFilterableMenu(activeFrame) ? activeFrame : undefined;
   const valueFrame = isSettingsValueMenu(activeFrame) ? activeFrame : undefined;
   // A settings_value frame edits a value, not a filter: label the line with
-  // the setting key (which the binding text itself omits) instead of "Filter:".
-  const promptLabel = valueFrame ? `${valueFrame.settingKey} = ` : filterFrame ? 'Filter: ' : menuPromptLabel;
-  const promptText = valueFrame?.binding.query ?? filterFrame?.binding.query ?? (menuPromptLabel ? input : undefined);
+  // the setting name (which the binding text itself omits) instead of "Filter:".
+  // A credential being typed is masked, so it never shows on screen.
+  const promptLabel = valueFrame
+    ? `${getSettingLabel(valueFrame.settingKey)} = `
+    : filterFrame
+    ? 'Filter: '
+    : menuPromptLabel;
+  const valueQuery =
+    valueFrame && isSecretSetting(valueFrame.settingKey)
+      ? '•'.repeat(valueFrame.binding.query.length)
+      : valueFrame?.binding.query;
+  const promptText = valueQuery ?? filterFrame?.binding.query ?? (menuPromptLabel ? input : undefined);
 
   useEffect(() => {
     if (enabled) setCursorOverride(cursorOffset);

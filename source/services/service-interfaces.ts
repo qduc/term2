@@ -240,7 +240,7 @@ export interface ISessionContextService {
 
 export interface ISettingsService {
   /** Optional provenance for distinguishing inherited allocation from explicit user policy. */
-  getSource?(key: string): 'cli' | 'env' | 'config' | 'default';
+  getSource?(key: string): 'cli' | 'env' | 'config' | 'session' | 'default';
   get<K extends SettingKey>(key: K): SettingValue<K>;
   getDynamic(key: string): unknown;
   set<K extends SettingKey>(key: K, value: SettingValue<K>, options?: { persist?: boolean }): void;

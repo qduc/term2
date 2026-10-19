@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { isSecretSetting, isStringSetting, type SettingValueSuggestion } from '../../utils/value-suggestions.js';
 import { formatSettingDisplayValue } from './settings-value-formatter.js';
-import { isDurationSetting } from '../../services/settings/settings-ui-metadata.js';
+import { getSettingLabel, isBooleanSetting, isDurationSetting } from '../../services/settings/settings-ui-metadata.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { useTheme } from '../theme.js';
 
@@ -20,6 +20,8 @@ type Props = {
   previewText?: string;
   /** Extra input shapes the setting accepts (e.g. `5m`, `$5`). */
   unitHint?: string;
+  /** Warning shown above the options, e.g. an env var that overrides a saved value. */
+  overrideNote?: string;
 };
 
 const SettingsValueSelectionMenu: FC<Props> = ({
@@ -32,6 +34,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
   defaultText,
   previewText,
   unitHint,
+  overrideNote,
 }) => {
   const theme = useTheme();
   const acceptsAnyString = isStringSetting(settingKey);
@@ -41,15 +44,17 @@ const SettingsValueSelectionMenu: FC<Props> = ({
   const acceptsTypedValue = acceptsAnyString || Boolean(isNumericSettings);
   const showNeutralEmpty = items.length === 0 && acceptsTypedValue;
   const selectedItem = items[selectedIndex];
-  const title =
-    settingKey === 'agent.reasoningEffort'
-      ? 'Reasoning effort'
-      : settingKey === 'shell.autoApproveMode'
-      ? 'Auto-approve mode'
-      : undefined;
+  const title = getSettingLabel(settingKey);
+  const isSecret = isSecretSetting(settingKey);
+  const displayOption = (value: string): string => {
+    if (isSecret) return '•'.repeat(value.length);
+    if (isDurationSetting(settingKey)) return formatSettingDisplayValue(settingKey, Number(value)).text;
+    if (isBooleanSetting(settingKey) && (value === 'true' || value === 'false')) return value === 'true' ? 'ON' : 'OFF';
+    return value;
+  };
   const canCopySuggestion = items.length > 0 && !isSecretSetting(settingKey);
 
-  const header = (currentText !== undefined || defaultText !== undefined || unitHint) && (
+  const header = (currentText !== undefined || defaultText !== undefined || unitHint || overrideNote) && (
     <Box flexDirection="column" marginBottom={1}>
       <Text color={theme.textSubtle}>
         {currentText !== undefined && (
@@ -65,6 +70,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
         )}
       </Text>
       {unitHint && <Text color={theme.textSubtle}>{unitHint}</Text>}
+      {overrideNote && <Text color={theme.warning}>{overrideNote}</Text>}
     </Box>
   );
 
@@ -109,9 +115,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
           <Box key={item.value}>
             <SelectionMarker selected={isSelected} />
             <Text color={isSelected ? theme.accent : theme.text} bold={isSelected}>
-              {isDurationSetting(settingKey)
-                ? formatSettingDisplayValue(settingKey, Number(item.value)).text
-                : item.value}
+              {displayOption(item.value)}
             </Text>
           </Box>
         )}

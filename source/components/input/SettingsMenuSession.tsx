@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Box, Text } from 'ink';
 import SettingsSelectionMenu from '../menu/SettingsSelectionMenu.js';
 import { getModelSettingConfig } from '../../utils/ai/model-settings.js';
 import { buildSettingValueSuggestions, isSecretSetting, isStringSetting } from '../../utils/value-suggestions.js';
@@ -8,7 +9,8 @@ import {
   getSubagentPoolEntryShape,
   getSubagentPoolRoleLabel,
 } from '../../services/subagents/subagent-pool-config.js';
-import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
+import type { SettingCompletionItem, useSettingsCompletion } from '../../hooks/use-settings-completion.js';
+import { useTheme } from '../theme.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { EditorSnapshot, MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
@@ -116,28 +118,60 @@ const pushChildEffect = (
 };
 
 export function SettingsMenuSession({ frame, active, controller, interactions, services }: Props) {
+  const theme = useTheme();
   const settings = services.settings;
   const keep = (): MenuEffect => ({ stack: { type: 'keep' } });
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
-  const interaction = useMemo<MenuInteraction>(
-    () => ({
+  const interaction = useMemo<MenuInteraction>(() => {
+    // Flip a boolean in place (Enter, or Space on an empty filter).
+    const toggleEffect = (selected: SettingCompletionItem): MenuEffect => ({
+      stack: { type: 'keep' },
+      intent: {
+        id: `apply-settings:${frame.id}:${selected.key}`,
+        sourceFrameId: frame.id,
+        intent: {
+          type: 'apply-settings',
+          changes: [
+            {
+              key: selected.key,
+              value: !selected.currentValue,
+              persistence: selected.requiresRestart ? 'restart' : 'runtime',
+            },
+          ],
+        },
+      },
+    });
+
+    return {
       handle: (event) => {
-        if (!('type' in event)) return;
-        if (event.type === 'input' && event.text === ' ' && frame.operation !== 'reset') {
+        if (!('type' in event)) {
+          // Result of a toggle this frame issued: report a refusal inline.
+          setToggleError(event.ok ? null : Object.values(event.fieldErrors ?? {})[0] ?? event.message ?? null);
+          return;
+        }
+        setToggleError(null);
+        // Space toggles the selected boolean only while the filter is empty;
+        // once the user is typing a search, a space is part of the query.
+        if (
+          event.type === 'input' &&
+          event.text === ' ' &&
+          frame.operation !== 'reset' &&
+          frame.binding.query.trim() === ''
+        ) {
           const selected = settings.getSelectedItem();
           if (selected && typeof selected.currentValue === 'boolean') {
-            return {
-              stack: { type: 'keep' },
-              intent: {
-                id: `apply-settings:${frame.id}:${selected.key}`,
-                sourceFrameId: frame.id,
-                intent: {
-                  type: 'apply-settings',
-                  changes: [{ key: selected.key, value: !selected.currentValue, persistence: 'runtime' }],
-                },
-              },
-            };
+            return toggleEffect(selected);
           }
+        }
+        // Backspace on an empty filter would delete the `/settings ` prefix and
+        // close the menu; Esc is the way out, so make it a no-op instead.
+        if (
+          event.type === 'command' &&
+          event.command === 'backspace' &&
+          controller.getSnapshot().editor.cursor <= frame.binding.replacement.start
+        ) {
+          return keep();
         }
         if (applyMenuEditorEvent(controller, event, { horizontal: false })) return keep();
         switch (event.type) {
@@ -188,6 +222,11 @@ export function SettingsMenuSession({ frame, active, controller, interactions, s
             }
 
             if (!selected) return 'fallthrough';
+            // A boolean has two values; Enter flips it in place rather than
+            // opening a two-option picker.
+            if (typeof selected.currentValue === 'boolean') {
+              return toggleEffect(selected);
+            }
             return pushChildEffect(frame, selected.key, currentEditor, selected.currentValue);
           }
           case 'escape':
@@ -196,9 +235,8 @@ export function SettingsMenuSession({ frame, active, controller, interactions, s
             return;
         }
       },
-    }),
-    [controller, frame, settings],
-  );
+    };
+  }, [controller, frame, settings]);
 
   useEffect(() => {
     if (!active) return;
@@ -207,14 +245,19 @@ export function SettingsMenuSession({ frame, active, controller, interactions, s
 
   if (!active) return null;
   return (
-    <SettingsSelectionMenu
-      items={settings.filteredEntries}
-      selectedIndex={settings.selectedIndex}
-      scrollOffset={settings.scrollOffset}
-      query={frame.binding.query}
-      isSearchingAll={settings.isSearchingAll}
-      activeCategoryId={settings.activeCategoryId}
-      categories={settings.categories}
-    />
+    <Box flexDirection="column">
+      <SettingsSelectionMenu
+        items={settings.filteredEntries}
+        selectedIndex={settings.selectedIndex}
+        scrollOffset={settings.scrollOffset}
+        query={frame.binding.query}
+        isSearchingAll={settings.isSearchingAll}
+        activeCategoryId={settings.activeCategoryId}
+        categories={settings.categories}
+        visibleCount={settings.visibleCount}
+        getDefaultValue={settings.getDefaultValue}
+      />
+      {toggleError && <Text color={theme.danger}>{toggleError}</Text>}
+    </Box>
   );
 }

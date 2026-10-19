@@ -48,6 +48,10 @@ type Props = {
   nicknameLabels?: Map<string, string>;
   /** When set, the inline nickname editor owns an input row below the list. */
   nicknameDraft?: NicknameDraftState | null;
+  /** `provider/modelId` strings currently configured for the setting being edited. */
+  currentKeys?: Set<string>;
+  /** False when the host already prints the filter line (the menu surface does). */
+  showFilterLine?: boolean;
 };
 
 const ModelSelectionMenu: FC<Props> = ({
@@ -68,6 +72,8 @@ const ModelSelectionMenu: FC<Props> = ({
   favoriteKeys = EMPTY_FAVORITE_KEYS,
   nicknameLabels,
   nicknameDraft = null,
+  currentKeys,
+  showFilterLine = true,
 }) => {
   const theme = useTheme();
   const isFavoritesTab = modelTab === 'favorites' || provider === FAVORITES_TAB_ID;
@@ -201,7 +207,7 @@ const ModelSelectionMenu: FC<Props> = ({
           </Text>
         </Box>
       )}
-      <Text color={theme.textSubtle}>Filter: {query || 'type to filter'}</Text>
+      {showFilterLine && <Text color={theme.textSubtle}>Filter: {query || 'type to filter'}</Text>}
       <MenuContainer
         items={items}
         selectedIndex={selectedIndex}
@@ -266,6 +272,9 @@ const ModelSelectionMenu: FC<Props> = ({
                     {item.id}
                   </Text>
                   {nickname && <Text color={theme.accent}> — aka "{nickname}"</Text>}
+                  {currentKeys?.has(serializeFavorite(item.provider, item.id)) && (
+                    <Text color={theme.success}> (current)</Text>
+                  )}
                   {item.unavailableReason === 'missing-codex-login' ? (
                     <Text color={theme.warning}>
                       {' '}

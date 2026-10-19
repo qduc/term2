@@ -700,7 +700,8 @@ export interface SettingsData {
   hooks: z.infer<typeof HooksSettingsSchema>;
 }
 
-export type SettingSource = 'cli' | 'env' | 'config' | 'default';
+/** `session` is an unsaved in-app change that lasts until term2 exits. */
+export type SettingSource = 'cli' | 'env' | 'config' | 'session' | 'default';
 
 export interface SettingWithSource<T = any> {
   value: T;

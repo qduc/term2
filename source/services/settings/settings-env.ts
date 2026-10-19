@@ -78,6 +78,29 @@ export function buildEnvOverrides(): Partial<SettingsData> {
   } as Partial<SettingsData>;
 }
 
+/**
+ * Environment variable behind each env-mapped setting, for messages that tell
+ * the user what overrides a saved value. Keep in step with buildEnvOverrides.
+ */
+export const SETTING_ENV_VARIABLES: Record<string, string> = {
+  'agent.openrouter.apiKey': 'OPENROUTER_API_KEY',
+  'agent.openrouter.baseUrl': 'OPENROUTER_BASE_URL',
+  'agent.openrouter.referrer': 'OPENROUTER_REFERRER',
+  'agent.openrouter.title': 'OPENROUTER_TITLE',
+  'agent.openai.apiKey': 'OPENAI_API_KEY',
+  'logging.logLevel': 'LOG_LEVEL',
+  'logging.disableLogging': 'DISABLE_LOGGING',
+  'logging.debugLogging': 'DEBUG_LOGGING',
+  'tools.logFileOperations': 'LOG_FILE_OPERATIONS',
+  'debug.debugBashTool': 'DEBUG_BASH_TOOL',
+  'webSearch.tavily.apiKey': 'TAVILY_API_KEY',
+  'webSearch.exa.apiKey': 'EXA_API_KEY',
+  'webSearch.firecrawl.apiKey': 'FIRECRAWL_API_KEY',
+  'webSearch.firecrawl.baseUrl': 'FIRECRAWL_BASE_URL',
+  'webSearch.searxng.baseUrl': 'SEARXNG_BASE_URL',
+  'webSearch.provider': 'WEB_SEARCH_PROVIDER',
+};
+
 export const parseBooleanEnv = (value: unknown): boolean => {
   if (typeof value !== 'string') {
     return false;

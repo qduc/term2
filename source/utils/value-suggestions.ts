@@ -4,6 +4,7 @@ import {
   isSecretSetting,
   isStringSetting,
   isNumberSetting,
+  isBooleanSetting,
 } from '../services/settings/settings-ui-metadata.js';
 import { fetchDecisionModels, isDecisionModelKey } from '../services/models/decision-model-listing.js';
 
@@ -81,9 +82,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   ],
   'agent.maxTurns': [{ value: '10' }, { value: '20' }, { value: '50' }],
   'agent.runBudget.maxUsdMicros': [
-    { value: '1000000', description: '$1' },
-    { value: '5000000', description: '$5 (default)' },
-    { value: '10000000', description: '$10' },
+    { value: '$1' },
+    { value: '$5', description: 'default' },
+    { value: '$10' },
+    { value: '$25' },
   ],
   'agent.runBudget.maxUnpricedTokens': [
     { value: '100000', description: '100k tokens' },
@@ -96,9 +98,9 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: '7200000', description: '2h' },
   ],
   'agent.runBudget.warningHeadroomUsdMicros': [
-    { value: '500000', description: '$0.50' },
-    { value: '1000000', description: '$1 (default)' },
-    { value: '2000000', description: '$2' },
+    { value: '$0.50' },
+    { value: '$1', description: 'default' },
+    { value: '$2' },
   ],
   'agent.runBudget.warningHeadroomUnpricedTokens': [
     { value: '50000', description: '50k tokens' },
@@ -111,9 +113,9 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: '1800000', description: '30m' },
   ],
   'agent.runBudget.softHeadroomUsdMicros': [
-    { value: '100000', description: '$0.10' },
-    { value: '250000', description: '$0.25 (default)' },
-    { value: '500000', description: '$0.50' },
+    { value: '$0.10' },
+    { value: '$0.25', description: 'default' },
+    { value: '$0.50' },
   ],
   'agent.runBudget.softHeadroomUnpricedTokens': [
     { value: '10000', description: '10k tokens' },
@@ -270,7 +272,13 @@ export function filterSettingValueSuggestionsByQuery(
 
   const scoredResults = suggestions
     .map((item) => {
-      const valueScore = scoreSubsequence(trimmed, item.value);
+      // Booleans are shown as ON/OFF, so "on"/"off" must find them too.
+      const booleanAlias =
+        key && isBooleanSetting(key) ? (item.value === 'true' ? 'on' : item.value === 'false' ? 'off' : '') : '';
+      const valueScore = Math.max(
+        scoreSubsequence(trimmed, item.value),
+        booleanAlias ? scoreSubsequence(trimmed, booleanAlias) : -Infinity,
+      );
       const descriptionScore = item.description ? scoreSubsequence(trimmed, item.description) : -Infinity;
 
       // Reward value match more than description match

@@ -9,6 +9,7 @@ import {
   isUsdMicrosSetting,
 } from '../../services/settings/settings-ui-metadata.js';
 import { formatSettingValueDetail } from '../menu/settings-value-formatter.js';
+import { SETTING_ENV_VARIABLES } from '../../services/settings/settings-env.js';
 import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { MenuComponentProps } from './menu-registry.js';
@@ -50,7 +51,13 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
       return draft ? parseSettingValueForKey(frame.settingKey, draft) : undefined;
     }
 
-    const typedValueText = frame.binding.query;
+    // The editor shows and suggests dollars, so a bare number typed here means
+    // dollars too ("5" is $5, not 5 micros). The `/settings <key> <value>`
+    // command keeps the stored unit its key name states.
+    const typedValueText =
+      isUsdMicrosSetting(frame.settingKey) && /^\d+(?:\.\d+)?$/.test(frame.binding.query.trim())
+        ? `$${frame.binding.query.trim()}`
+        : frame.binding.query;
     const parsedTypedValue = typedValueText ? parseSettingValueForKey(frame.settingKey, typedValueText) : undefined;
     const parsedSuggestionValue = suggestion ? parseSettingValueForKey(frame.settingKey, suggestion.value) : undefined;
     const shouldPreferTypedNumericValue =
@@ -176,7 +183,7 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
   const unitHint = isDurationSetting(frame.settingKey)
     ? 'Also accepts 30s, 5m, 1h 30m (plain numbers are milliseconds)'
     : isUsdMicrosSetting(frame.settingKey)
-    ? 'Also accepts $5 or $0.25 (plain numbers are USD micros)'
+    ? 'Amount in dollars, e.g. 5 or 0.25'
     : undefined;
 
   return (
@@ -191,10 +198,20 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
         defaultText={defaultValue.ok ? formatSettingValueDetail(frame.settingKey, defaultValue.value) : undefined}
         previewText={draftValue === undefined ? undefined : formatSettingValueDetail(frame.settingKey, draftValue)}
         unitHint={unitHint}
+        overrideNote={describeStartupOverride(settingsService, frame.settingKey)}
       />
       {applyError && <Text color={theme.danger}>{applyError}</Text>}
     </Box>
   );
+}
+
+/** Saving here does not stick if an env var or CLI flag sets the key at launch. */
+function describeStartupOverride(settingsService: SettingsService, key: string): string | undefined {
+  const source = readSetting(() => settingsService.getStartupOverride(key));
+  if (!source.ok || !source.value) return undefined;
+  const name = SETTING_ENV_VARIABLES[key];
+  const who = source.value === 'env' ? (name ? `$${name}` : 'An environment variable') : 'A command-line flag';
+  return `${who} sets this at startup, so it will override a saved value next launch.`;
 }
 
 function readSetting(read: () => unknown): { ok: true; value: unknown } | { ok: false } {

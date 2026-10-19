@@ -18,6 +18,40 @@ export function truncateText(text: string, max: number): string {
   return text.slice(0, Math.max(0, max - 1)) + '…';
 }
 
+/** Shorten text to `max` chars, keeping the end (the meaningful part of a path). */
+export function truncateStart(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return '…' + text.slice(text.length - Math.max(0, max - 1));
+}
+
+type BoundModel = { provider: string; model: string };
+
+function isBoundModel(value: unknown): value is BoundModel {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof (value as BoundModel).model === 'string' &&
+    typeof (value as BoundModel).provider === 'string'
+  );
+}
+
+/**
+ * Drop schema notation that only helps someone editing the JSON file — type
+ * hints like `(true|false)` or `(number)`, and stored units the menu already
+ * converts (milliseconds, USD micros) — so the menu reads as plain language.
+ */
+export function cleanSettingDescription(description: string): string {
+  return description
+    .replace(/\s*\((?:[\w~:-]+\|)+[\w~:-]+(?:[,;]\s*([^)]*))?\)/g, (_match, rest?: string) =>
+      rest ? ` (${rest.trim()})` : '',
+    )
+    .replace(/\s*\((?:number|path|JSON array|comma-separated)\)/g, '')
+    .replace(/,?\s*in milliseconds\b/g, '')
+    .replace(/\bthis many milliseconds\b/g, 'this long')
+    .replace(/\s+([.,;])/g, '$1')
+    .trim();
+}
+
 export function formatDurationMs(ms: number, isOptionalCeiling: boolean = false): string {
   if (ms === 0) {
     return isOptionalCeiling ? 'disabled (0s)' : '0s';
@@ -186,16 +220,23 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     }
   }
 
-  // 10. Arrays & Objects
+  // 10. Model selections: show the model, not the shape of the value
+  if (isBoundModel(value)) {
+    return { text: `${value.provider}/${value.model}`, tone: 'accent' };
+  }
+  if (Array.isArray(value) && value.length > 0 && value.every(isBoundModel)) {
+    const [first, ...rest] = value;
+    return { text: rest.length > 0 ? `${first!.model} +${rest.length} more` : first!.model, tone: 'accent' };
+  }
+
+  // 11. Arrays & Objects
   if (Array.isArray(value)) {
     if (value.length === 0) {
       return { text: '(none)', tone: 'textSubtle' };
     }
-    if (value.every((item) => typeof item === 'string') && value.length <= 2) {
-      const joined = value.join(', ');
-      if (joined.length <= 30) {
-        return { text: truncateText(joined, 40), tone: 'accent' };
-      }
+    if (value.every((item) => typeof item === 'string')) {
+      const [first, ...rest] = value as string[];
+      return { text: rest.length > 0 ? `${first} +${rest.length} more` : first!, tone: 'accent' };
     }
     return {
       text: `${value.length} ${value.length === 1 ? 'item' : 'items'}`,
@@ -208,23 +249,27 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     if (keys.length === 0) {
       return { text: '(none)', tone: 'textSubtle' };
     }
+    // A name -> value map (model nicknames): the names are what you scan for.
+    if (Object.values(value as Record<string, unknown>).every((entry) => typeof entry === 'string')) {
+      const [first, ...rest] = keys;
+      return {
+        text: rest.length > 0 ? `${first}, ${rest[0]}${rest.length > 1 ? ` +${rest.length - 1} more` : ''}` : first!,
+        tone: 'accent',
+      };
+    }
     return {
       text: `${keys.length} ${keys.length === 1 ? 'entry' : 'entries'}`,
       tone: 'accent',
     };
   }
 
-  // 11. Generic Numbers
+  // 12. Generic Numbers
   if (typeof value === 'number') {
     return { text: String(value), tone: 'warning' };
   }
 
-  // 12. Generic Strings
-  const str = String(value);
-  return {
-    text: truncateText(str, 40),
-    tone: 'accent',
-  };
+  // 13. Generic Strings (the list fits them to the available width)
+  return { text: String(value), tone: 'accent' };
 }
 
 /**
@@ -234,15 +279,20 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
  */
 export function formatSettingValueDetail(key: string, value: unknown): string {
   if (isSecretSetting(key)) return value ? '********' : '<empty>';
+  if (Array.isArray(value) && value.length > 0 && value.every(isBoundModel)) {
+    return value.map((entry) => `${entry.provider}/${entry.model}`).join(', ');
+  }
   if (Array.isArray(value) && value.length > 0 && key !== SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES) {
     return JSON.stringify(value);
   }
+  if (isBoundModel(value)) return `${value.provider}/${value.model}`;
   if (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0) {
     return JSON.stringify(value);
   }
   if (typeof value === 'string' && value !== '') return value;
   if (isUsdMicrosSetting(key) && typeof value === 'number') {
-    return `${formatUsdMicros(value)} (${formatNumber(value)} micros)`;
+    // Sub-cent amounts would round to $0.00; show them exactly.
+    return value % 10_000 === 0 ? formatUsdMicros(value) : `$${value / 1_000_000}`;
   }
   return formatSettingDisplayValue(key, value).text;
 }

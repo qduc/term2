@@ -46,6 +46,8 @@ import type { ProviderRequestCapture } from '../providers/provider-request-captu
 import { getProvider, type ProviderRegistry } from '../providers/index.js';
 import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 import { createGoalStopPolicy } from '../services/conversation/durable-goal-stop-check.js';
+import { createVerifiedGoalStopPolicy } from '../services/completion-verification/goal-stop-policy.js';
+import { RootCompletionBoundary } from '../services/completion-verification/root-boundary.js';
 import { randomUUID } from 'node:crypto';
 import { fetchModels } from '../services/model-service.js';
 import {
@@ -158,6 +160,7 @@ export class AgentClient {
   #logger: ILoggingService;
   #settings: ISettingsService;
   #onGoalAchieved?: (goal: DurableGoal) => void;
+  #completionBoundary?: RootCompletionBoundary;
   #sessionContextService: ISessionContextService;
   #requestCapture?: ProviderRequestCapture;
   #providerRegistry?: ProviderRegistry;
@@ -758,6 +761,19 @@ export class AgentClient {
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
     this.#onGoalAchieved = deps.onGoalAchieved;
+    if (!agentOverride)
+      this.#completionBoundary = new RootCompletionBoundary({
+        settings: deps.settings,
+        logger: deps.logger,
+        executionContext: deps.executionContext,
+        model: () => this.#agentConfig.getModel(),
+        // Do not reuse the worker's cached transport or session context.
+        resolveModel: (model) => {
+          const provider = getProvider(this.#agentConfig.getProvider());
+          if (!provider?.createStreamedModel) throw new Error('Independent verification provider unavailable');
+          return provider.createStreamedModel(model, { settingsService: deps.settings, loggingService: deps.logger });
+        },
+      });
     this.#sessionContextService = deps.sessionContextService;
     this.#providerRegistry = deps.providerRegistry;
     this.#toolLifecycle = toolLifecycle;
@@ -1054,9 +1070,17 @@ export class AgentClient {
   }
 
   /** Root-only active-goal stop check; transient clients never receive one. */
-  #goalStopCheck(): ReturnType<typeof createGoalStopPolicy> | undefined {
+  #goalStopCheck(): ApplicationRunLoopOptions['onNormalStop'] {
     const getGoal = this.#agentConfig.goalSource;
-    return getGoal ? createGoalStopPolicy(getGoal, this.#onGoalAchieved) : undefined;
+    if (!getGoal) return undefined;
+    if (this.#settings.get('agent.completionVerification') === false || !this.#completionBoundary) {
+      return createGoalStopPolicy(getGoal, this.#onGoalAchieved);
+    }
+    return createVerifiedGoalStopPolicy({
+      getGoal,
+      onGoalAchieved: this.#onGoalAchieved,
+      verify: (goal, history, signal) => this.#completionBoundary!.verify(goal, history, signal),
+    });
   }
 
   /** Grant one finite extension to the active run-budget envelope. */
@@ -1237,6 +1261,7 @@ export class AgentClient {
     void this.disposeChatModels();
     this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();
+    this.#completionBoundary?.dispose();
     this.#blockedCompactionRearmAtEstimatedTokens = undefined;
     this.#blockedCompactionUserTurnCount = undefined;
   }

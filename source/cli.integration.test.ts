@@ -378,7 +378,12 @@ it('positional launch closes the goal after a recorded achieved goal_check and r
         ],
   );
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+    // Exercise the legacy self-check/rollback path; independent completion has its own persisted-runtime coverage.
+    agent: {
+      completionVerification: false,
+      retryAttempts: 0,
+      modelSelection: { model: 'mock-alpha', provider: 'mockprov' },
+    },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
   try {
@@ -392,7 +397,7 @@ it('positional launch closes the goal after a recorded achieved goal_check and r
     expect(JSON.stringify(mock.capturedRequests()[1])).not.toContain('Durable goal stop check');
     expect(stdout).toContain('Shipped.');
     expect(stderr).toContain(
-      "Goal (achieved): Noninteractive outcome\nSuccess criteria: Provider returns\nMarked achieved by the model's goal_check.",
+      "Goal (achieved): Noninteractive outcome\nSuccess criteria: Provider returns\nCompletion accepted after the model's goal_check.",
     );
     const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
     const events = fs

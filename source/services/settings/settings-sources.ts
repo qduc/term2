@@ -76,6 +76,8 @@ export const SETTINGS_SOURCE_KEYS = {
     },
     autoApproveReasoningEffort: 'agent.autoApproveReasoningEffort',
     decisionModel: 'agent.decisionModel',
+    completionVerification: 'agent.completionVerification',
+    verificationMaxRepairs: 'agent.verificationMaxRepairs',
     subagentExplorerReasoningEffort: 'agent.subagentExplorerReasoningEffort',
     subagentWorkerReasoningEffort: 'agent.subagentWorkerReasoningEffort',
     subagentLibrarianReasoningEffort: 'agent.subagentLibrarianReasoningEffort',

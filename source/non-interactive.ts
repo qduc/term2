@@ -410,6 +410,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     if (result.type === 'approval_required' && result.approval.checkIn === 'run_budget') return 2;
 
     if (result?.type === 'response') {
+      if (result.terminalCause === 'completion_verification_blocked') return 2;
       if (backgroundWork) {
         const deadline = Date.now() + backgroundWaitTimeoutMs;
         while (true) {
@@ -453,6 +454,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
                 }
                 return 1;
               }
+              if (result.terminalCause === 'completion_verification_blocked') return 2;
               continue;
             }
           }

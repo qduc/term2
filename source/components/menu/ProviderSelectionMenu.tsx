@@ -265,10 +265,7 @@ const ProviderSelectionMenu: FC<Props> = ({
               suffix = 'API key not configured on this host · Enter to configure';
             }
             if (disabled) {
-              // Disable state wins the suffix: it explains why the provider is
-              // missing from model pickers even though credentials are fine.
               color = isSelected ? theme.accent : theme.textSubtle;
-              suffix = 'Disabled · hidden from model pickers · Enter to edit and re-enable';
             }
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';

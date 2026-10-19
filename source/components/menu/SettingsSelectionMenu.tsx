@@ -8,7 +8,7 @@ import {
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
 import { useTheme } from '../theme.js';
-import { formatSettingDisplayValue, truncateKeepingTail } from './settings-value-formatter.js';
+import { formatSettingDisplayValue, truncateText } from './settings-value-formatter.js';
 
 type Props = {
   items: SettingCompletionItem[];
@@ -45,7 +45,7 @@ const SettingsSelectionMenu: FC<Props> = ({
   categories,
 }) => {
   const theme = useTheme();
-  const keyColWidth = Math.max(12, Math.min(32, (process.stdout.columns ?? 80) - 48));
+  const labelColWidth = Math.max(12, Math.min(32, (process.stdout.columns ?? 80) - 48));
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
   const selectedItem = items[selectedIndex];
 
@@ -81,8 +81,11 @@ const SettingsSelectionMenu: FC<Props> = ({
         footer={
           <Box flexDirection="column">
             {selectedItem && (
-              <Text color={theme.text} bold>
-                {selectedItem.key}
+              <Text>
+                <Text color={theme.text} bold>
+                  {selectedItem.label}
+                </Text>
+                <Text color={theme.textSubtle}> {selectedItem.key}</Text>
               </Text>
             )}
             {selectedItem?.description && (
@@ -114,8 +117,7 @@ const SettingsSelectionMenu: FC<Props> = ({
           const showHeader = !isSearchingAll && (actualIndex === scrollOffset || category.id !== prevCategory?.id);
 
           const valueObj = formatSettingDisplayValue(item.key, item.currentValue);
-          // Keep the tail of long keys: the leaf name is what tells siblings apart.
-          const paddedKey = truncateKeepingTail(item.key, keyColWidth).padEnd(keyColWidth, ' ') + ' ';
+          const paddedLabel = truncateText(item.label, labelColWidth).padEnd(labelColWidth, ' ') + ' ';
           const isChanged = item.source !== undefined && item.source !== 'default';
 
           return (
@@ -131,7 +133,7 @@ const SettingsSelectionMenu: FC<Props> = ({
               <Box>
                 <SelectionMarker selected={isSelected} />
                 <Text color={isSelected ? theme.accent : theme.text} bold={isSelected}>
-                  {paddedKey}
+                  {paddedLabel}
                 </Text>
                 <Text color={theme.warning}>{isChanged ? '● ' : '  '}</Text>
                 {valueObj && (

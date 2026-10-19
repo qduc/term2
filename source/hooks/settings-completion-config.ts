@@ -3,6 +3,8 @@ import { getAllSettingDescriptions } from '../services/settings/settings-ui-meta
 
 export type SettingCompletionItem = {
   key: string;
+  /** Short human-readable name shown in the settings list. */
+  label: string;
   description?: string;
   currentValue?: unknown;
   /** Where the current value comes from; anything but 'default' is a user change. */

@@ -1,4 +1,5 @@
 import { SENSITIVE_SETTINGS } from '../services/settings/settings-service.js';
+import { getSettingLabel } from '../services/settings/settings-ui-metadata.js';
 import { scoreSubsequence } from '../utils/subsequence-filter.js';
 import {
   CATEGORY_KEYS,
@@ -64,6 +65,7 @@ export function buildSettingsList(
     .filter((key) => !sensitiveKeys.has(key) && !HIDDEN_SETTINGS.has(key))
     .map((key) => ({
       key,
+      label: getSettingLabel(key),
       description: descriptions[key] || '',
       currentValue: getCurrentValue?.(key),
     }))
@@ -82,22 +84,30 @@ export function filterSettingsByQuery(
 
   return settings
     .map((item) => {
+      const normalizedQuery = trimmed.toLowerCase();
       const keyScore = scoreSubsequence(trimmed, item.key);
+      const labelScore = scoreSubsequence(trimmed, item.label);
       const hasDescriptionSubstring = item.description
-        ? item.description.toLowerCase().includes(trimmed.toLowerCase())
+        ? item.description.toLowerCase().includes(normalizedQuery)
         : false;
       const descriptionScore =
         item.description && hasDescriptionSubstring ? scoreSubsequence(trimmed, item.description) : -Infinity;
 
-      const normalizedQuery = trimmed.toLowerCase();
       const normalizedKey = item.key.toLowerCase();
-      const exactMatch = normalizedKey === normalizedQuery;
-      const prefixMatch = normalizedKey.startsWith(normalizedQuery);
+      const normalizedLabel = item.label.toLowerCase();
+      const keyExactMatch = normalizedKey === normalizedQuery;
+      const keyPrefixMatch = normalizedKey.startsWith(normalizedQuery);
+      const labelExactMatch = normalizedLabel === normalizedQuery;
+      const labelPrefixMatch = normalizedLabel.startsWith(normalizedQuery);
       const weightedKey =
-        keyScore === -Infinity ? -Infinity : keyScore * 3 + (exactMatch ? 10_000 : prefixMatch ? 5_000 : 0);
+        keyScore === -Infinity ? -Infinity : keyScore * 3 + (keyExactMatch ? 10_000 : keyPrefixMatch ? 5_000 : 0);
+      const weightedLabel =
+        labelScore === -Infinity
+          ? -Infinity
+          : labelScore * 3 + (labelExactMatch ? 10_000 : labelPrefixMatch ? 5_000 : 0);
       const weightedDescription = descriptionScore === -Infinity ? -Infinity : descriptionScore;
 
-      const score = Math.max(weightedKey, weightedDescription);
+      const score = Math.max(weightedKey, weightedLabel, weightedDescription);
       return { item, score };
     })
     .filter(({ score }) => score !== -Infinity)

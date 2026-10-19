@@ -5,6 +5,8 @@ export type SettingValueType = 'string' | 'number' | 'boolean' | 'array' | 'obje
 
 export type SettingUIMetadata = {
   key: string;
+  /** Short human-readable name for menus; falls back to a humanized key. */
+  label: string;
   type: SettingValueType;
   enumOptions?: string[];
   description?: string;
@@ -12,6 +14,167 @@ export type SettingUIMetadata = {
   isRuntimeModifiable: boolean;
   isArray: boolean;
 };
+
+/**
+ * Short, human-readable names for the settings list. A setting without an entry
+ * here still renders through `humanizeSettingKey`, so new keys never fall back
+ * to showing the raw dotted key alone.
+ */
+export const SETTING_LABELS: Record<string, string> = {
+  [SETTING_KEYS.ENABLE_AGENT_WORKFLOW]: 'Agent workflows',
+  [SETTING_KEYS.AGENT_MODEL_SELECTION]: 'Model',
+  [SETTING_KEYS.AGENT_SMART_MODEL]: 'Smart model',
+  [SETTING_KEYS.AGENT_SMART_REASONING_EFFORT]: 'Smart reasoning effort',
+  [SETTING_KEYS.AGENT_BALANCED_MODEL]: 'Balanced model',
+  [SETTING_KEYS.AGENT_BALANCED_REASONING_EFFORT]: 'Balanced reasoning effort',
+  [SETTING_KEYS.AGENT_CHEAP_MODEL]: 'Cheap model',
+  [SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT]: 'Cheap reasoning effort',
+  [SETTING_KEYS.AGENT_CHORE_MODEL]: 'Chore model',
+  [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort',
+  [SETTING_KEYS.AGENT_TEMPERATURE]: 'Temperature',
+  [SETTING_KEYS.AGENT_FAVORITE_MODELS]: 'Favorite models',
+  [SETTING_KEYS.AGENT_MODEL_NICKNAMES]: 'Model nicknames',
+  [SETTING_KEYS.AGENT_DISABLED_PROVIDERS]: 'Disabled providers',
+  [SETTING_KEYS.AGENT_MAX_TURNS]: 'Max turns',
+  [SETTING_KEYS.AGENT_MAX_REQUEST_INPUT_TOKENS]: 'Max request input tokens',
+  [SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS]: 'Max output tokens',
+  [SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS]: 'Max streamed output',
+  [SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS]: 'Model request time limit',
+  [SETTING_KEYS.AGENT_MAX_MODEL_STREAM_IDLE_MS]: 'Model stream idle limit',
+  [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Retry attempts',
+  [SETTING_KEYS.AGENT_TRANSPORT]: 'Transport',
+  [SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS]: 'Max parallel tool calls',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]: 'Run budget (USD)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]: 'Run budget (tokens)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]: 'Run budget (active time)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]: 'Warning headroom (USD)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS]: 'Warning headroom (tokens)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS]: 'Warning headroom (time)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS]: 'Soft headroom (USD)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS]: 'Soft headroom (tokens)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS]: 'Soft headroom (time)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP]: 'Turn backstop',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT]: 'Budget extension percent',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS]: 'Max parent extensions',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]: 'Identical tool-call threshold',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]: 'Budget escalation',
+  [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED]: 'Background check-ins',
+  [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS]: 'Check-in interval',
+  [SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED]: 'Session rollover',
+  [SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES]: 'Rollover milestones',
+  [SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF]: 'Auto-pass rollover brief',
+  [SETTING_KEYS.AGENT_OPENROUTER_API_KEY]: 'OpenRouter API key',
+  [SETTING_KEYS.AGENT_OPENAI_API_KEY]: 'OpenAI API key',
+  [SETTING_KEYS.AGENT_OPENROUTER_BASE_URL]: 'OpenRouter base URL',
+  [SETTING_KEYS.AGENT_OPENROUTER_REFERRER]: 'OpenRouter referrer',
+  [SETTING_KEYS.AGENT_OPENROUTER_TITLE]: 'OpenRouter title',
+  [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]: 'Codex first-frame timeout',
+  [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]: 'Codex inter-frame timeout',
+  [SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT]: 'Mentor reasoning effort',
+  [SETTING_KEYS.AGENT_MENTOR_SAMPLES]: 'Mentor samples',
+  [SETTING_KEYS.AGENT_MENTOR_POOL]: 'Mentor pool',
+  [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]: 'Flex service tier',
+  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED]: 'Context compaction',
+  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE]: 'Compaction mode',
+  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD]: 'Compaction threshold',
+  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS]: 'Compaction token ceiling',
+  [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell timeout',
+  [SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT]: 'Background shell timeout',
+  [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Shell output lines',
+  [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Shell output chars',
+  [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell auto-approval',
+  [SETTING_KEYS.SANDBOX_ENABLED]: 'Sandbox',
+  [SETTING_KEYS.SANDBOX_READ_POLICY]: 'Sandbox read policy',
+  [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Sandbox extra read paths',
+  [SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]: 'Docker host-control projects',
+  [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Sandbox networking',
+  [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]: 'Auto-approval reasoning effort',
+  [SETTING_KEYS.AGENT_DECISION_MODEL]: 'Decision model',
+  [SETTING_KEYS.AGENT_COMPLETION_VERIFICATION]: 'Completion verification',
+  [SETTING_KEYS.AGENT_VERIFICATION_MAX_REPAIRS]: 'Max verification repairs',
+  [SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT]: 'Explorer subagent effort',
+  [SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT]: 'Worker subagent effort',
+  [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT]: 'Librarian subagent effort',
+  [SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS]: 'Subagent session TTL',
+  [SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP]: 'Subagent message cap',
+  [SETTING_KEYS.UI_HISTORY_SIZE]: 'History size',
+  [SETTING_KEYS.UI_PASTE_THRESHOLD]: 'Paste threshold',
+  [SETTING_KEYS.UI_DISPLAY_MODE]: 'Display mode',
+  [SETTING_KEYS.UI_THEME]: 'Theme',
+  [SETTING_KEYS.UI_SKIN]: 'Skin',
+  [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Log level',
+  [SETTING_KEYS.LOGGING_DISABLE]: 'Disable logging',
+  [SETTING_KEYS.LOGGING_DEBUG]: 'Debug logging',
+  [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]: 'Suppress console output',
+  [SETTING_KEYS.ENV_NODE_ENV]: 'Node environment',
+  [SETTING_KEYS.APP_SHELL_PATH]: 'Shell path',
+  [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile',
+  [SETTING_KEYS.APP_MENTOR_MODE]: 'Mentor mode',
+  [SETTING_KEYS.APP_LITE_MODE]: 'Lite mode',
+  [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode',
+  [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Orchestrator mode',
+  [SETTING_KEYS.APP_NOTIFICATIONS]: 'Notifications',
+  [SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL]: 'Approval notifications',
+  [SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE]: 'Completion notifications',
+  [SETTING_KEYS.APP_SEARCH_VIA_SHELL]: 'Search via shell',
+  [SETTING_KEYS.TOOLS_LOG_FILE_OPS]: 'Log file operations',
+  [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Edit healing',
+  [SETTING_KEYS.TOOLS_SHELL_ENABLED]: 'Shell tools',
+  [SETTING_KEYS.TOOLS_WEB_ENABLED]: 'Web tools',
+  [SETTING_KEYS.TOOLS_FILE_READ_ENABLED]: 'File read tools',
+  [SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED]: 'File edit tools',
+  [SETTING_KEYS.TOOLS_MEMORY_ENABLED]: 'Memory tools',
+  [SETTING_KEYS.TOOLS_SESSIONS_ENABLED]: 'Session tools',
+  [SETTING_KEYS.TOOLS_SKILLS_ENABLED]: 'Skill tools',
+  [SETTING_KEYS.TOOLS_MENTOR_ENABLED]: 'Mentor tool',
+  [SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED]: 'Subagent tools',
+  [SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED]: 'Background task tools',
+  [SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED]: 'ask_user tool',
+  [SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED]: 'Code context tools',
+  [SETTING_KEYS.DEBUG_BASH_TOOL]: 'Bash tool debugging',
+  [SETTING_KEYS.SSH_ENABLED]: 'SSH',
+  [SETTING_KEYS.SSH_HOST]: 'SSH host',
+  [SETTING_KEYS.SSH_PORT]: 'SSH port',
+  [SETTING_KEYS.SSH_USERNAME]: 'SSH username',
+  [SETTING_KEYS.SSH_REMOTE_DIR]: 'SSH remote directory',
+  [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider',
+  [SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY]: 'Tavily API key',
+  [SETTING_KEYS.WEB_SEARCH_EXA_API_KEY]: 'Exa API key',
+  [SETTING_KEYS.WEB_SEARCH_FIRECRAWL_API_KEY]: 'Firecrawl API key',
+  [SETTING_KEYS.WEB_SEARCH_FIRECRAWL_BASE_URL]: 'Firecrawl base URL',
+  [SETTING_KEYS.WEB_SEARCH_SEARXNG_BASE_URL]: 'SearXNG base URL',
+  [SETTING_KEYS.MEMORY_ENABLED]: 'Memory',
+  [SETTING_KEYS.MEMORY_DIRECTORY]: 'Memory directory',
+  [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Memory context budget',
+  [SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT]: 'Memory search results',
+  [SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT]: 'Memory max search results',
+  [SETTING_KEYS.HOOKS_USER_ENABLED]: 'User hooks',
+  [SETTING_KEYS.HOOKS_PROJECT_ENABLED]: 'Project hooks',
+  [SETTING_KEYS.HOOKS_TRUSTED_PROJECT_ROOTS]: 'Trusted hook roots',
+  [SETTING_KEYS.HOOKS_INCLUDE_USER_TEXT]: 'Include user text',
+  [SETTING_KEYS.HOOKS_INCLUDE_TOOL_ARGUMENTS]: 'Include tool arguments',
+  [SETTING_KEYS.HOOKS_INCLUDE_TOOL_RESULTS]: 'Include tool results',
+  [SETTING_KEYS.HOOKS_TIMEOUT_MS]: 'Hook timeout',
+};
+
+/**
+ * Turn a dotted setting key into a readable name when no curated label exists
+ * (for example a key added after `SETTING_LABELS`).
+ */
+export function humanizeSettingKey(key: string): string {
+  const leaf = key.slice(key.lastIndexOf('.') + 1);
+  const words = leaf
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .toLowerCase()
+    .trim();
+  if (!words) return key;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function getSettingLabel(key: string): string {
+  return SETTING_LABELS[key] ?? humanizeSettingKey(key);
+}
 
 /**
  * Fallback descriptions for setting keys whose schema field does not define a `.describe()` text.
@@ -253,6 +416,7 @@ export function getSettingMetadata(key: string): SettingUIMetadata | undefined {
     const isSecret = /(^|\.)apiKey$/.test(key);
     return {
       key,
+      label: getSettingLabel(key),
       type: 'string',
       isSecret,
       isRuntimeModifiable: RUNTIME_MODIFIABLE_SETTINGS.has(key),
@@ -299,6 +463,7 @@ export function getSettingMetadata(key: string): SettingUIMetadata | undefined {
 
   return {
     key,
+    label: getSettingLabel(key),
     type,
     enumOptions,
     description,

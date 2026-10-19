@@ -12,29 +12,10 @@ export interface FormattedSettingValue {
   tone?: ColorRole;
 }
 
-function truncate(text: string, max: number): string {
+/** Shorten text to `max` chars, keeping the start and marking the cut. */
+export function truncateText(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, Math.max(0, max - 1)) + '…';
-}
-
-/**
- * Shorten a dotted setting key to `max` chars, keeping the first segment and
- * as much of the tail as fits (`agent.…warningHeadroomActiveTimeMs`).
- */
-export function truncateKeepingTail(key: string, max: number): string {
-  if (key.length <= max) return key;
-  const firstDot = key.indexOf('.');
-  const leaf = key.slice(key.lastIndexOf('.') + 1);
-  if (leaf.length > max - 1) {
-    const boundary = [...leaf.matchAll(/[A-Z]/g)]
-      .map((match) => match.index!)
-      .find((index) => leaf.length - index <= max - 1);
-    return `…${boundary === undefined ? leaf : leaf.slice(boundary)}`;
-  }
-  // Keep the first segment only when the whole leaf name still fits after it.
-  const head = firstDot > 0 && firstDot + 2 + leaf.length <= max ? key.slice(0, firstDot + 1) : '';
-  const tailLength = Math.max(0, max - head.length - 1);
-  return `${head}…${key.slice(key.length - tailLength)}`;
 }
 
 export function formatDurationMs(ms: number, isOptionalCeiling: boolean = false): string {
@@ -213,7 +194,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     if (value.every((item) => typeof item === 'string') && value.length <= 2) {
       const joined = value.join(', ');
       if (joined.length <= 30) {
-        return { text: truncate(joined, 40), tone: 'accent' };
+        return { text: truncateText(joined, 40), tone: 'accent' };
       }
     }
     return {
@@ -241,7 +222,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
   // 12. Generic Strings
   const str = String(value);
   return {
-    text: truncate(str, 40),
+    text: truncateText(str, 40),
     tone: 'accent',
   };
 }

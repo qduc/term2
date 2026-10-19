@@ -351,6 +351,8 @@ it.sequential('shows the typed settings query above the filtered menu', async ()
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(lastFrame()).toContain('Filter: shell.time');
+  // The filtered list shows human-readable names; the key stays in the footer.
+  expect(lastFrame()).toContain('Shell timeout');
 });
 
 it.sequential('settings filter prompt uses the filter query instead of a legacy prompt fallback', async () => {

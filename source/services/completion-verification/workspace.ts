@@ -8,6 +8,21 @@ import type { CompletionProposal } from './contracts.js';
 const execute = promisify(execFile);
 const MAX_BYTES = 2 * 1024 * 1024;
 
+/**
+ * A workspace shape the read-only verifier cannot attest. The reason travels to the
+ * user and the log instead of collapsing into one generic verification failure.
+ */
+export class UnsupportedWorkspaceError extends Error {
+  readonly reason: string;
+  readonly detail?: string;
+  constructor(reason: string, message: string, detail?: string) {
+    super(message);
+    this.name = 'UnsupportedWorkspaceError';
+    this.reason = reason;
+    this.detail = detail;
+  }
+}
+
 export async function verificationGit(cwd: string, args: string[], signal?: AbortSignal): Promise<string> {
   const prefix = ['--no-pager', '--literal-pathspecs', '-c', 'core.fsmonitor=false'];
   const options = {
@@ -27,7 +42,11 @@ export async function verificationGit(cwd: string, args: string[], signal?: Abor
         options,
       );
       if (filters.stdout.length > 0)
-        throw new Error('Executable Git filters are unsupported by read-only verification');
+        throw new UnsupportedWorkspaceError(
+          'executable-git-filters-unsupported',
+          'Executable Git filters are configured; read-only verification cannot run repository-selected programs',
+          filters.stdout,
+        );
     } catch (error) {
       if ((error as { code?: unknown }).code !== 1) throw error;
     }
@@ -55,9 +74,26 @@ export async function readVerificationFile(root: string, filename: string): Prom
 
 export type WorkspaceSnapshot = Pick<CompletionProposal, 'revision' | 'environment' | 'files' | 'classification'>;
 
+/** The repository root, or an explicit unsupported-workspace reason when there is none. */
+async function repositoryRoot(cwd: string): Promise<string> {
+  try {
+    return (await verificationGit(cwd, ['rev-parse', '--show-toplevel'])).trim();
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const detail = typeof stderr === 'string' ? stderr.trim() : '';
+    if (detail.includes('not a git repository'))
+      throw new UnsupportedWorkspaceError(
+        'not-a-git-repository',
+        'the working directory is not inside a Git repository, so completion cannot be verified',
+        detail,
+      );
+    throw error;
+  }
+}
+
 /** Hash HEAD, staged/unstaged changes and untracked contents; a commit alone is insufficient. */
 export async function snapshotWorkspace(cwd: string): Promise<WorkspaceSnapshot> {
-  const root = (await verificationGit(cwd, ['rev-parse', '--show-toplevel'])).trim();
+  const root = await repositoryRoot(cwd);
   const [head, diff, changed, untracked] = await Promise.all([
     verificationGit(root, ['rev-parse', 'HEAD']),
     verificationGit(root, ['diff', '--no-ext-diff', '--no-textconv', '--binary', 'HEAD', '--']),
@@ -66,7 +102,11 @@ export async function snapshotWorkspace(cwd: string): Promise<WorkspaceSnapshot>
   ]);
   const untrackedFiles = untracked.split('\0').filter(Boolean).sort();
   const files = [...new Set([...changed.split('\0').filter(Boolean), ...untrackedFiles])].sort();
-  if (files.length > 512) throw new Error('Verification change set exceeds the input budget');
+  if (files.length > 512)
+    throw new UnsupportedWorkspaceError(
+      'change-set-too-large',
+      `the change set holds ${files.length} files, above the 512-file verification budget`,
+    );
   let documentation = files.length > 0 && files.every((file) => /\.(md|txt|rst)$/i.test(file));
   if (documentation) {
     for (const file of files) {
@@ -86,9 +126,17 @@ export async function snapshotWorkspace(cwd: string): Promise<WorkspaceSnapshot>
   for (const file of untrackedFiles) {
     const resolved = path.resolve(root, file);
     const stat = await lstat(resolved);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Untracked file type cannot be verified');
+    if (!stat.isFile() || stat.isSymbolicLink())
+      throw new UnsupportedWorkspaceError(
+        'untracked-file-type-unsupported',
+        `the untracked path ${file} is not a regular file`,
+      );
     bytes += stat.size;
-    if (bytes > MAX_BYTES) throw new Error('Verification artifacts exceed the input budget');
+    if (bytes > MAX_BYTES)
+      throw new UnsupportedWorkspaceError(
+        'artifacts-too-large',
+        'the untracked contents exceed the 2 MiB verification budget',
+      );
     hash
       .update(file)
       .update('\0')

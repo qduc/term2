@@ -18,6 +18,7 @@ import {
 } from './contracts.js';
 import { readVerificationFile, snapshotWorkspace, verificationGit } from './workspace.js';
 import { createIndependentVerifier, runQuickCheck } from './verifier.js';
+import { RootCompletionBoundary } from './root-boundary.js';
 import { createVerificationGate } from './gate.js';
 import { createVerifiedGoalStopPolicy } from './goal-stop-policy.js';
 import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
@@ -220,6 +221,37 @@ describe('completion verification through repository and persisted task boundari
       expect(result.action).toBe(fail ? 'repair' : 'complete');
       expect(store.read('task')?.decision?.action).toBe('quick_check');
       expect(store.read('task')?.report?.outcome).toBe(fail ? 'FAIL' : 'PASS');
+    },
+  );
+
+  it.each(['staged', 'untracked'] as const)(
+    'the deterministic checker fails on a %s whitespace error inside the attested revision',
+    async (kind) => {
+      if (kind === 'staged') {
+        // `git diff --check` without HEAD cannot see a staged change.
+        await writeFile(path.join(root, 'README.md'), 'Trailing whitespace  \n');
+        await git('git', ['-C', root, 'add', 'README.md']);
+      } else {
+        await writeFile(path.join(root, 'notes.txt'), 'Trailing whitespace  \n');
+      }
+      const taskId = `task-${kind}`;
+      const input = {
+        ...proposal,
+        taskId,
+        ...(await snapshotWorkspace(root)),
+        criteria: 'git diff --check',
+        quickCheck: 'diff_whitespace' as const,
+      };
+      const result = await new CompletionVerificationOrchestrator(
+        store,
+        operations({
+          gate: async () => decision('quick_check'),
+          quickCheck: runQuickCheck,
+        }),
+        budgets,
+      ).propose(input);
+      expect(result.action).toBe('repair');
+      expect(store.read(taskId)?.report?.outcome).toBe('FAIL');
     },
   );
 
@@ -778,6 +810,46 @@ it('new user steering supersedes an autonomous repair deadline without changing 
   expect(stream.terminalCause).toBeUndefined();
   expect(calls).toBe(2);
   expect(store.read('task')).toMatchObject({ repairs: 1, state: 'REPAIR_REQUIRED' });
+});
+
+it('an unsupported workspace blocks with a named reason and an operational alert', async () => {
+  const plain = await mkdtemp(path.join(os.tmpdir(), 'completion-verification-plain-'));
+  const alerts: Record<string, unknown>[] = [];
+  const logger = {
+    ...createMockLogger(),
+    error: (_message: string, meta?: Record<string, unknown>) => {
+      if (meta) alerts.push(meta);
+    },
+  };
+  const boundary = new RootCompletionBoundary({
+    settings: createMockSettings({ 'memory.enabled': false }),
+    logger,
+    executionContext: createMockExecutionContext(plain),
+    resolveModel: () => {
+      throw new Error('the unsupported workspace must never reach a model');
+    },
+    model: () => 'fixture',
+  });
+  try {
+    const verdict = await boundary.verify(
+      { id: 'plain-goal', outcome: 'Do the thing', successCriteria: 'It is done', status: 'active' },
+      [],
+      new AbortController().signal,
+    );
+    expect(verdict.action).toBe('blocked');
+    // The reason names the cause instead of collapsing into a generic failure.
+    expect(verdict.action === 'blocked' ? verdict.reason : '').toContain('not inside a Git repository');
+    expect(verdict.action === 'blocked' ? verdict.reason : '').not.toContain('goal persistence failed');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      eventType: 'completion_verification.operational_alert',
+      reason: 'not-a-git-repository',
+    });
+    expect(alerts[0]?.taskId).toEqual(expect.any(String));
+  } finally {
+    boundary.dispose();
+    await rm(plain, { recursive: true, force: true });
+  }
 });
 
 it('the root AgentClient uses a separate provider instance and persists completion before closing the goal', async () => {

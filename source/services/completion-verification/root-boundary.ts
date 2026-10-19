@@ -11,7 +11,7 @@ import { DEFAULT_BUDGETS, type CompletionVerdict } from './contracts.js';
 import { createVerificationGate } from './gate.js';
 import { CompletionVerificationOrchestrator } from './orchestrator.js';
 import { VerificationStore } from './store.js';
-import { snapshotWorkspace } from './workspace.js';
+import { UnsupportedWorkspaceError, snapshotWorkspace, type WorkspaceSnapshot } from './workspace.js';
 import { createIndependentVerifier, runQuickCheck } from './verifier.js';
 
 /** Root durable-goal adapter. The generic orchestrator has no dependency on conversational state. */
@@ -32,15 +32,42 @@ export class RootCompletionBoundary {
     return (this.#store ??= new VerificationStore(path.join(envPaths('term2').data, 'completion-verification.sqlite')));
   }
 
+  /**
+   * An unsupported workspace is an explicit outcome, not a generic failure: the user
+   * gets the reason and the operator gets an alert naming the task and the cause.
+   */
+  #unsupported(reason: string, message: string, goal: DurableGoal, cwd: string, detail?: string): CompletionVerdict {
+    this.deps.logger.error('Completion verification cannot inspect this workspace', {
+      eventType: 'completion_verification.operational_alert',
+      reason,
+      detail: detail ?? message,
+      environment: cwd,
+      taskId: createHash('sha256').update(`${cwd}\0${goal.id}`).digest('hex'),
+    });
+    return { action: 'blocked', reason: `Unsupported workspace: ${message}` };
+  }
+
   async verify(
     goal: DurableGoal,
     history: readonly ProviderInputItem[],
     signal?: AbortSignal,
   ): Promise<CompletionVerdict> {
-    if (this.deps.executionContext?.isRemote())
-      return { action: 'blocked', reason: 'Remote workspace verification is unavailable' };
     const cwd = this.deps.executionContext?.getCwd() ?? process.cwd();
-    const snapshot = await snapshotWorkspace(cwd);
+    if (this.deps.executionContext?.isRemote())
+      return this.#unsupported(
+        'remote-workspace-unsupported',
+        'Remote workspace verification is unavailable',
+        goal,
+        cwd,
+      );
+    let snapshot: WorkspaceSnapshot;
+    try {
+      snapshot = await snapshotWorkspace(cwd);
+    } catch (error) {
+      if (error instanceof UnsupportedWorkspaceError)
+        return this.#unsupported(error.reason, error.message, goal, cwd, error.detail);
+      throw error;
+    }
     if (signal?.aborted) return { action: 'blocked', reason: 'Completion verification cancelled' };
     if (!this.#orchestrator) {
       const settings = this.deps.settings;

@@ -10,7 +10,9 @@ precedence over its earlier phased-rollout sequence; model quality thresholds ha
 The first integration covers root durable goals in local Git repositories. Ordinary responses without
 an active goal, blocked/deferred self-checks, and transient subagents keep their existing lifecycle.
 Remote, non-Git, oversized, unsupported, and unverifiable workspace snapshots cannot authorize an achieved
-proposal. Independent verification currently supports repository inspection rather than arbitrary test
+proposal. Each one names its cause to the user and writes a `completion_verification.operational_alert`
+carrying the reason, the workspace path and the task id; such a workspace has no attested revision, so it
+leaves no persisted verification row. Independent verification currently supports repository inspection rather than arbitrary test
 execution. Tasks needing runtime evidence return INCONCLUSIVE when that evidence cannot be obtained.
 
 `adaptive-verification-v1` requires independent verification for executable/configuration and unknown
@@ -26,7 +28,10 @@ The gate receives a bounded original goal, criteria, host-observed change metada
 
 The only initial deterministic checker applies when the exact acceptance criterion is
 `git diff --check` and the changes are eligible documentation. Every other quick-check recommendation
-is upgraded to independent verification. A failed quick check requests repair, never completion.
+is upgraded to independent verification. A failed quick check requests repair, never completion. The check
+covers exactly the change set the revision attests to: tracked changes against HEAD, staged and unstaged
+alike, plus every untracked file. A staged whitespace error is inside the attested revision, so the check
+must see it.
 
 ## Isolation and evidence
 

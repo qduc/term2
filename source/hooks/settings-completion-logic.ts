@@ -97,7 +97,7 @@ export function filterSettingsByQuery(
   }
 
   const words = trimmed.split(/\s+/);
-  const advancedPenalty = (item: SettingCompletionItem) => (item.isAdvanced ? 5 : 0);
+  const advancedPenalty = (item: SettingCompletionItem) => (item.isAdvanced ? 20 : 0);
 
   const exact = settings
     .map((item) => {

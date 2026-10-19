@@ -8,6 +8,14 @@ import { formatSettingValueDetail } from '../menu/settings-value-formatter.js';
 import { getSettingLabel, isKnownSettingKey } from '../../services/settings/settings-ui-metadata.js';
 import { SETTING_ENV_VARIABLES } from '../../services/settings/settings-env.js';
 
+function readBack(settingsService: SettingsService, key: string): unknown {
+  try {
+    return settingsService.getDynamic(key);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Why a saved value will not survive the next launch, if something overrides it. */
 function startupOverrideNote(settingsService: SettingsService, key: string): string | undefined {
   const source = settingsService.getStartupOverride(key);
@@ -66,6 +74,16 @@ export function handleSettingsIntent(request: IntentRequest, deps: SettingsInten
       // only a failed write means the user's change was lost.
       const lastWrite = settingsService.getLastDurableWrite();
       const saved = !(lastWrite?.status === 'not-persisted' && lastWrite.reason === 'failed');
+      // The service drops a value the schema does not hold (a key that only
+      // looks like `agent.<provider>.apiKey`) without throwing; read it back.
+      for (const change of intent.changes) {
+        if (readBack(settingsService, change.key) === undefined && change.value !== undefined) {
+          fieldErrors[change.key] = `"${change.key}" is not a setting term2 can store`;
+        }
+      }
+      if (Object.keys(fieldErrors).length > 0) {
+        return { id, sourceFrameId, ok: false, message: 'Setting was not stored.', fieldErrors };
+      }
       for (const change of intent.changes) {
         const label = getSettingLabel(change.key);
         const valueText = formatSettingValueDetail(change.key, change.value);

@@ -52,8 +52,8 @@ function describeSettingState(
           : 'an environment variable'
         : 'a command-line flag';
     parts.push(`set by ${who} at startup — it wins over a saved value next launch`);
-  } else if (item.source === 'session') {
-    parts.push('changed for this session only (not saved)');
+  } else if (item.source === 'cli') {
+    parts.push('set by a command-line flag for this session');
   } else if (item.isModified && getDefaultValue) {
     parts.push(`default: ${formatSettingValueDetail(item.key, getDefaultValue(item.key))}`);
   }

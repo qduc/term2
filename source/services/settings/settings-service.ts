@@ -711,11 +711,11 @@ export class SettingsService {
     value = this.getDynamic(key);
     if (key === 'app.activeProfileId') this.normalizeProfileSelection(key, value);
 
-    // A runtime change is saved to the settings file unless the caller opts
-    // out, so it reads as a settings-file value; an unsaved one is a session
-    // change. Either way it now wins over the startup env/CLI value.
+    // A saved runtime change reads as a settings-file value. Only startup
+    // flags (--model, --effort, --profile, gateway/ACP startup) opt out of
+    // persistence, so an unsaved change is a command-line value.
     const persist = options?.persist !== false;
-    const source: SettingSource = persist ? 'config' : 'session';
+    const source: SettingSource = persist ? 'config' : 'cli';
     this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), source);
     this.sources.set(key, source);
 

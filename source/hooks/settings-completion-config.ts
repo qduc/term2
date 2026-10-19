@@ -7,8 +7,8 @@ export type SettingCompletionItem = {
   label: string;
   description?: string;
   currentValue?: unknown;
-  /** Where the current value comes from. `session` is an unsaved in-app change. */
-  source?: 'cli' | 'env' | 'config' | 'session' | 'default';
+  /** Where the current value comes from. */
+  source?: 'cli' | 'env' | 'config' | 'default';
   /** True when the current value differs from the built-in default. */
   isModified?: boolean;
   /** Environment variable or CLI flag that wins over the saved value at startup. */
@@ -91,8 +91,6 @@ export const CATEGORY_KEYS: Record<string, readonly string[]> = {
     SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
   ],
   providers: [
-    SETTING_KEYS.AGENT_OPENROUTER_API_KEY,
-    SETTING_KEYS.AGENT_OPENAI_API_KEY,
     SETTING_KEYS.WEB_SEARCH_PROVIDER,
     SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
     SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
@@ -164,9 +162,9 @@ export const CATEGORY_KEYS: Record<string, readonly string[]> = {
 export const SETTING_SEARCH_KEYWORDS: Record<string, string> = {
   [SETTING_KEYS.AGENT_MODEL_SELECTION]: 'llm main default',
   [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'thinking',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]: 'cost spend money price dollars limit cap',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]: 'limit cap duration',
-  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]: 'limit cap',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]: 'cost spend money price dollars usd budget limit cap',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]: 'budget limit cap duration',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]: 'budget limit cap',
   [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]: 'budget exhausted pause warn',
   [SETTING_KEYS.AGENT_MAX_TURNS]: 'limit cap loop',
   [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'internet network',
@@ -177,7 +175,5 @@ export const SETTING_SEARCH_KEYWORDS: Record<string, string> = {
   [SETTING_KEYS.UI_SKIN]: 'layout look style',
   [SETTING_KEYS.APP_NOTIFICATIONS]: 'alert bell desktop',
   [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'logging debug verbose',
-  [SETTING_KEYS.AGENT_OPENROUTER_API_KEY]: 'credentials token secret',
-  [SETTING_KEYS.AGENT_OPENAI_API_KEY]: 'credentials token secret',
   [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'internet browse',
 };

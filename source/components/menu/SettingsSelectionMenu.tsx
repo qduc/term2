@@ -91,25 +91,29 @@ const SettingsSelectionMenu: FC<Props> = ({
                 <Text color={theme.text} bold>
                   {selectedItem.label}
                 </Text>
-                <Text color={theme.textSubtle}> {selectedItem.key}</Text>
+                <Text color={theme.textSubtle}> · {selectedItem.key}</Text>
               </Text>
             )}
             {selectedItem?.description && (
-              <Text color={theme.accent} italic wrap="truncate-end">
-                {selectedItem.description}
-              </Text>
+              <Box marginTop={1}>
+                <Text color={theme.accent} italic wrap="truncate-end">
+                  {selectedItem.description}
+                </Text>
+              </Box>
             )}
             {stateDescription && <Text color={theme.textSubtle}>{stateDescription}</Text>}
-            <MenuFooter
-              hints={[
-                ['type', 'search all'],
-                ['↑↓', 'move'],
-                ['⏎', 'edit'],
-                ['Esc', 'close'],
-                ['●', 'changed', 'warning'],
-                ['↻', 'restart'],
-              ]}
-            />
+            <Box marginTop={1}>
+              <MenuFooter
+                hints={[
+                  ['type', 'search all'],
+                  ['↑↓', 'move'],
+                  ['⏎', 'edit'],
+                  ['Esc', 'close'],
+                  ['●', 'changed', 'warning'],
+                  ['↻', 'restart'],
+                ]}
+              />
+            </Box>
           </Box>
         }
         footerOutsideBorder={false}

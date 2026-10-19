@@ -69,7 +69,7 @@
     "test-audit": "tsx scripts/test-audit/cli.ts",
     "lint": "eslint . && prettier --check .",
     "lint-fix": "eslint --fix . && prettier --write .",
-    "post-build": "cp -r source/prompts dist/ && chmod +x dist/cli.js",
+    "post-build": "cp -r source/prompts dist/ && mkdir -p dist/providers && cp source/providers/provider-presets.json dist/providers/ && chmod +x dist/cli.js",
     "release": "./scripts/release.sh",
     "logs": "node tools/log_viewer/src/server.js",
     "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",

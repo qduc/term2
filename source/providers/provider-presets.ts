@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { KNOWN_CUSTOM_PROVIDER_TYPES } from '../services/settings/settings-schema.js';
-// TypeScript emits createRequire and copies the JSON; our formatter predates import attributes.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-import inventory = require('./provider-presets.json');
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const inventory = require('./provider-presets.json');
 
 const httpUrl = z.url().refine((value) => {
   const url = new URL(value);

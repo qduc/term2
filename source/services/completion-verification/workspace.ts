@@ -7,6 +7,10 @@ import type { CompletionProposal } from './contracts.js';
 
 const execute = promisify(execFile);
 const MAX_BYTES = 2 * 1024 * 1024;
+/** Tracked paths are probed in batches so the argument list stays inside ARG_MAX. */
+const ATTRIBUTE_BATCH = 2000;
+/** The tracked inventory is probe input rather than attested evidence, so it gets its own budget. */
+const TRACKED_PATH_BUDGET = 16 * 1024 * 1024;
 
 /**
  * A workspace shape the read-only verifier cannot attest. The reason travels to the
@@ -23,9 +27,83 @@ export class UnsupportedWorkspaceError extends Error {
   }
 }
 
+type GitProbe = {
+  cwd: string;
+  signal?: AbortSignal;
+  timeout: number;
+  maxBuffer: number;
+  env: NodeJS.ProcessEnv;
+};
+
+/**
+ * The filter names Git would actually run for the paths this repository tracks.
+ *
+ * A configured clean/process filter stays inert until an attribute binds a path to
+ * it. Ambient configuration - a runner-wide "git lfs install --system", for
+ * example - names a filter that no path selects, and must not block verification
+ * of a repository that never uses it. Reachability decides the block.
+ */
+async function reachableFilterNames(probe: GitProbe, prefix: string[]): Promise<string[]> {
+  const root = (await execute('git', [...prefix, 'rev-parse', '--show-toplevel'], probe)).stdout.trim();
+  if (!root) return [];
+  // The tracked inventory is probe input rather than attested evidence, so it
+  // gets its own budget instead of the diff-content budget.
+  const atRoot = { ...probe, cwd: root, maxBuffer: TRACKED_PATH_BUDGET };
+  const tracked = await execute('git', [...prefix, 'ls-files', '-z', '--cached'], atRoot);
+  const paths = tracked.stdout.split('\0').filter(Boolean);
+  const names = new Set<string>();
+  for (let index = 0; index < paths.length; index += ATTRIBUTE_BATCH) {
+    const batch = paths.slice(index, index + ATTRIBUTE_BATCH);
+    const attributes = await execute('git', [...prefix, 'check-attr', '-z', 'filter', '--', ...batch], atRoot);
+    // -z emits path\0attribute\0value\0 triples; only the value can name a filter.
+    const fields = attributes.stdout.split('\0');
+    for (let field = 2; field < fields.length; field += 3) {
+      const value = fields[field];
+      if (value && value !== 'unspecified' && value !== 'unset') names.add(value.toLowerCase());
+    }
+  }
+  return [...names];
+}
+
+/** Block when a tracked path selects a filter whose clean/process program Git would run. */
+async function assertNoExecutableFilters(probe: GitProbe, prefix: string[]): Promise<void> {
+  const reachable = await reachableFilterNames(probe, prefix);
+  if (reachable.length === 0) return;
+  let configured: string;
+  try {
+    configured = (
+      await execute(
+        'git',
+        [...prefix, 'config', '--null', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|process)$'],
+        probe,
+      )
+    ).stdout;
+  } catch (error) {
+    // git config --get-regexp exits 1 when nothing matches.
+    if ((error as { code?: unknown }).code !== 1) throw error;
+    return;
+  }
+  const configuredNames = configured
+    .split('\0')
+    .filter(Boolean)
+    .map((key) =>
+      key
+        .replace(/^filter\./, '')
+        .replace(/\.(clean|process)$/, '')
+        .toLowerCase(),
+    );
+  const matched = configuredNames.filter((name) => reachable.includes(name));
+  if (matched.length === 0) return;
+  throw new UnsupportedWorkspaceError(
+    'executable-git-filters-unsupported',
+    'Executable Git filters are configured; read-only verification cannot run repository-selected programs',
+    matched.join(', '),
+  );
+}
+
 export async function verificationGit(cwd: string, args: string[], signal?: AbortSignal): Promise<string> {
   const prefix = ['--no-pager', '--literal-pathspecs', '-c', 'core.fsmonitor=false'];
-  const options = {
+  const probe: GitProbe = {
     cwd,
     signal,
     timeout: 10_000,
@@ -34,24 +112,9 @@ export async function verificationGit(cwd: string, args: string[], signal?: Abor
   };
   // Even diff --no-ext-diff --no-textconv can execute clean/process filters.
   // v1 explicitly blocks filtered workspaces instead of running repository-selected programs.
-  if (args[0] === 'diff') {
-    try {
-      const filters = await execute(
-        'git',
-        [...prefix, 'config', '--null', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|process)$'],
-        options,
-      );
-      if (filters.stdout.length > 0)
-        throw new UnsupportedWorkspaceError(
-          'executable-git-filters-unsupported',
-          'Executable Git filters are configured; read-only verification cannot run repository-selected programs',
-          filters.stdout,
-        );
-    } catch (error) {
-      if ((error as { code?: unknown }).code !== 1) throw error;
-    }
-  }
-  const result = await execute('git', [...prefix, ...args], options);
+  // --no-index compares two raw files outside the index and converts neither.
+  if (args[0] === 'diff' && !args.includes('--no-index')) await assertNoExecutableFilters(probe, prefix);
+  const result = await execute('git', [...prefix, ...args], probe);
   return result.stdout;
 }
 

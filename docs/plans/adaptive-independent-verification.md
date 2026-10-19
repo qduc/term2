@@ -41,10 +41,12 @@ reasoning, explanation, confidence, memory instructions, or prior verifier concl
 offers bounded file reads, file listing, diff inspection, and a whitespace probe. It has no editor,
 arbitrary shell, delegation, approval, or task-state tools. Invalid tool use invalidates the result.
 
-Git operations disable fsmonitor and external diff/textconv/pager execution. Configured clean/process
-filters cause diff/snapshot verification to block: Git can otherwise execute those filters even with
-`--no-ext-diff --no-textconv`. This includes globally configured Git LFS filters. The initial policy
-prefers an explicit unsupported-workspace outcome over running repository-selected code.
+Git operations disable fsmonitor and external diff/textconv/pager execution. A clean/process
+filter that a tracked path selects causes diff/snapshot verification to block: Git can otherwise execute
+those filters even with `--no-ext-diff --no-textconv`. A configured filter that no path selects stays
+inert, so ambient configuration such as a system-wide Git LFS install blocks only once a repository
+binds a path to it. The initial policy prefers an explicit unsupported-workspace outcome over running
+repository-selected code.
 
 A valid report includes outcome, evidence, checked items, limitations, verifier version, attempt ID,
 revision, and reported cost when available. At least one successful independent probe is required;

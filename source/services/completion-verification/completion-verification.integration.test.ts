@@ -456,6 +456,23 @@ describe('completion verification through repository and persisted task boundari
     await expect(readFile(marker)).rejects.toThrow();
   });
 
+  it('blocks only when a tracked path selects a configured filter', async () => {
+    // A runner-wide configuration names a filter, the way "git lfs install --system" does.
+    const ambient = path.join(root, '.git', 'ambient-config');
+    await writeFile(ambient, '[filter "ambient"]\n\tclean = /bin/cat\n\tprocess = /bin/cat\n');
+    vi.stubEnv('GIT_CONFIG_GLOBAL', ambient);
+    // No path selects the filter, so Git converts nothing through it and verification runs.
+    await expect(snapshotWorkspace(root)).resolves.toMatchObject({ files: expect.any(Array) });
+    await expect(verificationGit(root, ['diff', '--no-ext-diff', '--no-textconv', 'HEAD', '--'])).resolves.toContain(
+      'README.md',
+    );
+    // The same configuration blocks as soon as the repository binds a tracked path to it.
+    await writeFile(path.join(root, '.gitattributes'), '*.md filter=ambient\n');
+    await expect(verificationGit(root, ['diff', '--no-ext-diff', '--no-textconv', 'HEAD', '--'])).rejects.toThrow(
+      'Executable Git filters',
+    );
+  });
+
   it('detects tracked, staged, committed, and untracked changes and refuses symlink escapes', async () => {
     const before = (await snapshotWorkspace(root)).revision;
     await writeFile(path.join(root, 'new.txt'), 'A\n');

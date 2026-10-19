@@ -8,6 +8,7 @@ revisited when new evidence supports doing so.
 
 Read the relevant documents before touching these areas, starting with **Resume here** where present. Keep milestone status, measurements, and implementation history in the linked documents, not this index.
 
+- **Agent assembly:** [Bounded feature composition and deferral criteria](plans/agent-assembly-migration.md)
 - **Gateway:** [Web client gateway](plans/web-client-gateway-completion.md)
 - **`run_code` runtime:** [Lifecycle and contracts](plans/run-code-codemode-improvements.md)
 - **Nested approval:** [Inline approval](plans/run-code-nested-approval.md)

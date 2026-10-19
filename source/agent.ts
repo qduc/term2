@@ -20,8 +20,11 @@ import {
   createSendMessageToolDefinition,
   createCancelRunToolDefinition,
 } from './tools/agent/run-subagent-async.js';
-import { createWebSearchToolDefinition } from './tools/web/web-search.js';
-import { createWebFetchToolDefinition } from './tools/web/web-fetch.js';
+import {
+  createSelectedActivateSkillTool,
+  createWebToolDefinitions,
+  type FeatureSelection,
+} from './services/assembly/feature-selection.js';
 import { createCreateFileToolDefinition } from './tools/file/create-file.js';
 import {
   createCodeContextSearchToolDefinition,
@@ -60,7 +63,6 @@ import { buildPromptSpec, isLiteProfile } from './prompts/prompt-constructor.js'
 import { ProfileResolutionError, resolveActiveProfile } from './services/profiles/index.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
-import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
 import { createProposeGoalToolDefinition } from './tools/agent/propose-goal.js';
 import { createGoalCheckToolDefinition } from './tools/agent/goal-check.js';
 import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow.js';
@@ -479,20 +481,13 @@ export const getAgentDefinition = (
     readOnly,
     allowUnsandboxed: deps.allowUnsandboxed,
   });
+  const features: FeatureSelection = {
+    web: hasCapability('web'),
+    activateSkill: hasCapability('skills') && Boolean(skillsService),
+  };
   const tools: RegistryToolDefinition[] = [];
   if (hasCapability('shell')) tools.push(shellTool);
-  if (hasCapability('web')) {
-    tools.push(
-      createWebSearchToolDefinition({
-        settingsService,
-        loggingService,
-      }),
-      createWebFetchToolDefinition({
-        settingsService,
-        loggingService,
-      }),
-    );
-  }
+  if (features.web) tools.push(...createWebToolDefinitions({ settingsService, loggingService }));
 
   if (
     backgroundTasksEnabled &&
@@ -535,8 +530,9 @@ export const getAgentDefinition = (
   if (hasCapability('sessions') && requestSessionRollover)
     tools.push(createSessionRolloverToolDefinition(requestSessionRollover));
 
-  if (hasCapability('skills') && skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
-    tools.push(createActivateSkillToolDefinition(skillsService));
+  if (features.activateSkill && skillsService) {
+    const activateSkill = createSelectedActivateSkillTool(skillsService);
+    if (activateSkill) tools.push(activateSkill);
   }
 
   if (hasCapability('user-interaction') && allowAskUser && proposeGoal && deps.getGoal) {

@@ -28,14 +28,16 @@ import {
   createReadCodeOutlineToolDefinition,
   createCodeContextSearchToolDefinition,
 } from '../../tools/file/code-context.js';
-import { createWebSearchToolDefinition } from '../../tools/web/web-search.js';
-import { createWebFetchToolDefinition } from '../../tools/web/web-fetch.js';
+import {
+  createSelectedActivateSkillTool,
+  createWebToolDefinitions,
+  type FeatureSelection,
+} from '../assembly/feature-selection.js';
 import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';
 import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
 import { createShellToolDefinition } from '../../tools/system/shell.js';
-import { createActivateSkillToolDefinition } from '../../tools/agent/activate-skill.js';
 import { createAskOrchestratorToolDefinition } from '../../tools/agent/ask-orchestrator.js';
 import { createRunExplorerToolDefinition, type ExplorerRunner } from '../../tools/agent/run-explorer.js';
 import type { SkillsService } from '../skills/skills-service.js';
@@ -1119,12 +1121,13 @@ export class SubagentToolFactory {
       tools.push(createAskOrchestratorToolDefinition(askOrchestrator));
     }
 
-    if (
-      !definition.isScriptGeneric &&
-      this.#skillsService &&
-      this.#skillsService.getAvailableSkillsForModel().length > 0
-    ) {
-      tools.push(createActivateSkillToolDefinition(this.#skillsService));
+    const features: FeatureSelection = {
+      web: definition.canSearchWeb === true,
+      activateSkill: !definition.isScriptGeneric && Boolean(this.#skillsService),
+    };
+    if (features.activateSkill && this.#skillsService) {
+      const activateSkill = createSelectedActivateSkillTool(this.#skillsService);
+      if (activateSkill) tools.push(activateSkill);
     }
 
     tools.push(
@@ -1205,18 +1208,14 @@ export class SubagentToolFactory {
       }
     }
 
-    if (definition.canSearchWeb) {
+    if (features.web) {
+      const [webSearch, webFetch] = createWebToolDefinitions({
+        settingsService: this.#settings,
+        loggingService: this.#logger,
+      });
       tools.push(
-        this.#toolPolicy.wrapNetworkToolWithScope(
-          createWebSearchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
-          netScope,
-          () => undefined,
-        ),
-        this.#toolPolicy.wrapNetworkToolWithScope(
-          createWebFetchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
-          netScope,
-          (params) => params.url,
-        ),
+        this.#toolPolicy.wrapNetworkToolWithScope(webSearch, netScope, () => undefined),
+        this.#toolPolicy.wrapNetworkToolWithScope(webFetch, netScope, (params) => params.url),
       );
     }
 

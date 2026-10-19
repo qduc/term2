@@ -29,10 +29,18 @@ import {
   type OAuthAccountSummary,
 } from '../providers/oauth-accounts.js';
 import { getSessionAccount } from '../providers/oauth-session-account.js';
+import { PROVIDER_PRESETS } from '../providers/provider-presets.js';
+import { getProvider } from '../providers/registry.js';
 
 export type { ProviderSelectionPhase, CustomProviderDraft, ProviderSelectionItem };
 
 export type ProviderSelectionMenuItem =
+  | {
+      kind: 'preset';
+      id: string;
+      label: string;
+      docsUrl: string;
+    }
   | {
       kind: 'provider';
       id: string;
@@ -83,7 +91,7 @@ export const useProviderSelection = (
     onSystemMessage?: (message: string) => void;
   },
 ) => {
-  const { mode, controller, setInput, replaceInput } = useInputContext();
+  const { mode, input, controller, setInput, replaceInput } = useInputContext();
   const providerSession = useMemo(() => new ProviderManagementSession(settingsService), [settingsService]);
 
   const [phase, setPhase] = useState<ProviderSelectionPhase>('list');
@@ -112,7 +120,16 @@ export const useProviderSelection = (
             hasCredentials: i.hasCredentials,
             isDisabled: i.isDisabled,
           })),
-          { kind: 'add-provider' as const, label: 'Add Custom Provider' },
+          { kind: 'add-provider' as const, label: 'Add Provider' },
+        ];
+      case 'presets':
+        return [
+          ...PROVIDER_PRESETS.filter((preset) => !preset.builtinProviderId || getProvider(preset.builtinProviderId))
+            .filter((preset) =>
+              `${preset.id} ${preset.name} ${preset.category}`.toLowerCase().includes(input.trim().toLowerCase()),
+            )
+            .map((preset) => ({ kind: 'preset' as const, id: preset.id, label: preset.name, docsUrl: preset.docsUrl })),
+          { kind: 'action' as const, label: 'Custom endpoint' },
         ];
       case 'accounts': {
         if (accounts.length === 0) {
@@ -178,7 +195,7 @@ export const useProviderSelection = (
             detail: draft.apiKey ? '********' : '<empty>',
             fieldKey: 'apiKey',
           },
-          { kind: 'action' as const, label: toggleLabel },
+          ...(editingOriginalName ? [{ kind: 'action' as const, label: toggleLabel }] : []),
           { kind: 'action' as const, label: 'Save Changes' },
           { kind: 'action' as const, label: 'Cancel' },
         ];
@@ -196,7 +213,7 @@ export const useProviderSelection = (
       default:
         return [];
     }
-  }, [phase, items, draft, editingOriginalName, accounts, accountProviderId, settingsService]);
+  }, [phase, input, items, draft, editingOriginalName, accounts, accountProviderId, settingsService]);
 
   const checkIsInactive = useCallback(
     (item: ProviderSelectionMenuItem) => {
@@ -228,6 +245,10 @@ export const useProviderSelection = (
       setScrollOffset(selectedIndex - 10 + 1);
     }
   }, [selectedIndex, scrollOffset]);
+
+  useEffect(() => {
+    if (phase === 'presets') setSelectedIndex(0);
+  }, [phase, input, setSelectedIndex]);
 
   const isOpen = mode === 'provider_selection';
 
@@ -320,7 +341,7 @@ export const useProviderSelection = (
 
     if (phase === 'list') {
       if (index === items.length) {
-        // "Add Custom Provider" selected
+        // Presets are setup templates, not registered connections.
         setFieldErrors({});
         setDiscardFromPhase(null);
         setDraftModified(false);
@@ -330,7 +351,7 @@ export const useProviderSelection = (
           baseUrl: '',
           apiKey: '',
         });
-        setPhase('wizard_name');
+        setPhase('presets');
         setSelectedIndex(0);
         setInput('');
       } else {
@@ -409,6 +430,42 @@ export const useProviderSelection = (
           }
         }
       }
+    } else if (phase === 'presets') {
+      const item = activeItems[index];
+      const preset = item?.kind === 'preset' ? PROVIDER_PRESETS.find((entry) => entry.id === item.id) : undefined;
+      setErrorMessage(null);
+      setEditingField(null);
+      setEditingOriginalName(null);
+      if (preset?.builtinProviderId) {
+        const providerId = preset.builtinProviderId;
+        if (isOAuthAccountProvider(providerId)) {
+          setAccountProviderId(providerId);
+          setAccounts(listOAuthAccounts(providerId));
+          setPhase('accounts');
+        } else {
+          const key = getProviderCredentialSettingKey(providerId);
+          setDraft({
+            name: preset.name,
+            type: providerId as CustomProviderDraft['type'],
+            apiKey: key ? String(settingsService.getDynamic(key) || '') : '',
+          });
+          setEditingOriginalName(providerId);
+          setEditingField('apiKey');
+          setPhase('wizard_key');
+        }
+      } else if (preset?.type) {
+        let name = preset.id;
+        let suffix = 2;
+        while (!validateWizardName(name, settingsService, false).valid) name = `${preset.id}-${suffix++}`;
+        setDraft({ name, type: preset.type, baseUrl: preset.baseUrl, apiKey: '' });
+        setPhase('edit_fields');
+      } else {
+        setDraft({ name: '', type: 'openai-compatible', baseUrl: '', apiKey: '' });
+        setPhase('wizard_name');
+      }
+      setSelectedIndex(preset?.type ? 3 : 0);
+      setDraftModified(false);
+      setInput('');
     } else if (phase === 'accounts') {
       const item = activeItems[index];
       if (!item || item.kind !== 'account' || !accountProviderId) return;
@@ -498,9 +555,9 @@ export const useProviderSelection = (
           setDraftModified(false);
           setPhase('wizard_key');
           replaceInput('');
-        } else if (index === 4) {
+        } else if (index === 4 && editingOriginalName) {
           toggleEditingProviderDisabled();
-        } else if (index === 5) {
+        } else if (index === (editingOriginalName ? 5 : 4)) {
           // Save Changes
           saveDraft();
         } else {
@@ -607,6 +664,9 @@ export const useProviderSelection = (
     setInput('');
     if (phase === 'list') {
       close();
+    } else if (phase === 'presets') {
+      setPhase('list');
+      setSelectedIndex(0);
     } else if (
       (phase === 'wizard_name' || phase === 'wizard_type' || phase === 'wizard_url' || phase === 'wizard_key') &&
       draftModified
@@ -742,7 +802,7 @@ export const useProviderSelection = (
 
       if (phase === 'wizard_key') {
         if (draft) {
-          const updatedDraft = { ...draft, apiKey: val || undefined };
+          const updatedDraft = { ...draft, apiKey: val || draft.apiKey };
           setDraft(updatedDraft);
           setDraftModified(true);
           const isEditingBuiltIn = editingOriginalName ? isProviderBuiltIn(editingOriginalName) : false;
@@ -755,7 +815,7 @@ export const useProviderSelection = (
           } else {
             // Wizard complete, go to fields overview before saving
             setPhase('edit_fields');
-            setSelectedIndex(isEditingBuiltIn ? 4 : 5); // focus Save changes button
+            setSelectedIndex(isEditingBuiltIn ? 4 : editingOriginalName ? 5 : 4); // focus Save changes button
             setFieldErrors({});
             setDraftModified(false);
           }
@@ -821,6 +881,7 @@ export const useProviderSelection = (
     items,
     selectedIndex,
     scrollOffset,
+    presetQuery: phase === 'presets' ? input : '',
     draft,
     errorMessage,
     fieldErrors,

@@ -1,4 +1,5 @@
 import type { ISettingsService } from '../services/service-interfaces.js';
+import { KNOWN_CUSTOM_PROVIDER_TYPES, type KnownCustomProviderType } from '../services/settings/settings-schema.js';
 import { getAllProviders, upsertProvider, unregisterProvider } from './index.js';
 import { createOpenAICompatibleProviderDefinition } from './openai-compatible-lazy.js';
 import { hasProviderCredentials, isProviderDisabled } from '../utils/ai/provider-credentials.js';
@@ -12,6 +13,7 @@ import {
 export type ProviderSelectionPhase =
   | 'list'
   | 'accounts'
+  | 'presets'
   | 'edit_fields'
   | 'wizard_name'
   | 'wizard_type'
@@ -22,7 +24,7 @@ export type ProviderSelectionPhase =
 
 export interface CustomProviderDraft {
   name: string;
-  type: 'openai-compatible' | 'openai' | 'llama.cpp' | 'anthropic' | 'google' | 'opencode';
+  type: KnownCustomProviderType;
   baseUrl?: string;
   apiKey?: string;
 }
@@ -37,14 +39,7 @@ export interface ProviderSelectionItem {
   isDisabled: boolean;
 }
 
-export const PROVIDER_TYPES: CustomProviderDraft['type'][] = [
-  'openai-compatible',
-  'openai',
-  'llama.cpp',
-  'anthropic',
-  'google',
-  'opencode',
-];
+export const PROVIDER_TYPES: CustomProviderDraft['type'][] = [...KNOWN_CUSTOM_PROVIDER_TYPES];
 
 export const PROVIDER_NAME_REGEX = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
 
@@ -92,7 +87,7 @@ export const loadProviderItems = (settingsService: ISettingsService): ProviderSe
   const activeProvider = settingsService.get('agent.modelSelection').provider || 'openai';
 
   const providerItems: ProviderSelectionItem[] = all
-    .filter((p) => !p.isRuntimeDefined)
+    .filter((p) => !p.isRuntimeDefined && hasProviderCredentials(settingsService, p.id))
     .map((p) => ({
       id: p.id,
       label: p.label,
@@ -115,18 +110,7 @@ export const loadProviderItems = (settingsService: ISettingsService): ProviderSe
     }
   }
 
-  if (!providerItems.some((p) => p.id === activeProvider)) {
-    providerItems.push({
-      id: activeProvider,
-      label: activeProvider,
-      isCustom: customList.some((c) => c.id === activeProvider),
-      isActive: true,
-      hasCredentials: hasProviderCredentials(settingsService, activeProvider),
-      isDisabled: isProviderDisabled(settingsService, activeProvider),
-    });
-  }
-
-  return providerItems;
+  return providerItems.sort((a, b) => a.label.localeCompare(b.label, 'en'));
 };
 
 export interface SaveProviderResult {

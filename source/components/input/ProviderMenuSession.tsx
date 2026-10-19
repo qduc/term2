@@ -66,7 +66,7 @@ export function ProviderMenuSession({ frame, active, controller, interactions, s
             return keep();
           case 'command':
             if (event.command === 'backspace' || event.command === 'delete') {
-              if (editingWizard) applyMenuEditorEvent(controller, event);
+              if (editingWizard || providers.phase === 'presets') applyMenuEditorEvent(controller, event);
               else providers.requestDelete();
             }
             return keep();
@@ -101,6 +101,7 @@ export function ProviderMenuSession({ frame, active, controller, interactions, s
   return (
     <ProviderSelectionMenu
       phase={providers.phase}
+      presetQuery={providers.presetQuery}
       selectedIndex={providers.selectedIndex}
       scrollOffset={providers.scrollOffset}
       activeItems={providers.getActiveItems()}

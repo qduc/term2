@@ -206,6 +206,29 @@ it.sequential('opens the slash menu and Escape cancels it through the terminal b
   expect(lastFrame()).not.toContain('/clear');
 });
 
+it.sequential('filters provider inventory through terminal input and opens an editable preset', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller);
+  await act(async () => {
+    controller.open({ kind: 'providers' });
+  });
+  await settle();
+  await writeInput(stdin, '\u001b[A');
+  await writeInput(stdin, '\r');
+  expect(lastFrame()).toContain('Add Provider');
+  expect(lastFrame()).toContain('Filter: <all>');
+  await writeInput(stdin, '\u001b[A');
+  await writeInput(stdin, 'ollamax');
+  await writeInput(stdin, '\u007f');
+  expect(lastFrame()).toContain('Filter: ollama');
+  expect(lastFrame()).toContain('Ollama (local)');
+  expect(lastFrame()).not.toContain('OpenAI');
+  await writeInput(stdin, '\r');
+  expect(lastFrame()).toContain('Review & Save Provider');
+  expect(lastFrame()).toContain('http://127.0.0.1:11434/v1');
+  expect(controller.getSnapshot().editor.text).toBe('');
+});
+
 it.sequential('copy menu owns keyboard input and accepts the selected code block', async () => {
   const controller = new MenuControllerImpl();
   const onCopySelection = vi.fn();

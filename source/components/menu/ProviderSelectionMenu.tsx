@@ -19,6 +19,7 @@ type Props = {
   selectedProviderName?: string;
   draft: CustomProviderDraft | null;
   allowCodexSelection?: boolean;
+  presetQuery?: string;
 };
 
 const ProviderSelectionMenu: FC<Props> = ({
@@ -31,13 +32,16 @@ const ProviderSelectionMenu: FC<Props> = ({
   selectedProviderName,
   draft,
   allowCodexSelection = false,
+  presetQuery = '',
 }) => {
   const theme = useTheme();
   const { MenuFrame } = useSkin();
   const getHeader = () => {
     switch (phase) {
       case 'list':
-        return 'Provider Management';
+        return 'Your Providers';
+      case 'presets':
+        return 'Add Provider';
       case 'accounts':
         return `Accounts: ${selectedProviderName ?? 'Provider'}`;
       case 'wizard_type':
@@ -87,6 +91,14 @@ const ProviderSelectionMenu: FC<Props> = ({
           ['Esc', 'back'],
         ];
         break;
+      case 'presets':
+        hints = [
+          ['type', 'filter presets'],
+          ['↑↓', 'navigate'],
+          ['⏎', 'select'],
+          ['Esc', 'back'],
+        ];
+        break;
       case 'edit_fields':
         hints = [
           ['↑↓', 'navigate'],
@@ -127,7 +139,9 @@ const ProviderSelectionMenu: FC<Props> = ({
       description = 'Enter the Base API URL (e.g. http://localhost:11434/v1).';
       currentValue = draft?.baseUrl || '';
     } else if (phase === 'wizard_key') {
-      description = 'Enter the API key for credentials. Leave empty if none required.';
+      description = draft?.apiKey
+        ? 'Enter a replacement API key, or leave empty to keep the current key.'
+        : 'Enter the API key for credentials. Leave empty if none required.';
       currentValue = draft?.apiKey ? '********' : '';
     }
 
@@ -181,6 +195,8 @@ const ProviderSelectionMenu: FC<Props> = ({
     return maxLen + 2;
   })();
 
+  const selectedItem = activeItems[selectedIndex];
+
   return (
     <Box flexDirection="column">
       <Box marginBottom={0}>
@@ -188,6 +204,12 @@ const ProviderSelectionMenu: FC<Props> = ({
           {getHeader()}
         </Text>
       </Box>
+      {phase === 'presets' && (
+        <Box flexDirection="column">
+          <Text color={theme.textSubtle}>Connection templates · Filter: {presetQuery || '<all>'}</Text>
+          {selectedItem?.kind === 'preset' && <Text color={theme.textSubtle}>{selectedItem.docsUrl}</Text>}
+        </Box>
+      )}
       {phase === 'confirm_delete' && (
         <Box marginTop={1} marginBottom={0}>
           <Text color={theme.danger} bold>
@@ -224,9 +246,6 @@ const ProviderSelectionMenu: FC<Props> = ({
           let bold = isSelected;
 
           if (item.kind === 'provider') {
-            // Built-in (non-active): greyed out, not actionable on Enter.
-            // Custom providers remain bright so they look interactive.
-            // Note: openai and openrouter remain active/bright because we can change their api key.
             const unavailable = item.hasCredentials === false;
             const disabled = item.isDisabled === true;
             color = isInactive

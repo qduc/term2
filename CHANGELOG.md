@@ -1,3 +1,23 @@
+## [0.34.0] - 2026-10-19
+
+### Features
+- Durable goal completion can now be gated by adaptive independent verification before being marked achieved, evaluating actual changes against the stated outcome and criteria (`agent.completionVerification`).
+- Expose runtime model and provider discovery to agents and `run_code` scripts via `list_models`, supporting pagination, credential readiness checks, and session usage stats.
+- Declarative provider presets inventory for streamlined provider connection and custom endpoint configuration.
+
+### Improvements
+- The `/settings` menu is reorganized into curated tabs (Models, Providers, Context, Safety, Tools, UI, Hooks) with human-readable labels, dollar-denominated run budget inputs, masked sensitive API keys, and in-place boolean toggling. Advanced settings are tagged and discoverable via search.
+- Upstream Grok client versions are resolved dynamically to prevent 426 upgrade rejections.
+- Consolidated web and skill tool construction for root and child agent assemblies.
+
+### Bug Fixes
+- Providers returning unrecognized bodies with HTTP 200 (such as error payloads) surface descriptive errors instead of silently producing an empty model catalog.
+- Fixed handling of null model list items when parsing OrcaRouter models.
+
+### Internal/Chores
+- Updated upstream model catalog.
+- Added test coverage for Codex approval crash recovery.
+
 ## [0.33.0] - 2026-10-18
 
 ### Features

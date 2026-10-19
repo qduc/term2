@@ -236,6 +236,21 @@ const AgentSettingsObjectSchema = z.object({
     .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .default('low')
     .describe('Reasoning effort for risky shell auto-approval reviews'),
+  completionVerification: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Verify durable-goal completion before marking achieved (true|false). Disable for operational rollback; applies at the next completion boundary.',
+    ),
+  verificationMaxRepairs: z
+    .number()
+    .int()
+    .min(0)
+    .max(10)
+    .default(3)
+    .describe(
+      'Maximum autonomous completion-verification repairs per new task (0-10). Existing persisted tasks retain their original budget.',
+    ),
   decisionModel: z
     .string()
     .min(1)
@@ -756,6 +771,8 @@ export interface SettingsWithSources {
     };
     autoApproveReasoningEffort: SettingWithSource<string>;
     decisionModel: SettingWithSource<string | undefined>;
+    completionVerification: SettingWithSource<boolean>;
+    verificationMaxRepairs: SettingWithSource<number>;
     subagentExplorerReasoningEffort: SettingWithSource<string | undefined>;
     subagentWorkerReasoningEffort: SettingWithSource<string | undefined>;
     subagentLibrarianReasoningEffort: SettingWithSource<string | undefined>;
@@ -931,6 +948,8 @@ export const SETTING_KEYS = {
   SANDBOX_ALLOW_NETWORKING: 'sandbox.allowNetworking',
   AGENT_AUTO_APPROVE_REASONING_EFFORT: 'agent.autoApproveReasoningEffort',
   AGENT_DECISION_MODEL: 'agent.decisionModel',
+  AGENT_COMPLETION_VERIFICATION: 'agent.completionVerification',
+  AGENT_VERIFICATION_MAX_REPAIRS: 'agent.verificationMaxRepairs',
   AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT: 'agent.subagentExplorerReasoningEffort',
   AGENT_SUBAGENT_WORKER_REASONING_EFFORT: 'agent.subagentWorkerReasoningEffort',
   AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT: 'agent.subagentLibrarianReasoningEffort',
@@ -1010,6 +1029,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_CHORE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT,
   SETTING_KEYS.AGENT_DECISION_MODEL,
+  SETTING_KEYS.AGENT_COMPLETION_VERIFICATION,
+  SETTING_KEYS.AGENT_VERIFICATION_MAX_REPAIRS,
   SETTING_KEYS.AGENT_REASONING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_FAVORITE_MODELS,
@@ -1183,6 +1204,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
     },
     autoApproveReasoningEffort: 'low',
     decisionModel: undefined,
+    completionVerification: true,
+    verificationMaxRepairs: 3,
     subagentExplorerReasoningEffort: undefined,
     subagentWorkerReasoningEffort: undefined,
     subagentLibrarianReasoningEffort: undefined,

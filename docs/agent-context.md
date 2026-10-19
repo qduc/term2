@@ -30,6 +30,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Rollover:** [Session handoff](plans/session-rollover-handoff.md)
 - **Grok Responses/credits:** [Provider plan](plans/grok-responses-and-credits.md)
 - **Run budgets:** [Stall escalation](plans/run-budget-stall-escalation.md) and [review](plans/run-budget-stall-escalation-review.md)
+- **Completion verification:** [Adaptive independent verification](plans/adaptive-independent-verification.md)
 - **Tool dispatch:** [Parallel-safe dispatch](plans/parallel-safe-tool-dispatch.md)
 - **Menu input:** [Exclusive ownership](plans/exclusive-menu-input.md)
 - **Chat-completions reasoning:** [Roundtrip](plans/chat-completions-reasoning-roundtrip.md)

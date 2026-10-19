@@ -18,7 +18,7 @@ import {
 const GOAL_CHECK_DESCRIPTION =
   'Report your self-check against the active durable session goal. While the goal is active, call this by itself ' +
   'as the last tool call before ending a turn, after any work and after reading its results. Reporting achieved ' +
-  'closes the goal: when the turn ends right after it, the durable goal is marked achieved. So before claiming ' +
+  'proposes completion: the harness closes the goal only after its applicable verification policy accepts the claim. It may request repairs or leave the goal active. Before claiming ' +
   'achieved, verify the outcome and every success criterion against concrete evidence from this session ' +
   '(commands you ran and their results, files you read); if anything is unverified, keep working or report ' +
   'blocked instead. It grants no permission and does not override newer user instructions. Use deferred when the ' +
@@ -26,7 +26,7 @@ const GOAL_CHECK_DESCRIPTION =
 
 const RESULT_TEXT: Record<GoalCheckStatus, string> = {
   achieved:
-    `achieved. The durable goal is marked achieved when you end the turn now; ` +
+    `achieved proposed. The harness evaluates completion when you end the turn now; ` +
     'more tool work first means checking again. End the turn now with a short summary of the evidence.',
   blocked:
     `blocked. Control returns to the user. End the turn now and state plainly what is ` +

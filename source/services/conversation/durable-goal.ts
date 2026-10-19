@@ -34,7 +34,9 @@ export function formatGoalStatus(goal: DurableGoal): string {
 
 /** How the TUI and non-interactive mode announce a goal closed by the model's self-check. */
 export function formatGoalClosedByCheck(goal: DurableGoal): string {
-  return `${formatGoalStatus(goal)}\nMarked achieved by the model's goal_check. Use /goal set to start a new goal.`;
+  return `${formatGoalStatus(
+    goal,
+  )}\nCompletion accepted after the model's goal_check. Use /goal set to start a new goal.`;
 }
 
 /** Who wrote a goal change; see `GoalChangedEvent.source`. */

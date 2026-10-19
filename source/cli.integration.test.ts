@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
@@ -65,8 +66,9 @@ function cliPath(): string {
 function spawnCli(
   args: string[],
   env: NodeJS.ProcessEnv,
+  cwd?: string,
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  const child = spawn('node', args, { env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
+  const child = spawn('node', args, { env, cwd, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
@@ -92,7 +94,7 @@ let testDir = '';
 async function startModelMock(
   modelIds: Array<string | Record<string, unknown>>,
   /** SSE data payloads for the n-th chat request (1-based); defaults to a plain "ok" reply. */
-  script?: (n: number) => unknown[],
+  script?: (n: number, body?: Record<string, unknown>) => unknown[],
 ): Promise<{
   baseUrl: string;
   close: () => Promise<void>;
@@ -126,7 +128,7 @@ async function startModelMock(
         requestedModels.push('<unparseable>');
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      const scripted = script?.(requestedBodies.length);
+      const scripted = script?.(requestedBodies.length, requestedBodies[requestedBodies.length - 1]);
       if (scripted) {
         res.end([...scripted.map((data) => `data: ${JSON.stringify(data)}\n`), 'data: [DONE]', ''].join('\n'));
         return;
@@ -378,7 +380,12 @@ it('positional launch closes the goal after a recorded achieved goal_check and r
         ],
   );
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+    // Exercise the legacy self-check/rollback path; independent completion has its own persisted-runtime coverage.
+    agent: {
+      completionVerification: false,
+      retryAttempts: 0,
+      modelSelection: { model: 'mock-alpha', provider: 'mockprov' },
+    },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
   try {
@@ -392,7 +399,7 @@ it('positional launch closes the goal after a recorded achieved goal_check and r
     expect(JSON.stringify(mock.capturedRequests()[1])).not.toContain('Durable goal stop check');
     expect(stdout).toContain('Shipped.');
     expect(stderr).toContain(
-      "Goal (achieved): Noninteractive outcome\nSuccess criteria: Provider returns\nMarked achieved by the model's goal_check.",
+      "Goal (achieved): Noninteractive outcome\nSuccess criteria: Provider returns\nCompletion accepted after the model's goal_check.",
     );
     const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
     const events = fs
@@ -412,6 +419,168 @@ it('positional launch closes the goal after a recorded achieved goal_check and r
   } finally {
     await mock.close();
     fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+it('the shipped CLI gates a durable goal through independent verification by default', async () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  // The gate attests to a repository change set, so the workspace is a real Git
+  // repository holding one uncommitted source file.
+  const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-verify-repo-')));
+  execFileSync('git', ['init', '--quiet', repo]);
+  execFileSync('git', ['-C', repo, 'config', 'user.email', 'fixture@example.test']);
+  execFileSync('git', ['-C', repo, 'config', 'user.name', 'Fixture']);
+  fs.writeFileSync(path.join(repo, 'README.md'), '# Fixture\n');
+  fs.writeFileSync(
+    path.join(repo, 'math.ts'),
+    'export function add(a: number, b: number): number {\n  return a + b;\n}\n',
+  );
+  execFileSync('git', ['-C', repo, 'add', 'README.md']);
+  execFileSync('git', ['-C', repo, 'commit', '--quiet', '-m', 'initial']);
+
+  const check = {
+    status: 'achieved',
+    evidence: 'Provider returned the reply',
+    criteriaEvidence: 'math.ts exports add(a, b) returning a + b',
+  };
+  const mock = await startModelMock(['mock-alpha'], (n, body) => {
+    const tools = Array.isArray(body?.tools) ? (body!.tools as Record<string, unknown>[]) : [];
+    const messages = Array.isArray(body?.messages) ? (body!.messages as Record<string, unknown>[]) : [];
+    const isVerifier = tools.some((tool) => {
+      const fn = tool?.function as { name?: string } | undefined;
+      return (fn?.name ?? (tool?.name as string | undefined)) === 'verification_probe';
+    });
+    if (isVerifier) {
+      // The first verifier round probes the repository; the second returns the verdict.
+      if (!messages.some((message) => message?.role === 'tool')) {
+        return [
+          {
+            id: 'chatcmpl-probe',
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call_probe',
+                      type: 'function',
+                      function: {
+                        name: 'verification_probe',
+                        arguments: JSON.stringify({ kind: 'list_files' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          { id: 'chatcmpl-probe', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+        ];
+      }
+      return [
+        {
+          id: 'chatcmpl-verdict',
+          choices: [
+            {
+              delta: {
+                role: 'assistant',
+                content: JSON.stringify({
+                  outcome: 'PASS',
+                  evidence: 'math.ts is in the repository root and exports add(a, b) returning a + b.',
+                  checked: ['Repository listing'],
+                  limitations: ['Static inspection only'],
+                }),
+              },
+            },
+          ],
+        },
+        { id: 'chatcmpl-verdict', choices: [{ delta: {}, finish_reason: 'stop' }] },
+      ];
+    }
+    return n === 1
+      ? [
+          {
+            id: 'chatcmpl-check',
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call_check',
+                      type: 'function',
+                      function: { name: 'goal_check', arguments: JSON.stringify(check) },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          { id: 'chatcmpl-check', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+        ]
+      : [
+          { id: 'chatcmpl-done', choices: [{ delta: { role: 'assistant', content: 'Shipped.' } }] },
+          { id: 'chatcmpl-done', choices: [{ delta: {}, finish_reason: 'stop' }] },
+        ];
+  });
+  writeSettings(tempHome, {
+    // completionVerification is left at its default: the gate must run.
+    agent: {
+      retryAttempts: 0,
+      modelSelection: { model: 'mock-alpha', provider: 'mockprov' },
+    },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+  try {
+    const { status, stdout, stderr } = await spawnCli(
+      [
+        cliPath(),
+        '--goal',
+        'Ship math.ts',
+        '--goal-criteria',
+        'math.ts exports add(a, b) returning a + b',
+        'worker-prompt-sentinel',
+      ],
+      createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+      repo,
+    );
+    expect(status, stderr).toBe(0);
+    expect(stdout).toContain('Shipped.');
+    expect(stderr).toContain('Goal (achieved): Ship math.ts');
+    expect(stderr).toContain("Completion accepted after the model's goal_check.");
+
+    const requests = mock.capturedRequests();
+    // Two worker rounds, then the fresh verifier's probe round and verdict round.
+    expect(requests).toHaveLength(4);
+    const verifierRequests = requests.slice(2);
+    for (const request of verifierRequests) {
+      const tools = (request.tools as Record<string, unknown>[]) ?? [];
+      expect(tools).toHaveLength(1);
+      expect((tools[0]!.function as { name: string }).name).toBe('verification_probe');
+    }
+    // The verifier sees the goal, never the worker's prompt or its evidence.
+    const verifierBody = JSON.stringify(verifierRequests);
+    expect(verifierBody).toContain('Ship math.ts');
+    expect(verifierBody).not.toContain('worker-prompt-sentinel');
+    expect(verifierBody).not.toContain('Provider returned the reply');
+
+    // The gate persisted its decision before the goal was closed.
+    const dbPath = path.join(tempHome, '.local', 'share', 'term2-nodejs', 'completion-verification.sqlite');
+    expect(fs.existsSync(dbPath)).toBe(true);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const row = db.prepare('SELECT record FROM completion_verification').get() as { record: string };
+      const record = JSON.parse(row.record);
+      expect(record.state).toBe('COMPLETED');
+      expect(record.decision.action).toBe('independent_verify');
+      expect(record.report.outcome).toBe('PASS');
+    } finally {
+      db.close();
+    }
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(repo, { recursive: true, force: true });
   }
 });
 

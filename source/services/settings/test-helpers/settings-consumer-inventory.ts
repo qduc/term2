@@ -4,6 +4,10 @@
  * this inventory with SETTING_KEYS so it cannot drift silently.
  */
 export const CONTRACT_04_CONSUMER_INVENTORY = {
+  'Completion verification — next completion boundary; budgets pinned per task': [
+    'agent.completionVerification',
+    'agent.verificationMaxRepairs',
+  ],
   'Workflow admission — next workflow invocation': ['enable_agent_workflow'],
   'Root model selection and request construction — live-effect router or next request': [
     // Tool capability toggles rebuild the agent through the live-effect router

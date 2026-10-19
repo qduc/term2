@@ -33,7 +33,7 @@ export const goalCheckParameters = z.object({
   status: z
     .enum(GOAL_CHECK_STATUSES)
     .describe(
-      'achieved: the outcome holds now, verified against concrete evidence; this marks the goal achieved. blocked: progress needs user input or a capability you do not have. ' +
+      'achieved: the outcome holds now, verified against concrete evidence; this proposes completion to the harness. blocked: progress needs user input or a capability you do not have. ' +
         'not_achieved: more work is needed and you can do it. deferred: the latest user message asked for ' +
         'something else, asked you to pause, or superseded the goal.',
     ),

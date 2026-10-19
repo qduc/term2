@@ -190,6 +190,8 @@ export interface ApplicationRunLoopOptions {
    * without one it preserves {@link MaxTurnsExceededError} compatibility.
    */
   readonly maxTurns?: number;
+  /** Persisted completion-repair wall-clock boundary, independent of advisory run budgets. */
+  readonly completionRepairDeadline?: number;
   /** Settings-backed staged containment policy. Omit only for legacy callers. */
   readonly runBudget?: RunBudgetPolicy;
   /** Observational escalation events; delivery and judgment remain outside the loop. */
@@ -229,7 +231,11 @@ export interface ApplicationRunLoopOptions {
    * for the next request boundary and keeps the same run going, so budget,
    * steering, compaction, approval, and cancellation all apply as usual.
    */
-  readonly onNormalStop?: (history: readonly ProviderInputItem[], agent: ApplicationAgent) => NormalStopDecision;
+  readonly onNormalStop?: (
+    history: readonly ProviderInputItem[],
+    agent: ApplicationAgent,
+    signal: AbortSignal,
+  ) => NormalStopDecision | Promise<NormalStopDecision>;
 }
 
 /** Bounded session operations. Only runTurn decides when execution advances. */
@@ -258,11 +264,13 @@ export type NormalStopDecision =
   | {
       readonly action: 'stop';
       readonly terminalCause?: RunTerminationCause;
+      readonly notice?: string;
       readonly diagnostics?: Readonly<Record<string, unknown>>;
     }
   | {
       readonly action: 'continue';
       readonly reminder: string;
+      readonly repairDeadline?: number;
       readonly diagnostics?: Readonly<Record<string, unknown>>;
     };
 
@@ -330,6 +338,7 @@ export type ApplicationRunLoopDiagnosticOptions = {
 export type SteerOutcome = 'admitted' | 'released' | 'retracted';
 
 type RunState = {
+  completionRepairDeadline?: number;
   /** One live computation; continuation handles only reconnect its event view. */
   live?: RunContext;
   inputUsageInvalidatedByCompaction?: boolean;
@@ -403,6 +412,7 @@ type RunState = {
 
 type ModelToolCall = Extract<StreamedModelTurnEvent, { type: 'tool_call' }>;
 type RunContext = {
+  completionRepairExpired?: boolean;
   session?: ApplicationTurnSession;
   turnSignal?: AbortSignal;
   observation?: Promise<void>;
@@ -696,6 +706,7 @@ export class ApplicationRunLoop {
       approvals: options.approvals ?? new ApprovalLedger(),
       turnCount: 0,
       maxTurns: options.maxTurns,
+      completionRepairDeadline: options.completionRepairDeadline,
       ...(options.runBudget
         ? {
             runBudget: new RunBudget(options.runBudget),
@@ -1009,6 +1020,13 @@ export class ApplicationRunLoop {
 
   #admitPendingSteers(state: RunState, stream: AgentStream, queue: EventQueue): void {
     this.#turnInputMailbox.admitAtRequestBoundary((item) => {
+      const text =
+        typeof item.content === 'string'
+          ? item.content
+          : Array.isArray(item.content)
+          ? item.content.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('')
+          : '';
+      if (item.role === 'user' && !text.startsWith('[Mode Notice]')) state.completionRepairDeadline = undefined;
       state.history.push(item);
       state.input.push(...normalizeApplicationInput([item]));
       outputPush(stream, queue, { type: 'item', item });
@@ -1034,13 +1052,25 @@ export class ApplicationRunLoop {
           this.#observe(context);
         }
         this.#assertLive(context);
-        if (await this.#prepareRequest(context)) return await this.#completeTurn(context);
-        const response = await this.#askModel(context);
+        // New explicit user authority supersedes a harness repair continuation before its deadline is applied.
+        this.#admitPendingSteers(context.state, context.stream, context.queue);
+        if (await this.#withinRepairDeadline(context, () => this.#prepareRequest(context!)))
+          return await this.#completeTurn(context);
+        const response = await this.#withinRepairDeadline(context, () => this.#askModel(context!));
         this.#assertLive(context);
         const calls = this.#recordResponse(context, response);
-        if (await this.#executeTools(context, response, calls)) return await this.#completeTurn(context);
-        if (calls.length === 0 && this.#finishTurn(context)) return await this.#completeTurn(context);
+        if (await this.#withinRepairDeadline(context, () => this.#executeTools(context!, response, calls)))
+          return await this.#completeTurn(context);
+        if (calls.length === 0 && (await this.#finishTurn(context))) return await this.#completeTurn(context);
       } catch (error) {
+        if (context?.completionRepairExpired) {
+          context.state.terminalCause = 'completion_verification_blocked';
+          this.#appendStopNotice(
+            context,
+            'Completion verification blocked: the repair task deadline expired. The durable goal remains active.',
+          );
+          return await this.#completeTurn(context);
+        }
         if (!session) throw error;
         if (context) {
           this.#settleSegment(context, undefined, error);
@@ -1051,6 +1081,38 @@ export class ApplicationRunLoop {
         context = undefined;
       }
     }
+  }
+
+  async #withinRepairDeadline<T>(context: RunContext, operation: () => Promise<T>): Promise<T> {
+    const deadline = context.state.completionRepairDeadline;
+    if (deadline === undefined) return operation();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        new Promise<never>((_resolve, reject) => {
+          const expire = () => {
+            if (context.state.completionRepairDeadline !== deadline) return;
+            context.completionRepairExpired = true;
+            context.requestAbortController.abort();
+            reject(new Error('Completion repair deadline exceeded'));
+          };
+          if (Date.now() >= deadline) expire();
+          else timer = setTimeout(expire, deadline - Date.now());
+        }),
+        Promise.resolve().then(() => {
+          if (context.completionRepairExpired) throw new Error('Completion repair deadline exceeded');
+          return operation();
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  #appendStopNotice(context: RunContext, notice: string): void {
+    const text = `\n\n${notice}`;
+    context.stream.finalOutput = (context.stream.finalOutput ?? '') + text;
+    context.queue.push({ type: 'text_delta', text });
   }
 
   #assertLive(context: RunContext): void {
@@ -1764,14 +1826,14 @@ export class ApplicationRunLoop {
   }
 
   /** Normal no-tool completion; only an explicit stop-policy continuation repeats. */
-  #finishTurn(context: RunContext): boolean {
+  async #finishTurn(context: RunContext): Promise<boolean> {
     const { state, options } = context;
     // The normal stop seam. A stop policy may keep the same run going; the
     // reminder is admitted at the next request boundary, where pending
     // budget evidence pauses first and turn accounting applies as usual.
     const stopDecision =
       options.onNormalStop && !options.signal?.aborted && !state.criticalWrapUpPending
-        ? options.onNormalStop(state.history, state.agent)
+        ? await options.onNormalStop(state.history, state.agent, context.requestAbortController.signal)
         : undefined;
     if (stopDecision) {
       this.#deps.logDiagnostic?.(
@@ -1781,10 +1843,14 @@ export class ApplicationRunLoop {
       );
     }
     if (stopDecision?.action === 'continue') {
+      if (stopDecision.repairDeadline !== undefined) state.completionRepairDeadline = stopDecision.repairDeadline;
       this.#queuePendingSystemNotice(stopDecision.reminder);
       return false;
     }
     if (stopDecision?.terminalCause) state.terminalCause = stopDecision.terminalCause;
+    if (stopDecision?.action === 'stop' && stopDecision.notice) {
+      this.#appendStopNotice(context, stopDecision.notice);
+    }
     // Evidence discovered when a response has already completed needs no
     // human boundary: there is no later request or tool to block.
     state.pendingRunBudgetInteraction = undefined;

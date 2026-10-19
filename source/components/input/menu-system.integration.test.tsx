@@ -316,7 +316,7 @@ it.sequential('accepting /settings opens the settings successor menu', async () 
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('type to search all sections');
+  expect(lastFrame()).toContain('type search all');
 });
 
 it.sequential('accepting a /settings prefix opens the settings successor menu', async () => {
@@ -329,7 +329,7 @@ it.sequential('accepting a /settings prefix opens the settings successor menu', 
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('type to search all sections');
+  expect(lastFrame()).toContain('type search all');
 });
 
 it.sequential('typing the /settings autocomplete trigger opens the settings menu', async () => {
@@ -340,7 +340,7 @@ it.sequential('typing the /settings autocomplete trigger opens the settings menu
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('type to search all sections');
+  expect(lastFrame()).toContain('type search all');
 });
 
 it.sequential('shows the typed settings query above the filtered menu', async () => {

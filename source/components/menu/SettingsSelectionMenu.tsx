@@ -29,11 +29,16 @@ const SOURCE_LABELS: Record<NonNullable<SettingCompletionItem['source']>, string
   cli: 'set by command-line flag',
 };
 
-function describeSettingState(item: SettingCompletionItem): string {
+/**
+ * Secondary detail for the selected setting. The common case (default value,
+ * applies immediately) needs no line at all; only a changed source or a
+ * restart requirement is worth the vertical space.
+ */
+function describeSettingState(item: SettingCompletionItem): string | undefined {
   const parts: string[] = [];
-  if (item.source) parts.push(SOURCE_LABELS[item.source]);
-  parts.push(item.requiresRestart ? 'applies after restart' : 'applies immediately');
-  return parts.join(' · ');
+  if (item.source && item.source !== 'default') parts.push(SOURCE_LABELS[item.source]);
+  if (item.requiresRestart) parts.push('needs restart');
+  return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 const SettingsSelectionMenu: FC<Props> = ({
   items,
@@ -48,6 +53,7 @@ const SettingsSelectionMenu: FC<Props> = ({
   const labelColWidth = Math.max(12, Math.min(32, (process.stdout.columns ?? 80) - 48));
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
   const selectedItem = items[selectedIndex];
+  const stateDescription = selectedItem ? describeSettingState(selectedItem) : undefined;
 
   return (
     <Box flexDirection="column">
@@ -89,21 +95,19 @@ const SettingsSelectionMenu: FC<Props> = ({
               </Text>
             )}
             {selectedItem?.description && (
-              <Box marginBottom={0}>
-                <Text color={theme.accent} italic>
-                  {selectedItem.description}
-                </Text>
-              </Box>
+              <Text color={theme.accent} italic wrap="truncate-end">
+                {selectedItem.description}
+              </Text>
             )}
-            {selectedItem && <Text color={theme.textSubtle}>{describeSettingState(selectedItem)}</Text>}
+            {stateDescription && <Text color={theme.textSubtle}>{stateDescription}</Text>}
             <MenuFooter
               hints={[
-                ['type', 'to search all sections'],
-                ['↑↓', 'navigate'],
+                ['type', 'search all'],
+                ['↑↓', 'move'],
                 ['⏎', 'edit'],
                 ['Esc', 'close'],
                 ['●', 'changed', 'warning'],
-                ['↻', 'needs restart'],
+                ['↻', 'restart'],
               ]}
             />
           </Box>

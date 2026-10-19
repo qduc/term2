@@ -9,7 +9,18 @@ import {
   mergeSettingValueSuggestions,
   type SettingValueSuggestion,
 } from '../utils/value-suggestions.js';
-import { isNumberSetting, isSecretSetting, isStringSetting } from '../services/settings/settings-ui-metadata.js';
+import {
+  isNumberSetting,
+  isSecretSetting,
+  isStringSetting,
+  isUsdMicrosSetting,
+} from '../services/settings/settings-ui-metadata.js';
+
+/** USD suggestions are written as `$5`; compare them to the stored micros. */
+function dollarTextToMicros(text: string): number | undefined {
+  const match = /^\$(\d+(?:\.\d+)?)$/.exec(text);
+  return match ? Math.round(Number(match[1]) * 1_000_000) : undefined;
+}
 
 const MAX_RESULTS = 10;
 
@@ -71,11 +82,19 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
       if (currentValue !== undefined) {
         // Lists and maps need JSON so accepting the suggestion round-trips;
         // String() would produce "[object Object]".
+        // USD settings are edited in dollars, so the current value is too.
         const currentValueStr =
           currentValue !== null && typeof currentValue === 'object'
             ? JSON.stringify(currentValue)
+            : isUsdMicrosSetting(resolvedSettingKey) && typeof currentValue === 'number'
+            ? `$${currentValue / 1_000_000}`
             : String(currentValue);
-        if (!suggestions.some((s) => s.value === currentValueStr)) {
+        const isListed = suggestions.some(
+          (s) =>
+            s.value === currentValueStr ||
+            (isUsdMicrosSetting(resolvedSettingKey) && dollarTextToMicros(s.value) === currentValue),
+        );
+        if (!isListed) {
           suggestions.unshift({
             value: currentValueStr,
             description: 'Current value',
@@ -105,7 +124,11 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
       const currentValue = settingsService.getDynamic(resolvedSettingKey);
       const currentValueText =
         currentValue !== null && typeof currentValue === 'object' ? JSON.stringify(currentValue) : String(currentValue);
-      const currentValueIndex = filteredEntries.findIndex((item) => item.value === currentValueText);
+      const currentValueIndex = filteredEntries.findIndex(
+        (item) =>
+          item.value === currentValueText ||
+          (isUsdMicrosSetting(resolvedSettingKey) && dollarTextToMicros(item.value) === currentValue),
+      );
       setSelectedIndex(currentValueIndex >= 0 ? currentValueIndex : 0);
     } catch {
       setSelectedIndex(0);

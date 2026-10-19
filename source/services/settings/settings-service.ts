@@ -564,6 +564,16 @@ export class SettingsService {
   }
 
   /**
+   * The environment variable or CLI flag that set this key at startup, if any.
+   * Startup values are re-applied on the next launch, so they win over a
+   * value saved from the settings menu once term2 restarts.
+   */
+  getStartupOverride(key: string): 'env' | 'cli' | undefined {
+    const source = trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get(key);
+    return source === 'env' || source === 'cli' ? source : undefined;
+  }
+
+  /**
    * Get the built-in default for a setting key (undefined when it has none)
    */
   getDefault(key: string): unknown {
@@ -662,12 +672,12 @@ export class SettingsService {
   private normalizeSandboxAutoApproveExclusivity(key: string, value: unknown): string | undefined {
     if (key === 'shell.autoApproveMode' && value === 'always') {
       this.settings.sandbox.enabled = false;
-      this.sources.set('sandbox.enabled', 'cli');
+      this.sources.set('sandbox.enabled', this.getSource(key));
       return 'sandbox.enabled';
     }
     if (key === 'sandbox.enabled' && value === true && this.settings.shell.autoApproveMode === 'always') {
       this.settings.shell.autoApproveMode = 'auto';
-      this.sources.set('shell.autoApproveMode', 'cli');
+      this.sources.set('shell.autoApproveMode', this.getSource(key));
       return 'shell.autoApproveMode';
     }
     return undefined;
@@ -701,10 +711,13 @@ export class SettingsService {
     value = this.getDynamic(key);
     if (key === 'app.activeProfileId') this.normalizeProfileSelection(key, value);
 
-    this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), 'cli');
-
-    // Track source as 'cli' for runtime-set values
-    this.sources.set(key, 'cli');
+    // A saved runtime change reads as a settings-file value. Only startup
+    // flags (--model, --effort, --profile, gateway/ACP startup) opt out of
+    // persistence, so an unsaved change is a command-line value.
+    const persist = options?.persist !== false;
+    const source: SettingSource = persist ? 'config' : 'cli';
+    this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), source);
+    this.sources.set(key, source);
 
     // Same single-enforcement-point treatment for the sandbox / auto-approve
     // pair. Must run after recordRuntimeOverride so that method can read the
@@ -741,7 +754,6 @@ export class SettingsService {
     // Persist to file unless the caller explicitly opts out. The durable
     // settlement is the caller's evidence: only a `saved` result may be
     // reported as a durable replacement.
-    const persist = options?.persist !== false;
     const durableResult: DurableWriteResult = persist
       ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent)
       : { status: 'not-persisted', reason: 'disabled' };
@@ -826,9 +838,9 @@ export class SettingsService {
       this.invalidateChangedProviderModelCaches(previousProviders, value);
     }
 
-    this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), 'cli');
+    this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), 'config');
 
-    this.sources.set(key, 'cli');
+    this.sources.set(key, 'config');
 
     const coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, value);
 
@@ -880,7 +892,7 @@ export class SettingsService {
       () => {
         // Install only successful batch intents before reconciliation. This
         // removes superseded leaf overlays without reinstalling a stale snapshot.
-        for (const change of canonicalChanges) this.recordRuntimeOverride(change.key, change.value, 'cli');
+        for (const change of canonicalChanges) this.recordRuntimeOverride(change.key, change.value, 'config');
       },
     );
     this.lastDurableWrite = durableResult;

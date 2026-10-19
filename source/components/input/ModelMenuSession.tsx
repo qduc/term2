@@ -8,6 +8,7 @@ import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
 import { resolveProviderCredentials } from '../../utils/ai/provider-credentials.js';
+import { serializeFavorite } from '../../services/models/model-favorites.js';
 import { useTheme } from '../theme.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;
@@ -212,8 +213,31 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         favoriteKeys={models.favoriteKeys}
         nicknameLabels={models.nicknameLabels}
         nicknameDraft={models.nicknameDraft}
+        currentKeys={currentModelKeys(
+          settingsService,
+          frame.target.type === 'setting' ? frame.target.config.modelKey : 'agent.modelSelection',
+        )}
+        showFilterLine={false}
       />
       {applyError && <Text color={theme.danger}>{applyError}</Text>}
     </Box>
   );
+}
+
+/** The model(s) the edited setting holds now: one selection or a tier pool. */
+function currentModelKeys(settingsService: SettingsService, key: string): Set<string> {
+  try {
+    const value = settingsService.getDynamic(key);
+    const entries = Array.isArray(value) ? value : [value];
+    return new Set(
+      entries
+        .filter(
+          (entry): entry is { provider: string; model: string } =>
+            entry !== null && typeof entry === 'object' && typeof entry.provider === 'string',
+        )
+        .map((entry) => serializeFavorite(entry.provider, entry.model)),
+    );
+  } catch {
+    return new Set();
+  }
 }

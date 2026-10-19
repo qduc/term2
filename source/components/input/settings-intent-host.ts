@@ -5,6 +5,29 @@ import type {
 } from '../../services/runtime-setting-router.js';
 import type { IntentRequest, IntentResult } from './menu-types.js';
 import { formatSettingValueDetail } from '../menu/settings-value-formatter.js';
+import { getSettingLabel, isKnownSettingKey } from '../../services/settings/settings-ui-metadata.js';
+import { SETTING_ENV_VARIABLES } from '../../services/settings/settings-env.js';
+
+function readBack(settingsService: SettingsService, key: string): unknown {
+  try {
+    return settingsService.getDynamic(key);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Why a saved value will not survive the next launch, if something overrides it. */
+function startupOverrideNote(settingsService: SettingsService, key: string): string | undefined {
+  const source = settingsService.getStartupOverride(key);
+  if (!source) return undefined;
+  const who =
+    source === 'env'
+      ? SETTING_ENV_VARIABLES[key]
+        ? `$${SETTING_ENV_VARIABLES[key]}`
+        : 'an environment variable'
+      : 'a command-line flag';
+  return `${who} also sets it and wins again at the next launch.`;
+}
 
 export type SettingsIntentHostDeps = {
   settingsService: SettingsService;
@@ -30,6 +53,14 @@ export function handleSettingsIntent(request: IntentRequest, deps: SettingsInten
 
   if (intent.type === 'apply-settings') {
     const fieldErrors: Record<string, string> = {};
+    // The service silently drops a key the schema does not know, so an unknown
+    // key must be refused here rather than reported as saved.
+    for (const change of intent.changes) {
+      if (!isKnownSettingKey(change.key)) fieldErrors[change.key] = `Unknown setting "${change.key}"`;
+    }
+    if (Object.keys(fieldErrors).length > 0) {
+      return { id, sourceFrameId, ok: false, message: 'Unknown setting.', fieldErrors };
+    }
     try {
       if (configurationService) {
         configurationService.apply(intent.changes as readonly ConversationSettingChange[]);
@@ -39,15 +70,35 @@ export function handleSettingsIntent(request: IntentRequest, deps: SettingsInten
           else settingsService.setPersistentDynamic(change.key, change.value);
         }
       }
+      // `disabled` persistence (tests, --no-save style runs) is intentional;
+      // only a failed write means the user's change was lost.
+      const lastWrite = settingsService.getLastDurableWrite();
+      const saved = !(lastWrite?.status === 'not-persisted' && lastWrite.reason === 'failed');
+      // The service drops a value the schema does not hold (a key that only
+      // looks like `agent.<provider>.apiKey`) without throwing; read it back.
       for (const change of intent.changes) {
-        if (change.persistence === 'runtime') onSettingChange?.(change.key, change.value);
-        else
+        if (readBack(settingsService, change.key) === undefined && change.value !== undefined) {
+          fieldErrors[change.key] = `"${change.key}" is not a setting term2 can store`;
+        }
+      }
+      if (Object.keys(fieldErrors).length > 0) {
+        return { id, sourceFrameId, ok: false, message: 'Setting was not stored.', fieldErrors };
+      }
+      for (const change of intent.changes) {
+        const label = getSettingLabel(change.key);
+        const valueText = formatSettingValueDetail(change.key, change.value);
+        const note = startupOverrideNote(settingsService, change.key);
+        if (change.persistence === 'runtime') {
+          onSettingChange?.(change.key, change.value);
+          if (!saved) onSystemMessage?.(`${label} set to ${valueText} for this session; it could not be saved.`);
+          else if (note) onSystemMessage?.(`${label} set to ${valueText}. Note: ${note}`);
+        } else {
           onSystemMessage?.(
-            `Saved ${change.key} = ${formatSettingValueDetail(
-              change.key,
-              change.value,
-            )}. Restart term2 for it to take effect.`,
+            saved
+              ? `Saved ${label} = ${valueText}. Restart term2 for it to take effect.${note ? ` Note: ${note}` : ''}`
+              : `Could not save ${label} = ${valueText} to the settings file.`,
           );
+        }
       }
     } catch (err) {
       for (const change of intent.changes) fieldErrors[change.key] = err instanceof Error ? err.message : String(err);
@@ -68,7 +119,7 @@ export function handleSettingsIntent(request: IntentRequest, deps: SettingsInten
     try {
       if (configurationService) configurationService.reset(intent.key);
       else settingsService.reset(intent.key);
-      onSystemMessage?.(`Reset ${intent.key} to default`);
+      onSystemMessage?.(`Reset ${getSettingLabel(intent.key)} to default`);
       if (!configurationService && applyRuntimeSetting && settingsService.isRuntimeModifiable(intent.key)) {
         applyRuntimeSetting(intent.key, settingsService.getDynamic(intent.key));
       }

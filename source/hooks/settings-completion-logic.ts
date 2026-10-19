@@ -3,50 +3,32 @@ import { getSettingLabel } from '../services/settings/settings-ui-metadata.js';
 import { scoreSubsequence } from '../utils/subsequence-filter.js';
 import {
   CATEGORY_KEYS,
-  CATEGORY_ORDER,
-  COMMON_SETTINGS,
   HIDDEN_SETTINGS,
   SETTINGS_CATEGORIES,
+  SETTING_SEARCH_KEYWORDS,
   type SettingCompletionItem,
   type SettingsCategory,
 } from './settings-completion-config.js';
 
-function findCategoryById(id: string): SettingsCategory {
-  return (
-    SETTINGS_CATEGORIES.find((category) => category.id === id) || SETTINGS_CATEGORIES[SETTINGS_CATEGORIES.length - 1]!
-  );
+/** Browse position of every categorized key: category index, then list order. */
+const CATEGORY_POSITION = new Map<string, { category: SettingsCategory; rank: number }>();
+SETTINGS_CATEGORIES.forEach((category, categoryIndex) => {
+  (CATEGORY_KEYS[category.id] ?? []).forEach((key, index) => {
+    CATEGORY_POSITION.set(key, { category, rank: categoryIndex * 1000 + index });
+  });
+});
+
+/** The browse tab a setting lives in; `undefined` for advanced settings. */
+export function getSettingCategory(key: string): SettingsCategory | undefined {
+  return CATEGORY_POSITION.get(key)?.category;
 }
 
-export function getSettingCategory(key: string): SettingsCategory {
-  for (const categoryId of CATEGORY_ORDER) {
-    if (CATEGORY_KEYS[categoryId].has(key)) {
-      return findCategoryById(categoryId);
-    }
-  }
-
-  return findCategoryById('misc');
+export function isAdvancedSetting(key: string): boolean {
+  return !CATEGORY_POSITION.has(key);
 }
 
-function categoryRank(key: string): number {
-  const category = getSettingCategory(key);
-  const index = SETTINGS_CATEGORIES.findIndex((item) => item.id === category.id);
-  return index === -1 ? SETTINGS_CATEGORIES.length : index;
-}
-
-function sortSettings(a: SettingCompletionItem, b: SettingCompletionItem): number {
-  const aCommonIndex = COMMON_SETTINGS.indexOf(a.key);
-  const bCommonIndex = COMMON_SETTINGS.indexOf(b.key);
-  const aIsCommon = aCommonIndex !== -1;
-  const bIsCommon = bCommonIndex !== -1;
-
-  if (aIsCommon && bIsCommon) return aCommonIndex - bCommonIndex;
-  if (aIsCommon) return -1;
-  if (bIsCommon) return 1;
-
-  const aRank = categoryRank(a.key);
-  const bRank = categoryRank(b.key);
-  if (aRank !== bRank) return aRank - bRank;
-  return a.key.localeCompare(b.key);
+function browseRank(key: string): number {
+  return CATEGORY_POSITION.get(key)?.rank ?? Number.MAX_SAFE_INTEGER;
 }
 
 function getSensitiveSettingKeysSet(): Set<string> {
@@ -68,56 +50,87 @@ export function buildSettingsList(
       label: getSettingLabel(key),
       description: descriptions[key] || '',
       currentValue: getCurrentValue?.(key),
+      isAdvanced: isAdvancedSetting(key),
     }))
-    .sort(sortSettings);
+    .sort((a, b) => browseRank(a.key) - browseRank(b.key) || a.label.localeCompare(b.label));
 }
 
+const WORD_SPLIT = /[^a-z0-9]+/;
+
+/**
+ * Score one query word against a setting. Whole-word and word-prefix hits in
+ * the label rank highest; key, keyword, and description substrings follow.
+ * Returns -Infinity when the word appears nowhere.
+ */
+function scoreWord(word: string, item: SettingCompletionItem): number {
+  const label = item.label.toLowerCase();
+  const labelWords = label.split(WORD_SPLIT);
+  const keywords = (SETTING_SEARCH_KEYWORDS[item.key] ?? '').toLowerCase().split(WORD_SPLIT);
+  const key = item.key.toLowerCase();
+  const description = (item.description ?? '').toLowerCase();
+
+  if (labelWords.includes(word)) return 100;
+  if (labelWords.some((part) => part.startsWith(word))) return 80;
+  if (keywords.includes(word)) return 70;
+  if (label.includes(word)) return 60;
+  if (key.includes(word)) return 50;
+  if (keywords.some((part) => part.startsWith(word))) return 40;
+  if (description.split(WORD_SPLIT).some((part) => part.startsWith(word))) return 20;
+  return -Infinity;
+}
+
+/**
+ * Filter by a free-text query. Every whitespace-separated word must match the
+ * setting somewhere (label, key, search keywords, description). Only when no
+ * setting matches that way does a fuzzy label/key subsequence match apply, so
+ * a typo still finds something without flooding normal searches with noise.
+ * Advanced settings rank after browse-tab settings of equal relevance.
+ */
 export function filterSettingsByQuery(
   settings: SettingCompletionItem[],
   query: string,
   maxResults: number = 10,
 ): SettingCompletionItem[] {
-  const trimmed = query.trim();
+  const trimmed = query.trim().toLowerCase();
   if (!trimmed) {
     return settings.slice(0, maxResults);
   }
 
-  return settings
+  const words = trimmed.split(/\s+/);
+  const advancedPenalty = (item: SettingCompletionItem) => (item.isAdvanced ? 20 : 0);
+
+  const exact = settings
     .map((item) => {
-      const normalizedQuery = trimmed.toLowerCase();
-      const keyScore = scoreSubsequence(trimmed, item.key);
-      const labelScore = scoreSubsequence(trimmed, item.label);
-      const hasDescriptionSubstring = item.description
-        ? item.description.toLowerCase().includes(normalizedQuery)
-        : false;
-      const descriptionScore =
-        item.description && hasDescriptionSubstring ? scoreSubsequence(trimmed, item.description) : -Infinity;
-
-      const normalizedKey = item.key.toLowerCase();
-      const normalizedLabel = item.label.toLowerCase();
-      const keyExactMatch = normalizedKey === normalizedQuery;
-      const keyPrefixMatch = normalizedKey.startsWith(normalizedQuery);
-      const labelExactMatch = normalizedLabel === normalizedQuery;
-      const labelPrefixMatch = normalizedLabel.startsWith(normalizedQuery);
-      const weightedKey =
-        keyScore === -Infinity ? -Infinity : keyScore * 3 + (keyExactMatch ? 10_000 : keyPrefixMatch ? 5_000 : 0);
-      const weightedLabel =
-        labelScore === -Infinity
-          ? -Infinity
-          : labelScore * 3 + (labelExactMatch ? 10_000 : labelPrefixMatch ? 5_000 : 0);
-      const weightedDescription = descriptionScore === -Infinity ? -Infinity : descriptionScore;
-
-      const score = Math.max(weightedKey, weightedLabel, weightedDescription);
-      return { item, score };
+      let score = 0;
+      for (const word of words) {
+        const wordScore = scoreWord(word, item);
+        if (wordScore === -Infinity) return { item, score: -Infinity };
+        score += wordScore;
+      }
+      if (item.label.toLowerCase() === trimmed || item.key.toLowerCase() === trimmed) score += 1000;
+      return { item, score: score - advancedPenalty(item) };
     })
-    .filter(({ score }) => score !== -Infinity)
-    .sort((a, b) => b.score - a.score)
+    .filter(({ score }) => score !== -Infinity);
+
+  const ranked =
+    exact.length > 0
+      ? exact
+      : settings
+          .map((item) => {
+            const compact = trimmed.replace(/\s+/g, '');
+            const score = Math.max(scoreSubsequence(compact, item.label), scoreSubsequence(compact, item.key));
+            return { item, score: score === -Infinity ? score : score - advancedPenalty(item) };
+          })
+          .filter(({ score }) => score !== -Infinity);
+
+  return ranked
+    .sort((a, b) => b.score - a.score || browseRank(a.item.key) - browseRank(b.item.key))
     .slice(0, maxResults)
     .map(({ item }) => item);
 }
 
 export function filterSettingsByCategory<T extends { key: string }>(settings: T[], categoryId: string): T[] {
-  return settings.filter((item) => getSettingCategory(item.key).id === categoryId);
+  return settings.filter((item) => getSettingCategory(item.key)?.id === categoryId);
 }
 
 export function clampIndex(currentIndex: number, arrayLength: number): number {

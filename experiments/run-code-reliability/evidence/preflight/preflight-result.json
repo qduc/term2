@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "tools": [
+    "read_file",
+    "run_code"
+  ],
+  "root": "/home/qduc/term2/.worktrees/run-code-reliability/experiments/run-code-reliability/evidence/preflight/containment-4KcDNw",
+  "output": "Result:\n{\"statuses\":[\"fulfilled\",\"rejected\",\"rejected\",\"rejected\"],\"content\":\"fixture-only\\n\",\"absent\":[\"unavailable\",\"unavailable\",\"unavailable\",\"unavailable\",\"unavailable\",\"undefined\",\"undefined\",\"undefined\",\"undefined\"]}\n\nRefused (needs user approval and could not be completed from inside this script): read_file\n\n[4 tool calls: read_file×4]"
+}

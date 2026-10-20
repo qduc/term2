@@ -1,0 +1,5 @@
+{"requested":"/etc/passwd","resolved":"/etc/passwd","allowed":false}
+{"requested":"../outside.txt","resolved":"/home/qduc/term2/.worktrees/run-code-reliability/experiments/run-code-reliability/evidence/preflight/outside.txt","allowed":false}
+{"requested":"link.txt","resolved":"/home/qduc/term2/.worktrees/run-code-reliability/experiments/run-code-reliability/evidence/preflight/containment-4KcDNw/link.txt","allowed":false}
+{"requested":"/home/qduc/term2/.worktrees/run-code-reliability/experiments/run-code-reliability/evidence/preflight/containment-4KcDNw/allowed.txt","resolved":"/home/qduc/term2/.worktrees/run-code-reliability/experiments/run-code-reliability/evidence/preflight/containment-4KcDNw/allowed.txt","allowed":true}
+{"requested":"/home/qduc/term2/.worktrees/run-code-reliability/experiments/run-code-reliability/evidence/preflight/containment-4KcDNw/missing.txt","resolved":"/home/qduc/term2/.worktrees/run-code-reliability/experiments/run-code-reliability/evidence/preflight/containment-4KcDNw/missing.txt","allowed":true}

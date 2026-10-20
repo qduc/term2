@@ -1,0 +1,11 @@
+{
+  "decision": "inconclusive-infrastructure",
+  "exitCode": 134,
+  "durationMs": 21518,
+  "failure": "Runner Node heap out of memory during initial scratch inventory",
+  "rootCause": "inventory(directory, relative) recursed with unchanged directory for every nested directory",
+  "providerInvocations": 0,
+  "completedTrials": 0,
+  "evidence": "Both initial scratch directories exist; neither has manifest.json or invocation.json. Both files are written before spawn in frozen runner. Process inspection after exit found no study child processes.",
+  "interpretation": "No baseline or candidate observations exist. No error-rate, correctness or safety-comparison claim can be made. Preserve this pre-launch failure separately from a corrected pre-provider harness revision."
+}

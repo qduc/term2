@@ -10,6 +10,7 @@ import { buildAgentTools } from '../../dist/lib/agent-factory.js';
 import { createEditorImpl } from '../../dist/lib/editor-impl.js';
 import { ToolApprovalPolicyRegistry } from '../../dist/services/approval/tool-approval-policy-registry.js';
 import { SessionAccessState } from '../../dist/services/session/session-access-state.js';
+import { inventory } from './inventory.mjs';
 
 // A deterministic filesystem/runtime integration probe, not an efficacy trial.
 const evidence = resolve(process.argv[2]);
@@ -18,7 +19,12 @@ const root = await mkdtemp(join(evidence, 'containment-'));
 const audit = join(evidence, 'preflight-reads.ndjson');
 await writeFile(audit, '');
 await writeFile(join(root, 'allowed.txt'), 'fixture-only\n');
+await mkdir(join(root, 'nested'));
+await writeFile(join(root, 'nested', 'other.txt'), 'nested fixture\n');
+const indexed = await inventory(root);
+assert.deepEqual(Object.keys(indexed).sort(), ['allowed.txt', 'nested/other.txt']);
 await symlink('/etc/passwd', join(root, 'link.txt'));
+await assert.rejects(() => inventory(root), /regular files/);
 const manifest = join(evidence, 'preflight-manifest.json');
 await writeFile(manifest, JSON.stringify({ root, paths: ['allowed.txt', 'missing.txt', 'link.txt'], audit }));
 process.env.TERM2_READ_STUDY_MANIFEST = manifest;

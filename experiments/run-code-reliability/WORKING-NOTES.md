@@ -1,7 +1,36 @@
 # Reliability study working state
 
-This is a handoff artifact, not an efficacy report. No live baseline or candidate
-trials have run. The protocol is still being prepared, NOT frozen.
+This is a handoff artifact, not an efficacy report.
+
+## Current state (2026-10-20 successor)
+
+The protocol, runner, containment adapter, deterministic integration preflight,
+and independent preflight acceptance have now been committed BEFORE efficacy
+trials. The first launch into `evidence/trials/` failed before any provider
+invocation due to an inventory recursion bug. See `harness-amendment.md`:
+native recursive enumeration fixed it, nested-filesystem preflight passed,
+and fresh Sol review accepted a corrected pre-provider launch with unchanged
+criteria. The corrected launch will use `evidence/trials-v2/`. Do not replace
+model trials.
+
+The three original preflight findings below were resolved: exact-path read-only
+tool registry with no agent/MCP bridge; once-only shared fixture snapshot; and
+bidirectional call/result reconciliation plus host-observed path coverage.
+The deterministic preflight passed through the production policy wrapper and
+isolated runtime. Sol's fresh independent review accepted readiness; retained
+summary: `preflight-review.md`.
+
+Production `source/agent.ts` is restored (git diff verified empty). `dist/`
+still contains the experiment-only variant, which requires a manifest and must
+not be used as an ordinary install. The exact temporary insertion is retained
+in `containment-block.txt`; reproduction instructions are in README.md.
+Typecheck and lint passed (31 existing warnings); the focused baseline command
+below passed again, 15/15. No candidate has been adopted.
+
+After trials: inspect summary and raw evidence, obtain the authorized independent
+codex/gpt-6.1-sol post-trial review, report inconclusive/reject honestly if any
+frozen gate fails, append EDD task ledger, commit own results and integrate.
+The remaining sections are historical pre-freeze notes, not current status.
 
 ## User goal and authorization
 

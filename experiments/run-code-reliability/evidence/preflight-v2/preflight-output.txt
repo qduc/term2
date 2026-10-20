@@ -1,0 +1,6 @@
+Result:
+{"statuses":["fulfilled","rejected","rejected","rejected"],"content":"fixture-only\n","absent":["unavailable","unavailable","unavailable","unavailable","unavailable","undefined","undefined","undefined","undefined"]}
+
+Refused (needs user approval and could not be completed from inside this script): read_file
+
+[4 tool calls: read_file×4]

@@ -1,6 +1,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { inventory } from './inventory.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
@@ -16,16 +17,6 @@ const stable = (value) =>
       ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
       : v,
   );
-
-async function inventory(directory, prefix = '') {
-  const result = {};
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const relative = path.join(prefix, entry.name);
-    if (entry.isDirectory()) Object.assign(result, await inventory(directory, relative));
-    else result[relative] = hash(await readFile(path.join(directory, entry.name)));
-  }
-  return result;
-}
 
 async function trial(out, protocol, task, model, arm, index, snapshot) {
   const id = `${task.id}-${index}-${arm}`;
@@ -262,6 +253,7 @@ await writeFile(
       revision,
       protocolHash: hash(bytes),
       runnerHash: hash(await readFile(fileURLToPath(import.meta.url))),
+      inventoryHash: hash(await readFile(path.join(here, 'inventory.mjs'))),
       cliHash: hash(await readFile(path.join(root, 'dist/cli.js'))),
       node: process.version,
       models: protocol.models,

@@ -28,6 +28,8 @@ export default tseslint.config(
       'tools/log_viewer/**',
       '.junie/**',
       'eval/**',
+      // Captured fixture source is evidence, not part of this TypeScript project.
+      'experiments/run-code-reliability/evidence/**',
       '*.config.ts',
       '*.config.js',
       'scripts/**',

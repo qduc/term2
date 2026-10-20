@@ -1,0 +1,48 @@
+{
+  "id": "release-readiness-1-baseline",
+  "task": "release-readiness",
+  "model": {
+    "provider": "orca",
+    "model": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  "arm": "baseline",
+  "code": 0,
+  "signal": null,
+  "timedOut": false,
+  "malformed": false,
+  "durationMs": 5043,
+  "scriptCalls": 1,
+  "scriptResults": 1,
+  "scriptErrors": 0,
+  "providerRetries": 0,
+  "fixturesPreserved": true,
+  "reconciled": true,
+  "pathsInspected": true,
+  "deniedReads": 0,
+  "forbiddenTopLevel": false,
+  "oraclePass": false,
+  "expected": {
+    "facts": {
+      "rootVersion": "0.34.0",
+      "rootBuild": "node scripts/build-with-rollback.mjs",
+      "websiteFramework": "astro"
+    },
+    "missing": [
+      "release/local-signoff.json"
+    ]
+  },
+  "actual": {
+    "rootVersion": "0.34.0",
+    "rootBuild": "node scripts/build-with-rollback.mjs",
+    "websiteFramework": "astro",
+    "missing": [
+      "release/local-signoff.json"
+    ]
+  },
+  "uncertain": false,
+  "evidence": {
+    "events": "39ff294697150f00fdd9351afd62a470ede3c4f19d89278a4d6cbe8d2ae2fb68",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "invocation": "4363533602543b14edafd431fba112bfec61844907faf0d28ac935beb5225da6"
+  }
+}

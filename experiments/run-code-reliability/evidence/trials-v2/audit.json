@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "revision": "071644afdc139c0725df7c2e21cfca58d2b6d46d",
+  "protocolHash": "e993f2447e51a47a0219de3145f5f957c3ec47372cc0a33fc55299357e3f2e68",
+  "runs": 24,
+  "totals": {
+    "baseline": {
+      "scriptErrors": 2,
+      "scriptCalls": 12,
+      "oraclePasses": 8,
+      "durationMs": 66438
+    },
+    "candidate": {
+      "scriptErrors": 0,
+      "scriptCalls": 12,
+      "oraclePasses": 10,
+      "durationMs": 75130
+    }
+  },
+  "latencyRatio": 1.1308287425870736,
+  "fixtureSnapshotHash": "caf605f1b8a72bf03cfe195af6716a6d82b12afc3f41c56f84cced547f85c184",
+  "builtAgentHash": "0be5a196ee8f55434d5653efff5e55b146b819045888c99d08cdf10d3d103286",
+  "conclusion": "Raw events, fixture bytes and hashes agree with recorded results. Manual independent script/safety inspection still required."
+}

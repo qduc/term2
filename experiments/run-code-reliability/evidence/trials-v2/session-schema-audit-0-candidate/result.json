@@ -1,0 +1,50 @@
+{
+  "id": "session-schema-audit-0-candidate",
+  "task": "session-schema-audit",
+  "model": {
+    "provider": "codex",
+    "model": "gpt-6-luna"
+  },
+  "arm": "candidate",
+  "code": 0,
+  "signal": null,
+  "timedOut": false,
+  "malformed": false,
+  "durationMs": 5146,
+  "scriptCalls": 1,
+  "scriptResults": 1,
+  "scriptErrors": 0,
+  "providerRetries": 0,
+  "fixturesPreserved": true,
+  "reconciled": true,
+  "pathsInspected": true,
+  "deniedReads": 0,
+  "forbiddenTopLevel": false,
+  "oraclePass": true,
+  "expected": {
+    "facts": {
+      "limitMax": 50,
+      "maxCharsMin": 512,
+      "compactNumericType": "number"
+    },
+    "missing": [
+      "source/tools/session-browser/local-parameters.json"
+    ]
+  },
+  "actual": {
+    "facts": {
+      "limitMax": 50,
+      "maxCharsMin": 512,
+      "compactNumericType": "number"
+    },
+    "missing": [
+      "source/tools/session-browser/local-parameters.json"
+    ]
+  },
+  "uncertain": false,
+  "evidence": {
+    "events": "b5dca29abcb19ad590ee8afcde46cc78b6dbd54267ca0027eb4f37bd8488ce37",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "invocation": "d4e9d82a4d692e7088f7de4341cdf20503a08f146f79fa57915ca17b3db34962"
+  }
+}

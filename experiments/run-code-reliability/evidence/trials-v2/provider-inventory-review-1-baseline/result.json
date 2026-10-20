@@ -1,0 +1,48 @@
+{
+  "id": "provider-inventory-review-1-baseline",
+  "task": "provider-inventory-review",
+  "model": {
+    "provider": "orca",
+    "model": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  "arm": "baseline",
+  "code": 0,
+  "signal": null,
+  "timedOut": false,
+  "malformed": false,
+  "durationMs": 4804,
+  "scriptCalls": 1,
+  "scriptResults": 1,
+  "scriptErrors": 0,
+  "providerRetries": 0,
+  "fixturesPreserved": true,
+  "reconciled": true,
+  "pathsInspected": true,
+  "deniedReads": 0,
+  "forbiddenTopLevel": false,
+  "oraclePass": false,
+  "expected": {
+    "facts": {
+      "schemaVersion": 1,
+      "codexCategory": "subscription",
+      "requireFactory": "createRequire"
+    },
+    "missing": [
+      "source/providers/local-provider-overrides.json"
+    ]
+  },
+  "actual": {
+    "schemaVersion": 1,
+    "codexCategory": "subscription",
+    "requireFactory": "createRequire",
+    "missing": [
+      "source/providers/local-provider-overrides.json"
+    ]
+  },
+  "uncertain": false,
+  "evidence": {
+    "events": "2df6cf8f56d1dc8fada6e23249ea977d03e16d8ee90b220bce789a1b17536fb8",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "invocation": "7b7ecb65469fd164a05d895e4d7f25b9237b5eebdbe2c7193e462864b98b9993"
+  }
+}

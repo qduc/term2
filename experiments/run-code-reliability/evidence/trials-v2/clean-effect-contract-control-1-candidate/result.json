@@ -1,0 +1,54 @@
+{
+  "id": "clean-effect-contract-control-1-candidate",
+  "task": "clean-effect-contract-control",
+  "model": {
+    "provider": "orca",
+    "model": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  "arm": "candidate",
+  "code": 0,
+  "signal": null,
+  "timedOut": false,
+  "malformed": false,
+  "durationMs": 4943,
+  "scriptCalls": 1,
+  "scriptResults": 1,
+  "scriptErrors": 0,
+  "providerRetries": 0,
+  "fixturesPreserved": true,
+  "reconciled": true,
+  "pathsInspected": true,
+  "deniedReads": 0,
+  "forbiddenTopLevel": false,
+  "oraclePass": true,
+  "expected": {
+    "facts": {
+      "actionOutcomes": [
+        "applied",
+        "not_applied",
+        "failed",
+        "unknown"
+      ],
+      "exactlyOnceClaimed": false
+    },
+    "missing": []
+  },
+  "actual": {
+    "facts": {
+      "actionOutcomes": [
+        "applied",
+        "not_applied",
+        "failed",
+        "unknown"
+      ],
+      "exactlyOnceClaimed": false
+    },
+    "missing": []
+  },
+  "uncertain": false,
+  "evidence": {
+    "events": "435d94ae8f3220b6da1fa3f9f5ed6d3547ed35beec3603e303c12767f8b87d83",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "invocation": "23d464538dc1147f4b9db2dce7cf8277c0d3c1d4e84a9a4f230049b08c1fc9f2"
+  }
+}

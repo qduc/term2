@@ -1,0 +1,45 @@
+  // Temporary reliability-study build: no agent/MCP bridge or other tools.
+  const studyManifestPath = process.env.TERM2_READ_STUDY_MANIFEST;
+  if (!studyManifestPath) throw new Error('Study build requires a read manifest');
+  const studyManifest = JSON.parse(fs.readFileSync(studyManifestPath, 'utf8')) as {
+    root: string;
+    paths: string[];
+    audit: string;
+  };
+  const studyRoot = fs.realpathSync(studyManifest.root);
+  if (studyRoot !== fs.realpathSync(executionContext?.getCwd() || process.cwd())) {
+    throw new Error('Study cwd mismatch');
+  }
+  const studyAllowed = new Set(studyManifest.paths.map((entry) => path.resolve(studyRoot, entry)));
+  const studyRead = tools.find((tool) => tool.name === 'read_file');
+  if (!studyRead) throw new Error('Study requires read_file');
+  const studyExecute = studyRead.execute.bind(studyRead);
+  studyRead.execute = async (params, context, details) => {
+    const requested = (params as { path: string }).path;
+    const resolved = path.resolve(studyRoot, requested);
+    let allowed = studyAllowed.has(resolved) && resolved.startsWith(studyRoot + path.sep);
+    let current = resolved;
+    while (allowed && current !== studyRoot) {
+      try {
+        if (fs.lstatSync(current).isSymbolicLink()) allowed = false;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      current = path.dirname(current);
+    }
+    fs.appendFileSync(studyManifest.audit, JSON.stringify({ requested, resolved, allowed }) + '\n');
+    if (!allowed) throw new Error('Study denied path');
+    return studyExecute(params, context, details);
+  };
+  tools.splice(
+    0,
+    tools.length,
+    studyRead,
+    createRunCodeToolDefinition({
+      loggingService,
+      executionContext,
+      getCwd: () => studyRoot,
+      approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
+      sessionAccess,
+    }),
+  );

@@ -1,0 +1,50 @@
+{
+  "id": "provider-inventory-review-0-baseline",
+  "task": "provider-inventory-review",
+  "model": {
+    "provider": "codex",
+    "model": "gpt-6-luna"
+  },
+  "arm": "baseline",
+  "code": 0,
+  "signal": null,
+  "timedOut": false,
+  "malformed": false,
+  "durationMs": 6494,
+  "scriptCalls": 1,
+  "scriptResults": 1,
+  "scriptErrors": 0,
+  "providerRetries": 0,
+  "fixturesPreserved": true,
+  "reconciled": true,
+  "pathsInspected": true,
+  "deniedReads": 0,
+  "forbiddenTopLevel": false,
+  "oraclePass": true,
+  "expected": {
+    "facts": {
+      "schemaVersion": 1,
+      "codexCategory": "subscription",
+      "requireFactory": "createRequire"
+    },
+    "missing": [
+      "source/providers/local-provider-overrides.json"
+    ]
+  },
+  "actual": {
+    "facts": {
+      "schemaVersion": 1,
+      "codexCategory": "subscription",
+      "requireFactory": "createRequire"
+    },
+    "missing": [
+      "source/providers/local-provider-overrides.json"
+    ]
+  },
+  "uncertain": false,
+  "evidence": {
+    "events": "3eec280bcc5cf3a93a09f99429e8a42aecabcdf2ef055fa8a077322cbf736030",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "invocation": "b68d49277e7677aa204203c18d7bac47a2f5c53cc7d5e8f59c5509c331241d36"
+  }
+}

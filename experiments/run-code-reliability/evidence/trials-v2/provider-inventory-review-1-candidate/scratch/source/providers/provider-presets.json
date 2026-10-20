@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "presets": [
+    {
+      "id": "alibaba",
+      "name": "Alibaba / Qwen (International API)",
+      "category": "model-api",
+      "type": "openai-compatible",
+      "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "docsUrl": "https://www.alibabacloud.com/help/en/model-studio/models"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "category": "model-api",
+      "type": "anthropic",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "docsUrl": "https://docs.anthropic.com/en/docs/about-claude/models"
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "category": "inference",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.cerebras.ai/v1",
+      "docsUrl": "https://inference-docs.cerebras.ai/"
+    },
+    {
+      "id": "codex",
+      "name": "Codex (ChatGPT login)",
+      "category": "subscription",
+      "builtinProviderId": "codex",
+      "docsUrl": "https://developers.openai.com/codex/"
+    },
+    {
+      "id": "deepinfra",
+      "name": "DeepInfra",
+      "category": "inference",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.deepinfra.com/v1/openai",
+      "docsUrl": "https://deepinfra.com/docs/openai_api"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "category": "model-api",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "docsUrl": "https://api-docs.deepseek.com/"
+    },
+    {
+      "id": "fireworks",
+      "name": "Fireworks AI",
+      "category": "inference",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.fireworks.ai/inference/v1",
+      "docsUrl": "https://docs.fireworks.ai/"
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "category": "model-api",
+      "type": "google",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "docsUrl": "https://ai.google.dev/gemini-api/docs"
+    },
+    {
+      "id": "grok",
+      "name": "Grok (browser login)",
+      "category": "subscription",
+      "builtinProviderId": "grok",
+      "docsUrl": "https://grok.com/"
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "category": "inference",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "docsUrl": "https://console.groq.com/docs/openai"
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face Inference Providers",
+      "category": "gateway",
+      "type": "openai-compatible",
+      "baseUrl": "https://router.huggingface.co/v1",
+      "docsUrl": "https://huggingface.co/docs/inference-providers/"
+    },
+    {
+      "id": "kimi",
+      "name": "Kimi / Moonshot (API)",
+      "category": "model-api",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.moonshot.ai/v1",
+      "docsUrl": "https://platform.moonshot.ai/docs/"
+    },
+    {
+      "id": "llama-cpp",
+      "name": "llama.cpp",
+      "category": "local",
+      "type": "llama.cpp",
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "docsUrl": "https://github.com/ggml-org/llama.cpp/tree/master/tools/server"
+    },
+    {
+      "id": "lm-studio",
+      "name": "LM Studio",
+      "category": "local",
+      "type": "openai-compatible",
+      "baseUrl": "http://127.0.0.1:1234/v1",
+      "docsUrl": "https://lmstudio.ai/docs/developer/openai-compat"
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax (International API)",
+      "category": "model-api",
+      "type": "anthropic",
+      "baseUrl": "https://api.minimax.io/anthropic/v1",
+      "docsUrl": "https://platform.minimax.io/docs/api-reference/text-anthropic-api"
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral",
+      "category": "model-api",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.mistral.ai/v1",
+      "docsUrl": "https://docs.mistral.ai/"
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama (local)",
+      "category": "local",
+      "type": "openai-compatible",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "docsUrl": "https://docs.ollama.com/api/openai-compatibility"
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "category": "model-api",
+      "builtinProviderId": "openai",
+      "docsUrl": "https://platform.openai.com/docs/"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "category": "gateway",
+      "builtinProviderId": "openrouter",
+      "docsUrl": "https://openrouter.ai/docs/"
+    },
+    {
+      "id": "together",
+      "name": "Together AI",
+      "category": "inference",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.together.xyz/v1",
+      "docsUrl": "https://docs.together.ai/"
+    },
+    {
+      "id": "vercel",
+      "name": "Vercel AI Gateway",
+      "category": "gateway",
+      "type": "openai-compatible",
+      "baseUrl": "https://ai-gateway.vercel.sh/v1",
+      "docsUrl": "https://vercel.com/docs/ai-gateway"
+    },
+    {
+      "id": "vllm",
+      "name": "vLLM (local)",
+      "category": "local",
+      "type": "openai-compatible",
+      "baseUrl": "http://127.0.0.1:8000/v1",
+      "docsUrl": "https://docs.vllm.ai/en/latest/serving/openai_compatible_server/"
+    },
+    {
+      "id": "xai",
+      "name": "xAI (API)",
+      "category": "model-api",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.x.ai/v1",
+      "docsUrl": "https://docs.x.ai/"
+    },
+    {
+      "id": "zai",
+      "name": "Z.AI (API)",
+      "category": "model-api",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.z.ai/api/paas/v4",
+      "docsUrl": "https://docs.z.ai/guides/overview/quick-start"
+    },
+    {
+      "id": "zai-coding",
+      "name": "Z.AI (Coding Plan)",
+      "category": "subscription",
+      "type": "openai-compatible",
+      "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+      "docsUrl": "https://docs.z.ai/devpack/overview"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "revision": "2b86881eb425ed0bcd51f42e247b25404266ce0c",
+  "protocolHash": "e993f2447e51a47a0219de3145f5f957c3ec47372cc0a33fc55299357e3f2e68",
+  "runnerHash": "fbb70f6fbc9d3424f66ab10cc2be0ef767d72d438034f704830f6163453917e3",
+  "cliHash": "beedc7b5ca3919784cfe47744678378476fd19dede1f6e875310cbd90432f1f8",
+  "node": "v24.19.0",
+  "models": [
+    {
+      "provider": "codex",
+      "model": "gpt-6-luna"
+    },
+    {
+      "provider": "orca",
+      "model": "deepseek/deepseek-v4.1-flash-1017"
+    }
+  ],
+  "startedAt": "2026-10-20T01:43:03.223Z",
+  "scope": "Explicit task-local instruction comparison, not a canonical skill mutation. Repeated-model strata are recorded separately, not treated as independent workflows. Production source stays unchanged."
+}

@@ -1,0 +1,50 @@
+{
+  "id": "release-readiness-0-candidate",
+  "task": "release-readiness",
+  "model": {
+    "provider": "codex",
+    "model": "gpt-6-luna"
+  },
+  "arm": "candidate",
+  "code": 0,
+  "signal": null,
+  "timedOut": false,
+  "malformed": false,
+  "durationMs": 8311,
+  "scriptCalls": 1,
+  "scriptResults": 1,
+  "scriptErrors": 0,
+  "providerRetries": 0,
+  "fixturesPreserved": true,
+  "reconciled": true,
+  "pathsInspected": true,
+  "deniedReads": 0,
+  "forbiddenTopLevel": false,
+  "oraclePass": true,
+  "expected": {
+    "facts": {
+      "rootVersion": "0.34.0",
+      "rootBuild": "node scripts/build-with-rollback.mjs",
+      "websiteFramework": "astro"
+    },
+    "missing": [
+      "release/local-signoff.json"
+    ]
+  },
+  "actual": {
+    "facts": {
+      "rootVersion": "0.34.0",
+      "rootBuild": "node scripts/build-with-rollback.mjs",
+      "websiteFramework": "astro"
+    },
+    "missing": [
+      "release/local-signoff.json"
+    ]
+  },
+  "uncertain": false,
+  "evidence": {
+    "events": "3216834c1ad040e1e6b57e497cca6c62af9f9f65d7bc3ad9e461884f3a89f4b9",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "invocation": "b3bc117bf119c4bc1da00124a4918e0d4a2d475783e13c9d9a0b2af80eaf8461"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "id": "session-schema-audit-1-candidate",
+  "task": "session-schema-audit",
+  "model": {
+    "provider": "orca",
+    "model": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  "arm": "candidate",
+  "code": 0,
+  "signal": null,
+  "timedOut": false,
+  "malformed": false,
+  "durationMs": 5626,
+  "scriptCalls": 1,
+  "scriptResults": 1,
+  "scriptErrors": 0,
+  "providerRetries": 0,
+  "fixturesPreserved": true,
+  "reconciled": true,
+  "pathsInspected": true,
+  "deniedReads": 0,
+  "forbiddenTopLevel": false,
+  "oraclePass": false,
+  "expected": {
+    "facts": {
+      "limitMax": 50,
+      "maxCharsMin": 512,
+      "compactNumericType": "number"
+    },
+    "missing": [
+      "source/tools/session-browser/local-parameters.json"
+    ]
+  },
+  "actual": null,
+  "uncertain": false,
+  "evidence": {
+    "events": "ac322d1200630fd15116db4012f54c80a63575e7abf8c9d4b223869ce14a2db6",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "invocation": "2b11b67e0091c998797d0f11a06076b28c93ec897366e1b686cc9ef140b10a73"
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "name": "@qduc/term2",
+  "version": "0.34.0",
+  "description": "A terminal-based AI assistant that can help you get things done on your computer",
+  "license": "MIT",
+  "author": "qduc",
+  "keywords": [
+    "ai",
+    "assistant",
+    "cli",
+    "terminal",
+    "openai",
+    "agent",
+    "chat",
+    "gpt"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qduc/term2.git"
+  },
+  "homepage": "https://github.com/qduc/term2",
+  "bugs": {
+    "url": "https://github.com/qduc/term2/issues"
+  },
+  "bin": {
+    "term2": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./hooks": {
+      "types": "./dist/services/hooks/index.d.ts"
+    }
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": ">=11.0.0"
+    }
+  },
+  "engineStrict": true,
+  "scripts": {
+    "start": "node dist/cli.js",
+    "build": "node scripts/build-with-rollback.mjs",
+    "build:restore": "node scripts/restore-build-output.mjs",
+    "dev": "tsc --build tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "cross-env NODE_ENV=test node scripts/run-test.mjs",
+    "check:no-unit-tests": "node scripts/check-no-unit-tests.mjs",
+    "test:e2e": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts",
+    "test:integration": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts",
+    "test:codex-network": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts scripts/fake-codex-server.e2e.test.ts",
+    "test:provider-black-box": "cross-env NODE_ENV=test node scripts/run-provider-black-box.mjs",
+    "bdv": "node scripts/bdv/run.mjs",
+    "provider:record": "tsx scripts/provider-record.ts",
+    "provider:fixture:prepare": "tsx scripts/provider-fixture-prepare.ts",
+    "provider:fixture:scan": "cross-env NODE_ENV=test vitest run --reporter=minimal scripts/provider-black-box/fixture-security.test.ts",
+    "test:docker-host-control-integration": "cross-env NODE_ENV=test RUN_DOCKER_HOST_CONTROL_INTEGRATION=1 vitest run --reporter=minimal source/tools/system/docker-host-control.integration.test.ts",
+    "fake:codex": "tsx scripts/fake-codex-server.ts",
+    "test:verbose": "cross-env NODE_ENV=test vitest run",
+    "test:vitest:watch": "cross-env NODE_ENV=test vitest",
+    "test:vitest:coverage": "cross-env NODE_ENV=test vitest run --coverage",
+    "test-audit": "tsx scripts/test-audit/cli.ts",
+    "lint": "eslint . && prettier --check .",
+    "lint-fix": "eslint --fix . && prettier --write .",
+    "post-build": "cp -r source/prompts dist/ && mkdir -p dist/providers && cp source/providers/provider-presets.json dist/providers/ && chmod +x dist/cli.js",
+    "release": "./scripts/release.sh",
+    "logs": "node tools/log_viewer/src/server.js",
+    "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
+    "prepare": "husky",
+    "catalog:update": "tsx scripts/update-model-catalog.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.4.0",
+    "@ai-sdk/anthropic": "^3.0.76",
+    "@ai-sdk/google": "^3.0.72",
+    "@ai-sdk/provider": "^3.0.10",
+    "@anthropic-ai/sandbox-runtime": "^0.0.56",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@openrouter/ai-sdk-provider": "^2.9.0",
+    "@qduc/web-fetch": "^0.1.4",
+    "ai": "^6.0.177",
+    "better-sqlite3": "^12.4.1",
+    "env-paths": "^3.0.0",
+    "fast-deep-equal": "^3.1.3",
+    "ignore": "^5.3.2",
+    "ink": "^7.0.1",
+    "ink-prompt": "^0.4.3",
+    "jiti": "^2.7.0",
+    "marked": "^17.0.1",
+    "meow": "^11.0.0",
+    "openai": "^6.9.1",
+    "react": "^19.0.0",
+    "ssh2": "^1.17.0",
+    "unbash": "^3.0.0",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0",
+    "yaml": "^2.9.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@qduc/agent-wire": "file:vendor/qduc-agent-wire-0.1.0.tgz",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/env-paths": "^1.0.2",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.0.0",
+    "@types/ssh2": "^1.15.5",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.1.9",
+    "chalk": "^5.2.0",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.32.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.6.0",
+    "husky": "^9.1.7",
+    "ink-testing-library": "^4.0.0",
+    "lint-staged": "^16.2.7",
+    "prettier": "^2.8.7",
+    "tsx": "^4.20.6",
+    "typescript": "npm:@typescript/typescript6@^6.0.1",
+    "typescript-7": "npm:typescript@7.0.2",
+    "typescript-eslint": "^8.62.0",
+    "vitest": "^4.1.9",
+    "ws": "^8.21.0"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{md,json}": "prettier --write"
+  }
+}

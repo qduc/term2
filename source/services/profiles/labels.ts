@@ -13,6 +13,8 @@ import {
  */
 export function getProfileLabel(profileId: string): string {
   switch (profileId) {
+    case 'builtin:bare':
+      return 'bare';
     case LITE_PROFILE_ID:
       return 'lite';
     case 'builtin:pair':

@@ -161,6 +161,7 @@ export class AgentClient {
   #settings: ISettingsService;
   #onGoalAchieved?: (goal: DurableGoal) => void;
   #completionBoundary?: RootCompletionBoundary;
+  #unattended = false;
   #sessionContextService: ISessionContextService;
   #requestCapture?: ProviderRequestCapture;
   #providerRegistry?: ProviderRegistry;
@@ -761,6 +762,7 @@ export class AgentClient {
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
     this.#onGoalAchieved = deps.onGoalAchieved;
+    this.#unattended = !allowAskUser;
     if (!agentOverride)
       this.#completionBoundary = new RootCompletionBoundary({
         settings: deps.settings,
@@ -1072,12 +1074,13 @@ export class AgentClient {
   /** Root-only active-goal stop check; transient clients never receive one. */
   #goalStopCheck(): ApplicationRunLoopOptions['onNormalStop'] {
     const getGoal = this.#agentConfig.goalSource;
-    if (!getGoal) return undefined;
+    if (!getGoal || this.#settings.get('app.activeProfileId') === 'builtin:bare') return undefined;
     if (this.#settings.get('agent.completionVerification') === false || !this.#completionBoundary) {
       return createGoalStopPolicy(getGoal, this.#onGoalAchieved);
     }
     return createVerifiedGoalStopPolicy({
       getGoal,
+      unattended: this.#unattended,
       onGoalAchieved: this.#onGoalAchieved,
       verify: (goal, history, signal) => this.#completionBoundary!.verify(goal, history, signal),
     });

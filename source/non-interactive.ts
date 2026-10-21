@@ -33,7 +33,7 @@ import {
   GOAL_CHECK_UNRESOLVED_NOTICE,
 } from './services/conversation/durable-goal-stop-check.js';
 
-const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 5 * 60 * 1000;
+const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 60 * 60 * 1000;
 const MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
 
 export interface NonInteractiveOutstandingWork {
@@ -81,7 +81,7 @@ export interface NonInteractiveConfig {
   hookEvents?: HookEventFactory;
   /** Internal/runtime seam for draining work that outlives the launch turn. */
   backgroundWork?: NonInteractiveBackgroundWork;
-  /** Overall bound for waiting on background work; defaults to five minutes. */
+  /** Overall bound for waiting on background work; defaults to one hour. */
   backgroundWaitTimeoutMs?: number;
   /** Abort the active foreground turn when the process receives a signal. */
   abort?: () => void;
@@ -274,8 +274,13 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     }
   };
 
+  const activeProfileId = config.settingsService?.get('app.activeProfileId') ?? 'builtin:standard';
+  if (config.json) stdout.write(JSON.stringify({ type: 'session_start', activeProfileId }) + '\n');
+  config.logger?.info('Headless session started', { eventType: 'session.start', activeProfileId });
   const backgroundWork = config.backgroundWork;
-  const backgroundWaitTimeoutMs = normalizeBackgroundWaitTimeout(config.backgroundWaitTimeoutMs);
+  const backgroundWaitTimeoutMs = normalizeBackgroundWaitTimeout(
+    config.backgroundWaitTimeoutMs ?? config.settingsService?.get('agent.backgroundWaitTimeoutMs'),
+  );
   let receivedSignal: NodeJS.Signals | null = null;
   let backgroundCancellationRequested = false;
   let wakeBackgroundWaiter: (() => void) | null = null;
@@ -324,7 +329,11 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     if (config.json) {
       stdout.write(JSON.stringify(payload) + '\n');
     } else {
-      const details = outstanding.map((work) => work.kind + ' ' + work.id + ' (' + work.status + ')').join(', ');
+      const details = outstanding
+        .map(
+          (work) => work.kind + ' ' + (work.name ?? work.task ?? work.id) + ' [' + work.id + '] (' + work.status + ')',
+        )
+        .join(', ');
       stderr.write('error ' + message + ' Outstanding: ' + (details || 'none') + '\n');
     }
     return 1;
@@ -621,6 +630,7 @@ export async function runNonInteractive(
         id: sessionId,
         createdAt: createdRuntime.runtime.sessionStartedAt,
         projectPath: process.cwd(),
+        activeProfileId: config.settingsService.get('app.activeProfileId'),
         model: config.settingsService.get('agent.modelSelection').model,
         provider: config.settingsService.get('agent.modelSelection').provider,
       });

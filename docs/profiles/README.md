@@ -68,3 +68,42 @@ Interfaces and consequential design decisions remain yours to author.
 Pair is instruction-only: it inherits Standard's tools and enforcement. Approval
 and step size are model instructions, not additional runtime restrictions. Switch
 back with `/profile standard`. The workflow is restored with the saved profile.
+
+## Bare profile and unattended runs
+
+`--profile bare` selects an opt-in shell-and-editor surface. Persist it with
+`app.activeProfileId: "builtin:bare"` in settings.json. `--profile full` selects
+`builtin:standard` for the session. CLI overrides do not persist. The configured
+default remains Standard; the existing implicit Lite selection for positional
+prompts without `--auto-approve` is unchanged, except an explicitly configured Bare
+profile takes precedence.
+
+Bare omits project/global AGENTS.md, skills, memory, environment catalogs, durable
+goal workflow instructions, delegation, JavaScript workflows, and completion
+verification. Its short prompt and tool allowlist do not alter sandbox authority,
+approval policy, cancellation, output bounds, request deadlines, or compaction.
+Shell handles file reading/search; file editors remain available. A supplied
+`--goal` is still recorded, but Bare does not automatically mark it achieved.
+
+Every CLI session prints its profile on stderr. Headless NDJSON begins with a
+`session_start` carrying `activeProfileId`, and persisted conversation headers
+record the same canonical profile ID.
+
+All headless profiles receive instructions to choose reasonable interpretations,
+continue within existing permissions, and state assumptions in the final response
+instead of asking questions. Ambiguous `--model` matches select the highest-ranked
+candidate and print the assumption. Tool and budget permissions remain enforced.
+
+`verifier.model` selects the independent completion verifier's model ID on the
+session provider; the default empty string uses the session model. When verification
+is unavailable or inconclusive, headless runs finish with “independent verification
+not performed” and retain an active durable goal. A concrete verification failure
+still requests repair or blocks completion. Interactive verification is unchanged.
+
+`agent.backgroundWaitTimeoutMs` bounds the overall headless background drain,
+including notification turns. It defaults to one hour and accepts 1–86,400,000 ms.
+Expiration cancels unfinished work and reports its name (or task/ID) in text and
+structured output. This containment limit does not infer whether work made progress.
+Term2 has no application-owned worktree removal operation or per-run output folder;
+worktree cleanup performed through arbitrary shell commands belongs to the invoking
+workflow, which must save tracked and untracked changes before removing a worktree.

@@ -380,6 +380,7 @@ export const getAgentDefinition = (
       'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
     );
   }
+  const bareMode = profile.identity.id === 'builtin:bare';
   const liteMode = isLiteProfile(profile);
   const capabilities = profile.tools.capabilities;
   // Per-group kill switches (tools.<group>.enabled): mask the resolved set so
@@ -431,7 +432,7 @@ export const getAgentDefinition = (
     memoryContext: memoryCapability.context,
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
-    runCodeEnabled: hasCapability('shell'),
+    runCodeEnabled: !bareMode && hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
@@ -512,6 +513,7 @@ export const getAgentDefinition = (
   // Worktree switching re-roots the local filesystem; in remote mode the remote
   // directory owns the execution root, so the tools have nothing to lease.
   if (
+    !bareMode &&
     !readOnly &&
     (filesystemReadEnabled || filesystemWriteEnabled) &&
     executionContext &&
@@ -567,8 +569,8 @@ export const getAgentDefinition = (
   }
 
   // The stop self-check is root-only (only the root receives `getGoal`) and is
-  // available in every mode: the stop guard requires it whenever a goal is active.
-  if (deps.getGoal) tools.push(createGoalCheckToolDefinition({ getGoal: deps.getGoal }));
+  // available outside Bare: the stop guard requires it whenever a goal is active.
+  if (!bareMode && deps.getGoal) tools.push(createGoalCheckToolDefinition({ getGoal: deps.getGoal }));
 
   if (hasCapability('user-interaction') && getAskUserAnswer && allowAskUser) {
     const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
@@ -708,7 +710,7 @@ export const getAgentDefinition = (
   // Registered last so its bridge exposes every other tool this profile
   // resolved. The registry it actually calls is injected later by
   // bindRunCodeRegistry, once the policy layer has wrapped these definitions.
-  if (hasCapability('shell')) {
+  if (!bareMode && hasCapability('shell')) {
     // Lite intentionally permits outside-workspace reads while its write tools
     // remain workspace-rooted. The current AgentSpec scope type cannot express
     // that mixed authority without widening writes, so fail closed for this
@@ -786,12 +788,16 @@ export const getAgentDefinition = (
 
   const instructions = `${prompt}\n\n${
     environmentEnabled ? `Environment: ${envInfo}` : ''
-  }${agentsInstructions}${skillsInstructions}`;
+  }${agentsInstructions}${skillsInstructions}${
+    !allowAskUser
+      ? '\n\nUnattended mode: Never ask the user questions or wait for clarification, verifier selection, or workflow approval. Choose the most reasonable interpretation within existing permissions, continue the task, and state any assumptions in your final response. If independent verification cannot run, finish the task and clearly say "independent verification not performed". These unattended instructions take precedence over interactive workflow guidance.'
+      : ''
+  }`;
   return {
     name: 'Terminal Assistant',
     memoryContextEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
     instructions,
-    ...(deps.getGoal
+    ...(!bareMode && deps.getGoal
       ? {
           resolveInstructionsForRequest: () => `${instructions}${renderDurableGoalContext(deps.getGoal?.())}`,
           // Read at the same request boundary as the rendered goal above, so

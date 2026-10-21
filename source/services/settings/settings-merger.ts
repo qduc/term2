@@ -87,6 +87,7 @@ export function mergeSettings(
 
   // Ensure all required fields are present
   const merged: SettingsData = {
+    verifier: (result.verifier as SettingsData['verifier']) || { ...defaults.verifier },
     providers: (result.providers as SettingsData['providers']) || JSON.parse(JSON.stringify(defaults.providers)),
     enable_agent_workflow: (result.enable_agent_workflow as boolean) ?? defaults.enable_agent_workflow,
     agent: (result.agent as SettingsData['agent']) || JSON.parse(JSON.stringify(defaults.agent)),
@@ -114,6 +115,7 @@ export function mergeSettings(
   if (validated.success) {
     // Ensure we return a complete SettingsData object
     return {
+      verifier: validated.data.verifier,
       providers: merged.providers,
       enable_agent_workflow: merged.enable_agent_workflow,
       agent: validated.data.agent!,

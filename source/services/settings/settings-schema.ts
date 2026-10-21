@@ -78,6 +78,15 @@ const AgentSettingsObjectSchema = z.object({
   // Temperature controls randomness. We keep it optional so providers/models
   // can use their own defaults when unset.
   temperature: z.number().min(0).max(2).optional(),
+  backgroundWaitTimeoutMs: z
+    .number()
+    .int()
+    .min(1)
+    .max(86_400_000)
+    .default(3_600_000)
+    .describe(
+      'Overall headless background-work wait limit in milliseconds (default one hour; unfinished work is cancelled and named)',
+    ),
   maxTurns: z.number().int().positive().default(100),
   maxRequestInputTokens: z
     .number()
@@ -660,6 +669,14 @@ export const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();
 const SettingsObjectSchema = z.object({
   providers: z.array(CustomProviderSchema).optional().default([]),
   enable_agent_workflow: z.boolean().optional().default(false),
+  verifier: z
+    .object({
+      model: z
+        .string()
+        .default('')
+        .describe('Independent verifier model ID; empty uses the session model and provider'),
+    })
+    .default({ model: '' }),
   agent: AgentSettingsSchema.optional(),
   shell: ShellSettingsSchema.optional(),
   sandbox: SandboxSettingsSchema.optional(),
@@ -681,6 +698,7 @@ export const SettingsSchema = SettingsObjectSchema;
 
 // Type definitions
 export interface SettingsData {
+  verifier: { model: string };
   providers: Array<z.infer<typeof CustomProviderSchema>>;
   enable_agent_workflow: boolean;
   agent: z.infer<typeof AgentSettingsSchema>;
@@ -708,6 +726,7 @@ export interface SettingWithSource<T = any> {
 }
 
 export interface SettingsWithSources {
+  verifier: { model: SettingWithSource<string> };
   agent: {
     modelSelection: SettingWithSource<ModelSelection>;
     smartModel: SettingWithSource<TierModelPoolSetting | undefined>;
@@ -719,6 +738,7 @@ export interface SettingsWithSources {
     choreModel: SettingWithSource<TierModelPoolSetting | undefined>;
     reasoningEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;
+    backgroundWaitTimeoutMs: SettingWithSource<number>;
     maxTurns: SettingWithSource<number>;
     maxRequestInputTokens: SettingWithSource<number | null>;
     maxOutputTokens: SettingWithSource<number>;
@@ -879,6 +899,8 @@ export interface SettingsWithSources {
  * Used by settings command UI and other components to avoid duplication.
  */
 export const SETTING_KEYS = {
+  VERIFIER_MODEL: 'verifier.model',
+  AGENT_BACKGROUND_WAIT_TIMEOUT_MS: 'agent.backgroundWaitTimeoutMs',
   ENABLE_AGENT_WORKFLOW: 'enable_agent_workflow',
   AGENT_MODEL_SELECTION: 'agent.modelSelection',
   AGENT_SMART_MODEL: 'agent.smartModel',
@@ -1017,6 +1039,7 @@ export const SETTING_KEYS = {
 
 // Define which settings are modifiable at runtime
 export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
+  SETTING_KEYS.VERIFIER_MODEL,
   'agent.modelSelection',
   SETTING_KEYS.AGENT_OPENROUTER_API_KEY,
   SETTING_KEYS.AGENT_OPENAI_API_KEY,
@@ -1134,6 +1157,7 @@ export const OPTIONAL_DEFAULT_KEYS = new Set<string>(['agent.maxOutputTokens']);
 export const DEFAULT_SETTINGS: SettingsData = {
   providers: [],
   enable_agent_workflow: false,
+  verifier: { model: '' },
   agent: {
     modelSelection: { model: 'gpt-5.1', provider: 'openai' },
     smartModel: undefined,
@@ -1144,6 +1168,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     cheapReasoningEffort: undefined,
     choreModel: undefined,
     reasoningEffort: 'default',
+    backgroundWaitTimeoutMs: 3_600_000,
     maxTurns: 100,
     maxRequestInputTokens: null,
     maxOutputTokens: 32_000,

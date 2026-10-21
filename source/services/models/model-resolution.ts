@@ -352,6 +352,8 @@ export async function resolveModelFlag(deps: {
   providerIds?: string[];
   /** See `InteractivePicker`. Only ever set by a confirmed-interactive caller. */
   interactivePicker?: InteractivePicker;
+  /** Unattended callers must never enter the readline fallback. */
+  unattended?: boolean;
 }): Promise<ModelResolutionResult> {
   const knownProviders = deps.knownProviders ?? getProviderIds();
   const parsed = parseModelFlag(deps.modelFlag, {
@@ -651,6 +653,20 @@ export async function resolveModelFlag(deps: {
       provider: picked.provider,
       reasoningEffort: parsed.reasoningEffort,
       ...(warnings.length > 0 ? { warnings } : {}),
+    };
+  }
+
+  if (deps.unattended) {
+    const selected = matches[0];
+    return {
+      status: 'resolved',
+      modelId: selected.model.id,
+      provider: selected.provider,
+      reasoningEffort: parsed.reasoningEffort,
+      warnings: [
+        ...warnings,
+        `Unattended model selection: assuming ${selected.provider}/${selected.model.id} for "${deps.modelFlag}" (highest-ranked match).`,
+      ],
     };
   }
 

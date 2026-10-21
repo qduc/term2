@@ -42,6 +42,7 @@ import { listRecentConversations } from './services/conversation/recent-conversa
 import { rotateSessionLog } from './services/conversation/session-log-lifecycle.js';
 import { formatResumeList } from './utils/resume-list.js';
 import { killLiveShellChildren } from './utils/shell/execute-shell.js';
+import { resolveProfile } from './services/profiles/resolver.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
@@ -235,6 +236,7 @@ const cli = meow(
       -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
           --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
           --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
+          --profile <name>                 Select a profile (full, bare, lite, plan, pair, mentor, orchestrator)
       -l, --lite                           Start in lite mode (minimal context, session-only)
           --auto-approve                   Allow tool execution for a non-interactive prompt
       -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
@@ -334,6 +336,7 @@ const cli = meow(
       },
       goal: { type: 'string' },
       goalCriteria: { type: 'string' },
+      profile: { type: 'string' },
       lite: {
         type: 'boolean',
         alias: 'l',
@@ -565,6 +568,12 @@ const needsHomeDirectoryConfirmation = shouldWarnOnHomeDirectoryStart({
 });
 
 if (needsHomeDirectoryConfirmation) {
+  if (hasPositionalPrompt) {
+    // Positional prompts are headless even when launched from a terminal.
+    // Preserve the startup restriction without entering readline or asking a question.
+    console.error('Headless startup refused from the home or root directory. Start in a project directory.');
+    process.exit(1);
+  }
   if (!nodeStdin.isTTY || !nodeStdout.isTTY) {
     console.error(HOME_DIRECTORY_START_WARNING.trimEnd());
     console.error('Cancelled.');
@@ -793,6 +802,7 @@ if (modelFlag) {
     settingsService: settings,
     loggingService: logger,
     interactivePicker,
+    unattended: !canUseInteractiveModelPicker,
   });
 
   if (resolution.status === 'no_match') {
@@ -834,7 +844,12 @@ if (modelFlag) {
 // is already active (orchestrator or mentor take precedence).
 {
   let profileId: string;
-  if (resumedConversation) {
+  if (cli.flags.profile) {
+    const name = cli.flags.profile === 'full' ? 'standard' : cli.flags.profile;
+    profileId = name.includes(':') ? name : `builtin:${name}`;
+    // Validate before building providers or starting a session.
+    resolveProfile(profileId);
+  } else if (resumedConversation) {
     profileId = cli.flags.lite
       ? LITE_PROFILE_ID
       : resumedConversation.activeProfileId ??
@@ -848,12 +863,18 @@ if (modelFlag) {
     const persistedProfileId = String(settings.get('app.activeProfileId'));
     // Implicit lite must not override a higher-precedence mode already persisted.
     profileId =
-      implicitLite && persistedProfileId !== 'builtin:orchestrator' && persistedProfileId !== 'builtin:mentor'
+      implicitLite && !['builtin:bare', 'builtin:orchestrator', 'builtin:mentor'].includes(persistedProfileId)
         ? LITE_PROFILE_ID
         : persistedProfileId;
   }
   settings.set('app.activeProfileId', profileId, { persist: false });
 }
+
+const activeProfileId = settings.get('app.activeProfileId');
+process.stderr.write(
+  `Profile: ${activeProfileId === 'builtin:standard' ? 'full' : activeProfileId.replace(/^builtin:/, '')}\n`,
+);
+logger.info('Session profile selected', { eventType: 'session.profile', activeProfileId });
 
 // SSH Handling
 const sshFlag = cli.flags.ssh;

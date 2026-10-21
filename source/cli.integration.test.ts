@@ -422,167 +422,177 @@ it('positional launch closes the goal after a recorded achieved goal_check and r
   }
 });
 
-it('the shipped CLI gates a durable goal through independent verification by default', async () => {
-  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
-  // The gate attests to a repository change set, so the workspace is a real Git
-  // repository holding one uncommitted source file.
-  const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-verify-repo-')));
-  execFileSync('git', ['init', '--quiet', repo]);
-  execFileSync('git', ['-C', repo, 'config', 'user.email', 'fixture@example.test']);
-  execFileSync('git', ['-C', repo, 'config', 'user.name', 'Fixture']);
-  fs.writeFileSync(path.join(repo, 'README.md'), '# Fixture\n');
-  fs.writeFileSync(
-    path.join(repo, 'math.ts'),
-    'export function add(a: number, b: number): number {\n  return a + b;\n}\n',
-  );
-  execFileSync('git', ['-C', repo, 'add', 'README.md']);
-  execFileSync('git', ['-C', repo, 'commit', '--quiet', '-m', 'initial']);
+it.each(['', 'mock-verifier'])(
+  'the shipped CLI verifies a durable goal with verifier.model=%s',
+  async (verifierModel) => {
+    const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+    // The gate attests to a repository change set, so the workspace is a real Git
+    // repository holding one uncommitted source file.
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-verify-repo-')));
+    execFileSync('git', ['init', '--quiet', repo]);
+    execFileSync('git', ['-C', repo, 'config', 'user.email', 'fixture@example.test']);
+    execFileSync('git', ['-C', repo, 'config', 'user.name', 'Fixture']);
+    fs.writeFileSync(path.join(repo, 'README.md'), '# Fixture\n');
+    fs.writeFileSync(
+      path.join(repo, 'math.ts'),
+      'export function add(a: number, b: number): number {\n  return a + b;\n}\n',
+    );
+    execFileSync('git', ['-C', repo, 'add', 'README.md']);
+    execFileSync('git', ['-C', repo, 'commit', '--quiet', '-m', 'initial']);
 
-  const check = {
-    status: 'achieved',
-    evidence: 'Provider returned the reply',
-    criteriaEvidence: 'math.ts exports add(a, b) returning a + b',
-  };
-  const mock = await startModelMock(['mock-alpha'], (n, body) => {
-    const tools = Array.isArray(body?.tools) ? (body!.tools as Record<string, unknown>[]) : [];
-    const messages = Array.isArray(body?.messages) ? (body!.messages as Record<string, unknown>[]) : [];
-    const isVerifier = tools.some((tool) => {
-      const fn = tool?.function as { name?: string } | undefined;
-      return (fn?.name ?? (tool?.name as string | undefined)) === 'verification_probe';
-    });
-    if (isVerifier) {
-      // The first verifier round probes the repository; the second returns the verdict.
-      if (!messages.some((message) => message?.role === 'tool')) {
+    const check = {
+      status: 'achieved',
+      evidence: 'Provider returned the reply',
+      criteriaEvidence: 'math.ts exports add(a, b) returning a + b',
+    };
+    const mock = await startModelMock(['mock-alpha', 'mock-verifier'], (n, body) => {
+      const tools = Array.isArray(body?.tools) ? (body!.tools as Record<string, unknown>[]) : [];
+      const messages = Array.isArray(body?.messages) ? (body!.messages as Record<string, unknown>[]) : [];
+      const isVerifier = tools.some((tool) => {
+        const fn = tool?.function as { name?: string } | undefined;
+        return (fn?.name ?? (tool?.name as string | undefined)) === 'verification_probe';
+      });
+      if (isVerifier) {
+        // The first verifier round probes the repository; the second returns the verdict.
+        if (!messages.some((message) => message?.role === 'tool')) {
+          return [
+            {
+              id: 'chatcmpl-probe',
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call_probe',
+                        type: 'function',
+                        function: {
+                          name: 'verification_probe',
+                          arguments: JSON.stringify({ kind: 'list_files' }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+            { id: 'chatcmpl-probe', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+          ];
+        }
         return [
           {
-            id: 'chatcmpl-probe',
+            id: 'chatcmpl-verdict',
             choices: [
               {
                 delta: {
-                  tool_calls: [
-                    {
-                      index: 0,
-                      id: 'call_probe',
-                      type: 'function',
-                      function: {
-                        name: 'verification_probe',
-                        arguments: JSON.stringify({ kind: 'list_files' }),
-                      },
-                    },
-                  ],
+                  role: 'assistant',
+                  content: JSON.stringify({
+                    outcome: 'PASS',
+                    evidence: 'math.ts is in the repository root and exports add(a, b) returning a + b.',
+                    checked: ['Repository listing'],
+                    limitations: ['Static inspection only'],
+                  }),
                 },
               },
             ],
           },
-          { id: 'chatcmpl-probe', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+          { id: 'chatcmpl-verdict', choices: [{ delta: {}, finish_reason: 'stop' }] },
         ];
       }
-      return [
-        {
-          id: 'chatcmpl-verdict',
-          choices: [
+      return n === 1
+        ? [
             {
-              delta: {
-                role: 'assistant',
-                content: JSON.stringify({
-                  outcome: 'PASS',
-                  evidence: 'math.ts is in the repository root and exports add(a, b) returning a + b.',
-                  checked: ['Repository listing'],
-                  limitations: ['Static inspection only'],
-                }),
-              },
-            },
-          ],
-        },
-        { id: 'chatcmpl-verdict', choices: [{ delta: {}, finish_reason: 'stop' }] },
-      ];
-    }
-    return n === 1
-      ? [
-          {
-            id: 'chatcmpl-check',
-            choices: [
-              {
-                delta: {
-                  tool_calls: [
-                    {
-                      index: 0,
-                      id: 'call_check',
-                      type: 'function',
-                      function: { name: 'goal_check', arguments: JSON.stringify(check) },
-                    },
-                  ],
+              id: 'chatcmpl-check',
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call_check',
+                        type: 'function',
+                        function: { name: 'goal_check', arguments: JSON.stringify(check) },
+                      },
+                    ],
+                  },
                 },
-              },
-            ],
-          },
-          { id: 'chatcmpl-check', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
-        ]
-      : [
-          { id: 'chatcmpl-done', choices: [{ delta: { role: 'assistant', content: 'Shipped.' } }] },
-          { id: 'chatcmpl-done', choices: [{ delta: {}, finish_reason: 'stop' }] },
-        ];
-  });
-  writeSettings(tempHome, {
-    // completionVerification is left at its default: the gate must run.
-    agent: {
-      retryAttempts: 0,
-      modelSelection: { model: 'mock-alpha', provider: 'mockprov' },
-    },
-    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
-  });
-  try {
-    const { status, stdout, stderr } = await spawnCli(
-      [
-        cliPath(),
-        '--goal',
-        'Ship math.ts',
-        '--goal-criteria',
-        'math.ts exports add(a, b) returning a + b',
-        'worker-prompt-sentinel',
-      ],
-      createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
-      repo,
-    );
-    expect(status, stderr).toBe(0);
-    expect(stdout).toContain('Shipped.');
-    expect(stderr).toContain('Goal (achieved): Ship math.ts');
-    expect(stderr).toContain("Completion accepted after the model's goal_check.");
-
-    const requests = mock.capturedRequests();
-    // Two worker rounds, then the fresh verifier's probe round and verdict round.
-    expect(requests).toHaveLength(4);
-    const verifierRequests = requests.slice(2);
-    for (const request of verifierRequests) {
-      const tools = (request.tools as Record<string, unknown>[]) ?? [];
-      expect(tools).toHaveLength(1);
-      expect((tools[0]!.function as { name: string }).name).toBe('verification_probe');
-    }
-    // The verifier sees the goal, never the worker's prompt or its evidence.
-    const verifierBody = JSON.stringify(verifierRequests);
-    expect(verifierBody).toContain('Ship math.ts');
-    expect(verifierBody).not.toContain('worker-prompt-sentinel');
-    expect(verifierBody).not.toContain('Provider returned the reply');
-
-    // The gate persisted its decision before the goal was closed.
-    const dbPath = path.join(tempHome, '.local', 'share', 'term2-nodejs', 'completion-verification.sqlite');
-    expect(fs.existsSync(dbPath)).toBe(true);
-    const db = new Database(dbPath, { readonly: true });
+              ],
+            },
+            { id: 'chatcmpl-check', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+          ]
+        : [
+            { id: 'chatcmpl-done', choices: [{ delta: { role: 'assistant', content: 'Shipped.' } }] },
+            { id: 'chatcmpl-done', choices: [{ delta: {}, finish_reason: 'stop' }] },
+          ];
+    });
+    writeSettings(tempHome, {
+      verifier: { model: verifierModel },
+      // completionVerification is left at its default: the gate must run.
+      agent: {
+        retryAttempts: 0,
+        modelSelection: { model: 'mock-alpha', provider: 'mockprov' },
+      },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+    });
     try {
-      const row = db.prepare('SELECT record FROM completion_verification').get() as { record: string };
-      const record = JSON.parse(row.record);
-      expect(record.state).toBe('COMPLETED');
-      expect(record.decision.action).toBe('independent_verify');
-      expect(record.report.outcome).toBe('PASS');
+      const { status, stdout, stderr } = await spawnCli(
+        [
+          cliPath(),
+          '--goal',
+          'Ship math.ts',
+          '--goal-criteria',
+          'math.ts exports add(a, b) returning a + b',
+          'worker-prompt-sentinel',
+        ],
+        createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+        repo,
+      );
+      expect(status, stderr).toBe(0);
+      expect(stdout).toContain('Shipped.');
+      expect(stderr).toContain('Goal (achieved): Ship math.ts');
+      expect(stderr).toContain("Completion accepted after the model's goal_check.");
+
+      const requests = mock.capturedRequests();
+      // Two worker rounds, then the fresh verifier's probe round and verdict round.
+      expect(requests).toHaveLength(4);
+      const verifierRequests = requests.slice(2);
+      expect(mock.capturedModels()).toEqual([
+        'mock-alpha',
+        'mock-alpha',
+        verifierModel || 'mock-alpha',
+        verifierModel || 'mock-alpha',
+      ]);
+      for (const request of verifierRequests) {
+        const tools = (request.tools as Record<string, unknown>[]) ?? [];
+        expect(tools).toHaveLength(1);
+        expect((tools[0]!.function as { name: string }).name).toBe('verification_probe');
+      }
+      // The verifier sees the goal, never the worker's prompt or its evidence.
+      const verifierBody = JSON.stringify(verifierRequests);
+      expect(verifierBody).toContain('Ship math.ts');
+      expect(verifierBody).not.toContain('worker-prompt-sentinel');
+      expect(verifierBody).not.toContain('Provider returned the reply');
+
+      // The gate persisted its decision before the goal was closed.
+      const dbPath = path.join(tempHome, '.local', 'share', 'term2-nodejs', 'completion-verification.sqlite');
+      expect(fs.existsSync(dbPath)).toBe(true);
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const row = db.prepare('SELECT record FROM completion_verification').get() as { record: string };
+        const record = JSON.parse(row.record);
+        expect(record.state).toBe('COMPLETED');
+        expect(record.decision.action).toBe('independent_verify');
+        expect(record.report.outcome).toBe('PASS');
+      } finally {
+        db.close();
+      }
     } finally {
-      db.close();
+      await mock.close();
+      fs.rmSync(tempHome, { recursive: true, force: true });
+      fs.rmSync(repo, { recursive: true, force: true });
     }
-  } finally {
-    await mock.close();
-    fs.rmSync(tempHome, { recursive: true, force: true });
-    fs.rmSync(repo, { recursive: true, force: true });
-  }
-});
+  },
+);
 
 it('resume preserves the replayed goal without flags and replaces it before startup when flags are explicit', async () => {
   for (const explicit of [false, true]) {
@@ -1154,7 +1164,7 @@ it('CLI --model keeps settings.json session-only when resolution passes through 
   }
 });
 
-it('CLI --json routes the ambiguous --model disambiguation prompt to stderr, keeping stdout machine-readable', async () => {
+it('CLI --json auto-selects an ambiguous model without asking for input', async () => {
   // Regression: the prompt defaulted to process.stdout, corrupting the NDJSON
   // event channel whenever an ambiguous pattern needed disambiguation.
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
@@ -1172,9 +1182,10 @@ it('CLI --json routes the ambiguous --model disambiguation prompt to stderr, kee
     });
     const { status, stdout, stderr } = await spawnCli([cliPath(), '--json', '--model', 'mock', 'hello'], childEnv);
 
-    // EOF on stdin cancels the selection.
-    expect(status).toBe(1);
-    expect(stderr).toContain('Multiple models match "mock"');
+    expect(status, stderr).toBe(0);
+    expect(stderr).toContain('Unattended model selection: assuming mockprov/mock-alpha');
+    expect(stderr).not.toContain('Select a model');
+    expect(mock.capturedModels()).toEqual(['mock-alpha']);
     expect(stdout).not.toContain('Multiple models match');
     expect(stdout).not.toContain('Select a model');
     for (const line of stdout.split('\n')) {
@@ -1678,4 +1689,242 @@ it('a call that reuses a refused call id runs and is saved as run, not as refuse
     { command: refusedCommand, isApprovalRejection: true, success: expect.anything() },
     { command: ranCommand, isApprovalRejection: false, success: true },
   ]);
+});
+
+it.each(['flag', 'config'])(
+  'bare profile via %s exposes only shell and editors and persists its identity',
+  async (selection) => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-bare-'));
+    fs.writeFileSync(path.join(repo, 'AGENTS.md'), 'PROJECT_GUIDANCE_SENTINEL: ask the user for workflow selection.');
+    const mock = await startModelMock(['mock-alpha'], (n) =>
+      n === 1
+        ? [
+            {
+              id: 'bare-edit',
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'bare-create',
+                        type: 'function',
+                        function: {
+                          name: 'create_file',
+                          arguments: JSON.stringify({ path: 'result.txt', content: 'bare edit succeeded\n' }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+            { id: 'bare-edit', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+          ]
+        : [
+            {
+              id: 'bare-done',
+              choices: [{ delta: { role: 'assistant', content: 'Done; assumed the default filename.' } }],
+            },
+            { id: 'bare-done', choices: [{ delta: {}, finish_reason: 'stop' }] },
+          ],
+    );
+    writeSettings(testDir, {
+      app: { activeProfileId: selection === 'config' ? 'builtin:bare' : 'builtin:standard' },
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+    });
+    try {
+      const result = await spawnCli(
+        [
+          cliPath(),
+          ...(selection === 'flag' ? ['--profile', 'bare'] : []),
+          '--auto-approve',
+          '--json',
+          '--goal',
+          'Write result',
+          'Write a result file',
+        ],
+        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+        repo,
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stderr).toContain('Profile: bare');
+      expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).toBe('bare edit succeeded\n');
+      const request = mock.capturedRequests()[0];
+      const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
+      expect(names).toEqual(['create_file', 'search_replace', 'shell']);
+      const system = (request.messages as { role: string; content: string }[])
+        .filter((m) => m.role === 'system')
+        .map((m) => m.content)
+        .join('\n');
+      expect(system.length).toBeLessThan(4000);
+      expect(system).toContain('Unattended mode: Never ask');
+      expect(system).not.toContain('PROJECT_GUIDANCE_SENTINEL');
+      expect(system).not.toContain('run_code');
+      expect(mock.capturedModels()).toHaveLength(2);
+      const emitted = result.stdout
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(emitted[0]).toMatchObject({ type: 'session_start', activeProfileId: 'builtin:bare' });
+      const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
+      const events = fs
+        .readFileSync(path.join(testDir, saved), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line).event);
+      expect(events[0]).toMatchObject({ type: 'session_init', activeProfileId: 'builtin:bare' });
+      expect(events.filter((e) => e.type === 'goal_changed')).toHaveLength(1);
+    } finally {
+      await mock.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  },
+);
+
+it('headless completion in an unsupported workspace finishes with an explicit verification notice', async () => {
+  const mock = await startModelMock(['mock-alpha'], (n) =>
+    n === 1
+      ? [
+          {
+            id: 'check',
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'goal-check',
+                      type: 'function',
+                      function: {
+                        name: 'goal_check',
+                        arguments: JSON.stringify({ status: 'achieved', evidence: 'Reply delivered' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          { id: 'check', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+        ]
+      : [
+          { id: 'done', choices: [{ delta: { role: 'assistant', content: 'Done.' } }] },
+          { id: 'done', choices: [{ delta: {}, finish_reason: 'stop' }] },
+        ],
+  );
+  writeSettings(testDir, {
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+  try {
+    const result = await spawnCli(
+      [cliPath(), '--profile', 'full', '--goal', 'Deliver a reply', 'Reply'],
+      createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+      testDir,
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('independent verification not performed');
+    expect(result.stdout).toContain('durable goal remains active');
+    expect(result.stderr).toContain('Profile: full');
+  } finally {
+    await mock.close();
+  }
+});
+
+it.each(['full', 'bare', 'lite', 'pair', 'plan', 'mentor', 'orchestrator'])(
+  'headless %s has unattended instructions and no ask_user capability',
+  async (profile) => {
+    const mock = await startModelMock(['mock-alpha']);
+    writeSettings(testDir, {
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+    });
+    try {
+      const result = await spawnCli(
+        [cliPath(), '--profile', profile, 'Interpret reasonably and reply'],
+        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+        testDir,
+      );
+      expect(result.status, result.stderr).toBe(0);
+      const request = mock.capturedRequests()[0];
+      const system = (request.messages as { role: string; content: string }[])
+        .filter((m) => m.role === 'system')
+        .map((m) => m.content)
+        .join('\n');
+      expect(system).toContain('Unattended mode: Never ask the user questions');
+      expect(system).toContain('state any assumptions in your final response');
+      expect(JSON.stringify(request.tools)).not.toContain('"name":"ask_user"');
+    } finally {
+      await mock.close();
+    }
+  },
+);
+
+it('bare retains the outside-workspace edit approval boundary without asking headlessly', async () => {
+  const workspace = path.join(testDir, 'workspace');
+  fs.mkdirSync(workspace);
+  const outside = path.join(testDir, 'outside.txt');
+  const mock = await startModelMock(['mock-alpha'], (n) =>
+    n === 1
+      ? [
+          {
+            id: 'outside-edit',
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'outside-create',
+                      type: 'function',
+                      function: {
+                        name: 'create_file',
+                        arguments: JSON.stringify({ path: outside, content: 'must not be written' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          { id: 'outside-edit', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+        ]
+      : [
+          {
+            id: 'done',
+            choices: [{ delta: { role: 'assistant', content: 'Outside edit denied; kept existing permissions.' } }],
+          },
+          { id: 'done', choices: [{ delta: {}, finish_reason: 'stop' }] },
+        ],
+  );
+  writeSettings(testDir, {
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+  try {
+    const result = await spawnCli(
+      [cliPath(), '--profile', 'bare', 'Attempt the fixture edit'],
+      createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+      workspace,
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(fs.existsSync(outside)).toBe(false);
+    expect(result.stdout).toContain('Outside edit denied');
+    expect(JSON.stringify(mock.capturedRequests()[1])).toContain('use --auto-approve');
+  } finally {
+    await mock.close();
+  }
+});
+
+it('headless auto-approve at home refuses without printing or waiting for a question', async () => {
+  const result = await spawnCli(
+    [cliPath(), '--auto-approve', '--profile', 'bare', 'Reply'],
+    createTestChildEnv({ HOME: testDir, DISABLE_LOGGING: '1' }),
+    testDir,
+  );
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('Headless startup refused');
+  expect(result.stdout + result.stderr).not.toContain('Continue?');
 });

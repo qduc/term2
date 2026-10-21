@@ -1,3 +1,19 @@
+## [0.35.0] - 2026-10-22
+
+### Features
+- Added the opt-in `bare` profile (`--profile bare`, `/profile bare`, `profiles.active: "bare"`), providing a minimal system prompt baseline while retaining codebase tool access, system invariants, and completion verification safeguards.
+- Added `--profile <name>` CLI option to select an operating profile (`full`, `bare`, `lite`, `plan`, `pair`, `mentor`, `orchestrator`) directly on startup.
+- Added `agent.backgroundWaitTimeoutMs` setting to configure the overall wait limit for headless background tasks (default 1 hour), terminating and reporting unfinished work when exceeded.
+- Added `verifier.model` setting allowing an independent verifier model to be designated for completion verification.
+
+### Improvements
+- Headless non-interactive workflows with durable goals run unattended: when completion verification passes, the workflow stops cleanly without prompting or stalling.
+- Provider selection menu (`/providers`) removes the redundant "(disabled)" text suffix on disabled provider rows.
+
+### Bug Fixes
+- Fixed Bare profile initialization during interactive session startup so system prompt generation and legacy mode adapters handle bare mode properly.
+- Fixed authorized reference approval context evaluation in headless runs so references in approval prompts are resolved correctly.
+
 ## [0.34.0] - 2026-10-19
 
 ### Features

@@ -1,5 +1,9 @@
 # Cheap Bare additions: pre-dispatch evidence
 
+This is the historical preflight, not the current execution state. The user
+subsequently waived hard reservations; the completed capped screens and final
+accounting are in [cheap-additions-results.md](cheap-additions-results.md).
+
 ## Scope and authorization
 
 The user authorized the new cheap-additions experiment on 2026-10-21.
@@ -13,6 +17,15 @@ This is the inspected revision, not a claim that an execution configuration has
 been frozen or that provider-resolved model availability has been checked.
 
 ## Blocking admission finding
+
+User amendment after this report was committed: **"skip budget"**, in response
+to the explicit choice between skipping the experiment and skipping budget
+enforcement. The pre-dispatch reservation prerequisite below is waived for this
+experiment. It is retained as evidence of a known limitation, not a current
+dispatch blocker. Whole-run hard containment must not be claimed. Other plan
+limits and accounting requirements remain in effect; use the 12,000-token
+per-run target as a monitored ceiling and disclose possible in-flight overshoot.
+No runtime budget repair is requested.
 
 The inspected budget owners do not establish the experiment's required
 12,000-total-token reservation before dispatch:
@@ -38,8 +51,8 @@ external reservation-capable runner could exist. No suitable experiment runner
 has been established by this preflight. A per-response output cap or a
 post-response usage monitor cannot replace the requested whole-run reservation.
 
-Under the user's pre-dispatch stopping rule, paid calls must not begin on the
-strength of these controls alone.
+Before the amendment, the pre-dispatch stopping rule prevented relying on these
+controls alone. The amendment removed that blocker without claiming hard bounds.
 
 ## Evidence and limits
 
@@ -57,18 +70,11 @@ strength of these controls alone.
   model identity, randomization, and screen/confirmation measurements remain
   unperformed. No candidate recommendation is supported yet.
 
-## Resume boundary
+## Superseding outcome
 
-Establish a separately verified reservation-capable runner before any paid call.
-It must atomically reserve a defensible worst-case input plus enforced output
-allocation for every root/helper/retry request, include outstanding reservations
-in admission, and fail closed when usage or bounds are unknown. Verify concurrent
-admission, failed/partial streams, retries, missing usage and reviewer calls with
-local fixtures. The experiment ceiling remains 24 paid runs and 288,000 reserved
-tokens, with 12,000 reserved per run; helper costs belong to their owning run.
-
-If meeting this prerequisite changes runtime enforcement, treat that work as a
-separate high-risk change with independent verification, not an experimental
-addition or a silent relaxation of the frozen runtime. Finish the remaining
-Stage 0 checks and freeze fixtures, scoring and actual request differences before
-dispatching either arm of a pair.
+The waiver authorized monitored rather than reserved accounting: 12,000 tokens
+per run, 288,000 overall, at most 24 paid runs, helper charges included. The
+experiment concluded with all ten available screens capped, one incomplete blind
+review, and 155,778 total tokens across 11 paid runs. No addition advances and no
+production runtime repair was made. See the results and retained evidence rather
+than restarting from the obsolete reservation prerequisite.

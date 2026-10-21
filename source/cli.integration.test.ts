@@ -1692,10 +1692,15 @@ it('a call that reuses a refused call id runs and is saved as run, not as refuse
 });
 
 it.each(['flag', 'config'])(
-  'bare profile via %s exposes only shell and editors and persists its identity',
+  'bare profile via %s keeps a small tool surface, project guidance, and versioned session identity',
   async (selection) => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-bare-'));
-    fs.writeFileSync(path.join(repo, 'AGENTS.md'), 'PROJECT_GUIDANCE_SENTINEL: ask the user for workflow selection.');
+    fs.mkdirSync(path.join(testDir, '.agents'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, '.agents', 'AGENTS.md'), 'GLOBAL_GUIDANCE_SENTINEL: report observed checks.');
+    fs.writeFileSync(
+      path.join(repo, 'AGENTS.md'),
+      'PROJECT_GUIDANCE_SENTINEL: preserve existing files and run relevant checks.',
+    );
     const mock = await startModelMock(['mock-alpha'], (n) =>
       n === 1
         ? [
@@ -1741,8 +1746,6 @@ it.each(['flag', 'config'])(
           ...(selection === 'flag' ? ['--profile', 'bare'] : []),
           '--auto-approve',
           '--json',
-          '--goal',
-          'Write result',
           'Write a result file',
         ],
         createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
@@ -1753,29 +1756,42 @@ it.each(['flag', 'config'])(
       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).toBe('bare edit succeeded\n');
       const request = mock.capturedRequests()[0];
       const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
-      expect(names).toEqual(['create_file', 'search_replace', 'shell']);
+      expect(names).toEqual(['create_file', 'goal_check', 'search_replace', 'shell']);
       const system = (request.messages as { role: string; content: string }[])
         .filter((m) => m.role === 'system')
         .map((m) => m.content)
         .join('\n');
       expect(system.length).toBeLessThan(4000);
       expect(system).toContain('Unattended mode: Never ask');
-      expect(system).not.toContain('PROJECT_GUIDANCE_SENTINEL');
+      expect(system).toContain('PROJECT_GUIDANCE_SENTINEL');
+      expect(system).toContain('GLOBAL_GUIDANCE_SENTINEL');
+      expect(system).toContain('report blocked');
+      expect(system).toContain('Follow required independent review policies');
       expect(system).not.toContain('run_code');
       expect(mock.capturedModels()).toHaveLength(2);
       const emitted = result.stdout
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line));
-      expect(emitted[0]).toMatchObject({ type: 'session_start', activeProfileId: 'builtin:bare' });
+      expect(emitted[0]).toMatchObject({
+        type: 'session_start',
+        activeProfileId: 'builtin:bare',
+        activeProfileVersion: '1.1.0',
+        activeProfileDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
       const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
       const events = fs
         .readFileSync(path.join(testDir, saved), 'utf8')
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line).event);
-      expect(events[0]).toMatchObject({ type: 'session_init', activeProfileId: 'builtin:bare' });
-      expect(events.filter((e) => e.type === 'goal_changed')).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: 'session_init',
+        activeProfileId: 'builtin:bare',
+        activeProfileVersion: emitted[0].activeProfileVersion,
+        activeProfileDigest: emitted[0].activeProfileDigest,
+      });
+      expect(events.filter((e) => e.type === 'goal_changed')).toHaveLength(0);
     } finally {
       await mock.close();
       fs.rmSync(repo, { recursive: true, force: true });
@@ -1783,55 +1799,60 @@ it.each(['flag', 'config'])(
   },
 );
 
-it('headless completion in an unsupported workspace finishes with an explicit verification notice', async () => {
-  const mock = await startModelMock(['mock-alpha'], (n) =>
-    n === 1
-      ? [
-          {
-            id: 'check',
-            choices: [
-              {
-                delta: {
-                  tool_calls: [
-                    {
-                      index: 0,
-                      id: 'goal-check',
-                      type: 'function',
-                      function: {
-                        name: 'goal_check',
-                        arguments: JSON.stringify({ status: 'achieved', evidence: 'Reply delivered' }),
+it.each(['full', 'bare'])(
+  'headless %s completion in an unsupported workspace reports missing verification',
+  async (profile) => {
+    const mock = await startModelMock(['mock-alpha'], (n) =>
+      n === 1
+        ? [
+            {
+              id: 'check',
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'goal-check',
+                        type: 'function',
+                        function: {
+                          name: 'goal_check',
+                          arguments: JSON.stringify({ status: 'achieved', evidence: 'Reply delivered' }),
+                        },
                       },
-                    },
-                  ],
+                    ],
+                  },
                 },
-              },
-            ],
-          },
-          { id: 'check', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
-        ]
-      : [
-          { id: 'done', choices: [{ delta: { role: 'assistant', content: 'Done.' } }] },
-          { id: 'done', choices: [{ delta: {}, finish_reason: 'stop' }] },
-        ],
-  );
-  writeSettings(testDir, {
-    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
-    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
-  });
-  try {
-    const result = await spawnCli(
-      [cliPath(), '--profile', 'full', '--goal', 'Deliver a reply', 'Reply'],
-      createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
-      testDir,
+              ],
+            },
+            { id: 'check', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+          ]
+        : [
+            { id: 'done', choices: [{ delta: { role: 'assistant', content: 'Done.' } }] },
+            { id: 'done', choices: [{ delta: {}, finish_reason: 'stop' }] },
+          ],
     );
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain('independent verification not performed');
-    expect(result.stdout).toContain('durable goal remains active');
-    expect(result.stderr).toContain('Profile: full');
-  } finally {
-    await mock.close();
-  }
-});
+    writeSettings(testDir, {
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+    });
+    try {
+      const result = await spawnCli(
+        [cliPath(), '--profile', profile, '--goal', 'Deliver a reply', 'Reply'],
+        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+        testDir,
+      );
+      expect(result.status, result.stderr).toBe(profile === 'bare' ? 2 : 0);
+      expect(result.stdout).toContain(
+        profile === 'bare' ? 'Completion verification blocked' : 'independent verification not performed',
+      );
+      expect(result.stdout).toContain('durable goal remains active');
+      expect(result.stderr).toContain(`Profile: ${profile}`);
+    } finally {
+      await mock.close();
+    }
+  },
+);
 
 it.each(['full', 'bare', 'lite', 'pair', 'plan', 'mentor', 'orchestrator'])(
   'headless %s has unattended instructions and no ask_user capability',

@@ -869,114 +869,125 @@ it('an unsupported workspace blocks with a named reason and an operational alert
   }
 });
 
-it('the root AgentClient uses a separate provider instance and persists completion before closing the goal', async () => {
-  vi.stubEnv('XDG_DATA_HOME', path.join(root, '.git', 'data'));
-  const goal: DurableGoal = {
-    id: 'root-goal',
-    outcome: 'Read README',
-    successCriteria: 'README contains Revision',
-    status: 'active',
-  };
-  let currentGoal = goal;
-  let instances = 0;
-  let verifierRequests = 0;
-  const provider = registerTestProvider({
-    createStreamedModel: () => {
-      const instance = ++instances;
-      return {
-        async *stream(request) {
-          const verifier = request.tools.length === 1 && request.tools[0]?.name === 'verification_probe';
-          if (verifier) {
-            verifierRequests++;
-            expect(instance).toBeGreaterThan(1);
-            expect(JSON.stringify(request)).not.toContain('WORKER_PRIVATE_SENTINEL');
-            if (!request.input.some((item) => item.type === 'tool_result')) {
+it.each([
+  { profileId: 'builtin:standard', outcome: 'PASS' },
+  { profileId: 'builtin:bare', outcome: 'PASS' },
+  { profileId: 'builtin:bare', outcome: 'FAIL' },
+  { profileId: 'builtin:bare', outcome: 'INCONCLUSIVE' },
+])(
+  'the root $profileId AgentClient independently verifies $outcome before closing the goal',
+  async ({ profileId, outcome }) => {
+    vi.stubEnv('XDG_DATA_HOME', path.join(root, '.git', 'data'));
+    const goal: DurableGoal = {
+      id: 'root-goal',
+      outcome: 'Read README',
+      successCriteria: 'README contains Revision',
+      status: 'active',
+    };
+    let currentGoal = goal;
+    let instances = 0;
+    let verifierRequests = 0;
+    const provider = registerTestProvider({
+      createStreamedModel: () => {
+        const instance = ++instances;
+        return {
+          async *stream(request) {
+            const verifier = request.tools.length === 1 && request.tools[0]?.name === 'verification_probe';
+            if (verifier) {
+              verifierRequests++;
+              expect(instance).toBeGreaterThan(1);
+              expect(JSON.stringify(request)).not.toContain('WORKER_PRIVATE_SENTINEL');
+              if (!request.input.some((item) => item.type === 'tool_result')) {
+                const call = {
+                  type: 'tool_call' as const,
+                  id: 'independent-read',
+                  name: 'verification_probe',
+                  arguments: JSON.stringify({ kind: 'read_file', path: 'README.md' }),
+                };
+                yield call;
+                yield { type: 'completion', responseId: 'independent-read', output: [call] };
+              } else {
+                yield {
+                  type: 'completion',
+                  responseId: 'verified',
+                  output: [
+                    {
+                      type: 'message',
+                      content: [
+                        {
+                          type: 'text',
+                          text: JSON.stringify({
+                            outcome,
+                            evidence: 'README contains Revision, observed on disk',
+                            checked: ['README contents'],
+                            limitations: ['Content-only criterion'],
+                          }),
+                        },
+                      ],
+                    },
+                  ],
+                };
+              }
+            } else if (!request.input.some((item) => item.type === 'tool_result')) {
               const call = {
                 type: 'tool_call' as const,
-                id: 'independent-read',
-                name: 'verification_probe',
-                arguments: JSON.stringify({ kind: 'read_file', path: 'README.md' }),
+                id: 'self-check',
+                name: 'goal_check',
+                arguments: JSON.stringify({
+                  status: 'achieved',
+                  evidence: 'WORKER_PRIVATE_SENTINEL',
+                  criteriaEvidence: 'README contains Revision',
+                }),
               };
               yield call;
-              yield { type: 'completion', responseId: 'independent-read', output: [call] };
+              yield { type: 'completion', responseId: 'self-check', output: [call] };
             } else {
               yield {
                 type: 'completion',
-                responseId: 'verified',
-                output: [
-                  {
-                    type: 'message',
-                    content: [
-                      {
-                        type: 'text',
-                        text: JSON.stringify({
-                          outcome: 'PASS',
-                          evidence: 'README contains Revision, observed on disk',
-                          checked: ['README contents'],
-                          limitations: ['Content-only criterion'],
-                        }),
-                      },
-                    ],
-                  },
-                ],
+                responseId: 'worker-done',
+                output: [{ type: 'message', content: [{ type: 'text', text: 'Done' }] }],
               };
             }
-          } else if (!request.input.some((item) => item.type === 'tool_result')) {
-            const call = {
-              type: 'tool_call' as const,
-              id: 'self-check',
-              name: 'goal_check',
-              arguments: JSON.stringify({
-                status: 'achieved',
-                evidence: 'WORKER_PRIVATE_SENTINEL',
-                criteriaEvidence: 'README contains Revision',
-              }),
-            };
-            yield call;
-            yield { type: 'completion', responseId: 'self-check', output: [call] };
-          } else {
-            yield {
-              type: 'completion',
-              responseId: 'worker-done',
-              output: [{ type: 'message', content: [{ type: 'text', text: 'Done' }] }],
-            };
-          }
-        },
-      } satisfies StreamedModelTurn;
-    },
-  });
-  const client = new AgentClient({
-    selection: { provider, model: 'fixture' },
-    toolOwnership: new ToolOwnershipRegistry(),
-    deps: {
-      settings: createMockSettings({
-        'agent.modelSelection': { provider, model: 'fixture' },
-        'memory.enabled': false,
-        'agent.contextCompaction.enabled': false,
-      }),
-      logger: createMockLogger(),
-      executionContext: createMockExecutionContext(root),
-      sessionContextService: createSessionContextService(),
-      getGoal: () => currentGoal,
-      onGoalAchieved: (value) => {
-        currentGoal = value;
+          },
+        } satisfies StreamedModelTurn;
       },
-    },
-  });
-  try {
-    let stream = await client.startStream('Read README');
-    await stream.completed;
-    if (stream.interruptions?.length) {
-      expect(currentGoal.status).toBe('active');
-      for (const interruption of stream.interruptions) stream.state!.approve!(interruption);
-      stream = await client.continueRunStream(stream.state!);
+    });
+    const client = new AgentClient({
+      selection: { provider, model: 'fixture' },
+      allowAskUser: false,
+      toolOwnership: new ToolOwnershipRegistry(),
+      deps: {
+        settings: createMockSettings({
+          'app.activeProfileId': profileId,
+          'agent.verificationMaxRepairs': 0,
+          'agent.modelSelection': { provider, model: 'fixture' },
+          'memory.enabled': false,
+          'agent.contextCompaction.enabled': false,
+        }),
+        logger: createMockLogger(),
+        executionContext: createMockExecutionContext(root),
+        sessionContextService: createSessionContextService(),
+        getGoal: () => currentGoal,
+        onGoalAchieved: (value) => {
+          currentGoal = value;
+        },
+      },
+    });
+    try {
+      let stream = await client.startStream('Read README');
       await stream.completed;
+      if (stream.interruptions?.length) {
+        expect(currentGoal.status).toBe('active');
+        for (const interruption of stream.interruptions) stream.state!.approve!(interruption);
+        stream = await client.continueRunStream(stream.state!);
+        await stream.completed;
+      }
+      expect(stream.terminalCause).toBe(outcome === 'PASS' ? undefined : 'completion_verification_blocked');
+      expect(currentGoal.status).toBe(outcome === 'PASS' ? 'achieved' : 'active');
+      expect(verifierRequests).toBe(2);
+      expect(instances).toBe(2);
+    } finally {
+      client.dispose();
     }
-    expect(stream.terminalCause).toBeUndefined();
-    expect(currentGoal.status).toBe('achieved');
-    expect(verifierRequests).toBe(2);
-    expect(instances).toBe(2);
-  } finally {
-    client.dispose();
-  }
-});
+  },
+);

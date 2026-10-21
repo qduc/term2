@@ -569,8 +569,8 @@ export const getAgentDefinition = (
   }
 
   // The stop self-check is root-only (only the root receives `getGoal`) and is
-  // available outside Bare: the stop guard requires it whenever a goal is active.
-  if (!bareMode && deps.getGoal) tools.push(createGoalCheckToolDefinition({ getGoal: deps.getGoal }));
+  // available in Bare too: selecting a small tool surface cannot waive goal verification.
+  if (deps.getGoal) tools.push(createGoalCheckToolDefinition({ getGoal: deps.getGoal }));
 
   if (hasCapability('user-interaction') && getAskUserAnswer && allowAskUser) {
     const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
@@ -790,14 +790,14 @@ export const getAgentDefinition = (
     environmentEnabled ? `Environment: ${envInfo}` : ''
   }${agentsInstructions}${skillsInstructions}${
     !allowAskUser
-      ? '\n\nUnattended mode: Never ask the user questions or wait for clarification, verifier selection, or workflow approval. Choose the most reasonable interpretation within existing permissions, continue the task, and state any assumptions in your final response. If independent verification cannot run, finish the task and clearly say "independent verification not performed". These unattended instructions take precedence over interactive workflow guidance.'
+      ? '\n\nUnattended mode: Never ask the user questions or wait for clarification, verifier selection, or workflow approval. Choose reasonable low-risk interpretations within existing permissions, continue the task, and state any assumptions in your final response. If material requirements or authorization are missing, report blocked and state what is needed. If required independent verification cannot run, report completion as unverified and clearly say "independent verification not performed"; do not claim required review passed. These unattended instructions take precedence over interactive workflow guidance.'
       : ''
   }`;
   return {
     name: 'Terminal Assistant',
     memoryContextEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
     instructions,
-    ...(!bareMode && deps.getGoal
+    ...(deps.getGoal
       ? {
           resolveInstructionsForRequest: () => `${instructions}${renderDurableGoalContext(deps.getGoal?.())}`,
           // Read at the same request boundary as the rendered goal above, so

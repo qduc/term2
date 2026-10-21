@@ -3614,3 +3614,34 @@ Expiry retains the existing nonzero exit and cancellation behavior; outstanding 
 names now appear in text as well as structured diagnostics. No interactive deadline,
 shell deadline, run-budget policy, or recovery grant changes. Roll back the default
 independently from the setting and diagnostics if operational evidence warrants it.
+
+
+### Bare profile completion policy (2026-10-21)
+
+The Bare profile now joins the existing active-goal stop/completion boundary.
+Enforcement remains in `AgentClient.#goalStopCheck`, `createGoalStopPolicy`, and
+`createVerifiedGoalStopPolicy`; recovery and goal persistence remain session-owned.
+The signal is a recorded, current-goal-bound achieved check and a verification
+verdict for the current workspace revision, not elapsed-time evidence. Bare with
+an active goal gets the same bounded reminders, repair budgets, cancellation,
+and explicit `agent.completionVerification` override as Standard. No settings,
+clamps, deadlines, migration, tool replay, or provider-continuity change is added.
+
+A blocked/deferred self-check still returns control. Unavailable/inconclusive
+required verification in a headless Bare run uses the existing blocking completion
+outcome (`completion_verification_blocked`, exit 2), retains work and the active
+goal, and reports the cause. Other headless profiles retain their existing
+unavailable-verifier notice behavior. Verified FAIL still repairs or blocks;
+PASS still requires authoritative goal persistence. No-goal and transient runs
+remain outside goal verification. The root-only `goal_check` tool is available
+so goals added later in a session can use the same boundary.
+
+Red evidence: the filesystem/provider-backed root Bare scenario ended with an
+active goal instead of verified completion before removing the exemption.
+Afterwards, the same scenario and PASS/FAIL/INCONCLUSIVE variants exercise fresh
+verifier transports and real repository reads. Built-CLI cases cover the
+unsupported-workspace block, Standard's retained unavailable notice, and edit
+approval denial. Commands: `pnpm test:integration` and
+`pnpm test:provider-black-box`; final results are recorded in the experiment task
+ledger. Existing diagnostic fields and notices identify the action and cause.
+Rollback is Bare goal-tool/context wiring and stop-policy selection together.

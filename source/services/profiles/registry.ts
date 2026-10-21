@@ -137,19 +137,21 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
     enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
     presentation: { kind: 'presentation', displayName: 'Standard', label: 'STD', color: 'white' },
   }),
-  builtinProfile('bare', {
-    instructions: {
-      kind: 'instructions',
-      identity: {
-        content:
-          'You are a terminal coding assistant. Complete the user’s task using shell and file editing tools. Read files and search through shell. Preserve existing work. Respect sandbox and capability permissions; never bypass denied actions. Verify your changes with appropriate checks and report results and remaining uncertainty concisely.',
+  {
+    ...builtinProfile('bare', {
+      instructions: {
+        kind: 'instructions',
+        identity: {
+          content: prompt('bare.md'),
+        },
       },
-    },
-    context: { kind: 'context', sources: [] },
-    tools: { kind: 'tools', include: ['shell', 'filesystem-write'] },
-    enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
-    presentation: { kind: 'presentation', displayName: 'Bare', label: 'BARE', color: 'cyan' },
-  }),
+      context: { kind: 'context', sources: [{ id: 'project-instructions', source: 'project-instructions' }] },
+      tools: { kind: 'tools', include: ['shell', 'filesystem-write'] },
+      enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
+      presentation: { kind: 'presentation', displayName: 'Bare', label: 'BARE', color: 'cyan' },
+    }),
+    version: '1.1.0',
+  },
   builtinProfile(
     'lite',
     {

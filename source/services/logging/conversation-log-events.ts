@@ -63,6 +63,8 @@ export interface SessionInitEvent {
   projectPath?: string;
   sshHost?: string;
   activeProfileId?: string;
+  activeProfileVersion?: string;
+  activeProfileDigest?: string;
   appMode?: SavedAppMode;
   model?: string;
   provider?: string;

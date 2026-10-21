@@ -1,3 +1,4 @@
+import { getProfileMetadata } from './services/profiles/active-profile.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './services/service-interfaces.js';
 import { createConversationRuntime } from './services/conversation/conversation-runtime-factory.js';
 import { SessionContextService } from './services/session/session-context-service.js';
@@ -275,8 +276,9 @@ export async function runWithSession(session: ConversationSessionLike, config: N
   };
 
   const activeProfileId = config.settingsService?.get('app.activeProfileId') ?? 'builtin:standard';
-  if (config.json) stdout.write(JSON.stringify({ type: 'session_start', activeProfileId }) + '\n');
-  config.logger?.info('Headless session started', { eventType: 'session.start', activeProfileId });
+  const profileMetadata = getProfileMetadata(activeProfileId);
+  if (config.json) stdout.write(JSON.stringify({ type: 'session_start', ...profileMetadata }) + '\n');
+  config.logger?.info('Headless session started', { eventType: 'session.start', ...profileMetadata });
   const backgroundWork = config.backgroundWork;
   const backgroundWaitTimeoutMs = normalizeBackgroundWaitTimeout(
     config.backgroundWaitTimeoutMs ?? config.settingsService?.get('agent.backgroundWaitTimeoutMs'),
@@ -630,7 +632,7 @@ export async function runNonInteractive(
         id: sessionId,
         createdAt: createdRuntime.runtime.sessionStartedAt,
         projectPath: process.cwd(),
-        activeProfileId: config.settingsService.get('app.activeProfileId'),
+        ...getProfileMetadata(config.settingsService.get('app.activeProfileId')),
         model: config.settingsService.get('agent.modelSelection').model,
         provider: config.settingsService.get('agent.modelSelection').provider,
       });

@@ -134,11 +134,16 @@ to collect that evidence during live use. Parallel preparation and artifact reus
 
 ## Unattended profile behavior
 
-The Bare profile bypasses durable-goal stop and completion verification workflows.
-Other headless profiles use `verifier.model` (empty selects the session model) on
+Bare root sessions use durable-goal stop checks and the configured completion
+verification policy. Without an active goal, ordinary Bare replies do not invoke
+the completion verifier. Bare headless runs block with exit 2 and retain the goal
+when verification is unavailable or inconclusive; the profile does not authorize
+a successful completion in that case.
+
+Headless profiles use `verifier.model` (empty selects the session model) on
 the session provider without prompting for a selection. An unavailable or inconclusive
-verification finishes the run with an explicit “independent verification not performed”
-notice and leaves the durable goal active. PASS still requires authoritative goal
+verification in profiles other than Bare finishes the run with an explicit
+“independent verification not performed” notice and leaves the durable goal active. PASS still requires authoritative goal
 persistence; FAIL still requests repair or blocks. Cancellation, goal replacement,
 and persistence failures retain their existing failure behavior. Interactive runs
 keep the blocking completion boundary described above.

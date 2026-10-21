@@ -1074,13 +1074,14 @@ export class AgentClient {
   /** Root-only active-goal stop check; transient clients never receive one. */
   #goalStopCheck(): ApplicationRunLoopOptions['onNormalStop'] {
     const getGoal = this.#agentConfig.goalSource;
-    if (!getGoal || this.#settings.get('app.activeProfileId') === 'builtin:bare') return undefined;
+    if (!getGoal) return undefined;
     if (this.#settings.get('agent.completionVerification') === false || !this.#completionBoundary) {
       return createGoalStopPolicy(getGoal, this.#onGoalAchieved);
     }
     return createVerifiedGoalStopPolicy({
       getGoal,
-      unattended: this.#unattended,
+      // Bare must not turn an unavailable required review into successful headless completion.
+      unattended: this.#unattended && this.#settings.get('app.activeProfileId') !== 'builtin:bare',
       onGoalAchieved: this.#onGoalAchieved,
       verify: (goal, history, signal) => this.#completionBoundary!.verify(goal, history, signal),
     });

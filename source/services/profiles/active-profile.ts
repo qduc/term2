@@ -34,3 +34,13 @@ export function resolveActiveEnforcement(settingsService: ISettingsService): Res
   enforcementCache.set(settingsService, { profileId, enforcement });
   return enforcement;
 }
+
+/** Version the selected profile composition without logging its instruction contents. */
+export function getProfileMetadata(profileId: string) {
+  const { identity } = resolveProfile(profileId);
+  return {
+    activeProfileId: identity.id,
+    activeProfileVersion: identity.version,
+    activeProfileDigest: identity.digest,
+  };
+}

@@ -43,6 +43,7 @@ import { rotateSessionLog } from './services/conversation/session-log-lifecycle.
 import { formatResumeList } from './utils/resume-list.js';
 import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { resolveProfile } from './services/profiles/resolver.js';
+import { getProfileMetadata } from './services/profiles/active-profile.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
@@ -1308,7 +1309,7 @@ function buildInitMeta(id: string, createdAt: string, rolloverFrom?: string) {
     createdAt,
     ...(cwd ? { projectPath: cwd } : {}),
     ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
-    activeProfileId,
+    ...getProfileMetadata(activeProfileId),
     appMode: legacyModeFromProfileId(activeProfileId),
     ...(settings.get('agent.modelSelection').model ? { model: settings.get('agent.modelSelection').model } : {}),
     ...(settings.get('agent.modelSelection').provider

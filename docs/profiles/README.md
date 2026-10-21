@@ -78,27 +78,50 @@ default remains Standard; the existing implicit Lite selection for positional
 prompts without `--auto-approve` is unchanged, except an explicitly configured Bare
 profile takes precedence.
 
-Bare omits project/global AGENTS.md, skills, memory, environment catalogs, durable
-goal workflow instructions, delegation, JavaScript workflows, and completion
-verification. Its short prompt and tool allowlist do not alter sandbox authority,
-approval policy, cancellation, output bounds, request deadlines, or compaction.
-Shell handles file reading/search; file editors remain available. A supplied
-`--goal` is still recorded, but Bare does not automatically mark it achieved.
+Bare uses a short coding prompt with shell and file editors. Local sessions include
+applicable global/project AGENTS.md without clipping them to the prompt budget;
+the prompt directs the model to read scoped instructions before editing. Remote
+sessions do not inject local AGENTS.md: the model must read the remote checkout's
+instructions through shell. Skills catalogs, memory, environment catalogs,
+delegation, and JavaScript workflows remain omitted. Specifically requested or
+required skills/documents can be read through shell when accessible; missing
+capabilities must be reported, not silently skipped.
+
+Root sessions also expose `goal_check`. A supplied `--goal` uses the existing
+request-time goal context, stop checks, and configured completion verification.
+Bare does not waive required review. Ordinary replies without an active goal do
+not trigger goal verification. When required review cannot run through the
+available tools, report the missing capability or needed handoff and leave
+completion unverified; do not silently switch profiles/models or launch agents.
+Sandbox authority, approval policy, cancellation, output bounds, request deadlines,
+and compaction remain authoritative. `agent.completionVerification=false` remains
+an explicit operator override of the runtime completion gate.
+
+Bare's profile version is `1.1.0`. Its original minimal definition is retained as
+an experiment fixture; the comparison protocol and measurement limitations are in
+[the Bare experiment notes](../../experiments/bare-profile/README.md). No measured
+token saving or quality equivalence is claimed.
 
 Every CLI session prints its profile on stderr. Headless NDJSON begins with a
 `session_start` carrying `activeProfileId`, and persisted conversation headers
-record the same canonical profile ID.
+record the same canonical profile ID. CLI session headers also carry
+`activeProfileVersion` and `activeProfileDigest` for composition comparisons; the
+digest excludes project instruction contents and runtime settings.
 
 All headless profiles receive instructions to choose reasonable interpretations,
 continue within existing permissions, and state assumptions in the final response
-instead of asking questions. Ambiguous `--model` matches select the highest-ranked
+instead of asking questions. Material missing requirements or authorization call
+for an explicit blocked result; unavailable required review remains unverified. Ambiguous `--model` matches select the highest-ranked
 candidate and print the assumption. Tool and budget permissions remain enforced.
 
 `verifier.model` selects the independent completion verifier's model ID on the
 session provider; the default empty string uses the session model. When verification
-is unavailable or inconclusive, headless runs finish with “independent verification
-not performed” and retain an active durable goal. A concrete verification failure
-still requests repair or blocks completion. Interactive verification is unchanged.
+is unavailable or inconclusive, Bare goal-driven runs block completion (exit 2),
+report the cause, and retain the active goal. Other headless profiles finish with
+“independent verification not performed” and retain an active durable goal. A
+concrete verification failure still requests repair or blocks completion.
+Interactive Bare uses the same configured completion gate as Standard; other
+profiles retain their interactive verification behavior.
 
 `agent.backgroundWaitTimeoutMs` bounds the overall headless background drain,
 including notification turns. It defaults to one hour and accepts 1–86,400,000 ms.

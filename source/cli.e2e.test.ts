@@ -33,36 +33,66 @@ afterEach(() => {
   tempHome = '';
 });
 
-it.sequential('starts the terminal UI and exits on the second Ctrl+C', { timeout: TEST_TIMEOUT_MS }, async () => {
-  tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-home-'));
-  tempConversationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-conversations-'));
+it.sequential.each(['lite', 'bare'])(
+  'starts the %s terminal UI and exits on the second Ctrl+C',
+  { timeout: TEST_TIMEOUT_MS },
+  async (profile) => {
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-home-'));
+    tempConversationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-conversations-'));
 
-  const idlePath = path.join(tempHome, 'input-idle');
-  session = spawnTerminal('node', ['--import', 'tsx', 'source/cli.tsx', '--lite'], {
-    cwd: process.cwd(),
-    env: {
-      HOME: tempHome,
-      OPENAI_API_KEY: 'test-key',
-      TERM2_CONVERSATIONS_DIR: tempConversationsDir,
-      DISABLE_LOGGING: '1',
-      [HARNESS_IDLE_ENV]: idlePath,
-      // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
-      CI: 'false',
-    },
-  });
+    const idlePath = path.join(tempHome, 'input-idle');
+    session = spawnTerminal(
+      'node',
+      ['--import', 'tsx', 'source/cli.tsx', ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
+      {
+        cwd: process.cwd(),
+        env: {
+          HOME: tempHome,
+          OPENAI_API_KEY: 'test-key',
+          TERM2_CONVERSATIONS_DIR: tempConversationsDir,
+          DISABLE_LOGGING: '1',
+          [HARNESS_IDLE_ENV]: idlePath,
+          // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
+          CI: 'false',
+        },
+      },
+    );
 
-  // The banner's mode pill renders "LITE" (Banner.tsx); do not wait on
-  // StatusBar text below the fold, which is not part of the first paint.
-  await session.waitForOutput('LITE', STARTUP_TIMEOUT_MS);
-  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
+    // Idle is application-owned evidence that startup reached the composer.
+    // Bare's identity is checked in the session header below, independently
+    // of the banner's legacy presentation labels.
+    if (profile === 'lite') await session.waitForOutput('LITE', STARTUP_TIMEOUT_MS);
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
 
-  session.write('\x03');
-  await session.waitForOutput('Press Ctrl+C again to exit', EXIT_TIMEOUT_MS);
-  session.write('\x03');
+    if (profile === 'bare') {
+      const headers = fs
+        .readdirSync(tempConversationsDir, { recursive: true })
+        .filter((file) => String(file).endsWith('.jsonl'))
+        .flatMap((file) =>
+          fs
+            .readFileSync(path.join(tempConversationsDir, String(file)), 'utf8')
+            .trim()
+            .split('\n'),
+        )
+        .map((line) => JSON.parse(line).event)
+        .filter((event) => event?.type === 'session_init');
+      expect(headers).toHaveLength(1);
+      expect(headers[0]).toMatchObject({
+        activeProfileId: 'builtin:bare',
+        activeProfileVersion: '1.1.0',
+        appMode: { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: false },
+      });
+      expect(headers[0].activeProfileDigest).toMatch(/^[a-f0-9]{64}$/);
+    }
 
-  const exit = await session.waitForExit(EXIT_TIMEOUT_MS);
-  expect(exit.exitCode).toBe(0);
-  expect(session.getVisibleOutput()).toContain('Lite');
-  expect(session.getVisibleOutput()).not.toContain('Session:');
-  expect(session.getVisibleOutput()).not.toContain('To resume this conversation:');
-});
+    session.write('\x03');
+    await session.waitForOutput('Press Ctrl+C again to exit', EXIT_TIMEOUT_MS);
+    session.write('\x03');
+
+    const exit = await session.waitForExit(EXIT_TIMEOUT_MS);
+    expect(exit.exitCode).toBe(0);
+    if (profile === 'lite') expect(session.getVisibleOutput()).toContain('Lite');
+    expect(session.getVisibleOutput()).not.toContain('Session:');
+    expect(session.getVisibleOutput()).not.toContain('To resume this conversation:');
+  },
+);

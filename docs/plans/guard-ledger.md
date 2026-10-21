@@ -45,7 +45,7 @@ curl/Node reads and rejected unrelated admin GET/upload; credentials were reject
 by the system heuristic. Commands in that live advisory check were data only.
 The paired pilot remains paused; its earlier outcomes are unchanged.
 
-Status: repaired; focused evidence passes. Broader gate outcomes and independent
+Status: repaired in `721795e1`; focused evidence passes. Broader gate outcomes and independent
 verification disposition are recorded in the experiment task ledger.
 
 ## Agent model discovery pages (2026-10-19)

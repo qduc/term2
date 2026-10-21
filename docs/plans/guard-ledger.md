@@ -1,5 +1,53 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Authorized reference retrieval in headless approval (2026-10-22)
+
+Incident: the paused Bare/Full pilot's Bare reference task could not fetch its
+explicitly requested local reference. The fallback reviewer received no task
+context: `runWithSession` tried an optional `exportState` on the production
+`ConversationAdapter`, which has no such method. The fallback prompt also
+classified network effects as high risk regardless of an authorized read.
+
+Contract: prevent unrequested external effects while admitting an explicitly
+requested, informational HTTP GET without credentials, cookies, private payloads,
+or response execution. Localhost is not evidence of safety or authorization;
+unknown/admin/state-changing endpoints, uploads and authenticated requests remain
+outside this case. The complete command is reviewed. This is the existing
+approval admission boundary, not a Bare-specific bypass. Its enforcement owners
+remain `NonInteractiveApprovalPolicy` and the shared evaluator; interactive
+approval or a later authorized request owns recovery. Prior work is preserved on
+rejection; no command dispatch, retry, model fallback or budget changes are added.
+
+Evidence is the live runtime transcript, wired explicitly through
+`getApprovalHistory`; compatibility callers retain their optional session export.
+The reviewer separately receives the latest genuine user request (3,000 chars),
+excluding synthetic summaries and stripping memory/steering wrappers. Recent
+activity remains last 8 items, 500 chars each, 3,000 chars total. Truncation is
+marked and remains uncertainty, never authorization. These are context retention
+bounds; full evidence remains in the session. No settings, defaults, environment
+overrides, persisted migration, cancellation or provider continuity changes.
+
+The measured signal is command effects plus user intent. Missing intent was a
+proxy for danger and rejected legitimate work; public/reference retrieval is not
+itself exfiltration. Prompt v12 distinguishes them, retaining RED/sensitive-path
+heuristics and risk/authorization derivation. Existing advisory metadata exposes
+risk, authorization, confidence, source and reason; no new payload logging.
+Rollback is the history wiring, bounded latest-user context and prompt revision.
+
+Red proof: the new built-CLI reference fixture failed on the baseline for both
+Bare and Full when forced through headless continuation: user context was absent.
+After repair, six loopback CLI checks pass (both profiles, authorized/high-risk/
+unknown advice); only authorized reads reach the actual reference server.
+Independent temporary checks cover long tool history, synthetic/tool injection,
+newer restrictions, RED/sensitive paths and malformed responses. A single
+Neuralwatt `deepseek-v4.1-flash` advisory request (2,751 tokens) approved requested
+curl/Node reads and rejected unrelated admin GET/upload; credentials were rejected
+by the system heuristic. Commands in that live advisory check were data only.
+The paired pilot remains paused; its earlier outcomes are unchanged.
+
+Status: repaired; focused evidence passes. Broader gate outcomes and independent
+verification disposition are recorded in the experiment task ledger.
+
 ## Agent model discovery pages (2026-10-19)
 
 Harm prevented: a discovery query injecting hundreds of verbose catalog rows into
@@ -3058,7 +3106,7 @@ Catalogued, no hypothesized failure mode:
 | App log retention | 7 days | no |
 | OpenCode transport discovery cache | 24h successful endpoint-table snapshot; a 2s failed or invalid lookup falls back to local Chat routing | no |
 | Active-turn cancel wait | 10,000 ms | injectable |
-| Shell auto-approval evidence caps | 8 / 3000 / 500 / 10 / 1000 / 20 | no |
+| Shell auto-approval evidence caps | latest genuine user 3000; recent 8 / 3000 / 500; manual 10; reasoning 1000; other 20 | no |
 | OpenRouter Decisions approval shadow | 4 concurrent requests / 10,000ms each; skips optional comparison on saturation | no |
 | Tool argument repair caps | 200,000 / 8 / 2048 / 160 / 16 | no |
 | Code-context search bounds | 512KiB / 10,000 files / 20 results | `max_results` |

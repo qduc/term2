@@ -78,6 +78,8 @@ export interface NonInteractiveConfig {
   sessionClientFactory?: SessionClientFactory;
   logger?: ILoggingService;
   sessionContextService?: ISessionContextService;
+  /** Live runtime history for approval evidence; the conversation adapter owns no state export. */
+  getApprovalHistory?: () => unknown[];
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
   /** Internal/runtime seam for draining work that outlives the launch turn. */
@@ -385,7 +387,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
         const decision = await approvalPolicy.decide({
           autoApprove: config.autoApprove,
           approval: result.approval,
-          getHistory: () => session.exportState?.().history ?? [],
+          getHistory: () => config.getApprovalHistory?.() ?? session.exportState?.().history ?? [],
         });
         const rejectionReason = decision.answer === 'n' ? decision.rejectionReason : undefined;
         if (decision.answer === 'n' && decision.reportRejection) {
@@ -680,6 +682,7 @@ export async function runNonInteractive(
       recoverySessionId: sessionId,
       agentClient: clientHandle.agentClient,
       sessionContextService,
+      getApprovalHistory: () => createdRuntime.runtime.state.exportState().history,
       abort: () => clientHandle.agentClient.abort(),
       backgroundWork: {
         notifications: createdRuntime.runtime.backgroundSubagentNotifications,

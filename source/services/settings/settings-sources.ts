@@ -10,6 +10,7 @@ type SourceKeyShape<T> = T extends { value: infer V; source: SettingSource }
 type SourceGetter = (key: string) => SettingSource;
 
 export const SETTINGS_SOURCE_KEYS = {
+  verifier: { model: 'verifier.model' },
   agent: {
     modelSelection: 'agent.modelSelection',
     smartModel: 'agent.smartModel',
@@ -21,6 +22,7 @@ export const SETTINGS_SOURCE_KEYS = {
     choreModel: 'agent.choreModel',
     reasoningEffort: 'agent.reasoningEffort',
     temperature: 'agent.temperature',
+    backgroundWaitTimeoutMs: 'agent.backgroundWaitTimeoutMs',
     maxTurns: 'agent.maxTurns',
     maxRequestInputTokens: 'agent.maxRequestInputTokens',
     maxOutputTokens: 'agent.maxOutputTokens',

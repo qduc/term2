@@ -64,6 +64,13 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     editorSurface = 'none',
   } = options;
 
+  if (profile.identity.id === 'builtin:bare') {
+    return {
+      basePromptContent: profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : '',
+      fragmentFiles: [],
+      inlineSections: [],
+    };
+  }
   const liteMode = isLiteProfile(profile);
   // Runtime modes are intentionally absent from model-family profile selection.
   // Their full workflows ride on the next user turn so rebuilding the agent does

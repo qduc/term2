@@ -18,6 +18,7 @@ export type ProfileOption = {
 
 const PROFILE_DETAILS: Record<string, string> = {
   standard: 'Default full-context mode',
+  bare: 'Shell and file edits, short prompt, no workflows',
   lite: 'Minimal prompt, no codebase context',
   plan: 'Read-only research/planning mode',
   pair: 'Human-led coding, one approved step at a time',

@@ -3602,3 +3602,15 @@ abort and script timeout, refusal without spawning, and background survival.
 `provider-session-responses.blackbox.ts` exercises approval and rejection through
 the built CLI. No OS sandbox confinement claim derives from the deterministic
 sandbox-runner fixture.
+
+### Configurable headless background drain
+
+`runWithSession` retains the existing wall-clock containment deadline and cancellation
+owner. `agent.backgroundWaitTimeoutMs` now supplies its default (one hour instead of
+five minutes); explicit caller overrides remain supported. Schema validation admits
+1 ms through 24 hours, matching the existing runtime ceiling. Time measures the whole
+background drain, including notification turns, and is not evidence of failed progress.
+Expiry retains the existing nonzero exit and cancellation behavior; outstanding task
+names now appear in text as well as structured diagnostics. No interactive deadline,
+shell deadline, run-budget policy, or recovery grant changes. Roll back the default
+independently from the setting and diagnostics if operational evidence warrants it.

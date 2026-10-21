@@ -83,7 +83,10 @@ export class RootCompletionBoundary {
             }),
             model: () => settings.get('agent.decisionModel'),
           }),
-          verify: createIndependentVerifier({ resolveModel: this.deps.resolveModel, model: this.deps.model }),
+          verify: createIndependentVerifier({
+            resolveModel: this.deps.resolveModel,
+            model: () => settings.get('verifier.model') || this.deps.model(),
+          }),
           quickCheck: runQuickCheck,
           currentRevision: async () =>
             (await snapshotWorkspace(this.deps.executionContext?.getCwd() ?? process.cwd())).revision,

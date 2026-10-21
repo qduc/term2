@@ -21,6 +21,8 @@ export type SettingUIMetadata = {
  * to showing the raw dotted key alone.
  */
 export const SETTING_LABELS: Record<string, string> = {
+  [SETTING_KEYS.VERIFIER_MODEL]: 'Verifier model',
+  [SETTING_KEYS.AGENT_BACKGROUND_WAIT_TIMEOUT_MS]: 'Headless background wait limit',
   [SETTING_KEYS.ENABLE_AGENT_WORKFLOW]: 'Agent workflows',
   [SETTING_KEYS.AGENT_MODEL_SELECTION]: 'Model',
   [SETTING_KEYS.AGENT_SMART_MODEL]: 'Smart model',

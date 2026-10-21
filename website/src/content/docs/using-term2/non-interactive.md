@@ -17,7 +17,7 @@ Execute one-off queries with stdout output:
 term2 "Explain the purpose of package.json in this project"
 ```
 
-A positional prompt without `--auto-approve` uses `builtin:lite` by default (unless a persisted Mentor or Orchestrator profile takes precedence), so tools are unavailable. `--auto-approve` opts out of that implicit Lite selection and enables tools. It applies GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
+A positional prompt without `--auto-approve` uses `builtin:lite` by default (unless `--profile` is specified or a persisted Bare, Mentor, or Orchestrator profile takes precedence), so tools are unavailable. `--auto-approve` opts out of that implicit Lite selection and enables tools. It applies GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
 
 The output streams directly to standard output. Non-error diagnostic logs are printed to standard error.
 

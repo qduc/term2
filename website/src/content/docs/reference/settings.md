@@ -23,6 +23,7 @@ term2 settings can be configured via:
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
+| `agent.backgroundWaitTimeoutMs` | `number` | `3600000` | No | — | Overall headless background-work wait limit in milliseconds (default one hour; unfinished work is cancelled and named) |
 | `agent.modelSelection` | `object` | `{"model":"gpt-5.1","provider":"openai"}` | ✓ Yes | — | Bound provider and model selection for the main agent |
 | `agent.smartModel` | `array` | — | ✓ Yes | — | Models for smart-tier helper agents (the hardest side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset. |
 | `agent.smartReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for smart-tier helper agents (the hardest side tasks). Falls back to agent.reasoningEffort when unset. |
@@ -203,6 +204,7 @@ term2 settings can be configured via:
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
+| `verifier.model` | `string` | `""` | ✓ Yes | — | Independent verifier model ID; empty uses the session model and provider |
 | `enable_agent_workflow` | `boolean` | `false` | No | — | Enable bounded JavaScript workflows that coordinate concurrent read-only agents (true\|false) |
 | `environment.nodeEnv` | `string` | — | No | `NODE_ENV` | Node environment (development\|production\|test) |
 | `hooks.user.enabled` | `boolean` | `true` | ✓ Yes | — | Load trusted user hooks from ~/.term2/hooks (true\|false) |

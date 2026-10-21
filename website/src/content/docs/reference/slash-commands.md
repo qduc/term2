@@ -15,7 +15,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 | **`/lite`** | — | Toggle lightweight terminal mode (minimal prompt, session-only context). |
 | **`/mentor`** | — | Toggle collaborative Mentor mode with dual-model consultation. |
 | **`/orchestrator`** | — | Toggle prompt-guided Orchestrator mode (delegates all tool-backed work). |
-| **`/profile`** | `[name]` | Switch the active operating profile (`standard`, `plan`, `lite`, `pair`, `mentor`, `orchestrator`). |
+| **`/profile`** | `[name]` | Switch the active operating profile (`standard`, `bare`, `plan`, `lite`, `pair`, `mentor`, `orchestrator`). |
 | **`/auto-approve`** | `[off\|advisory\|auto\|always]` | Set shell and tool auto-approval policy. `always` disables `sandbox.enabled`. |
 | **`/sandbox`** | — | Toggle shell sandbox isolation on or off. |
 | **`/compact`** | — | Compact older conversation turns into a local summary. |
@@ -51,7 +51,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 - Sets the reasoning effort level passed to models supporting variable reasoning tokens.
 
 ### `/profile [profile-name]`
-- **Usage**: `/profile`, `/profile standard`, `/profile plan`, `/profile lite`, `/profile mentor`, `/profile orchestrator`
+- **Usage**: `/profile`, `/profile standard`, `/profile bare`, `/profile plan`, `/profile lite`, `/profile pair`, `/profile mentor`, `/profile orchestrator`
 - Switches the active operating profile. Switching to or from `lite` mid-session prompts for confirmation or recommends `/clear`.
 
 ### `/auto-approve [mode]`

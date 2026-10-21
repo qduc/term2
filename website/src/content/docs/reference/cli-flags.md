@@ -31,6 +31,7 @@ Usage:
 | `--resume [id\|ls]` | `-R` | Boolean / String | `false` | Resume the last conversation, a specific ID, or list recent conversations (`ls`). |
 | `--goal <text>` | — | String | — | Set a durable session outcome (up to 2,000 characters). |
 | `--goal-criteria <text>` | — | String | — | Optional success criteria (up to 2,000 characters); requires `--goal`. |
+| `--profile <name>` | — | String | Configured | Select an operating profile (`full`, `bare`, `lite`, `plan`, `pair`, `mentor`, `orchestrator`). |
 | `--control-socket[=<name>]` | — | Boolean / String | `false` | Enable a local control socket for the interactive TUI. |
 | `--fork` | — | Boolean | `false` | Fork the resumed conversation into a new session branch (requires `--resume`). |
 | `--help` | `-h` | Boolean | `false` | Show help message and exit. |

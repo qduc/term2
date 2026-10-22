@@ -441,19 +441,12 @@ function formatRunBudgetInteraction(event: import('../agent-runtime/run-budget.j
 
 export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent => {
   if (result.type === 'approval_required') {
+    // Only the private interruption stays runtime-local. Preserve the complete
+    // public descriptor, including the token that selects the decision owner.
+    const { rawInterruption: _rawInterruption, ...approval } = result.approval;
     return {
       type: 'approval_required',
-      approval: {
-        agentName: result.approval.agentName,
-        toolName: result.approval.toolName,
-        argumentsText: result.approval.argumentsText,
-        ...(result.approval.callId ? { callId: result.approval.callId } : {}),
-        ...(result.approval.llmAdvisory ? { llmAdvisory: result.approval.llmAdvisory } : {}),
-        ...(result.approval.deniedRead ? { deniedRead: result.approval.deniedRead } : {}),
-        ...(result.approval.dockerHostControl ? { dockerHostControl: true } : {}),
-        ...(result.approval.runBudgetEvent ? { runBudgetEvent: result.approval.runBudgetEvent } : {}),
-        ...(result.approval.checkIn ? { checkIn: result.approval.checkIn } : {}),
-      },
+      approval,
       ...(result.usage ? { usage: result.usage } : {}),
       ...(result.costRecords && result.costRecords.length > 0 ? { costRecords: result.costRecords } : {}),
     };

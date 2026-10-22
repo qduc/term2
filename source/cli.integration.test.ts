@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
+import { localLogDateKey } from './services/logging/logging-service.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
 const require = createRequire(import.meta.url);
@@ -223,6 +224,50 @@ it('CLI generic model listing ignores vendor capabilities and replaces broadly f
 
 beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-'));
+});
+
+it('finishes a provider turn when file logging hits ENOSPC', async () => {
+  const home = path.join(testDir, 'home');
+  const workspace = path.join(testDir, 'workspace');
+  const stateHome = path.join(home, '.local', 'state');
+  const logDir = path.join(stateHome, 'term2-nodejs', 'logs');
+  const today = localLogDateKey();
+  if (process.env.TZ === 'Pacific/Kiritimati') {
+    expect(today).not.toBe(new Date().toISOString().slice(0, 10));
+  }
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(logDir, { recursive: true });
+  fs.symlinkSync('/dev/full', path.join(logDir, `term2-${today}.log`));
+  const mock = await startModelMock(['mock-alpha']);
+  const env = createTestChildEnv({
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_STATE_HOME: stateHome,
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_RUNTIME_DIR: path.join(testDir, 'runtime'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(testDir, 'conversations'),
+    TZ: process.env.TZ,
+    LOG_LEVEL: 'debug',
+  });
+  writeSettings(home, {
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+
+  try {
+    const result = await spawnCli([cliPath(), '--auto-approve', 'Reply with a short answer'], env, workspace);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('ok');
+    expect(result.stderr).toContain('File logging disabled after write failure');
+    expect(result.stderr.match(/File logging disabled after write failure/g)).toHaveLength(1);
+    expect(result.stderr).not.toContain('[winston]');
+    expect(result.stderr).not.toContain("Unhandled 'error' event");
+    expect(mock.capturedRequests()).toHaveLength(1);
+  } finally {
+    await mock.close();
+  }
 });
 
 afterEach(() => {

@@ -618,12 +618,28 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   #logWriteFailure(err: unknown): void {
     if (this.#writeErrorLogged) return;
     this.#writeErrorLogged = true;
-    this.#logger.error('Conversation log write failed', {
-      eventType: 'conversation_log.write_failed',
-      category: 'persistence',
-      sessionId: this.#sessionId,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
+    const message = err instanceof Error ? err.message : String(err);
+    try {
+      this.#logger.error('Conversation log write failed', {
+        eventType: 'conversation_log.write_failed',
+        category: 'persistence',
+        sessionId: this.#sessionId,
+        errorMessage: message,
+      });
+    } catch {
+      // Persistence diagnostics must not mask the underlying storage failure.
+    }
+    // A failed critical append is rethrown to stop the affected session path;
+    // a failed delta append is best-effort and cannot be rethrown safely. In
+    // either case the user must know that recovery data may be missing, even
+    // when the general log transport is itself unavailable.
+    try {
+      process.stderr.write(
+        `[Conversation persistence] Write failed; this session may not be recoverable: ${message}\n`,
+      );
+    } catch {
+      // The original persistence error remains the authoritative failure.
+    }
   }
 }
 

@@ -432,7 +432,7 @@
     ]
   },
   "baseline_job_span_seconds": 172,
-  "candidate_status": "Two-entry CLI implementation passed complete Linux CI at d396a438. Final assignment and its complete-feedback target await CI.",
+  "candidate_status": "Closed: retained code 5a2997bf passed all four exact-head CI jobs. One-minute target not achieved; further performance experiments stopped at user/parent direction. Remaining commit is documentation and task-ledger closeout only.",
   "resource_policy": {
     "runner_count_before": 4,
     "runner_count_after": 4,
@@ -4544,7 +4544,7 @@
     "action_sha256": "b5842a7bdd7ce99d464ad623f18dbf00e4bf29f4e5bd39f66db28a42588844f2"
   },
   "second_scheduling_experiment": {
-    "status": "awaiting full Ubuntu CI",
+    "status": "Retained after complete passing Ubuntu CI at d396a438 and 5a2997bf; earlier rejected three-entry cloud partition remains rejected.",
     "reason": "Pinned-runtime experiment exposed a 51-second apt installation and a 63-second sequential CLI invocation; cache the image-specific rg binary and divide CLI into two isolated entries at the existing worker cap.",
     "source_sha256": {
       ".github/actions/setup-tests/action.yml": "cb8d6e08ccc9a8c1384b483ab6b1228a91da60ec9a15448705f7115a220c9f9d",
@@ -8146,6 +8146,800 @@
       ".github/workflows/ci.yml": "f7342dd21ed4e3426a25b76024458ea846a5a804eb431fece436ec95df448fb0",
       ".github/actions/setup-tests/action.yml": "cb8d6e08ccc9a8c1384b483ab6b1228a91da60ec9a15448705f7115a220c9f9d"
     },
-    "validation": "63-file exact-once union, no-unit-tests and injected earlier-tier failure propagation passed. Waiting for full CI on this assignment."
+    "validation": "All 63 files assigned exactly once; failure propagation and no-unit-tests passed; full Ubuntu CI at 5a2997bf passed 486 cases with the same two existing skips."
+  },
+  "final_code_ci": {
+    "run_id": 39801850508,
+    "attempt": 1,
+    "head_sha": "5a2997bfec981bd965b292cbc58df8ea4752a4c2",
+    "run": {
+      "id": 39801850508,
+      "name": "CI",
+      "node_id": "WFR_kwLOQcHVcc8AAAAJRGAKjA",
+      "head_branch": "perf/test-suite-speed",
+      "head_sha": "5a2997bfec981bd965b292cbc58df8ea4752a4c2",
+      "path": ".github/workflows/ci.yml",
+      "display_title": "perf: reduce full CI setup and balance test workloads",
+      "run_number": 169,
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "workflow_id": 342067715,
+      "check_suite_id": 107873196522,
+      "check_suite_node_id": "CS_kwDOQcHVcc8AAAAZHb5Z6g",
+      "url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508",
+      "html_url": "https://github.com/qduc/term2/actions/runs/39801850508",
+      "pull_requests": [
+        {
+          "url": "https://api.github.com/repos/qduc/term2/pulls/35",
+          "id": 4963835608,
+          "number": 35,
+          "head": {
+            "ref": "perf/test-suite-speed",
+            "sha": "5a2997bfec981bd965b292cbc58df8ea4752a4c2",
+            "repo": {
+              "id": 1103222129,
+              "url": "https://api.github.com/repos/qduc/term2",
+              "name": "term2"
+            }
+          },
+          "base": {
+            "ref": "main",
+            "sha": "31bf8380137d7f48f463e54f31570a3f3026b4fc",
+            "repo": {
+              "id": 1103222129,
+              "url": "https://api.github.com/repos/qduc/term2",
+              "name": "term2"
+            }
+          }
+        }
+      ],
+      "created_at": "2026-10-22T15:07:34Z",
+      "updated_at": "2026-10-22T15:09:18Z",
+      "actor": {
+        "login": "qduc",
+        "id": 11575015,
+        "node_id": "MDQ6VXNlcjExNTc1MDE1",
+        "avatar_url": "https://avatars.githubusercontent.com/u/11575015?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/qduc",
+        "html_url": "https://github.com/qduc",
+        "followers_url": "https://api.github.com/users/qduc/followers",
+        "following_url": "https://api.github.com/users/qduc/following{/other_user}",
+        "gists_url": "https://api.github.com/users/qduc/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/qduc/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/qduc/subscriptions",
+        "organizations_url": "https://api.github.com/users/qduc/orgs",
+        "repos_url": "https://api.github.com/users/qduc/repos",
+        "events_url": "https://api.github.com/users/qduc/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/qduc/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "run_attempt": 1,
+      "referenced_workflows": [],
+      "run_started_at": "2026-10-22T15:07:34Z",
+      "triggering_actor": {
+        "login": "qduc",
+        "id": 11575015,
+        "node_id": "MDQ6VXNlcjExNTc1MDE1",
+        "avatar_url": "https://avatars.githubusercontent.com/u/11575015?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/qduc",
+        "html_url": "https://github.com/qduc",
+        "followers_url": "https://api.github.com/users/qduc/followers",
+        "following_url": "https://api.github.com/users/qduc/following{/other_user}",
+        "gists_url": "https://api.github.com/users/qduc/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/qduc/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/qduc/subscriptions",
+        "organizations_url": "https://api.github.com/users/qduc/orgs",
+        "repos_url": "https://api.github.com/users/qduc/repos",
+        "events_url": "https://api.github.com/users/qduc/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/qduc/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "jobs_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508/attempts/1/jobs",
+      "logs_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508/attempts/1/logs",
+      "check_suite_url": "https://api.github.com/repos/qduc/term2/check-suites/107873196522",
+      "artifacts_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508/artifacts",
+      "cancel_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508/cancel",
+      "rerun_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508/rerun",
+      "previous_attempt_url": null,
+      "workflow_url": "https://api.github.com/repos/qduc/term2/actions/workflows/342067715",
+      "head_commit": {
+        "id": "5a2997bfec981bd965b292cbc58df8ea4752a4c2",
+        "tree_id": "d8e20f1975430bb07f33dc887e3bcc2424be0ac7",
+        "message": "perf: balance remaining provider work across existing CI lanes",
+        "timestamp": "2026-10-22T15:05:55Z",
+        "author": {
+          "name": "qduc",
+          "email": "qduc159@gmail.com"
+        },
+        "committer": {
+          "name": "qduc",
+          "email": "qduc159@gmail.com"
+        }
+      },
+      "repository": {
+        "id": 1103222129,
+        "node_id": "R_kgDOQcHVcQ",
+        "name": "term2",
+        "full_name": "qduc/term2",
+        "private": false,
+        "owner": {
+          "login": "qduc",
+          "id": 11575015,
+          "node_id": "MDQ6VXNlcjExNTc1MDE1",
+          "avatar_url": "https://avatars.githubusercontent.com/u/11575015?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/qduc",
+          "html_url": "https://github.com/qduc",
+          "followers_url": "https://api.github.com/users/qduc/followers",
+          "following_url": "https://api.github.com/users/qduc/following{/other_user}",
+          "gists_url": "https://api.github.com/users/qduc/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/qduc/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/qduc/subscriptions",
+          "organizations_url": "https://api.github.com/users/qduc/orgs",
+          "repos_url": "https://api.github.com/users/qduc/repos",
+          "events_url": "https://api.github.com/users/qduc/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/qduc/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "html_url": "https://github.com/qduc/term2",
+        "description": "A terminal-based AI assistant, think of Claude Code and Warp getting married and having a child",
+        "fork": false,
+        "url": "https://api.github.com/repos/qduc/term2",
+        "forks_url": "https://api.github.com/repos/qduc/term2/forks",
+        "keys_url": "https://api.github.com/repos/qduc/term2/keys{/key_id}",
+        "collaborators_url": "https://api.github.com/repos/qduc/term2/collaborators{/collaborator}",
+        "teams_url": "https://api.github.com/repos/qduc/term2/teams",
+        "hooks_url": "https://api.github.com/repos/qduc/term2/hooks",
+        "issue_events_url": "https://api.github.com/repos/qduc/term2/issues/events{/number}",
+        "events_url": "https://api.github.com/repos/qduc/term2/events",
+        "assignees_url": "https://api.github.com/repos/qduc/term2/assignees{/user}",
+        "branches_url": "https://api.github.com/repos/qduc/term2/branches{/branch}",
+        "tags_url": "https://api.github.com/repos/qduc/term2/tags",
+        "blobs_url": "https://api.github.com/repos/qduc/term2/git/blobs{/sha}",
+        "git_tags_url": "https://api.github.com/repos/qduc/term2/git/tags{/sha}",
+        "git_refs_url": "https://api.github.com/repos/qduc/term2/git/refs{/sha}",
+        "trees_url": "https://api.github.com/repos/qduc/term2/git/trees{/sha}",
+        "statuses_url": "https://api.github.com/repos/qduc/term2/statuses/{sha}",
+        "languages_url": "https://api.github.com/repos/qduc/term2/languages",
+        "stargazers_url": "https://api.github.com/repos/qduc/term2/stargazers",
+        "contributors_url": "https://api.github.com/repos/qduc/term2/contributors",
+        "subscribers_url": "https://api.github.com/repos/qduc/term2/subscribers",
+        "subscription_url": "https://api.github.com/repos/qduc/term2/subscription",
+        "commits_url": "https://api.github.com/repos/qduc/term2/commits{/sha}",
+        "git_commits_url": "https://api.github.com/repos/qduc/term2/git/commits{/sha}",
+        "comments_url": "https://api.github.com/repos/qduc/term2/comments{/number}",
+        "issue_comment_url": "https://api.github.com/repos/qduc/term2/issues/comments{/number}",
+        "contents_url": "https://api.github.com/repos/qduc/term2/contents/{+path}",
+        "compare_url": "https://api.github.com/repos/qduc/term2/compare/{base}...{head}",
+        "merges_url": "https://api.github.com/repos/qduc/term2/merges",
+        "archive_url": "https://api.github.com/repos/qduc/term2/{archive_format}{/ref}",
+        "downloads_url": "https://api.github.com/repos/qduc/term2/downloads",
+        "issues_url": "https://api.github.com/repos/qduc/term2/issues{/number}",
+        "pulls_url": "https://api.github.com/repos/qduc/term2/pulls{/number}",
+        "milestones_url": "https://api.github.com/repos/qduc/term2/milestones{/number}",
+        "notifications_url": "https://api.github.com/repos/qduc/term2/notifications{?since,all,participating}",
+        "labels_url": "https://api.github.com/repos/qduc/term2/labels{/name}",
+        "releases_url": "https://api.github.com/repos/qduc/term2/releases{/id}",
+        "deployments_url": "https://api.github.com/repos/qduc/term2/deployments"
+      },
+      "head_repository": {
+        "id": 1103222129,
+        "node_id": "R_kgDOQcHVcQ",
+        "name": "term2",
+        "full_name": "qduc/term2",
+        "private": false,
+        "owner": {
+          "login": "qduc",
+          "id": 11575015,
+          "node_id": "MDQ6VXNlcjExNTc1MDE1",
+          "avatar_url": "https://avatars.githubusercontent.com/u/11575015?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/qduc",
+          "html_url": "https://github.com/qduc",
+          "followers_url": "https://api.github.com/users/qduc/followers",
+          "following_url": "https://api.github.com/users/qduc/following{/other_user}",
+          "gists_url": "https://api.github.com/users/qduc/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/qduc/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/qduc/subscriptions",
+          "organizations_url": "https://api.github.com/users/qduc/orgs",
+          "repos_url": "https://api.github.com/users/qduc/repos",
+          "events_url": "https://api.github.com/users/qduc/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/qduc/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "html_url": "https://github.com/qduc/term2",
+        "description": "A terminal-based AI assistant, think of Claude Code and Warp getting married and having a child",
+        "fork": false,
+        "url": "https://api.github.com/repos/qduc/term2",
+        "forks_url": "https://api.github.com/repos/qduc/term2/forks",
+        "keys_url": "https://api.github.com/repos/qduc/term2/keys{/key_id}",
+        "collaborators_url": "https://api.github.com/repos/qduc/term2/collaborators{/collaborator}",
+        "teams_url": "https://api.github.com/repos/qduc/term2/teams",
+        "hooks_url": "https://api.github.com/repos/qduc/term2/hooks",
+        "issue_events_url": "https://api.github.com/repos/qduc/term2/issues/events{/number}",
+        "events_url": "https://api.github.com/repos/qduc/term2/events",
+        "assignees_url": "https://api.github.com/repos/qduc/term2/assignees{/user}",
+        "branches_url": "https://api.github.com/repos/qduc/term2/branches{/branch}",
+        "tags_url": "https://api.github.com/repos/qduc/term2/tags",
+        "blobs_url": "https://api.github.com/repos/qduc/term2/git/blobs{/sha}",
+        "git_tags_url": "https://api.github.com/repos/qduc/term2/git/tags{/sha}",
+        "git_refs_url": "https://api.github.com/repos/qduc/term2/git/refs{/sha}",
+        "trees_url": "https://api.github.com/repos/qduc/term2/git/trees{/sha}",
+        "statuses_url": "https://api.github.com/repos/qduc/term2/statuses/{sha}",
+        "languages_url": "https://api.github.com/repos/qduc/term2/languages",
+        "stargazers_url": "https://api.github.com/repos/qduc/term2/stargazers",
+        "contributors_url": "https://api.github.com/repos/qduc/term2/contributors",
+        "subscribers_url": "https://api.github.com/repos/qduc/term2/subscribers",
+        "subscription_url": "https://api.github.com/repos/qduc/term2/subscription",
+        "commits_url": "https://api.github.com/repos/qduc/term2/commits{/sha}",
+        "git_commits_url": "https://api.github.com/repos/qduc/term2/git/commits{/sha}",
+        "comments_url": "https://api.github.com/repos/qduc/term2/comments{/number}",
+        "issue_comment_url": "https://api.github.com/repos/qduc/term2/issues/comments{/number}",
+        "contents_url": "https://api.github.com/repos/qduc/term2/contents/{+path}",
+        "compare_url": "https://api.github.com/repos/qduc/term2/compare/{base}...{head}",
+        "merges_url": "https://api.github.com/repos/qduc/term2/merges",
+        "archive_url": "https://api.github.com/repos/qduc/term2/{archive_format}{/ref}",
+        "downloads_url": "https://api.github.com/repos/qduc/term2/downloads",
+        "issues_url": "https://api.github.com/repos/qduc/term2/issues{/number}",
+        "pulls_url": "https://api.github.com/repos/qduc/term2/pulls{/number}",
+        "milestones_url": "https://api.github.com/repos/qduc/term2/milestones{/number}",
+        "notifications_url": "https://api.github.com/repos/qduc/term2/notifications{?since,all,participating}",
+        "labels_url": "https://api.github.com/repos/qduc/term2/labels{/name}",
+        "releases_url": "https://api.github.com/repos/qduc/term2/releases{/id}",
+        "deployments_url": "https://api.github.com/repos/qduc/term2/deployments"
+      }
+    },
+    "jobs": [
+      {
+        "id": 119904385145,
+        "run_id": 39801850508,
+        "workflow_name": "CI",
+        "head_branch": "perf/test-suite-speed",
+        "run_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOQcHVcc8AAAAb6tu4eQ",
+        "head_sha": "5a2997bfec981bd965b292cbc58df8ea4752a4c2",
+        "url": "https://api.github.com/repos/qduc/term2/actions/jobs/119904385145",
+        "html_url": "https://github.com/qduc/term2/actions/runs/39801850508/job/119904385145",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-10-22T15:07:35Z",
+        "started_at": "2026-10-22T15:07:37Z",
+        "completed_at": "2026-10-22T15:08:59Z",
+        "name": "integration",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-22T15:07:38Z",
+            "completed_at": "2026-10-22T15:07:38Z"
+          },
+          {
+            "name": "Run actions/checkout@v7",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-22T15:07:38Z",
+            "completed_at": "2026-10-22T15:07:41Z"
+          },
+          {
+            "name": "Run ./.github/actions/setup-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-22T15:07:41Z",
+            "completed_at": "2026-10-22T15:07:52Z"
+          },
+          {
+            "name": "Build dist",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-22T15:07:52Z",
+            "completed_at": "2026-10-22T15:07:57Z"
+          },
+          {
+            "name": "Run remaining integration and stateless provider cases",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-22T15:07:57Z",
+            "completed_at": "2026-10-22T15:08:57Z"
+          },
+          {
+            "name": "Post Run ./.github/actions/setup-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-22T15:08:57Z",
+            "completed_at": "2026-10-22T15:08:58Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10,
+            "started_at": "2026-10-22T15:08:58Z",
+            "completed_at": "2026-10-22T15:08:58Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11,
+            "started_at": "2026-10-22T15:08:58Z",
+            "completed_at": "2026-10-22T15:08:58Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/qduc/term2/check-runs/119904385145",
+        "labels": ["ubuntu-latest"],
+        "runner_id": 1000002681,
+        "runner_name": "GitHub Actions 1000002681",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      },
+      {
+        "id": 119904385709,
+        "run_id": 39801850508,
+        "workflow_name": "CI",
+        "head_branch": "perf/test-suite-speed",
+        "run_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOQcHVcc8AAAAb6tu6rQ",
+        "head_sha": "5a2997bfec981bd965b292cbc58df8ea4752a4c2",
+        "url": "https://api.github.com/repos/qduc/term2/actions/jobs/119904385709",
+        "html_url": "https://github.com/qduc/term2/actions/runs/39801850508/job/119904385709",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-10-22T15:07:35Z",
+        "started_at": "2026-10-22T15:07:37Z",
+        "completed_at": "2026-10-22T15:09:08Z",
+        "name": "provider-black-box",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-22T15:07:38Z",
+            "completed_at": "2026-10-22T15:07:40Z"
+          },
+          {
+            "name": "Run actions/checkout@v7",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-22T15:07:40Z",
+            "completed_at": "2026-10-22T15:07:42Z"
+          },
+          {
+            "name": "Run ./.github/actions/setup-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-22T15:07:42Z",
+            "completed_at": "2026-10-22T15:07:56Z"
+          },
+          {
+            "name": "Build dist",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-22T15:07:56Z",
+            "completed_at": "2026-10-22T15:08:01Z"
+          },
+          {
+            "name": "Run resilience and remaining provider cases",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-22T15:08:01Z",
+            "completed_at": "2026-10-22T15:09:04Z"
+          },
+          {
+            "name": "Post Run ./.github/actions/setup-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-22T15:09:04Z",
+            "completed_at": "2026-10-22T15:09:05Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10,
+            "started_at": "2026-10-22T15:09:05Z",
+            "completed_at": "2026-10-22T15:09:05Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11,
+            "started_at": "2026-10-22T15:09:05Z",
+            "completed_at": "2026-10-22T15:09:05Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/qduc/term2/check-runs/119904385709",
+        "labels": ["ubuntu-latest"],
+        "runner_id": 1000002682,
+        "runner_name": "GitHub Actions 1000002682",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      },
+      {
+        "id": 119904385993,
+        "run_id": 39801850508,
+        "workflow_name": "CI",
+        "head_branch": "perf/test-suite-speed",
+        "run_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOQcHVcc8AAAAb6tu7yQ",
+        "head_sha": "5a2997bfec981bd965b292cbc58df8ea4752a4c2",
+        "url": "https://api.github.com/repos/qduc/term2/actions/jobs/119904385993",
+        "html_url": "https://github.com/qduc/term2/actions/runs/39801850508/job/119904385993",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-10-22T15:07:35Z",
+        "started_at": "2026-10-22T15:07:37Z",
+        "completed_at": "2026-10-22T15:08:34Z",
+        "name": "test",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-22T15:07:37Z",
+            "completed_at": "2026-10-22T15:07:38Z"
+          },
+          {
+            "name": "Run actions/checkout@v7",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-22T15:07:38Z",
+            "completed_at": "2026-10-22T15:07:40Z"
+          },
+          {
+            "name": "Run ./.github/actions/setup-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-22T15:07:40Z",
+            "completed_at": "2026-10-22T15:07:53Z"
+          },
+          {
+            "name": "Reject committed unit tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-22T15:07:53Z",
+            "completed_at": "2026-10-22T15:07:53Z"
+          },
+          {
+            "name": "Build dist",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-22T15:07:53Z",
+            "completed_at": "2026-10-22T15:07:55Z"
+          },
+          {
+            "name": "Run guards, CLI integration and safety provider cases",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-22T15:07:55Z",
+            "completed_at": "2026-10-22T15:08:31Z"
+          },
+          {
+            "name": "Post Run ./.github/actions/setup-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11,
+            "started_at": "2026-10-22T15:08:31Z",
+            "completed_at": "2026-10-22T15:08:33Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 12,
+            "started_at": "2026-10-22T15:08:33Z",
+            "completed_at": "2026-10-22T15:08:33Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13,
+            "started_at": "2026-10-22T15:08:33Z",
+            "completed_at": "2026-10-22T15:08:33Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/qduc/term2/check-runs/119904385993",
+        "labels": ["ubuntu-latest"],
+        "runner_id": 1000002683,
+        "runner_name": "GitHub Actions 1000002683",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      },
+      {
+        "id": 119904386003,
+        "run_id": 39801850508,
+        "workflow_name": "CI",
+        "head_branch": "perf/test-suite-speed",
+        "run_url": "https://api.github.com/repos/qduc/term2/actions/runs/39801850508",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOQcHVcc8AAAAb6tu70w",
+        "head_sha": "5a2997bfec981bd965b292cbc58df8ea4752a4c2",
+        "url": "https://api.github.com/repos/qduc/term2/actions/jobs/119904386003",
+        "html_url": "https://github.com/qduc/term2/actions/runs/39801850508/job/119904386003",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-10-22T15:07:35Z",
+        "started_at": "2026-10-22T15:07:37Z",
+        "completed_at": "2026-10-22T15:08:46Z",
+        "name": "e2e",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-22T15:07:38Z",
+            "completed_at": "2026-10-22T15:07:39Z"
+          },
+          {
+            "name": "Run actions/checkout@v7",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-22T15:07:39Z",
+            "completed_at": "2026-10-22T15:07:41Z"
+          },
+          {
+            "name": "Run ./.github/actions/setup-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-22T15:07:41Z",
+            "completed_at": "2026-10-22T15:07:52Z"
+          },
+          {
+            "name": "Build dist",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-22T15:07:52Z",
+            "completed_at": "2026-10-22T15:07:56Z"
+          },
+          {
+            "name": "Run E2E and Responses provider cases",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-22T15:07:56Z",
+            "completed_at": "2026-10-22T15:08:43Z"
+          },
+          {
+            "name": "Post Run ./.github/actions/setup-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-22T15:08:43Z",
+            "completed_at": "2026-10-22T15:08:43Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10,
+            "started_at": "2026-10-22T15:08:43Z",
+            "completed_at": "2026-10-22T15:08:43Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11,
+            "started_at": "2026-10-22T15:08:43Z",
+            "completed_at": "2026-10-22T15:08:43Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/qduc/term2/check-runs/119904386003",
+        "labels": ["ubuntu-latest"],
+        "runner_id": 1000002684,
+        "runner_name": "GitHub Actions 1000002684",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      }
+    ],
+    "job_span_seconds": 91.0,
+    "created_to_jobs_completed_seconds": 94.0,
+    "queue_to_first_job_seconds": 3.0,
+    "runner_seconds": 299.0,
+    "created_to_success_updated_at_seconds": 104.0,
+    "status_timing_note": "updated_at is mutable metadata, not a dedicated completion timestamp. Retained separately because status summaries visibly lagged complete job logs; job completion is not assumed to mean immediate published feedback.",
+    "log_evidence": [
+      {
+        "job_id": 119904385145,
+        "name": "integration",
+        "sha256": "31909116404529945e62b78574dfd5d275ecbbcb03e1b34768dcb3aa6af72c7f",
+        "test_summaries": [
+          "2026-10-22T15:08:38.9963064Z       Tests  151 passed | 1 skipped (152)",
+          "2026-10-22T15:08:57.5067897Z       Tests  8 passed (8)"
+        ],
+        "durations": [
+          "2026-10-22T15:08:38.9965994Z    Duration  39.84s (transform 4.98s, setup 326ms, import 16.98s, tests 47.80s, environment 3ms)",
+          "2026-10-22T15:08:57.5069703Z    Duration  17.99s (transform 74ms, setup 14ms, import 108ms, tests 16.43s, environment 0ms)"
+        ],
+        "cache": [
+          "2026-10-22T15:07:47.6287659Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-a28648db380c05256776a163beca2f0fae8bd69a47be62c3c02667de9a8fb0ad",
+          "2026-10-22T15:07:51.1050783Z Cache restored successfully",
+          "2026-10-22T15:07:52.2970118Z Cache hit for: test-ripgrep-v1-Linux-X64-ubuntu24-20261018.339.1",
+          "2026-10-22T15:07:52.5312520Z Cache restored successfully"
+        ],
+        "environment": [
+          "2026-10-22T15:07:38.1854058Z Version: 20261015.610",
+          "2026-10-22T15:07:38.1869618Z Image: ubuntu-24.04",
+          "2026-10-22T15:07:38.1870623Z Version: 20261018.339.1",
+          "2026-10-22T15:07:46.2661425Z node: v24.21.0"
+        ],
+        "action_durations": [
+          "2026-10-22T15:07:46.2838199Z ##[end-action id=__self.node;outcome=success;conclusion=success;duration_ms=4533]",
+          "2026-10-22T15:07:47.3165715Z ##[end-action id=__self.__run;outcome=success;conclusion=success;duration_ms=1032]",
+          "2026-10-22T15:07:47.3335346Z ##[end-action id=__self.image;outcome=success;conclusion=success;duration_ms=16]",
+          "2026-10-22T15:07:51.1331621Z ##[end-action id=__self.__actions_cache;outcome=success;conclusion=success;duration_ms=3799]",
+          "2026-10-22T15:07:51.9707789Z ##[end-action id=__self.__run_2;outcome=success;conclusion=success;duration_ms=837]",
+          "2026-10-22T15:07:52.0679494Z ##[end-action id=__self.__run_3;outcome=success;conclusion=success;duration_ms=96]",
+          "2026-10-22T15:07:52.5466749Z ##[end-action id=__self.__actions_cache_2;outcome=success;conclusion=success;duration_ms=478]",
+          "2026-10-22T15:07:52.5644105Z ##[end-action id=__self.__run_4;outcome=success;conclusion=success;duration_ms=17]",
+          "2026-10-22T15:08:57.7282630Z ##[end-action id=__6c47ea01-2cda-4ce5-909a-9e0af1185e0d.__actions_cache_2;outcome=success;conclusion=success;duration_ms=139]",
+          "2026-10-22T15:08:57.9319297Z ##[end-action id=__6c47ea01-2cda-4ce5-909a-9e0af1185e0d.__actions_cache;outcome=success;conclusion=success;duration_ms=203]",
+          "2026-10-22T15:08:58.0640131Z ##[end-action id=__6c47ea01-2cda-4ce5-909a-9e0af1185e0d.node;outcome=success;conclusion=success;duration_ms=131]"
+        ]
+      },
+      {
+        "job_id": 119904385709,
+        "name": "provider-black-box",
+        "sha256": "132e039e9a6722f3a457b4494f079e5ef27dbb426d75280346c12b0344c7e3e0",
+        "test_summaries": ["2026-10-22T15:09:04.4449147Z       Tests  166 passed | 1 skipped (167)"],
+        "durations": [
+          "2026-10-22T15:09:04.4452032Z    Duration  60.96s (transform 3.65s, setup 249ms, import 6.46s, tests 109.00s, environment 3ms)"
+        ],
+        "cache": [
+          "2026-10-22T15:07:49.8597503Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-a28648db380c05256776a163beca2f0fae8bd69a47be62c3c02667de9a8fb0ad",
+          "2026-10-22T15:07:55.8728036Z Cache restored successfully"
+        ],
+        "environment": [
+          "2026-10-22T15:07:38.8857182Z Version: 20261015.610",
+          "2026-10-22T15:07:38.8866632Z Image: ubuntu-24.04",
+          "2026-10-22T15:07:38.8867925Z Version: 20261018.339.1",
+          "2026-10-22T15:07:48.1609614Z node: v24.21.0"
+        ],
+        "action_durations": [
+          "2026-10-22T15:07:48.1804587Z ##[end-action id=__self.node;outcome=success;conclusion=success;duration_ms=4769]",
+          "2026-10-22T15:07:49.3527344Z ##[end-action id=__self.__run;outcome=success;conclusion=success;duration_ms=1171]",
+          "2026-10-22T15:07:49.3691026Z ##[end-action id=__self.image;outcome=success;conclusion=success;duration_ms=16]",
+          "2026-10-22T15:07:55.9120536Z ##[end-action id=__self.__actions_cache;outcome=success;conclusion=success;duration_ms=6542]",
+          "2026-10-22T15:07:56.6774139Z ##[end-action id=__self.__run_2;outcome=success;conclusion=success;duration_ms=764]",
+          "2026-10-22T15:07:56.7749677Z ##[end-action id=__self.__run_3;outcome=success;conclusion=success;duration_ms=97]",
+          "2026-10-22T15:07:56.7761327Z ##[end-action id=__self.__actions_cache_2;outcome=skipped;conclusion=skipped;duration_ms=0]",
+          "2026-10-22T15:07:56.7768399Z ##[end-action id=__self.__run_4;outcome=skipped;conclusion=skipped;duration_ms=0]",
+          "2026-10-22T15:09:04.9074127Z ##[end-action id=__f11fa19b-a329-435a-bdd7-e9d4fba6fee5.__actions_cache;outcome=success;conclusion=success;duration_ms=230]",
+          "2026-10-22T15:09:05.0515568Z ##[end-action id=__f11fa19b-a329-435a-bdd7-e9d4fba6fee5.node;outcome=success;conclusion=success;duration_ms=143]"
+        ]
+      },
+      {
+        "job_id": 119904385993,
+        "name": "test",
+        "sha256": "ab1080a53db1aadea688d29ba51b397ffb17bc50549b46999a1f7728c92365a0",
+        "test_summaries": [
+          "2026-10-22T15:07:58.4641752Z       Tests  28 passed (28)",
+          "2026-10-22T15:08:23.2264261Z       Tests  53 passed (53)",
+          "2026-10-22T15:08:31.8881436Z       Tests  14 passed (14)"
+        ],
+        "durations": [
+          "2026-10-22T15:07:58.4643086Z    Duration  1.44s (transform 954ms, setup 81ms, import 57ms, tests 1.90s, environment 0ms)",
+          "2026-10-22T15:08:23.2265266Z    Duration  24.54s (transform 128ms, setup 29ms, import 186ms, tests 38.58s, environment 0ms)",
+          "2026-10-22T15:08:31.8882331Z    Duration  8.42s (transform 99ms, setup 16ms, import 150ms, tests 12.23s, environment 0ms)"
+        ],
+        "cache": [
+          "2026-10-22T15:07:43.1983726Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-a28648db380c05256776a163beca2f0fae8bd69a47be62c3c02667de9a8fb0ad",
+          "2026-10-22T15:07:46.3207365Z Cache restored successfully",
+          "2026-10-22T15:07:47.1973158Z Cache not found for input keys: test-ripgrep-v1-Linux-X64-ubuntu24-20261012.334.1",
+          "2026-10-22T15:08:33.0794452Z Cache saved with key: test-ripgrep-v1-Linux-X64-ubuntu24-20261012.334.1"
+        ],
+        "environment": [
+          "2026-10-22T15:07:37.8621773Z Version: 20261012.601",
+          "2026-10-22T15:07:37.8626968Z Image: ubuntu-24.04",
+          "2026-10-22T15:07:37.8627329Z Version: 20261012.334.1",
+          "2026-10-22T15:07:41.8262997Z node: v24.21.0"
+        ],
+        "action_durations": [
+          "2026-10-22T15:07:41.8350410Z ##[end-action id=__self.node;outcome=success;conclusion=success;duration_ms=416]",
+          "2026-10-22T15:07:42.8859908Z ##[end-action id=__self.__run;outcome=success;conclusion=success;duration_ms=1050]",
+          "2026-10-22T15:07:42.9019991Z ##[end-action id=__self.image;outcome=success;conclusion=success;duration_ms=15]",
+          "2026-10-22T15:07:46.3399944Z ##[end-action id=__self.__actions_cache;outcome=success;conclusion=success;duration_ms=3437]",
+          "2026-10-22T15:07:46.8482101Z ##[end-action id=__self.__run_2;outcome=success;conclusion=success;duration_ms=507]",
+          "2026-10-22T15:07:46.9584999Z ##[end-action id=__self.__run_3;outcome=success;conclusion=success;duration_ms=110]",
+          "2026-10-22T15:07:47.2037644Z ##[end-action id=__self.__actions_cache_2;outcome=success;conclusion=success;duration_ms=244]",
+          "2026-10-22T15:07:53.1624370Z ##[end-action id=__self.__run_4;outcome=success;conclusion=success;duration_ms=5958]",
+          "2026-10-22T15:08:33.0859449Z ##[end-action id=__f48d3f1c-9c6f-490e-94c5-09031c427ff3.__actions_cache_2;outcome=success;conclusion=success;duration_ms=1138]",
+          "2026-10-22T15:08:33.2877354Z ##[end-action id=__f48d3f1c-9c6f-490e-94c5-09031c427ff3.__actions_cache;outcome=success;conclusion=success;duration_ms=201]",
+          "2026-10-22T15:08:33.3649984Z ##[end-action id=__f48d3f1c-9c6f-490e-94c5-09031c427ff3.node;outcome=success;conclusion=success;duration_ms=76]"
+        ]
+      },
+      {
+        "job_id": 119904386003,
+        "name": "e2e",
+        "sha256": "c5ee4c4fd2317475f71f35250868f227692e475ba12384a5539df1abec53ebe3",
+        "test_summaries": [
+          "2026-10-22T15:08:08.4591270Z       Tests  32 passed (32)",
+          "2026-10-22T15:08:42.8326767Z       Tests  34 passed (34)"
+        ],
+        "durations": [
+          "2026-10-22T15:08:08.4592466Z    Duration  10.72s (transform 391ms, setup 70ms, import 562ms, tests 16.69s, environment 0ms)",
+          "2026-10-22T15:08:42.8330821Z    Duration  34.14s (transform 143ms, setup 28ms, import 264ms, tests 52.12s, environment 0ms)"
+        ],
+        "cache": [
+          "2026-10-22T15:07:48.0221732Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-a28648db380c05256776a163beca2f0fae8bd69a47be62c3c02667de9a8fb0ad",
+          "2026-10-22T15:07:52.3222042Z Cache restored successfully"
+        ],
+        "environment": [
+          "2026-10-22T15:07:38.2445701Z Version: 20261015.610",
+          "2026-10-22T15:07:38.2451515Z Image: ubuntu-24.04",
+          "2026-10-22T15:07:38.2451876Z Version: 20261018.339.1",
+          "2026-10-22T15:07:46.6774403Z node: v24.21.0"
+        ],
+        "action_durations": [
+          "2026-10-22T15:07:46.6948134Z ##[end-action id=__self.node;outcome=success;conclusion=success;duration_ms=4493]",
+          "2026-10-22T15:07:47.5948133Z ##[end-action id=__self.__run;outcome=success;conclusion=success;duration_ms=899]",
+          "2026-10-22T15:07:47.6086977Z ##[end-action id=__self.image;outcome=success;conclusion=success;duration_ms=13]",
+          "2026-10-22T15:07:52.3465975Z ##[end-action id=__self.__actions_cache;outcome=success;conclusion=success;duration_ms=4737]",
+          "2026-10-22T15:07:52.9032944Z ##[end-action id=__self.__run_2;outcome=success;conclusion=success;duration_ms=556]",
+          "2026-10-22T15:07:52.9771929Z ##[end-action id=__self.__run_3;outcome=success;conclusion=success;duration_ms=73]",
+          "2026-10-22T15:07:52.9782136Z ##[end-action id=__self.__actions_cache_2;outcome=skipped;conclusion=skipped;duration_ms=0]",
+          "2026-10-22T15:07:52.9786421Z ##[end-action id=__self.__run_4;outcome=skipped;conclusion=skipped;duration_ms=0]",
+          "2026-10-22T15:08:43.2391912Z ##[end-action id=__7f435297-9a22-468b-bfbb-44981e488939.__actions_cache;outcome=success;conclusion=success;duration_ms=146]",
+          "2026-10-22T15:08:43.3294159Z ##[end-action id=__7f435297-9a22-468b-bfbb-44981e488939.node;outcome=success;conclusion=success;duration_ms=89]"
+        ]
+      }
+    ],
+    "coverage": {
+      "passed": 486,
+      "skipped": 2,
+      "failed": 0,
+      "total": 488
+    }
+  },
+  "closeout": {
+    "goal_seconds": 60,
+    "goal_achieved": false,
+    "runner_span_reduction_percent": 47.093,
+    "created_to_jobs_completed_reduction_percent": 46.286,
+    "runner_seconds_reduction_percent": 23.724,
+    "comparison_limit": "Individual hosted-runner observations, not matched hardware or a stable speed guarantee. Same four jobs, two workers per runner; Node24.21.0 final matches baseline. Mac and Linux measurements remain separate.",
+    "cache_state": "All four dependency caches hit; integration ripgrep cache hit; test ripgrep cache missed on a previously unseen image version. Final all-warm ripgrep run not yet measured.",
+    "full_feedback": "Final code: creation to last job completion94s; success workflow updated_at104s. Baseline175s and192s respectively. updated_at is mutable metadata, so retain it separately from job timing.",
+    "remaining_bottleneck": "Provider Vitest invocation60.96s before checkout/setup/build/post-processing. No further optimization authorized after stop decision.",
+    "historical_metadata_limit": "Pinned-setup and first two-entry runs reported workflow success, but one historical per-job API summary still lacked terminal metadata on final reconciliation. Complete successful logs retained; no invented completion timestamps or aggregate runner cost.",
+    "original_checkout": "All three unrelated files retain their starting hashes; shared branch/worktrees not modified."
   }
 }

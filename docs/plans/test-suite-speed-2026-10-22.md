@@ -1,5 +1,60 @@
 # Integration and provider test performance (2026-10-22)
 
+## Closeout: faster, one-minute goal not achieved
+
+Further performance experiments stopped at the user's direction. The retained
+code at `5a2997bfec981bd965b292cbc58df8ea4752a4c2` passed all four jobs in
+[CI run 39801850508](https://github.com/qduc/term2/actions/runs/39801850508).
+The documentation/ledger closeout head's checks are linked from
+[PR #35](https://github.com/qduc/term2/pull/35); no further performance changes
+are part of that closeout.
+
+| Run | Runner start → last finish | Creation → last job finish | Total runner-seconds | Cache state |
+| --- | ---: | ---: | ---: | --- |
+| Baseline `81445c7`, 39788751714 | 172 s | 175 s | 392 | Previous dependency setup |
+| First candidate `88b2cc6`, attempt 1 | 109 s | 112 s | 426 | All dependency caches cold |
+| Same-head attempt 2 | 84 s | 86 s | 308 | Mixed Node patches; two dependency hits, two misses |
+| Retained code `5a2997bf`, 39801850508 | **91 s** | **94 s** | **299** | Four dependency hits; one rg hit, one image-specific rg miss |
+
+Queue-to-first-runner time was 3, 3, 2 and 3 seconds respectively. These intervals
+include checkout, dependencies, builds, all tests, cache post-processing and
+cleanup. The retained run cut runner-span elapsed time by 47.1% and aggregate
+runner time by 23.7% relative to the baseline, with the same four runners and
+two workers each. The first cold candidate instead increased aggregate work
+by 8.7%; that counterexample remains recorded. These are individual hosted-runner
+samples, not a guarantee or a clean causal estimate of every component.
+
+Workflow success `updated_at` was 192 seconds after creation for the baseline
+and 104 seconds for the retained code. Earlier candidates showed delayed status
+publication (610 and 598 seconds) despite much earlier completed job logs.
+`updated_at` is mutable metadata rather than a dedicated finish timestamp; it
+is retained separately so runner completion is not misrepresented as immediate
+published feedback. The approximately **60-second complete-feedback goal was
+not achieved**, including on the final verified code. Its provider invocation
+alone took 60.96 seconds before setup and cleanup.
+
+Coverage is unchanged: **28 guards, 204 integration + 1 skip, 222 provider +
+1 skip, and 32 E2E**: 486 passes and two existing skips across 488 cases, assigned
+once across 63 files. Cases, assertions, deadlines, retries, skip conditions
+and file isolation remain. The retained CLI partition passed all 53 cases in
+28.22 s and 24.54 s in two complete Linux runs. The earlier failed three-entry
+cloud partition remains rejected; the retained two-entry implementation has
+fresh complete CI evidence. No new permanent unit tests were introduced.
+
+Typecheck, build, lint (31 existing warnings), formatting, no-unit-tests, AST
+preservation, inventory and failure-path checks passed. The Mac failures below
+remain visible and were never converted into skips. The final assignment and
+setup are retained; all earlier slower or unsuccessful experiments remain in
+[the machine-readable evidence](./test-suite-speed-2026-10-22.ci-loop.json).
+Two historical per-job summaries still lacked terminal metadata even though
+their workflows reported success and complete logs passed. Their exact job
+completion/cost values are left unknown; no timestamps were invented. The
+retained code's four job timestamps and conclusions are complete.
+
+The shared Mac checkout and its three unrelated files remain unchanged. No
+merge, deployment, paid-provider run, extra runner or expanded access occurred.
+The following sections preserve the chronological investigation and its limits.
+
 Measured against main `31bf8380137d7f48f463e54f31570a3f3026b4fc`
 (v0.35.0), in an isolated worktree. All providers were local HTTP/SSE/WS
 fixtures. No paid provider calls were made.
@@ -546,7 +601,7 @@ successful installation, stale-index recovery, update failure and final install
 failure; final failures remain nonzero. This targets the observed 8–12 seconds
 of unconditional apt update/install without changing test deadlines or cases.
 
-The one-minute goal remains unverified. The cold CLI integration invocation
+At this intermediate checkpoint the one-minute goal was unverified. The cold CLI integration invocation
 alone took 63.04 seconds; the same-head repeat took 50.63 seconds. Its 53 cases
 remain sequential. The previously unreliable integration partition remains
 rejected. Full metadata, local outcomes, source hashes, preservation checks,
@@ -577,8 +632,8 @@ module was emitted. All 42 registration ASTs, nine helpers and two hooks matched
 Comparable Mac runs covered all 53 CLI cases with cold emitted builds, fresh
 V8 cache priming and two workers: **29.61 → 19.14 seconds**, both 51 passes and
 the same two durable-goal database-path failures. These failed runs support
-preserved local outcomes, not a passing speedup claim. The experiment still
-requires complete Ubuntu CI before adoption.
+preserved local outcomes, not a passing speedup claim. At this point the experiment still
+required complete Ubuntu CI before adoption; the passing results are recorded below.
 
 The four jobs now assign all 63 files exactly once: guards, the two CLI files
 and safety/approval provider files on `test`; the other integration files on
@@ -616,4 +671,5 @@ two-entry run exposed individual job summaries lagging fully completed logs
 even after their workflows reported success. No retry or cancellation was made
 because of that inconsistency. Raw timestamps and snapshots are retained;
 mutable workflow `updated_at` values are recorded separately from job elapsed
-time. The approximately one-minute complete feedback target remains unproven.
+time. The approximately one-minute complete feedback target was not achieved;
+see the closeout above for the final verified measurements.

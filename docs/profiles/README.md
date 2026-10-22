@@ -82,10 +82,9 @@ Bare uses a short coding prompt with shell and file editors. Local sessions incl
 applicable global/project AGENTS.md without clipping them to the prompt budget;
 the prompt directs the model to read scoped instructions before editing. Remote
 sessions do not inject local AGENTS.md: the model must read the remote checkout's
-instructions through shell. Skills catalogs, memory, environment catalogs,
-delegation, and JavaScript workflows remain omitted. Specifically requested or
-required skills/documents can be read through shell when accessible; missing
-capabilities must be reported, not silently skipped.
+instructions through shell. Bare includes the skills catalog and `activate_skill`.
+Memory, environment catalogs, delegation, and JavaScript workflows remain omitted.
+Missing capabilities must be reported, not silently skipped.
 
 Root sessions also expose `goal_check`. A supplied `--goal` uses the existing
 request-time goal context, stop checks, and configured completion verification.
@@ -97,10 +96,13 @@ Sandbox authority, approval policy, cancellation, output bounds, request deadlin
 and compaction remain authoritative. `agent.completionVerification=false` remains
 an explicit operator override of the runtime completion gate.
 
-Bare's profile version is `1.1.0`. Its original minimal definition is retained as
+Bare's profile version is `1.2.0`. Its original minimal definition is retained as
 an experiment fixture; the comparison protocol and measurement limitations are in
-[the Bare experiment notes](../../experiments/bare-profile/README.md). No measured
-token saving or quality equivalence is claimed.
+[the Bare experiment notes](../../experiments/bare-profile/README.md). Skills were
+restored after the cheap-additions experiment: on one skill-discovery task, three
+fresh paired runs used 34–66% fewer tokens with skills. That task is narrow, and
+one skills run overwrote a file without reading it first, so no general token
+saving or quality equivalence is claimed.
 
 Every CLI session prints its profile on stderr. Headless NDJSON begins with a
 `session_start` carrying `activeProfileId`, and persisted conversation headers

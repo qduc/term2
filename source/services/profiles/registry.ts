@@ -145,12 +145,18 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
           content: prompt('bare.md'),
         },
       },
-      context: { kind: 'context', sources: [{ id: 'project-instructions', source: 'project-instructions' }] },
-      tools: { kind: 'tools', include: ['shell', 'filesystem-write'] },
+      context: {
+        kind: 'context',
+        sources: [
+          { id: 'project-instructions', source: 'project-instructions' },
+          { id: 'skills-catalog', source: 'skills-catalog' },
+        ],
+      },
+      tools: { kind: 'tools', include: ['shell', 'filesystem-write', 'skills'] },
       enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
       presentation: { kind: 'presentation', displayName: 'Bare', label: 'BARE', color: 'cyan' },
     }),
-    version: '1.1.0',
+    version: '1.2.0',
   },
   builtinProfile(
     'lite',

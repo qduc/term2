@@ -1701,6 +1701,11 @@ it.each(['flag', 'config'])(
       path.join(repo, 'AGENTS.md'),
       'PROJECT_GUIDANCE_SENTINEL: preserve existing files and run relevant checks.',
     );
+    fs.mkdirSync(path.join(repo, '.agents/skills/bare-probe'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repo, '.agents/skills/bare-probe/SKILL.md'),
+      '---\nname: bare-probe\ndescription: BARE_SKILL_CATALOG_SENTINEL\n---\nProbe body.\n',
+    );
     const mock = await startModelMock(['mock-alpha'], (n) =>
       n === 1
         ? [
@@ -1756,7 +1761,7 @@ it.each(['flag', 'config'])(
       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).toBe('bare edit succeeded\n');
       const request = mock.capturedRequests()[0];
       const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
-      expect(names).toEqual(['create_file', 'goal_check', 'search_replace', 'shell']);
+      expect(names).toEqual(['activate_skill', 'create_file', 'goal_check', 'search_replace', 'shell']);
       const system = (request.messages as { role: string; content: string }[])
         .filter((m) => m.role === 'system')
         .map((m) => m.content)
@@ -1766,6 +1771,7 @@ it.each(['flag', 'config'])(
       expect(system).toContain('PROJECT_GUIDANCE_SENTINEL');
       expect(system).toContain('GLOBAL_GUIDANCE_SENTINEL');
       expect(system).toContain('report blocked');
+      expect(system).toContain('BARE_SKILL_CATALOG_SENTINEL');
       expect(system).toContain('Follow required independent review policies');
       expect(system).not.toContain('run_code');
       expect(mock.capturedModels()).toHaveLength(2);
@@ -1776,7 +1782,7 @@ it.each(['flag', 'config'])(
       expect(emitted[0]).toMatchObject({
         type: 'session_start',
         activeProfileId: 'builtin:bare',
-        activeProfileVersion: '1.1.0',
+        activeProfileVersion: '1.2.0',
         activeProfileDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
       const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;

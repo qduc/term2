@@ -370,7 +370,14 @@ export const useConversation = ({
           dispatch({ type: 'turn/completed' });
           const consumption = conversationService.consumeSessionRolloverRequest?.();
           if (consumption?.status === 'ready') {
-            void onSessionRollover?.(consumption.request);
+            void Promise.resolve()
+              .then(() => onSessionRollover?.(consumption.request))
+              .catch((error: unknown) => {
+                const reason = error instanceof Error ? error.message : String(error);
+                addSystemMessage(
+                  `Session rollover was not completed: ${reason}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
+                );
+              });
           } else if (consumption?.status === 'blocked') {
             addSystemMessage(
               `Session rollover was not performed: ${consumption.error}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,

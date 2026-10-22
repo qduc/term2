@@ -301,6 +301,10 @@ The tool refuses with a structured tool error, not a crash, when:
 - A pending approval, other pending interaction, post-execute gate, background
   approval, or queued user submission exists. `ConversationService` rechecks
   these immediately before handing rotation to the app.
+  Queue ownership is checked at request consumption as well as at the final
+  mutation boundary; if the queue changes between those checks, the UI catches
+  the rejected rollover callback and shows the preserved brief. Queued input is
+  never transferred into the successor or retried automatically.
 
 `terminateAfterExecution` is result-aware for this tool. Only the accepted
 `{ ok: true, status: "rollover_requested" }` result ends the run segment.

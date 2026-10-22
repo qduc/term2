@@ -58,7 +58,9 @@ runs:
       uses: actions/cache@v6
       with:
         path: ${{ runner.temp }}/term2-ci-ripgrep
-        key: test-ripgrep-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-${{ steps.image.outputs.version }}
+        # The executable is portable across patch revisions of the same Ubuntu
+        # image family. Re-key on OS/architecture/family, not image publication.
+        key: test-ripgrep-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}
     - name: Prepare ripgrep
       if: inputs.ripgrep == 'true'
       shell: bash

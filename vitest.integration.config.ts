@@ -8,8 +8,9 @@
 // against 125.9s for the 598 unit files. vitest.config.ts excludes them; this
 // config is how they run, via `pnpm test:integration`.
 //
-// No prior `pnpm build` is needed. Global setup compiles one CLI for the CLI,
-// gateway and ACP launchers before isolated workers start.
+// Standalone runs need no prior build: global setup compiles one private CLI.
+// CI explicitly selects its fresh production build for the CLI, gateway and
+// ACP launchers, avoiding a second compilation of the same application.
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({

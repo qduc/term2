@@ -90,3 +90,29 @@ for subsequent incremental compilation.
 
 Full behavior, package relocation, rollback, and complete feedback measurements
 are in progress. No production change has earned adoption at this point.
+
+The packaging-only commit `2913273` passed all 486 tests with the two existing
+skips on GitHub run `39809026965`. Attempt 1 was cold: 140 s first job to last
+completion, 142 s feedback metadata, 397 aggregate runner-seconds. Attempt 2 had
+warm dependency caches but one ripgrep image-key miss: 97 s jobs, 101 s feedback,
+294 aggregate runner-seconds. A provider-lane reduction alone did not meet the
+complete-loop target. Its test stage was 30.90/45.04 s in these attempts versus
+about 62 s at the verified checkpoint, showing substantial runner variance too.
+
+The next experiment treats the CLI artifact and execution queue as shared build
+inputs, without sharing test state. CI integration launches the fresh production
+artifact already built in its job. Each lane then uses a single Vitest queue with
+two workers and separate projects retaining the original tier settings. This
+removes serial phase barriers and duplicate CLI compilation. Assertion failures
+do not suppress other assigned files; failures remain fatal. No cases are moved
+between the four jobs. The first `extends` prototype was rejected because Vite
+concatenated include arrays and ran entire tiers; its interrupted output is
+retained. Explicitly overriding each original config's include fixes discovery.
+The corrected local test lane passed the expected 95 tests in 31.81 s, versus
+41.81 s for the serialized bundle lane (one pair, not a complete CI measurement).
+
+Two setup details follow directly from observed costs: the ripgrep cache is keyed
+by OS/architecture/Ubuntu family rather than each image publication (a cold
+integration setup took 77 s); bundle source maps omit duplicate embedded source
+content while retaining mappings. The initial package added 50.9 MB uncompressed
+and packed to 12.6 MB, so artifact-size cost is part of the adoption decision.

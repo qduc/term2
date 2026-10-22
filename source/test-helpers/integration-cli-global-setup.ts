@@ -8,6 +8,14 @@ import { prepareCliCompileCache } from './cli-compile-cache.js';
 
 export default function setup(project: TestProject): (() => void) | undefined {
   const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
+  if (process.env.TERM2_CI_PREBUILT_CLI === '1') {
+    // run-ci-lane is invoked only after the workflow's fresh production build.
+    // Exercise that same shipped artifact instead of compiling a second CLI.
+    const cliPath = path.join(projectRoot, 'dist', 'cli.js');
+    fs.accessSync(cliPath, fs.constants.R_OK);
+    project.provide('integrationCliPath', cliPath);
+    return prepareCliCompileCache(project, cliPath);
+  }
   const require = createRequire(import.meta.url);
   const typescriptDir = path.resolve(path.dirname(require.resolve('typescript-7')), '..');
   const buildDir = path.join(projectRoot, 'node_modules', '.cache', 'term2-integration-cli');

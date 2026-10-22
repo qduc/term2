@@ -27,6 +27,7 @@ await build({
   target: 'node20',
   keepNames: true,
   sourcemap: true,
+  sourcesContent: false,
   // Native addons, runtime code loaders and independently loaded React must
   // keep their package identity. Optional Ink devtools remains a lazy import.
   external: [
@@ -56,11 +57,23 @@ await build({
           }
           const source = await readFile(path, 'utf8');
           if (!source.includes('import.meta.')) return;
+          const locationPrelude = [
+            "import { fileURLToPath as __term2FileURLToPath } from 'node:url';",
+            `const __term2OriginalUrl = new URL(${JSON.stringify(relativeUrl(original))}, import.meta.url).href;`,
+            `const __term2OriginalDir = __term2FileURLToPath(new URL(${JSON.stringify(
+              relativeUrl(dirname(original)) + '/',
+            )}, import.meta.url));`,
+            'const __term2OriginalFile = __term2FileURLToPath(__term2OriginalUrl);',
+          ].join('\n');
           const { code } = await transform(source, {
             loader: 'js',
             format: 'esm',
             target: 'node20',
             keepNames: true,
+            banner: locationPrelude,
+            sourcefile: path,
+            sourcemap: 'inline',
+            sourcesContent: false,
             // Let the parser replace expressions, never text in strings/comments.
             define: {
               'import.meta.url': '__term2OriginalUrl',
@@ -70,15 +83,8 @@ await build({
           });
           return {
             loader: 'js',
-            contents: [
-              "import { fileURLToPath as __term2FileURLToPath } from 'node:url';",
-              `const __term2OriginalUrl = new URL(${JSON.stringify(relativeUrl(original))}, import.meta.url).href;`,
-              `const __term2OriginalDir = __term2FileURLToPath(new URL(${JSON.stringify(
-                relativeUrl(dirname(original)) + '/',
-              )}, import.meta.url));`,
-              'const __term2OriginalFile = __term2FileURLToPath(__term2OriginalUrl);',
-              code.replace(/^#!.*\n/, ''),
-            ].join('\n'),
+            // Keep the source-map line offsets when removing the nested hashbang.
+            contents: code.replace(/^#!.*\n/, '\n'),
           };
         });
       },

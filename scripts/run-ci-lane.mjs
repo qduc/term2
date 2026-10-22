@@ -44,18 +44,14 @@ const plan = tiers.map(([tier, config]) => {
 });
 console.log(JSON.stringify({ lane, maxWorkers: 2, plan }, null, 2));
 if (!listOnly) {
-  let failed = false;
-  for (const { tier, config, files } of plan) {
-    if (files.length === 0) continue;
-    const args = [vitest, 'run', '--config', config, ...files, '--maxWorkers=2', '--reporter=verbose'];
-    // Preserve the published provider command's fail-fast policy. Other tiers
-    // keep their default bail=0. A failed tier never suppresses later tiers.
-    if (tier === 'provider') args.push('--bail=1');
-    const result = spawnSync(process.execPath, args, { env, stdio: 'inherit' });
-    if (result.status !== 0 || result.error) {
-      failed = true;
-      console.error(`[ci] ${lane}/${tier} failed: ${result.error?.message ?? result.signal ?? result.status}`);
-    }
+  const result = spawnSync(process.execPath, [vitest, 'run', '--config', 'vitest.ci.config.ts', '--reporter=verbose'], {
+    env: { ...env, TERM2_CI_PLAN: JSON.stringify(plan), TERM2_CI_PREBUILT_CLI: '1' },
+    stdio: 'inherit',
+  });
+  // Run all assigned files even after a test fails. The single invocation
+  // reports collection/unhandled errors and propagates its failure status.
+  if (result.status !== 0 || result.error) {
+    console.error(`[ci] ${lane} failed: ${result.error?.message ?? result.signal ?? result.status}`);
+    process.exitCode = 1;
   }
-  process.exitCode = failed ? 1 : 0;
 }

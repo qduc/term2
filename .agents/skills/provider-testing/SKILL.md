@@ -83,10 +83,13 @@ scenario is the one whose CLI never reached the state it waits for.
   sequential. The transport entry retains the aggregate resilience ledger.
 
 CI uses `scripts/run-ci-lane.mjs` to distribute the complete tier inventories
-across the same four jobs. Each lane invokes the original tier configuration
-with two workers; provider invocations retain `--bail=1`. Discovery assigns new
-files automatically, and a failed tier still causes its job to fail while later
-tiers run. The published full-suite commands above remain available locally.
+across the same four jobs. Each lane schedules its files through isolated Vitest
+projects using the original tier configurations and one two-worker queue. All
+process suites use the job's freshly built, bundled CLI; standalone integration
+runs still prepare a private build. Discovery assigns new files automatically.
+CI runs all assigned files after assertion failures and propagates collection,
+test, and unhandled failures. The published local provider command above retains
+`--bail=1`; it and the other full-suite commands remain available locally.
 
 ## Adding or changing a scenario
 

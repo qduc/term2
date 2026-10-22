@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { chmod, mkdtemp, mkdir, readFile, readdir, rm, truncate, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -18,9 +18,13 @@ async function temporaryDirectory(): Promise<string> {
   return directory;
 }
 
-it('keeps a process alive after its daily log stream becomes unwritable and reports once', async () => {
+it('keeps a process alive after ENOSPC, reports once, and drops further logs without Winston noise', async () => {
   const directory = await temporaryDirectory();
-  await chmod(directory, 0o555);
+  const secondDirectory = join(directory, 'second');
+  const today = new Date().toISOString().slice(0, 10);
+  await mkdir(secondDirectory);
+  await symlink('/dev/full', join(directory, `term2-${today}.log`));
+  await symlink('/dev/full', join(secondDirectory, `term2-${today}.log`));
   const child = spawnSync(
     process.execPath,
     [
@@ -30,18 +34,19 @@ it('keeps a process alive after its daily log stream becomes unwritable and repo
       '-e',
       `import { LoggingService } from './source/services/logging/logging-service.ts';
        const logging = new LoggingService({ logDir: process.argv[1], suppressConsoleOutput: true });
-       for (let i = 0; i < 10; i++) logging.info('write ' + i);
+       const second = new LoggingService({ logDir: process.argv[2], suppressConsoleOutput: true });
+       for (let i = 0; i < 10; i++) { logging.info('write ' + i); second.info('write ' + i); }
        setTimeout(() => { console.log('TURN_FINISHED'); setTimeout(() => process.exit(0), 50); }, 150);`,
       directory,
+      secondDirectory,
     ],
     { cwd: process.cwd(), encoding: 'utf8', timeout: 10_000 },
   );
-  await chmod(directory, 0o700);
-
   expect(child.error).toBeUndefined();
   expect(child.status, child.stderr).toBe(0);
   expect(child.stdout).toContain('TURN_FINISHED');
   expect(child.stderr.match(/File logging disabled after write failure/g)).toHaveLength(1);
+  expect(child.stderr).not.toContain('[winston]');
   expect(child.stderr).not.toContain("Unhandled 'error' event");
 });
 
@@ -85,50 +90,86 @@ it('removes aged and over-budget traffic days while preserving recent traffic', 
   const oldDay = join(trafficDir, dateForDaysAgo(30), 'session-old');
   const oversizedDay = join(trafficDir, dateForDaysAgo(3), 'session-large');
   const recentDay = join(trafficDir, dateForDaysAgo(0), 'session-recent');
+  const currentOversizedDay = join(trafficDir, dateForDaysAgo(0), 'session-current-large');
   const oldApplicationLog = join(logDir, `term2-${dateForDaysAgo(30)}.log.1`);
   const oversizedApplicationLog = join(logDir, `term2-${dateForDaysAgo(3)}.log.1`);
   const recentApplicationLog = join(logDir, `term2-${dateForDaysAgo(0)}.log`);
+  const currentOversizedApplicationLog = join(logDir, `term2-${dateForDaysAgo(0)}.log.1`);
   await Promise.all([
     mkdir(oldDay, { recursive: true }),
     mkdir(oversizedDay, { recursive: true }),
     mkdir(recentDay, { recursive: true }),
+    mkdir(currentOversizedDay, { recursive: true }),
   ]);
   await writeFile(join(oldDay, 'request.json'), '{}');
   await writeFile(join(oversizedDay, 'request.json'), '');
   await truncate(join(oversizedDay, 'request.json'), 512 * 1024 * 1024 + 1);
   await writeFile(join(recentDay, 'request.json'), '{"sent":true}');
+  await writeFile(join(currentOversizedDay, 'request.json'), '');
+  await truncate(join(currentOversizedDay, 'request.json'), 512 * 1024 * 1024 + 1);
   await writeFile(oldApplicationLog, '{}');
   await writeFile(oversizedApplicationLog, '');
   await truncate(oversizedApplicationLog, 512 * 1024 * 1024 + 1);
   await writeFile(recentApplicationLog, '{}');
+  await writeFile(currentOversizedApplicationLog, '');
+  await truncate(currentOversizedApplicationLog, 512 * 1024 * 1024 + 1);
 
   new LoggingService({ logDir });
 
   expect(existsSync(join(trafficDir, dateForDaysAgo(30)))).toBe(false);
   expect(existsSync(join(trafficDir, dateForDaysAgo(3)))).toBe(false);
   expect(existsSync(join(recentDay, 'request.json'))).toBe(true);
+  expect(existsSync(join(currentOversizedDay, 'request.json'))).toBe(true);
   expect(existsSync(oldApplicationLog)).toBe(false);
   expect(existsSync(oversizedApplicationLog)).toBe(false);
   expect(existsSync(recentApplicationLog)).toBe(true);
+  expect(existsSync(currentOversizedApplicationLog)).toBe(true);
 });
 
 it('continues startup and logs one warning when retention cannot delete old traffic', async () => {
   const directory = await temporaryDirectory();
-  const logDir = join(directory, 'logs');
-  const trafficDir = join(logDir, 'provider-traffic');
+  const logDirs = [join(directory, 'logs-one'), join(directory, 'logs-two')];
+  const trafficDirs = logDirs.map((logDir) => join(logDir, 'provider-traffic'));
   const oldDate = new Date();
   oldDate.setUTCDate(oldDate.getUTCDate() - 30);
-  const oldDay = join(trafficDir, oldDate.toISOString().slice(0, 10));
-  await mkdir(oldDay, { recursive: true });
-  await writeFile(join(oldDay, 'request.json'), '{}');
-  await chmod(trafficDir, 0o555);
+  for (const trafficDir of trafficDirs) {
+    const oldDay = join(trafficDir, oldDate.toISOString().slice(0, 10));
+    await mkdir(oldDay, { recursive: true });
+    await writeFile(join(oldDay, 'request.json'), '{}');
+    await chmod(trafficDir, 0o555);
+  }
 
-  expect(() => new LoggingService({ logDir })).not.toThrow();
+  expect(() => logDirs.forEach((logDir) => new LoggingService({ logDir }))).not.toThrow();
   await new Promise((resolve) => setTimeout(resolve, 100));
-  await chmod(trafficDir, 0o700);
+  await Promise.all(trafficDirs.map((trafficDir) => chmod(trafficDir, 0o700)));
 
-  const applicationLog = (await readdir(logDir)).find((name) => /^term2-\d{4}-\d{2}-\d{2}\.log$/.test(name));
-  expect(applicationLog).toBeTruthy();
-  const contents = await readFile(join(logDir, applicationLog!), 'utf8');
-  expect(contents.match(/logging\.retention_cleanup_failed/g)).toHaveLength(1);
+  const warnings: string[] = [];
+  for (const logDir of logDirs) {
+    const applicationLog = (await readdir(logDir)).find((name) => /^term2-\d{4}-\d{2}-\d{2}\.log$/.test(name));
+    if (applicationLog) warnings.push(await readFile(join(logDir, applicationLog), 'utf8'));
+  }
+  expect(warnings.join('').match(/logging\.retention_cleanup_failed/g)).toHaveLength(1);
+});
+
+it('continues measuring sibling traffic entries when one subdirectory is unreadable', async () => {
+  const directory = await temporaryDirectory();
+  const trafficDir = join(directory, 'logs', 'provider-traffic');
+  const unreadableDate = new Date();
+  unreadableDate.setUTCDate(unreadableDate.getUTCDate() - 1);
+  const largeDate = new Date();
+  largeDate.setUTCDate(largeDate.getUTCDate() - 2);
+  const unreadableDir = join(trafficDir, unreadableDate.toISOString().slice(0, 10), 'unreadable');
+  const oversizedDir = join(trafficDir, largeDate.toISOString().slice(0, 10));
+  await mkdir(unreadableDir, { recursive: true });
+  await mkdir(oversizedDir, { recursive: true });
+  await writeFile(join(oversizedDir, 'large.json'), '');
+  await truncate(join(oversizedDir, 'large.json'), 512 * 1024 * 1024 + 1);
+  await chmod(unreadableDir, 0o000);
+
+  try {
+    expect(() => new LoggingService({ logDir: join(directory, 'logs') })).not.toThrow();
+    expect(existsSync(oversizedDir)).toBe(false);
+  } finally {
+    await chmod(unreadableDir, 0o700);
+  }
 });

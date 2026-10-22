@@ -225,13 +225,15 @@ beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-'));
 });
 
-it('finishes a provider turn when the log directory is unwritable', async () => {
+it('finishes a provider turn when file logging hits ENOSPC', async () => {
   const home = path.join(testDir, 'home');
   const workspace = path.join(testDir, 'workspace');
   const stateHome = path.join(home, '.local', 'state');
   const logDir = path.join(stateHome, 'term2-nodejs', 'logs');
+  const today = new Date().toISOString().slice(0, 10);
   fs.mkdirSync(workspace, { recursive: true });
   fs.mkdirSync(logDir, { recursive: true });
+  fs.symlinkSync('/dev/full', path.join(logDir, `term2-${today}.log`));
   const mock = await startModelMock(['mock-alpha']);
   const env = createTestChildEnv({
     HOME: home,
@@ -248,7 +250,6 @@ it('finishes a provider turn when the log directory is unwritable', async () => 
     agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
-  fs.chmodSync(logDir, 0o555);
 
   try {
     const result = await spawnCli([cliPath(), '--auto-approve', 'Reply with a short answer'], env, workspace);
@@ -256,10 +257,10 @@ it('finishes a provider turn when the log directory is unwritable', async () => 
     expect(result.stdout).toContain('ok');
     expect(result.stderr).toContain('File logging disabled after write failure');
     expect(result.stderr.match(/File logging disabled after write failure/g)).toHaveLength(1);
+    expect(result.stderr).not.toContain('[winston]');
     expect(result.stderr).not.toContain("Unhandled 'error' event");
     expect(mock.capturedRequests()).toHaveLength(1);
   } finally {
-    fs.chmodSync(logDir, 0o700);
     await mock.close();
   }
 });

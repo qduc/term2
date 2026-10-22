@@ -20,6 +20,9 @@ import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service
 
 const LOG_RETENTION_DAYS = 7;
 const LOG_DIRECTORY_MAX_BYTES = 512 * 1024 * 1024;
+const retentionCleanupRoots = new Set<string>();
+let cleanupFailureReported = false;
+let fileLoggingFailureReported = false;
 
 const LOG_LEVELS = {
   error: 0,
@@ -63,7 +66,6 @@ interface LoggingServiceConfig {
 export class LoggingService {
   private logger: winston.Logger;
   private fileLoggingDisabled = false;
-  private trafficCleanupFailureReported = false;
   private correlationId: string | undefined;
   private debugLogging: boolean;
   private suppressConsoleOutput: boolean;
@@ -295,7 +297,11 @@ export class LoggingService {
    * Remove old and over-budget provider/evaluator traffic logs at startup.
    */
   private cleanupProviderTraffic(maxDays = LOG_RETENTION_DAYS, maxBytes = LOG_DIRECTORY_MAX_BYTES): void {
-    this.cleanupRotatedApplicationLogs(path.dirname(this.providerTrafficDir), maxDays, maxBytes);
+    const logRoot = path.resolve(path.dirname(this.providerTrafficDir));
+    if (retentionCleanupRoots.has(logRoot)) return;
+    retentionCleanupRoots.add(logRoot);
+
+    this.cleanupRotatedApplicationLogs(logRoot, maxDays, maxBytes);
     this.cleanupTrafficDir(this.providerTrafficDir, maxDays, maxBytes);
     this.cleanupTrafficDir(this.evaluatorTrafficDir, maxDays, maxBytes);
   }
@@ -325,8 +331,11 @@ export class LoggingService {
 
       const orderedDays = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
       let totalBytes = [...groups.values()].flat().reduce((total, file) => total + file.bytes, 0);
-      for (const [, files] of orderedDays) {
+      const today = new Date().toISOString().slice(0, 10);
+      for (const [dateKey, files] of orderedDays) {
         if (totalBytes <= maxBytes) break;
+        // The active date may be in use by this or another Term2 process.
+        if (dateKey === today) continue;
         for (const file of files) {
           if (this.removeLogFile(file.filePath)) totalBytes -= file.bytes;
         }
@@ -391,6 +400,7 @@ export class LoggingService {
       let totalBytes = datedEntries.reduce((total, entry) => total + entry.bytes, 0);
       for (const entry of datedEntries.sort((a, b) => a.dateKey.localeCompare(b.dateKey))) {
         if (totalBytes <= maxBytes) break;
+        if (entry.dateKey === new Date().toISOString().slice(0, 10)) continue;
         try {
           fs.rmSync(entry.fullPath, { recursive: true, force: true });
           totalBytes -= entry.bytes;
@@ -404,16 +414,23 @@ export class LoggingService {
   }
 
   private measureTrafficBytes(filePath: string): number {
-    const stat = fs.lstatSync(filePath);
-    if (!stat.isDirectory()) return stat.isFile() ? stat.size : 0;
-    return fs
-      .readdirSync(filePath)
-      .reduce((total, name) => total + this.measureTrafficBytes(path.join(filePath, name)), 0);
+    try {
+      const stat = fs.lstatSync(filePath);
+      if (!stat.isDirectory()) return stat.isFile() ? stat.size : 0;
+      let total = 0;
+      for (const name of fs.readdirSync(filePath)) {
+        total += this.measureTrafficBytes(path.join(filePath, name));
+      }
+      return total;
+    } catch (error) {
+      this.reportTrafficCleanupFailure(error);
+      return 0;
+    }
   }
 
   private reportTrafficCleanupFailure(error: unknown): void {
-    if (this.trafficCleanupFailureReported) return;
-    this.trafficCleanupFailureReported = true;
+    if (cleanupFailureReported) return;
+    cleanupFailureReported = true;
     const message = error instanceof Error ? error.message : String(error);
     this.warn('Provider traffic retention cleanup failed', {
       eventType: 'logging.retention_cleanup_failed',
@@ -423,6 +440,9 @@ export class LoggingService {
   }
 
   private log(level: string, message: string, meta?: LogMetadataContract): void {
+    // Winston warns to stderr and buffers records if every transport has been
+    // removed. Once the failed file sink was the last transport, drop logs.
+    if (this.fileLoggingDisabled && this.logger.transports.length === 0) return;
     try {
       // Callers that own an asynchronous operation can provide its correlation
       // explicitly. That must beat the mutable process-wide fallback, otherwise
@@ -529,6 +549,8 @@ export class LoggingService {
 
     // Disk errors must be visible even when routine console logging is
     // suppressed. Never route this warning back through the failed logger.
+    if (fileLoggingFailureReported) return;
+    fileLoggingFailureReported = true;
     try {
       process.stderr.write(`[LoggingService] File logging disabled after write failure: ${error.message}\n`);
     } catch {

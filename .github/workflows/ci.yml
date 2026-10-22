@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 # The same four runners now share the complete inventory. Each tier keeps its
-# configuration, module isolation and failure policy; run-ci-lane.mjs assigns
+# configuration and module isolation; run-ci-lane.mjs assigns
 # every discovered file once. No test selection depends on changed paths.
 jobs:
   test:

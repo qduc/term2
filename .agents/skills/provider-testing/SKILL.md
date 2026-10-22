@@ -84,9 +84,10 @@ scenario is the one whose CLI never reached the state it waits for.
 
 CI uses `scripts/run-ci-lane.mjs` to distribute the complete tier inventories
 across the same four jobs. Each lane schedules its files through isolated Vitest
-projects using the original tier configurations and one two-worker queue. All
-process suites use the job's freshly built, bundled CLI; standalone integration
-runs still prepare a private build. Discovery assigns new files automatically.
+projects using the original tier configurations and one two-worker queue.
+Integration CLI launchers and provider suites use the job's freshly built,
+bundled CLI; standalone integration runs still prepare a private build. E2E
+retains its source and built-entry coverage. Discovery assigns new files automatically.
 CI runs all assigned files after assertion failures and propagates collection,
 test, and unhandled failures. The published local provider command above retains
 `--bail=1`; it and the other full-suite commands remain available locally.

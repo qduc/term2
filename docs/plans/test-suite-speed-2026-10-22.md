@@ -13,6 +13,13 @@ provider. That runner used Node 24.22.0 and pnpm 11.7.0; it is not directly
 comparable to the local environment below. This CI result was rechecked before
 the follow-up optimization, with both the PR head and main unchanged.
 
+The retained provider split at `c12690edd65c205099ed2f982ba59b22828c594c`
+also passed all four jobs in [CI run 39784356168](https://github.com/qduc/term2/actions/runs/39784356168):
+28 guards, 204 integration cases plus one existing skip, 222 provider cases plus
+one existing skip, and 32 E2E cases. The Mac continuation below independently
+checked these job results and logs, repeated the Responses comparison, and ran
+the complete integration inventory against main. Earlier failures remain below.
+
 ## Changes and coverage
 
 - Compile the integration CLI once in global setup, using the same native
@@ -378,6 +385,99 @@ and the independent preservation/diff checks passed on the complete experimental
 candidate. A first guard run had 27 passes and one 10 s core-import timeout while
 lint and typecheck ran concurrently. A subsequent sequential run passed all
 28 assertions in seven files (8.51 s Vitest). Both logs are retained. Full
-integration, provider, and E2E verification of the retained patch is delegated
-to the PR's CI jobs; their final result is required before this follow-up is
-reported complete. No paid provider, Docker opt-in, merge, or deployment was run.
+integration, provider, and E2E verification of the retained patch subsequently
+passed in CI run 39784356168 at `c12690e`, as recorded above. Its Vitest durations
+were 75.50 s for integration, 80.00 s for provider, 7.81 s for E2E, and 2.29 s
+for guards. Separate CI runs have uncontrolled host variation; these durations
+are verification evidence, not a paired performance estimate. No paid provider,
+Docker opt-in, merge, or deployment was run.
+
+## Mac continuation and repeated comparison
+
+The cloud executor stopped before local work began. The fetched branch matched
+`c12690edd65c205099ed2f982ba59b22828c594c`. A private clone and three isolated
+worktrees kept the shared checkout, its three unrelated changed/untracked files,
+and its existing worktrees untouched. Each worktree had its own frozen-lockfile
+installation; no `node_modules` symlinks were used.
+
+The host was macOS 26.6.2 arm64, Apple M4 Pro, 12 logical CPUs, 48 GiB RAM,
+Node 24.16.0, pnpm 11.7.0, and Vitest 4.1.9. Every measurement used `CI=1`,
+`NODE_ENV=test`, and two workers. Measured suites ran sequentially without other
+task-owned builds, lint, or tests. Other user workloads were not controlled;
+per-run load averages are retained. These Mac results are separate from the
+Linux observations above.
+
+### Responses: retain the provider split
+
+The baseline was `7d9a901`; the candidate was `c12690e`. Both used separately
+built, identical production code and dependencies, with warm emitted CLI files.
+Every invocation included normal setup, a fresh disposable bytecode cache and
+its priming process. The comparison selected all 34 Responses cases, with no
+bail, filtering, assertion changes, or deadline changes.
+
+The first pair used the Mac's inherited `TMPDIR`, whose `/var/...` spelling
+differs from its canonical `/private/var/...` spelling. Both variants failed
+the same existing `session_search` fallback assertion (33 passed / 1 failed;
+48.19 s baseline and 30.37 s candidate). The fixture saved `projectPath: root`,
+while the child searched the canonical path. Changing only `TMPDIR` to the
+canonical spelling of the same directory made the focused unchanged baseline
+case pass. That diagnostic selected one case; it was not a performance sample.
+
+All subsequent complete runs used that canonical directory on both sides:
+
+| Order | Variant | Wall | Passed / failed |
+| --- | --- | ---: | --- |
+| 1 | Baseline | 46.29 s | 34 / 0 |
+| 2 | Candidate | 29.77 s | 34 / 0 |
+| 3 | Candidate | 29.73 s | 34 / 0 |
+| 4 | Baseline | 46.76 s | 34 / 0 |
+
+The two-sample means were **46.53 s → 29.75 s**, a 16.78 s (36.1%) reduction
+for this workload on this Mac. The baseline range was 46.29–46.76 s and the
+candidate range 29.73–29.77 s. This supports retaining the split; it does not
+estimate whole-provider-suite performance or establish a cross-platform speed
+ratio. The inherited-path failures remain recorded and are not fixed by this PR.
+
+A fresh normalized TypeScript AST comparison independently matched all 13
+original test registrations, 29 helper functions, and the cleanup hook. All
+four retained source hashes matched the cloud checkpoint. All six complete
+Responses runs preserved exactly the same 34 case names.
+
+Mac typecheck, full lint (31 existing warnings, no errors), the no-unit-tests
+guard, and diff whitespace checks passed. This continuation changed only the
+report, evidence, and task ledger; the measured application and test code stayed
+at `c12690e`.
+
+### Integration: preserve the limits, add no further change
+
+The complete integration comparison used main `31bf8380` and candidate
+`c12690e`, both with two workers and the same canonical `TMPDIR`. Emitted CLI
+cache directories were absent before each run. Default setup, compilation,
+candidate bytecode-cache priming, and teardown were included in elapsed time.
+
+| Variant | Wall | Passed | Failed | Existing skips |
+| --- | ---: | ---: | ---: | ---: |
+| Main | 38.29 s | 197 | 7 | 1 |
+| Candidate | 34.17 s | 197 | 7 | 1 |
+
+All 205 case identities and all seven failing case names matched. Failures were
+two durable-goal verifier database-path assertions, the ACP backend list/resume
+journey, three gateway runtime binding cases, and the gateway pairing socket.
+The goal assertions assume a Linux `.local/share` path; the runtime fixtures use
+hard-coded `/tmp` roots that fail the canonical-root check on this Mac; the
+pairing failure reported `listen EINVAL` at the long temporary socket path.
+The ACP failure's cause was not diagnosed. None was converted into a skip.
+
+These failed complete runs do not establish a passing full-suite speedup.
+The earlier shared-build/cache work remains backed by passing Linux CI; the
+rejected integration partition stays reverted. No additional source-code
+optimization or Mac-specific test repair was adopted during this continuation.
+
+Exact commands, environment overrides, timestamps, every case result and
+failure, raw-log hashes, CI evidence, and preservation hashes are in
+[Mac evidence](./test-suite-speed-2026-10-22.mac.json). Raw local logs, Vitest JSON,
+and measurement records remain under
+`/Users/qduc/Documents/Codex/2026-10-22/task/evidence/`; the bounded measurement
+and AST-check scripts are beside that directory. The cloud's `/tmp` paths above
+refer to its original environment and are not available on the Mac. The
+committed cloud evidence and GitHub logs were sufficient for this continuation.

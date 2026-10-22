@@ -4,7 +4,7 @@ import { chmod, mkdtemp, mkdir, readFile, readdir, rm, symlink, truncate, writeF
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { LoggingService } from './logging-service.js';
+import { localLogDateKey, LoggingService } from './logging-service.js';
 import { ProviderTraffic, ProviderTrafficArtifactStore } from './provider-traffic.js';
 
 const directories: string[] = [];
@@ -21,7 +21,10 @@ async function temporaryDirectory(): Promise<string> {
 it('keeps a process alive after ENOSPC, reports once, and drops further logs without Winston noise', async () => {
   const directory = await temporaryDirectory();
   const secondDirectory = join(directory, 'second');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localLogDateKey();
+  if (process.env.TZ === 'Pacific/Kiritimati') {
+    expect(today).not.toBe(new Date().toISOString().slice(0, 10));
+  }
   await mkdir(secondDirectory);
   await symlink('/dev/full', join(directory, `term2-${today}.log`));
   await symlink('/dev/full', join(secondDirectory, `term2-${today}.log`));
@@ -93,8 +96,8 @@ it('removes aged and over-budget traffic days while preserving recent traffic', 
   const currentOversizedDay = join(trafficDir, dateForDaysAgo(0), 'session-current-large');
   const oldApplicationLog = join(logDir, `term2-${dateForDaysAgo(30)}.log.1`);
   const oversizedApplicationLog = join(logDir, `term2-${dateForDaysAgo(3)}.log.1`);
-  const recentApplicationLog = join(logDir, `term2-${dateForDaysAgo(0)}.log`);
-  const currentOversizedApplicationLog = join(logDir, `term2-${dateForDaysAgo(0)}.log.1`);
+  const recentApplicationLog = join(logDir, `term2-${localLogDateKey()}.log`);
+  const currentOversizedApplicationLog = join(logDir, `term2-${localLogDateKey()}.log.1`);
   await Promise.all([
     mkdir(oldDay, { recursive: true }),
     mkdir(oversizedDay, { recursive: true }),

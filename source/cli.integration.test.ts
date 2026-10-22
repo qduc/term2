@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
+import { localLogDateKey } from './services/logging/logging-service.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
 const require = createRequire(import.meta.url);
@@ -230,7 +231,10 @@ it('finishes a provider turn when file logging hits ENOSPC', async () => {
   const workspace = path.join(testDir, 'workspace');
   const stateHome = path.join(home, '.local', 'state');
   const logDir = path.join(stateHome, 'term2-nodejs', 'logs');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localLogDateKey();
+  if (process.env.TZ === 'Pacific/Kiritimati') {
+    expect(today).not.toBe(new Date().toISOString().slice(0, 10));
+  }
   fs.mkdirSync(workspace, { recursive: true });
   fs.mkdirSync(logDir, { recursive: true });
   fs.symlinkSync('/dev/full', path.join(logDir, `term2-${today}.log`));
@@ -244,6 +248,7 @@ it('finishes a provider turn when file logging hits ENOSPC', async () => {
     XDG_RUNTIME_DIR: path.join(testDir, 'runtime'),
     TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
     TERM2_CONVERSATIONS_DIR: path.join(testDir, 'conversations'),
+    TZ: process.env.TZ,
     LOG_LEVEL: 'debug',
   });
   writeSettings(home, {

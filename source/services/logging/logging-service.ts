@@ -24,6 +24,12 @@ const retentionCleanupRoots = new Set<string>();
 let cleanupFailureReported = false;
 let fileLoggingFailureReported = false;
 
+export function localLogDateKey(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 const LOG_LEVELS = {
   error: 0,
   warn: 1,
@@ -309,7 +315,7 @@ export class LoggingService {
   private cleanupRotatedApplicationLogs(dir: string, maxDays: number, maxBytes: number): void {
     try {
       if (!fs.existsSync(dir)) return;
-      const threshold = new Date(Date.now() - maxDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const threshold = localLogDateKey(new Date(Date.now() - maxDays * 24 * 60 * 60 * 1000));
       const groups = new Map<string, Array<{ filePath: string; bytes: number }>>();
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         if (!entry.isFile()) continue;
@@ -331,7 +337,7 @@ export class LoggingService {
 
       const orderedDays = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
       let totalBytes = [...groups.values()].flat().reduce((total, file) => total + file.bytes, 0);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localLogDateKey();
       for (const [dateKey, files] of orderedDays) {
         if (totalBytes <= maxBytes) break;
         // The active date may be in use by this or another Term2 process.

@@ -32,6 +32,29 @@ elsewhere.
 | Clarification (`ask_user`) | 114% more tokens |
 | External / MCP | Didn't show up: no runnable service |
 
+## Where candidates come from
+
+Token cost is roughly the number of calls times the context size, because
+every call resends the conversation. Bare's minimal tool surface saves tokens
+because shell batches work into fewer calls. Skills and environment save
+tokens because they answer, up front, a question the model would otherwise
+spend a call on: the receipt format, or where it is and what OS it's on.
+
+So an addition earns its place when it removes more round trips than it adds
+in per-call cost. Look for candidates in Bare's traces, not in the feature
+list. Every call outside the essential read → edit → verify path is an
+opening. Classify those calls by cause (discovery, failed command and retry,
+re-read, verification retry), then hire the cheapest static text that
+prevents the biggest cause. That text may not exist yet.
+
+Wasted-call causes already seen:
+
+- Escaping `!` in `node -e` under zsh. This happened in most arms, Bare and
+  environment alike.
+- `mktemp` failing on the sandbox temp dir, followed by a blocked-read
+  approval detour.
+- Checksum and permission errors inside the sandbox.
+
 ## Open applications
 
 ### Prompt fragments

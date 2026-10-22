@@ -13,10 +13,26 @@ elsewhere.
 
 ## Requirements
 
-- Survive a one-pair screen against shipped Bare. Quality is checked first,
-  then tokens.
-- Back it up with three fresh confirmation pairs.
-- Pass the executed-read gate: read before you overwrite.
+Interview a candidate on its strong point and it passes; interview it on its
+weak point and it fails. A task designed for one candidate measures its best
+case, not its net value. So screening has two stages:
+
+1. **Home-turf screen (rejection filter only).** Run one pair on a task where
+   the candidate should help. A loss here rules it out. A win only earns a
+   place in stage 2.
+2. **Shared battery (acceptance).** Every candidate, and every existing hire,
+   runs the same frozen set of tasks that reflect real use: mostly ordinary
+   edits and fixes, plus a few specialised tasks. The candidate is scored on net
+   tokens and quality across the whole battery, so its cost on tasks where it
+   doesn't help counts against it. Battery tasks come from existing real-task
+   material (model-benchmark tasks and the harness-quick-check oracles), not
+   from tasks invented for a candidate.
+
+Every run must also pass the executed-read gate: read the target before
+overwriting it.
+
+Skills and environment were hired on home-turf evidence alone. They get
+re-tested on the battery.
 
 ## Already hired
 

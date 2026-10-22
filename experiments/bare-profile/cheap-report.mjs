@@ -55,33 +55,56 @@ const runs = summary.records.map((record) => {
     instrumentError: record.instrumentError ?? null,
   };
 });
-assert.equal(runs.length, 10);
-assert.equal(new Set(runs.map((run) => `${run.candidate}/${run.arm}`)).size, 10);
+const expectedRuns = summary.manifest.pairs.filter((pair) => !pair.unavailable).length * 2;
+assert.equal(runs.length, expectedRuns);
+assert.equal(new Set(runs.map((run) => `${run.candidate}/${run.arm}`)).size, expectedRuns);
 for (const pair of summary.manifest.pairs.filter((pair) => !pair.unavailable)) {
   const paired = runs.filter((run) => run.candidate === pair.candidate);
   assert.equal(paired.length, 2);
   assert.equal(paired[0].fixtureHash, paired[1].fixtureHash);
   assert.equal(paired[0].instructionHash, paired[1].instructionHash);
 }
-assert.equal(runs[0].id, 'e73a7a65-2066-4b0c-ad96-3edb7e9424ec');
-assert.equal(runs[0].total, 14748);
+if (summary.manifest.fixtureVersion === 1) {
+  assert.equal(runs[0].id, 'e73a7a65-2066-4b0c-ad96-3edb7e9424ec');
+  assert.equal(runs[0].total, 14748);
+}
+const openingTokens = summary.manifest.priorTokens ?? 0;
 assert.equal(
-  runs.reduce((total, run) => total + run.total, 0),
+  runs.reduce((total, run) => total + run.total, openingTokens),
   summary.experimentTokens,
 );
 const helper = JSON.parse(fs.readFileSync(path.join(dir, 'blind-review.json'), 'utf8'));
 assert.equal(helper.response.model, summary.manifest.model);
 assert(Number.isFinite(helper.usage.total_tokens));
+const packetPath = path.join(dir, 'packet-reviews.json');
+const packets = fs.existsSync(packetPath) ? JSON.parse(fs.readFileSync(packetPath, 'utf8')) : undefined;
+for (const call of packets?.calls ?? []) {
+  assert.equal(call.response.model, summary.manifest.model);
+  assert.equal(call.request.reasoning_effort, 'high');
+  assert(Number.isFinite(call.usage.total_tokens));
+}
+const packetTokens = packets?.calls.reduce((total, call) => total + call.usage.total_tokens, 0) ?? 0;
 const result = {
-  screenTokens: summary.experimentTokens,
-  helperTokens: helper.usage.total_tokens,
-  totalTokens: summary.experimentTokens + helper.usage.total_tokens,
-  paidRuns: runs.length + 1,
+  openingTokens,
+  openingPaidRuns: summary.manifest.priorPaidRuns ?? 0,
+  screenTokens: summary.experimentTokens - openingTokens,
+  helperTokens: helper.usage.total_tokens + packetTokens,
+  totalTokens: summary.experimentTokens + helper.usage.total_tokens + packetTokens,
+  paidRuns: (summary.manifest.priorPaidRuns ?? 0) + runs.length + 1 + (packets?.calls.length ?? 0),
   helperVerdict: helper.response.choices[0].message.content
     ? 'inspect response'
     : 'incomplete; output allocation consumed by reasoning',
   runs,
+  independentChecklists: packets?.calls.map((call) => ({
+    usage: call.usage,
+    checklist: call.checklist,
+    error: call.error,
+  })),
 };
+if (packets) {
+  assert.equal(packets.totalTokens, result.totalTokens);
+  assert.equal(packets.paidRuns, result.paidRuns);
+}
 assert(result.totalTokens <= 288000 && result.paidRuns <= 24);
 fs.writeFileSync(path.join(dir, 'reconciled.json'), JSON.stringify(result, null, 2) + '\n');
 console.log(JSON.stringify(result, null, 2));

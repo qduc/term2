@@ -100,4 +100,159 @@ do not invent it or substitute Standard by name.
 - Focused ESLint and formatting pass after changes. Runtime typecheck is rerun
   before paid dispatch; no production source or permanent unit tests change.
 
-Results and cumulative accounting will be appended after the four frozen arms.
+The results below supersede this prospective boundary without replacing the
+original charges or comparison results.
+
+## Review repair boundary after the four retry arms
+
+The four arms spent 59,716 tokens; cumulative opening balance for review was
+215,494 / 15 paid runs. All four capped. The first expanded four-packet reviewer
+then spent 13,617 tokens (5,425 input + 8,192 reasoning-only output), returned no
+checklist and exceeded the monitored per-run ceiling by 1,617. It is a charged
+failed helper, not a verdict: cumulative balance 229,111 / 16 paid runs.
+
+Before any further helper call, the review is narrowed to **one trace per stateless
+request**, with an explicit per-axis rubric and forced `submit_checklist` tool
+result rather than free-form prose. Model/high effort and 8,192 output allocation
+remain fixed. No candidate is rerun and no capped candidate can be promoted by
+this review. At most four helpers (one per trace) use the existing 24-run/288,000
+allowance; stop helper dispatch on a cap, absent checklist, provider/model failure
+or unknown accounting. Their purpose is independent quality evidence, not a search
+for an approving reviewer. All verdicts, including unfavorable ones, are retained.
+
+Local schema/parser and request construction passed with zero dispatch; four
+requests were 5,604 / 6,212 / 8,714 / 7,843 characters. Actual token allocation and
+adequacy remain live measurements, not byte-based bounds. No exact hard input
+reservation is claimed. This narrowing isolates the verified larger reviewer
+failure without lowering model effort or changing candidate artifacts.
+
+## Retry results
+
+The manifest and instrument were frozen before dispatch at `1cfe789a`. All four
+arms used fresh homes and pair salts; paired fixture and instruction hashes match.
+Runtime/model/high effort/permission policy were unchanged. The selected order
+was Bare-first skills, addition-first clarification. No additional candidate
+retry or confirmation run was used.
+
+| Pair | Arm | Input | Output | Total | Upstream calls | Seconds | Exact artifact |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Skills | Bare | 15,619 | 1,326 | 16,945 | 4 | 11.528 | Yes |
+| Skills | Addition | 12,376 | 876 | 13,252 | 3 | 7.595 | No |
+| Clarification | Addition | 14,941 | 1,104 | 16,045 | 4 | 8.993 | Yes |
+| Clarification | Bare | 12,593 | 881 | 13,474 | 4 | 7.914 | Yes |
+
+**Every row is capped/incomplete.** Each admitted final tool ran before the next
+request was refused locally; no unaccounted upstream calls were made by those four
+refusals. Per-run overshoots were 4,945 / 1,252 / 4,045 / 1,474 tokens. Both
+clarification arms asked before editing and consumed the same frozen answer.
+All four final-disk oracles found unrelated checkout files preserved.
+
+Skills paired total: 30,197; variant used 21.8% fewer tokens, but its artifact was
+wrong and both capped, so this is **not** efficiency evidence. Clarification paired
+total: 29,519; variant used 19.1% more. Both artifacts were correct, but neither
+completed within the monitored ceiling. No retry screen response finished `length`;
+maximum observed output was 599 tokens, still below 1,500.
+
+### What the traces establish after repair
+
+- The corrected settlement boundary worked in paid runs: final emitted tool
+  results are captured in the subsequent locally refused request. Neither local
+  nor paid retry cap settlement waited for the old 240-second timeout.
+- The batching hypothesis was **not borne out**. Despite the new instructions,
+  the model still took three/four upstream requests. Retry input totals were
+  55,529 of 59,716 tokens (93.0%); larger output allowances would not remove this
+  repeated-context cost. No completed normal-run cost was measured.
+- Bare skills did an extra inspection round, then wrote correct JSON. Its first
+  sentinel assertion expected no newline, while the fixture contains one; the
+  outer multi-command shell still exited zero. A subsequent explicit byte/JSON
+  verification succeeded before the next request was refused.
+- Skills addition inspected and activated the right skill, then its Python
+  heredoc failed with a SyntaxError before the write. The raw requested `!=`
+  appeared as `\!=` in the executed diagnostic. It then created a task-related
+  script under `/tmp`, but capped before executing it; receipt.json stayed `{}`.
+  The location of the escaping defect in the execution stack has not been isolated.
+  No production shell repair is included in this experiment.
+- Clarification addition delivered the question/answer correctly. It nevertheless
+  split inspection into extra requests. Its final shell printed a successful
+  parsed assertion for 14 days, then exited 128 on an unnecessary `git status`
+  because these fixtures are not repositories. Verification success and whole
+  shell exit status are recorded separately.
+- Bare clarification asked immediately, read instructions and target, and made
+  the right edit. It split edit/verification instead of batching; its Python
+  f-string verifier failed with a SyntaxError. Disk correctness is not successful
+  observed verification.
+
+Thus the verified instrument bug was fixed, but the instruction-level round-trip
+reduction did not make the model conform to the proposed efficient trajectory.
+The new command errors also consumed useful work or caused missing verification.
+Changing runtime shell semantics, reducing the base profile, raising the 12,000
+ceiling, substituting a model, or continuing until a pass would exceed this retry's
+constraints. No such change was made.
+
+## Independent checklist review
+
+Simply raising the four-trace prose review from 1,500 to 8,192 output tokens did
+**not** solve it: the second reviewer again spent the entire allocation reasoning,
+with null final content and `length`. The stronger conclusion is output exhaustion
+for this aggregate review, not that 8,192 is a generally sufficient allowance.
+
+The subsequent one-trace, forced-tool method returned four complete independent
+checklists. Each stateless request used the same exact model/high effort, hidden
+condition labels/costs, and the same masked trace mapping. This changes scope and
+response structure together: their individual contributions cannot be separated.
+All verdicts were retained; the method was not repeated to seek favorable scores.
+
+| Trace (mapping revealed after review) | Input | Output | Total | Artifact | Read first | Clarification first | Collateral preserved | Verification | Batching |
+| --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |
+| Clarification Bare | 1,505 | 625 | 2,130 | Pass | Pass | Pass | Pass | Fail | Fail |
+| Clarification addition | 1,722 | 2,818 | 4,540 | Pass | Pass | Pass | Pass | Pass | Fail |
+| Skills Bare | 2,796 | 1,101 | 3,897 | Pass | Pass | N/A | Pass | Pass | Fail |
+| Skills addition | 2,249 | 2,568 | 4,817 | Fail | Pass | N/A | Pass | Fail | Fail |
+
+All four found no unsupported success claims in the supplied trace. They returned
+`submit_checklist` tool calls, not reasoning-only output, and stayed below the
+12,000 monitored ceiling. Their combined 15,384 tokens include 5,882 reasoning
+tokens already counted within output; total wall time was about 29 seconds. The
+review judges the captured evidence and oracles, not the whole host filesystem.
+It does not certify capped completion, production safety, or general capability.
+
+In particular, the skill variant's temporary script is visible in the trace. The
+review classified checkout collateral preservation as pass; that is not a claim
+that no scratch file was created outside the checkout. All four failed the explicit
+new batching instruction, independently of their collateral/authority safety axes.
+
+## Final cumulative accounting and disposition
+
+| Work | Paid runs | Tokens |
+| --- | ---: | ---: |
+| Original ten screens | 10 | 145,282 |
+| Original exhausted reviewer | 1 | 10,496 |
+| Four fresh retry screens | 4 | 59,716 |
+| Expanded exhausted reviewer | 1 | 13,617 |
+| Four one-trace structured reviewers | 4 | 15,384 |
+| **Total** | **20** | **244,495** |
+
+All 57 upstream requests have known provider-reported usage and resolved the exact
+authorized model; cache/reasoning subsets are not added twice. Five local refusals
+across the original/retry screens have no upstream usage. The original first run
+and its 14,748 tokens remain intact. Six paid runs were helpers, fourteen were
+candidate screens. No paid retries are hidden within a root run.
+
+Remaining headroom is 4 runs and 43,505 tokens, **not** authorization to search for
+a favorable candidate outcome. Both complete retry/reserve pairs have been spent.
+None of the candidates meets the plan's quality gate, so no finalist advances and
+no conditional confirmation is appropriate. The other original pairs and external
+remain deferred. The unresolved old Full composition was not silently substituted.
+
+**Recommendation remains adopt none.** The bounded retry established a better
+instrument and recovered independent review, but did not recover a qualifying
+candidate comparison. Results are limited to these tasks/model/allocations. There
+is no normal completed-run cost, ordinary-edit overhead, fresh relevant confirmation,
+or basis for a broader efficiency/capability claim.
+
+Final accounting/disk reconciliation, focused ESLint, formatting, typecheck and
+diff checks passed. Evidence, including all unfavorable results, local preflights,
+review packets and raw usage, is retained in
+`cheap-additions-retry-evidence-2026-10-22.tar.gz` with its adjacent SHA-256 file.
+The original archive remains unchanged. No production source/profile/permissions
+changed; no permanent unit tests or new static guards were added.

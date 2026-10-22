@@ -69,7 +69,7 @@ restored lazy loading and passed all help launches. These failed starts are neve
 counted as performance wins. The preliminary RSS statistic is a cumulative process
 high-water mark and is not suitable for comparing individual startup variants.
 
-## Status
+## Implementation and complete-run evidence
 
 The first full local provider comparison passed the same 222 tests with the same
 one existing skip in each variant. Checkpoint: 182.60 s elapsed, 118.11 s child CPU,
@@ -87,9 +87,6 @@ for workers and assets, uses parser-aware location replacements, and adds the
 bundler as a build step covered by the existing rollback mechanism. The integration
 CLI is produced through the same bundler while keeping its original emitted input
 for subsequent incremental compilation.
-
-Full behavior, package relocation, rollback, and complete feedback measurements
-are in progress. No production change has earned adoption at this point.
 
 The packaging-only commit `2913273` passed all 486 tests with the two existing
 skips on GitHub run `39809026965`. Attempt 1 was cold: 140 s first job to last
@@ -116,3 +113,90 @@ by OS/architecture/Ubuntu family rather than each image publication (a cold
 integration setup took 77 s); bundle source maps omit duplicate embedded source
 content while retaining mappings. The initial package added 50.9 MB uncompressed
 and packed to 12.6 MB, so artifact-size cost is part of the adoption decision.
+
+The coherent candidate `f684903f` passed the complete inventory twice on run
+`39811992641`: **486 passed, two existing skips, 63 files**, with four unchanged
+Ubuntu runner classes and a global two-worker limit per job.
+
+| Revision / cache state | Job span | Complete feedback metadata | Aggregate runner time |
+| --- | ---: | ---: | ---: |
+| Checkpoint `be87dae`, fetched API snapshot | 93 s | 96 s | 323 s |
+| Bundle only, cold dependencies/ripgrep | 140 s | 142 s | 397 s |
+| Bundle only, warm dependencies / one cold ripgrep | 97 s | 101 s | 294 s |
+| Bundle + shared queue, warm dependencies / cold ripgrep | 88 s | 92 s | 291 s |
+| Bundle + shared queue, all warm | 77 s | 82 s | 262 s |
+| Bundle + shared queue, all cold (cache restore/save disabled) | 95 s | 99 s | 323 s |
+
+The fully cold observation is run `39812799535` at `92332e13`: identical
+functional code, with dependency/ripgrep cache steps disabled for this one run.
+All 486 cases passed with the two existing skips. Shared caches were neither
+deleted nor rewritten. Normal cache conditions are restored in the retained
+workflow, and the temporary experimental-branch trigger is removed. This measures
+fresh hosted setup honestly without adding a permanent cache-bypass mechanism.
+
+Complete feedback uses workflow creation for push runs and `run_started_at` for
+reruns, through terminal workflow `updated_at`; job span uses first job start
+through last job completion. Queue, setup, build, test, cleanup and publication
+metadata are included. There is no separate GitHub publication timestamp, so these
+are bounded observations, not an exact UI notification measurement. Raw API and
+logs are retained in adjacent JSON files, including failed and slower experiments.
+
+The all-warm candidate's build-plus-test stages used 284.06 CPU-seconds total
+(user + system), versus 289.18 in the preceding mixed-cache run; hosted-runner
+variance remains material. These CPU totals exclude setup processes; the aggregate
+job-seconds include every phase. Maximum child RSS across build stages was
+1,165,760 KB; the largest test-stage RSS was 474,388 KB. E2E/Responses was the
+warm critical lane: 48.88 s test stage, 77 s complete job. This is evidence for
+retaining the different architecture, not evidence that a 60-second goal is met.
+
+## Correctness and tradeoffs
+
+All assertions, cases, deadlines and source/built E2E entry-point coverage remain
+unchanged. Integration's CI CLI launchers and provider cases exercise the freshly
+built production artifact. Standalone integration still builds its own artifact.
+The queue retains each tier's setup and file isolation. All 63 discovered files
+are assigned exactly once; explicit include override is essential.
+
+Independent verification accepted the exact functional code `f684903f`:
+
+- Temporary assertion, collection and unhandled-rejection faults all returned
+  exit 1 while other assigned files completed; unassigned files stayed excluded.
+- Six files used six fresh processes, distinct application caches, separate
+  project bytecode caches, and a maximum of two active workers. Teardown removed
+  the caches. No inter-project build mutation was found.
+- A real final bundler failure restored the previous build byte-for-byte and
+  returned failure; the restored executable still worked.
+- A fresh exact-commit build packed and relocated to a path containing spaces and
+  `#` passed direct executable help/version in unset, test and production modes.
+  React initialization modes and version were correct; the tarball omitted source
+  and build scripts. Dependency installation was reused for this relocation probe.
+- A source-map offset defect was reproduced, fixed and rechecked: replacing the
+  nested shebang with a blank line preserves original stack line 3:7.
+
+The final packed artifact is 8,095,188 bytes; unpacked files are 42,054,719 bytes,
+including a 27,972,160-byte bundle (9,822,645 bytes of maps). This costs package
+size because emitted modules remain for worker entry points, assets and public
+deep imports. The 35.9% reduction from the first bundled archive removes duplicate
+embedded source content, not executable code or verification. Bundle build cost
+was 5.27–6.48 s per entire production build in the all-warm run, included above.
+
+Typecheck, lint (31 pre-existing warnings), build, the no-unit-tests policy and
+every required CI tier passed. No permanent tests or static guards were added;
+the fault probes are preserved as evidence only. Linux/Node24 is verified; this
+fresh investigation did not measure Mac or other supported Node/platform pairs.
+No paid model calls, additional runner classes/counts, merge or deployment occurred.
+
+## Adoption decision
+
+Retain bundling the shipped CLI and sharing one isolated queue per job. The
+measured warm feedback improved from the rechecked checkpoint's 96 s to 82 s,
+with aggregate job time 323 s to 262 s; cold feedback was 99 s. These finite
+samples justify the improvement and its CPU/startup mechanism, but do **not**
+establish a stable one-minute loop. No lower bound is inferred. The next distinct
+question is what the Responses/E2E lane spends its low-CPU waiting time on; that
+has not been solved by moving cases, adding runners or weakening timeouts here.
+
+PR35's checkpoint `be87dae` remains in ancestry and its evidence remains intact.
+Prior writer ownership was explicitly cleared before updating its branch; the
+remote head was rechecked unchanged. The parent can compare or revert this
+bounded experiment independently of the earlier gains.

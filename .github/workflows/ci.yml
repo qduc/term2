@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - perf/ci-fresh-architecture
   pull_request:
     branches:
       - main

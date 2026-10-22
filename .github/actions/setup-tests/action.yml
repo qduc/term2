@@ -23,7 +23,6 @@ runs:
         echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
         echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
     - name: Restore locked dependency installation
-      if: false # One-run experiment: measure complete cold setup without deleting shared caches.
       uses: actions/cache@v6
       with:
         path: |
@@ -55,7 +54,7 @@ runs:
         createRequire(require.resolve('ssh2'))('cpu-features')();
         NODE
     - name: Restore ripgrep
-      if: false # Same one-run cold-cache experiment; restore normal condition afterward.
+      if: inputs.ripgrep == 'true'
       uses: actions/cache@v6
       with:
         path: ${{ runner.temp }}/term2-ci-ripgrep

@@ -1,0 +1,861 @@
+{
+  "baseline_commit": "31bf8380137d7f48f463e54f31570a3f3026b4fc",
+  "environment": {
+    "node": "24.19.0",
+    "pnpm": "11.19.0",
+    "vitest": "4.1.9",
+    "kernel": "6.18.55",
+    "arch": "x86_64",
+    "visible_cpus": 5,
+    "cpu_quota": "400000 100000",
+    "memory_limit_bytes": 17179869184,
+    "CI": "1",
+    "NODE_ENV": "test",
+    "benchmarks_sequential": true,
+    "paid_provider_calls": 0
+  },
+  "limitations": [
+    "Full-suite failure sets differ; percentages are observations, not clean successful-work speedup proof.",
+    "Initial integration comparison has cold emitted builds on both sides; final two-worker trial has warm emitted build.",
+    "Representative timings did not remain reliably passing; all failed attempts retained.",
+    "Physical host contention was not controlled."
+  ],
+  "measurements": {
+    "before-integration-cold": {
+      "command": ["pnpm", "test:integration"],
+      "elapsed": 462.63802199199995,
+      "user": 896.04018,
+      "system": 252.925647,
+      "maxrss": 1082204,
+      "exit": 1
+    },
+    "after-integration-cold": {
+      "command": ["pnpm", "test:integration"],
+      "elapsed": 403.00574593900024,
+      "user": 696.092659,
+      "system": 227.250429,
+      "maxrss": 996200,
+      "exit": 1
+    },
+    "after-integration-final": {
+      "command": [
+        "pnpm",
+        "test:integration",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-after-integration-results.json"
+      ],
+      "elapsed": 375.57390940899995,
+      "user": 633.42816,
+      "system": 207.891625,
+      "maxrss": 424464,
+      "exit": 1
+    },
+    "before-provider-full": {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-before-provider-results.json"
+      ],
+      "elapsed": 519.6008212680001,
+      "user": 448.617699,
+      "system": 106.429641,
+      "maxrss": 418420,
+      "exit": 1
+    },
+    "after-provider-full": {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-after-provider-results.json"
+      ],
+      "elapsed": 444.33497603800015,
+      "user": 423.598089,
+      "system": 110.594745,
+      "maxrss": 427412,
+      "exit": 1
+    },
+    "failures-provider-cache-off": {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "scripts/provider-black-box/provider-cli.blackbox.ts",
+        "--maxWorkers=1",
+        "-t",
+        "codex-http.incomplete|runtime-anthropic-messages.incomplete|runtime-google-generate-content.incomplete|openai-http.reasoning|codex-http.reasoning|reports provider errors",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-provider-failure-isolation.json"
+      ],
+      "elapsed": 44.19647620900014,
+      "user": 33.514213,
+      "system": 10.234602,
+      "maxrss": 219964,
+      "exit": 1
+    },
+    "failures-integration-cache-off": {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "source/providers/provider-presets.integration.test.tsx",
+        "--maxWorkers=1",
+        "-t",
+        "goal flags before startup|interactive launch persists|positional launch durably|resume preserves the replayed goal|advertised -h and -v|--resume ls prints|session-only when resolution|copies inventory defaults",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-integration-failure-isolation.json"
+      ],
+      "elapsed": 76.83221212199987,
+      "user": 74.332361,
+      "system": 35.801025,
+      "maxrss": 381844,
+      "exit": 0
+    }
+  },
+  "provider_case_accounting": {
+    "before": 222,
+    "after": 223,
+    "missing": [],
+    "added": [
+      {
+        "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+        "name": "provider black-box harness observes HTTP arrivals without further PTY output and still rejects an unmet state"
+      }
+    ],
+    "files": [
+      {
+        "file": "scripts/provider-black-box/conversation-loop.blackbox.ts",
+        "before": {
+          "passed": 1
+        },
+        "after": {
+          "passed": 1
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fake-provider-http-server.fixture.test.ts",
+        "before": {
+          "passed": 2
+        },
+        "after": {
+          "passed": 2
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+        "before": {
+          "passed": 14
+        },
+        "after": {
+          "passed": 14
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+        "before": {
+          "passed": 6
+        },
+        "after": {
+          "passed": 6
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fixture-drift.test.ts",
+        "before": {
+          "passed": 1
+        },
+        "after": {
+          "passed": 1
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+        "before": {
+          "passed": 6
+        },
+        "after": {
+          "passed": 6
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fixture-recorder.test.ts",
+        "before": {
+          "passed": 2
+        },
+        "after": {
+          "passed": 2
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+        "before": {
+          "passed": 8
+        },
+        "after": {
+          "passed": 8
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fixture-security.test.ts",
+        "before": {
+          "passed": 3
+        },
+        "after": {
+          "passed": 3
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/fixture-self-validation.test.ts",
+        "before": {
+          "passed": 1
+        },
+        "after": {
+          "passed": 1
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/nested-hide.blackbox.ts",
+        "before": {
+          "passed": 1
+        },
+        "after": {
+          "passed": 1
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/openai-base-url.test.ts",
+        "before": {
+          "passed": 2
+        },
+        "after": {
+          "passed": 2
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+        "before": {
+          "passed": 6
+        },
+        "after": {
+          "passed": 6
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+        "before": {
+          "passed": 5,
+          "failed": 1
+        },
+        "after": {
+          "passed": 5,
+          "failed": 1
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-contract.test.ts",
+        "before": {
+          "passed": 43
+        },
+        "after": {
+          "passed": 43
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-crash-window.blackbox.ts",
+        "before": {
+          "passed": 1
+        },
+        "after": {
+          "passed": 1
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "before": {
+          "passed": 8
+        },
+        "after": {
+          "passed": 8
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-record-security.test.ts",
+        "before": {
+          "passed": 1
+        },
+        "after": {
+          "passed": 1
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "before": {
+          "failed": 16,
+          "passed": 24,
+          "skipped": 1
+        },
+        "after": {
+          "passed": 27,
+          "failed": 13,
+          "skipped": 1
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+        "before": {
+          "passed": 34
+        },
+        "after": {
+          "passed": 34
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+        "before": {
+          "passed": 8
+        },
+        "after": {
+          "passed": 8
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+        "before": {
+          "passed": 17
+        },
+        "after": {
+          "passed": 18
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/public-hooks.blackbox.ts",
+        "before": {
+          "passed": 3
+        },
+        "after": {
+          "passed": 3
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "before": {
+          "passed": 6
+        },
+        "after": {
+          "passed": 6
+        }
+      },
+      {
+        "file": "scripts/provider-black-box/turn-decisions.blackbox.ts",
+        "before": {
+          "failed": 1
+        },
+        "after": {
+          "passed": 1
+        }
+      }
+    ],
+    "after_failures": [
+      {
+        "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+        "name": "assembled provider CLI black-box reports provider errors without fabricating successful output",
+        "before_status": "failed",
+        "after_ms": 15160.184539000002
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience codex-http.early-close does not become empty success",
+        "before_status": "failed",
+        "after_ms": 4172.066038999999
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience codex-http.incomplete does not become empty success",
+        "before_status": "passed",
+        "after_ms": 6043.407934999999
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience openrouter-http.early-close does not become empty success",
+        "before_status": "failed",
+        "after_ms": 4050.7327760000007
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.native-error does not become empty success",
+        "before_status": "failed",
+        "after_ms": 6158.035072999999
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.early-close does not become empty success",
+        "before_status": "failed",
+        "after_ms": 4515.770670000005
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.incomplete does not become empty success",
+        "before_status": "failed",
+        "after_ms": 6063.496447000005
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience runtime-anthropic-messages.incomplete does not become empty success",
+        "before_status": "passed",
+        "after_ms": 6291.405785000003
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.early-close does not become empty success",
+        "before_status": "failed",
+        "after_ms": 4197.652563000011
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.incomplete does not become empty success",
+        "before_status": "passed",
+        "after_ms": 8712.57300399999
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider response-side reasoning openai-http.reasoning preserves response-side reasoning and final output",
+        "before_status": "passed",
+        "after_ms": 7872.178540000008
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider response-side reasoning codex-http.reasoning preserves response-side reasoning and final output",
+        "before_status": "passed",
+        "after_ms": 6496.89198
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider response-side reasoning openrouter-http.reasoning preserves response-side reasoning and final output",
+        "before_status": "failed",
+        "after_ms": 6740.5579940000025
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider response-side reasoning runtime-anthropic-messages.reasoning preserves response-side reasoning and final output",
+        "before_status": "failed",
+        "after_ms": 6106.16575
+      }
+    ]
+  },
+  "integration_case_accounting": {
+    "before": 205,
+    "after": 205,
+    "after_passed": 196,
+    "after_failed": 8,
+    "after_failures": [
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "CLI validates goal flags before startup",
+        "duration_ms": 10117.612865000001
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "interactive launch persists the goal before requiring a terminal",
+        "duration_ms": 10006.171341999998
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "positional launch durably records its goal before the first provider request",
+        "duration_ms": 10170.537058999998
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+        "duration_ms": 11059.865785000002
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "CLI supports the advertised -h and -v aliases",
+        "duration_ms": 19177.627896000005
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "CLI --resume ls prints list of conversations and exits",
+        "duration_ms": 11567.849866999997
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+        "duration_ms": 10011.726285000012
+      },
+      {
+        "file": "source/providers/provider-presets.integration.test.tsx",
+        "name": "copies inventory defaults into independent editable connections and reloads them from disk",
+        "duration_ms": 11377.623002
+      }
+    ]
+  },
+  "failure_isolation": {
+    "provider_cache_off": [
+      {
+        "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+        "name": "assembled provider CLI black-box reports provider errors without fabricating successful output",
+        "status": "failed",
+        "duration_ms": 15209.753016999999
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience codex-http.incomplete does not become empty success",
+        "status": "passed",
+        "duration_ms": 4742.710527
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience runtime-anthropic-messages.incomplete does not become empty success",
+        "status": "passed",
+        "duration_ms": 5230.884306999999
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.incomplete does not become empty success",
+        "status": "passed",
+        "duration_ms": 5419.868947000001
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider response-side reasoning openai-http.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration_ms": 3777.9316080000026
+      },
+      {
+        "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "name": "application-owned provider response-side reasoning codex-http.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration_ms": 4483.289285000003
+      }
+    ],
+    "integration_cache_off": [
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "CLI validates goal flags before startup",
+        "status": "passed",
+        "duration_ms": 5860.562482
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "interactive launch persists the goal before requiring a terminal",
+        "status": "passed",
+        "duration_ms": 2801.2158390000004
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "positional launch durably records its goal before the first provider request",
+        "status": "passed",
+        "duration_ms": 3440.0666949999995
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+        "status": "passed",
+        "duration_ms": 8738.349950000002
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "CLI supports the advertised -h and -v aliases",
+        "status": "passed",
+        "duration_ms": 8341.898963
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "CLI --resume ls prints list of conversations and exits",
+        "status": "passed",
+        "duration_ms": 5316.997429000003
+      },
+      {
+        "file": "source/cli.integration.test.ts",
+        "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+        "status": "passed",
+        "duration_ms": 4846.471047000006
+      },
+      {
+        "file": "source/providers/provider-presets.integration.test.tsx",
+        "name": "copies inventory defaults into independent editable connections and reloads them from disk",
+        "status": "passed",
+        "duration_ms": 5595.037251000002
+      }
+    ]
+  },
+  "representative_pilot": [
+    {
+      "suite": "integration",
+      "variant": "off",
+      "pair": 1,
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "has unattended instructions",
+        "--maxWorkers=1",
+        "--reporter=json",
+        "--outputFile=/tmp/term2-representative-integration-off-1-results.json"
+      ],
+      "elapsed": 40.880992959000196,
+      "user": 42.796183,
+      "system": 16.704268,
+      "maxrss": 373292,
+      "exit": 0,
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "suite": "provider",
+      "variant": "off",
+      "pair": 1,
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "scripts/provider-black-box/provider-cli.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "-t",
+        "reference approval preserves|rejects excessive|supervised output profile|runtime provider and captures|prints terminal-only",
+        "--maxWorkers=1",
+        "--reporter=json",
+        "--outputFile=/tmp/term2-representative-provider-off-1-results.json"
+      ],
+      "elapsed": 75.42278245699981,
+      "user": 82.806503,
+      "system": 18.46896,
+      "maxrss": 218688,
+      "exit": 1,
+      "passed": 9,
+      "failed": 1
+    }
+  ],
+  "representative_attempts": [
+    {
+      "suite": "integration",
+      "variant": "off",
+      "pair": 1,
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "has unattended instructions",
+        "--maxWorkers=1",
+        "--reporter=json",
+        "--outputFile=/tmp/term2-representative-integration-off-1-results.json"
+      ],
+      "elapsed": 40.880992959000196,
+      "user": 42.796183,
+      "system": 16.704268,
+      "maxrss": 373292,
+      "exit": 0,
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "suite": "provider",
+      "variant": "off",
+      "pair": 1,
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "-t",
+        "reference approval preserves",
+        "--maxWorkers=1",
+        "--reporter=json",
+        "--outputFile=/tmp/term2-representative-approval-provider-off-1-results.json"
+      ],
+      "elapsed": 69.30812814199999,
+      "user": 56.601769,
+      "system": 18.716072,
+      "maxrss": 218520,
+      "exit": 0,
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "suite": "integration",
+      "variant": "on",
+      "pair": 1,
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "has unattended instructions",
+        "--maxWorkers=1",
+        "--reporter=json",
+        "--outputFile=/tmp/term2-representative-integration-on-1-results.json"
+      ],
+      "elapsed": 36.0273637790001,
+      "user": 37.648866,
+      "system": 13.159809,
+      "maxrss": 380724,
+      "exit": 0,
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "suite": "provider",
+      "variant": "on",
+      "pair": 1,
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "-t",
+        "reference approval preserves",
+        "--maxWorkers=1",
+        "--reporter=json",
+        "--outputFile=/tmp/term2-representative-approval-provider-on-1-results.json"
+      ],
+      "elapsed": 29.217972016000203,
+      "user": 29.931857,
+      "system": 7.668062,
+      "maxrss": 230280,
+      "exit": 0,
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "suite": "integration",
+      "variant": "on",
+      "pair": 2,
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "has unattended instructions",
+        "--maxWorkers=1",
+        "--reporter=json",
+        "--outputFile=/tmp/term2-representative-integration-on-2-results.json"
+      ],
+      "elapsed": 61.63213609000013,
+      "user": 65.332946,
+      "system": 25.026675,
+      "maxrss": 370704,
+      "exit": 1,
+      "passed": 6,
+      "failed": 1
+    }
+  ],
+  "startup_probe": {
+    "startup-profile": {
+      "command": [
+        "node",
+        "--cpu-prof",
+        "--cpu-prof-dir=/tmp",
+        "--cpu-prof-name=term2-startup.cpuprofile",
+        "dist/cli.js",
+        "--help"
+      ],
+      "elapsed": 6.766429697999911,
+      "user": 5.653963,
+      "system": 2.688468,
+      "maxrss": 212220,
+      "exit": 0
+    },
+    "startup-cache-cold": {
+      "command": ["node", "dist/cli.js", "--help"],
+      "elapsed": 5.660611802000176,
+      "user": 5.108046,
+      "system": 1.892164,
+      "maxrss": 195532,
+      "exit": 0
+    },
+    "startup-cache-warm": {
+      "command": ["node", "dist/cli.js", "--help"],
+      "elapsed": 3.464084203000084,
+      "user": 3.419905,
+      "system": 1.267875,
+      "maxrss": 201144,
+      "exit": 0
+    },
+    "startup-plain": {
+      "command": ["node", "dist/cli.js", "--help"],
+      "elapsed": 6.722958853999899,
+      "user": 10.142653,
+      "system": 2.640715,
+      "maxrss": 201144,
+      "exit": 0
+    }
+  },
+  "checks": {
+    "typecheck": "passed",
+    "lint": "passed, 31 warnings / 0 errors",
+    "static_guards": "28 passed in 7 files",
+    "no_unit_tests": "passed",
+    "build": "passed",
+    "harness_and_questions": "19 passed",
+    "new_http_case_red_proof": "failed before fix; exit 1",
+    "e2e": "31 passed / 1 failed; WebSocket first frame timeout",
+    "fake_codex_isolated": "16 passed",
+    "initial_e2e": "invalidated by overlapping build; 30 passed / 2 failed"
+  },
+  "source_sha256": {
+    "scripts/provider-black-box/global-setup.ts": "7fa456e7273fb746020fe84c17e9de7d65467072c67b5568a3eea5756733117e",
+    "scripts/provider-black-box/provider-harness-child.mjs": "c5499dd6adb43a2028345a1d00069ace885c77798634aeb33433c6460a40e16c",
+    "scripts/provider-black-box/provider-test-harness.test.ts": "40e916d967d8fd773f6582c6caee5ae82913b3331dfd0c95e1038c22d4dc6a95",
+    "scripts/provider-black-box/provider-test-harness.ts": "77169a1fe77b354cffc2bd2ea4428ed2697aa497134993e702a2ba52d94cfec3",
+    "source/acp-v2/serve.integration.test.ts": "e437191c87251b0117d82d80c2544559ed307b717877c932c8db5f6e48c47ae1",
+    "source/cli.integration.test.ts": "9ff671257c29d2c0d9ec828fbb4ae76aa9b34f8279e6d116c195c2d9ba9f36cb",
+    "source/gateway/serve.integration.test.ts": "60d871ba56f1427cf32024388f8e95ad64f331740fe143550276f1b0c0286ad9",
+    "source/test-helpers/cli-compile-cache-setup.ts": "8ab4ff60a5cadc3bcf85162f27750a816c5583ebad00887a13706e288b02f9d0",
+    "source/test-helpers/cli-compile-cache.ts": "4ff7df0aca1fde0f1190602c74117da01468acafcc64ac7ae0f93065ed5e21e3",
+    "source/test-helpers/integration-cli-global-setup.ts": "6aa6d85aaeee63e4eeeef8d35c2cf8f90e9e052789427086e3efe1e39364d0ec",
+    "source/test-helpers/integration-cli.ts": "176884d5ce44b56d6361ba4473aa592a6f4e9c5fb0280a8a0f6b06f731d3dc92",
+    "source/test-helpers/terminal-e2e.ts": "ba4afb4055569053c039aa65f3e9a491201382fc3c9dccb30de1bcabcfaf6254",
+    "vitest.integration.config.ts": "38724f6dc7736c2457da8984850364114d0221abe53c6278a6fb4ecd95921cb3",
+    "vitest.provider-black-box.config.ts": "27bb2d24a040be5c8a34be2ff6e15754e9a43a49f64f37e8e9f377498f1c2974"
+  }
+}

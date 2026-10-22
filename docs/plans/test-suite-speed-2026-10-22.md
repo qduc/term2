@@ -1,0 +1,255 @@
+# Integration and provider test performance (2026-10-22)
+
+Measured against main `31bf8380137d7f48f463e54f31570a3f3026b4fc`
+(v0.35.0), in an isolated worktree. All providers were local HTTP/SSE/WS
+fixtures. No paid provider calls were made.
+
+## Changes and coverage
+
+- Compile the integration CLI once in global setup, using the same native
+  TypeScript compiler/configuration as the previous CLI and gateway helpers.
+  CLI, gateway and ACP tests share emitted code, with separate processes,
+  homes, settings, mock servers and persisted state. ACP's package-version
+  assertion remains; its old reason for using `tsx` was obsolete because
+  installation-version resolution now walks up to the package root.
+- Prime one disposable Node compile cache per invocation using an isolated
+  `--help` process before starting workers. This shares V8 bytecode, not module
+  instances or application state. Teardown removes it. Node <22, V8 coverage,
+  and `NODE_DISABLE_COMPILE_CACHE=1` skip it. Global setup errors fail the run.
+- Reevaluate PTY predicates every 20 ms as well as on terminal events, and
+  once at the timeout boundary. HTTP arrivals do not necessarily produce PTY
+  events. Success, errors, exit and timeout all remove the interval/listeners.
+- Bound integration CI workers to two, since each worker may also start a real
+  CLI or index process. Module isolation remains enabled.
+
+No existing scenario, assertion, test deadline, fixture deadline, bail behavior,
+or skip condition was removed or relaxed. Integration retains 205 cases in 22
+files. Provider retains every original case and adds one process/HTTP regression
+case (222 to 223 cases, still 25 files). This is test infrastructure only.
+
+## Environment and method
+
+Linux x86_64, kernel 6.18.55; Intel Xeon Platinum 8573C; five visible CPUs,
+cgroup CPU quota four cores (`cpu.max = 400000 100000`), memory limit 16 GiB.
+Node 24.19.0, pnpm 11.19.0, Vitest 4.1.9. CI mode was explicit. Runs were
+sequential; no lint, build, profiling or other suite was run concurrently with
+a measured suite. Physical-host contention was not controlled.
+
+Common environment for suite runs:
+
+```sh
+export PATH=/workspace/.local/usr/bin:$PATH
+export XDG_CACHE_HOME=/workspace/.cache
+export XDG_DATA_HOME=/workspace/.local/share
+export npm_config_store_dir=/workspace/.cache/pnpm-store
+export pnpm_config_verify_deps_before_run=
+export CI=1
+export NODE_ENV=test
+```
+
+The pnpm override prevents automatic dependency relinking during a timing run;
+dependencies were already installed with the frozen lockfile in this worktree.
+Initial setup failures and an automatic relink/build warmup are excluded from
+performance comparisons. Their logs remain in `/tmp/term2-install*.log` and
+`/tmp/term2-before-provider-cold*.log` in the execution environment.
+
+Wall times include the command's setup/teardown and use Python
+`time.monotonic()` around `subprocess.run(..., timeout=900)`. CPU times use
+`resource.getrusage(RUSAGE_CHILDREN)`. Provider timing commands intentionally
+omit bail to execute the complete inventory despite baseline failures. The
+published fail-fast command remains unchanged. The CLI had already been built
+for provider-only timing; build cost is separate.
+
+```sh
+pnpm test:integration
+pnpm exec vitest run --config vitest.provider-black-box.config.ts \
+  --reporter=verbose --reporter=json \
+  --outputFile.json=/tmp/term2-before-provider-results.json
+```
+
+Use an `after` output filename for the candidate provider run. The final
+integration run appends `--reporter=verbose --reporter=json
+--outputFile.json=/tmp/term2-after-integration-results.json` to the integration
+command for progress and case accounting.
+
+## Full-suite observations
+
+The initial integration comparison had cold emitted CLI caches on both sides
+(two private builds before, one new shared build after). The later CI-worker
+trial used a warm emitted build. Every candidate invocation used a fresh
+bytecode directory and included the priming process. OS/dependency caches were
+not reset.
+
+These are single full-suite observations with failures, not a clean passing
+benchmark or a stable percentage-speedup guarantee. Failure membership changes
+between runs. Lower elapsed times must be read alongside counts; they cannot
+alone establish equal successful work. Passing representative comparisons and
+the regression checks below are the narrower correctness/performance evidence.
+
+| Run | Wall | Passed | Failed | Skipped |
+| --- | ---: | ---: | ---: | ---: |
+| Main integration, cold emitted builds | 462.64 s | 188 | 16 | 1 |
+| Shared build/cache, original worker count | 403.01 s | 193 | 11 | 1 |
+| Candidate integration, two CI workers, warm emitted build | 375.57 s | 196 | 8 | 1 |
+| Main provider, complete inventory | 519.60 s | 203 | 18 | 1 |
+| Candidate provider, complete inventory | 444.33 s | 208 | 14 | 1 |
+
+The observed reductions against the initial main runs are 75.27 s (14.5%) for
+provider and 87.06 s (18.8%) for the final integration run. The latter also
+changes the worker limit and emitted-build cache condition. Neither percentage
+is a claim about a stable, equally passing suite.
+
+The provider inventory comparison found zero missing original case names and
+exactly the new harness regression. The repeated-questions case failed before
+at 48.17 s (40 s PTY wait) and passed after in 11.41 s. Its assertions and number
+key selection were unchanged. This supports the synchronization repair; it does
+not prove the historical GitHub timeout had no other contributing cause.
+
+## Attribution and regression evidence
+
+An isolated built CLI `--help` CPU profile took 6.77 s. The largest individual
+sampled cost was `compileSourceTextModule` (1.218 s), followed by garbage
+collection (0.346 s), CommonJS compilation (`wrapSafe`, 0.337 s), and Zod schema
+initialization (0.283 s). Module stat/realpath/load work was also visible. The
+profile is `/tmp/term2-startup.cpuprofile`; profiling was separate from acceptance
+runs. A first probe was 6.72 s uncached versus 3.46 s with a warm compile cache;
+priming took 5.66 s and must be amortized across a suite.
+
+The new regression starts a real PTY child, waits for readiness, sends input,
+and captures the child's HTTP request without subsequent output. On the old
+harness it fails with a 1000 ms state timeout even though HTTP arrived. After
+the fix it observes that request and separately proves an unmet request count
+still times out. The focused harness plus repeated-question run passed 19/19.
+
+```sh
+pnpm exec vitest run --config vitest.provider-black-box.config.ts \
+  scripts/provider-black-box/provider-test-harness.test.ts \
+  -t 'observes HTTP arrivals'
+pnpm exec vitest run --config vitest.provider-black-box.config.ts \
+  scripts/provider-black-box/provider-test-harness.test.ts \
+  scripts/provider-black-box/turn-decisions.blackbox.ts
+```
+
+The first command was run before the harness fix and failed (exit 1). The second
+passed after it. No deadline was increased and no Enter key was added.
+
+## Bounded passing comparisons and failed attempts
+
+On the final implementation, switch only `NODE_DISABLE_COMPILE_CACHE=1` (off)
+versus unset (on), keeping one worker, the same warm emitted CLI, isolated
+per-test homes, and unchanged assertions. Each on invocation has a fresh cache
+and includes priming. One fully passing pair was obtained for each workload:
+
+| Selected workload | Cases | Cache off | Cache on |
+| --- | ---: | ---: | ---: |
+| Headless instructions across all seven profiles | 7 | 40.88 s | 36.03 s |
+| Reference approval across full/bare and three advice outcomes | 6 | 69.31 s | 29.22 s |
+
+```sh
+# Off: prefix either command with NODE_DISABLE_COMPILE_CACHE=1.
+# On: leave that variable unset. Keep NODE_ENV=test and the common environment.
+pnpm exec vitest run --config vitest.integration.config.ts \
+  source/cli.integration.test.ts -t 'has unattended instructions' \
+  --maxWorkers=1 --reporter=json --outputFile=/tmp/integration-representative.json
+pnpm exec vitest run --config vitest.provider-black-box.config.ts \
+  scripts/provider-black-box/reference-approval.blackbox.ts \
+  -t 'reference approval preserves' \
+  --maxWorkers=1 --reporter=json --outputFile=/tmp/provider-representative.json
+```
+
+These are **single passing pairs**, not repeated proof: a second cached
+integration observation took 61.63 s and timed out in the `pair` profile at
+10.08 s (6 passed, 1 failed). The comparison stopped there. A preliminary
+10-case provider selection also failed its uncached terminal-only case at the
+existing 15 s deadline (9 passed, 1 failed, 75.42 s); that attempt was retained
+and rejected as a clean benchmark. It was not silently dropped from a median.
+The narrower approval workload above is a separately named comparison. No
+scenario was excluded from either full-suite run.
+
+Large variability and failed samples preclude a reliable percentile, spread,
+or stable suite speedup claim on this host. The results support a bounded
+compile/setup optimization and the missed-wakeup repair; they do not establish
+a clean green baseline.
+
+## Remaining-failure isolation
+
+The final full integration run failed seven CLI cases and one provider-menu
+case, all at deadlines. All eight passed in a subsequent one-worker,
+cache-disabled run (76.83 s wall, 68.11 s Vitest duration). The earlier repair
+deadline and index-corruption cases passed in the two-worker full run.
+
+Five provider cases passed on main but timed out only in the candidate full
+observation: Codex incomplete HTTP, Anthropic incomplete, Google incomplete,
+OpenAI HTTP reasoning and Codex HTTP reasoning. All five passed together with
+one worker and cache disabled, at their unchanged deadlines. The provider-error
+CLI case still failed in that run (5 passed, 1 failed; 44.20 s wall). It also
+failed on main. Nine of the final provider failures overlap main's failures;
+the other five have this isolated passing evidence. This is consistent with
+contention-sensitive deadlines, not proof that every failure is unrelated to
+the change. Remaining full-suite failures require a healthy-runner check before
+merge; no timeout was enlarged to make them disappear.
+
+The isolated commands were:
+
+```sh
+NODE_DISABLE_COMPILE_CACHE=1 pnpm exec vitest run \
+  --config vitest.provider-black-box.config.ts \
+  scripts/provider-black-box/provider-session-resilience.blackbox.ts \
+  scripts/provider-black-box/provider-cli.blackbox.ts --maxWorkers=1 \
+  -t 'codex-http.incomplete|runtime-anthropic-messages.incomplete|runtime-google-generate-content.incomplete|openai-http.reasoning|codex-http.reasoning|reports provider errors' \
+  --reporter=verbose
+NODE_DISABLE_COMPILE_CACHE=1 pnpm exec vitest run \
+  --config vitest.integration.config.ts source/cli.integration.test.ts \
+  source/providers/provider-presets.integration.test.tsx --maxWorkers=1 \
+  -t 'goal flags before startup|interactive launch persists|positional launch durably|resume preserves the replayed goal|advertised -h and -v|--resume ls prints|session-only when resolution|copies inventory defaults' \
+  --reporter=verbose
+```
+
+## Timing wrapper
+
+The temporary wrapper used for each measured command (pass a unique label,
+then the command and arguments) was:
+
+```python
+import json, resource, subprocess, sys, time
+label, *command = sys.argv[1:]
+start = time.monotonic()
+with open('/tmp/term2-' + label + '.log', 'w') as log:
+    result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=900)
+usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+data = dict(command=command, elapsed=time.monotonic()-start,
+            user=usage.ru_utime, system=usage.ru_stime,
+            maxrss=usage.ru_maxrss, exit=result.returncode)
+with open('/tmp/term2-' + label + '.json', 'w') as out:
+    json.dump(data, out)
+print(json.dumps(data), flush=True)
+sys.exit(result.returncode)
+```
+
+## Verification and remaining limits
+
+Typecheck, full lint (31 warnings, no errors), 28 static guard assertions, and
+the no-unit-tests check passed. The final `pnpm build` passed. The sequential
+E2E run (`pnpm test:e2e --reporter=verbose`) had 31 passed and one failed:
+fake-Codex's retained-socket stale-anchor case exceeded its first-frame watchdog.
+`pnpm test:codex-network --maxWorkers=1` then passed all 16 protocol cases.
+The full E2E result remains a failure; an isolated pass is not a full-suite pass.
+
+An earlier E2E attempt was invalidated by my launching it alongside the build:
+one built-worker module was temporarily absent while `dist` was replaced. That
+attempt had 30 passed and two failed and remains in `/tmp/term2-e2e.log`.
+The corrected sequential result is `/tmp/term2-e2e-final.log`. No published
+performance number includes E2E or concurrent build work.
+
+Full-suite failures are preserved, not converted to skips or accepted as green.
+The machine-readable [evidence summary](./test-suite-speed-2026-10-22.results.json)
+includes commands, resource measurements, all provider case-name accounting,
+failure names, representative attempts, and source hashes. Full local logs and
+Vitest JSON reports are `/tmp/term2-*.log` and `/tmp/term2-*-results.json` in the
+execution environment. The temporary scripts/profile are not committed.
+
+Remaining blockers: no reproducibly green complete suite on this host, unstable
+repeated representative timings, and pending PR CI. No live/paid provider,
+Docker-host opt-in, merge, or deployment check was attempted. The ordinary
+integration suite retains its existing opt-in Docker skip. Main was fetched
+again after validation and remained at the measured baseline commit.

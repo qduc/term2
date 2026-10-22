@@ -15,6 +15,14 @@ pnpm test:provider-black-box
 
 This command builds `dist/` first, then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
 
+Global setup primes a disposable Node compile cache with `dist/cli.js --help`
+before starting the workers. Only compiled bytecode is shared: every scenario
+still starts fresh processes and isolated application state. The cache is
+removed on teardown and is disabled for V8 coverage or
+`NODE_DISABLE_COMPILE_CACHE=1`. Direct Vitest invocations still require a prior
+build. Integration launchers similarly share one emitted CLI build prepared by
+their global setup; they do not reuse a running application.
+
 Compare timing with a recent run on a similarly loaded host; a fixed healthy
 duration becomes stale as PTY scenarios grow. The command uses `--bail=1`
 because the tests drive the built CLI through a PTY and wait on its output:

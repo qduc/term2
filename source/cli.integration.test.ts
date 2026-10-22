@@ -2,58 +2,17 @@ import { it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync, spawn, type SpawnOptions } from 'child_process';
 import fs from 'fs';
 import http from 'http';
-import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
-const require = createRequire(import.meta.url);
+import { integrationCliPath as cliPath } from './test-helpers/integration-cli.js';
 
 function expectedToolLine(command: string): string {
   const preview = command.length > 80 ? `${command.slice(0, 80)}…` : command;
   return `[tool] shell: ${preview}`;
-}
-
-// dist/ is a gitignored build artifact, so a fresh worktree has no compiled
-// CLI and these tests would fail until someone runs `pnpm build`. Instead of
-// spawning tsx per test (which pays a ~2s compile per process), compile the
-// CLI once into a per-worktree cache with the same compiler and config as
-// `pnpm build` (incremental, so unchanged work is a fast no-op) and spawn
-// that for every test.
-const projectRoot = fileURLToPath(new URL('..', import.meta.url));
-const typescriptDir = path.resolve(path.dirname(require.resolve('typescript-7')), '..');
-const cliBuildDir = path.join(projectRoot, 'node_modules', '.cache', 'term2-cli-test-build');
-
-let compiledCliPath: string | undefined;
-function cliPath(): string {
-  if (compiledCliPath) return compiledCliPath;
-  fs.mkdirSync(cliBuildDir, { recursive: true });
-  try {
-    execFileSync(
-      process.execPath,
-      [
-        path.join(typescriptDir, 'bin', 'tsc'),
-        '--project',
-        'tsconfig.build.json',
-        '--outDir',
-        cliBuildDir,
-        '--incremental',
-        '--tsBuildInfoFile',
-        path.join(cliBuildDir, 'tsconfig.tsbuildinfo'),
-      ],
-      { cwd: projectRoot, stdio: 'pipe' },
-    );
-  } catch (error: any) {
-    throw new Error(`Failed to build CLI for tests: ${error.stderr?.toString?.() ?? error}`);
-  }
-  // `pnpm build` copies the prompts next to the compiled output; do the same
-  // so import.meta.dirname-based prompt resolution works from the cache dir.
-  fs.cpSync(path.join(projectRoot, 'source', 'prompts'), path.join(cliBuildDir, 'prompts'), { recursive: true });
-  compiledCliPath = path.join(cliBuildDir, 'cli.js');
-  return compiledCliPath;
 }
 
 /**

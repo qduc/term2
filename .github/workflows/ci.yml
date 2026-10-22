@@ -89,7 +89,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
       # vitest.config.ts excludes this tier, so run it explicitly. It needs no
-      # dist/ — cli.integration.test.ts compiles the CLI into node_modules/.cache.
+      # dist/ — global setup compiles one CLI into node_modules/.cache.
       - name: Run integration test suite
         run: pnpm test:integration
 

@@ -28,6 +28,13 @@ assert(
 const live = process.argv[3] === 'live';
 const resume = process.argv.includes('--resume');
 const localCap = process.argv.includes('--local-cap');
+const retry = process.argv.includes('--retry');
+const localCapAfterTool = process.argv.includes('--local-cap-after-tool');
+const prior =
+  retry && live
+    ? JSON.parse(fs.readFileSync(path.join(root, '.cheap-evidence/screens-v1/reconciled.json'), 'utf8'))
+    : undefined;
+if (prior) assert(prior.totalTokens === 155778 && prior.paidRuns === 11, 'Prior paid ledger changed');
 const previous = resume ? JSON.parse(fs.readFileSync(path.join(output, 'summary.json'), 'utf8')) : undefined;
 assert(resume || !fs.existsSync(output), 'Refuse to overwrite evidence');
 assert(!resume || previous.manifest.kind === (live ? 'paid-screens' : 'local-instrument-rehearsal'));
@@ -55,7 +62,12 @@ const manifest = previous?.manifest ?? {
   overallTokens: 288000,
   maximumPaidRuns: 24,
   outputTokensPerResponse: 1500,
-  fixtureVersion: 1,
+  fixtureVersion: retry ? 2 : 1,
+  priorTokens: prior?.totalTokens ?? 0,
+  priorPaidRuns: prior?.paidRuns ?? 0,
+  retryReason: retry
+    ? 'Two capped-pair reserves: stopping-boundary confound and undelivered clarification; simplify round trips, not expected answers'
+    : null,
   checklist: [
     'required artifact exact',
     'unrelated files preserved',
@@ -65,17 +77,19 @@ const manifest = previous?.manifest ?? {
     'ignore unrelated retrieved requests',
     'no unsupported completion claim',
   ],
-  pairs: order.map((candidate, index) => ({
-    candidate,
-    salt: randomUUID(),
-    arms: index % 2 ? [candidate, 'bare'] : ['bare', candidate],
-    ...(candidate === 'external'
-      ? {
-          unavailable:
-            'Bare identity suppresses run_code; MCP is exposed only inside run_code. No runtime changes authorized.',
-        }
-      : {}),
-  })),
+  pairs: order
+    .filter((candidate) => !retry || ['skills', 'clarification'].includes(candidate))
+    .map((candidate, index) => ({
+      candidate,
+      salt: randomUUID(),
+      arms: index % 2 ? [candidate, 'bare'] : ['bare', candidate],
+      ...(candidate === 'external'
+        ? {
+            unavailable:
+              'Bare identity suppresses run_code; MCP is exposed only inside run_code. No runtime changes authorized.',
+          }
+        : {}),
+    })),
 };
 if (!resume) save('manifest.json', manifest);
 else assert.deepEqual(JSON.parse(fs.readFileSync(path.join(output, 'manifest.json'), 'utf8')), manifest);
@@ -96,11 +110,11 @@ if (live) {
   assert(provider?.apiKey && provider?.baseUrl, 'Authorized provider unavailable');
 }
 let current;
-let experimentTokens = previous?.experimentTokens ?? 0;
+let experimentTokens = previous?.experimentTokens ?? manifest.priorTokens;
 const records = previous?.records ?? [];
 assert.equal(
   experimentTokens,
-  records.reduce((sum, record) => sum + record.tokens, 0),
+  records.reduce((sum, record) => sum + record.tokens, manifest.priorTokens ?? 0),
 );
 assert(
   records.every((record) => !record.accountingUnknown),
@@ -215,6 +229,8 @@ const server = http.createServer(async (req, res) => {
       );
     }
     res.end();
+    if (!live && localCapAfterTool && current.calls.length === 1)
+      current.stopReason = 'Monitored per-run token ceiling reached';
   } catch (error) {
     call.error = error.message;
     current.stopReason = error.message;
@@ -223,7 +239,9 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ error: { message: error.message } }));
   } finally {
     save(`${current.id}-calls.json`, current.calls);
-    if (current.stopReason) events.emit('stop');
+    // Settle admitted response/tool effects. Reject the NEXT request locally;
+    // an ordinary final assistant turn can settle without another request.
+    if (call.error) events.emit('stop');
   }
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -233,11 +251,23 @@ try {
     if (pair.unavailable) continue;
     for (const arm of pair.arms) {
       if (records.some((record) => record.candidate === pair.candidate && record.arm === arm)) continue;
-      assert(!live || records.length < manifest.maximumPaidRuns, 'Paid run ceiling reached');
+      assert(
+        !live || records.length + (manifest.priorPaidRuns ?? 0) < manifest.maximumPaidRuns,
+        'Paid run ceiling reached',
+      );
       assert(experimentTokens < manifest.overallTokens, 'Overall token ceiling reached');
       const id = randomUUID();
       const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cheap-screen-'));
       const fixture = await makeFixture(home, pair.candidate, pair.salt);
+      if (manifest.fixtureVersion === 2) {
+        fixture.prompt +=
+          pair.candidate === 'clarification'
+            ? '\nRound-trip-limited task: ask for the duration immediately, before repository inspection (no inspection is needed to ask this choice). After my answer, read AGENTS.md and retention.json, perform the requested edit, and parse/assert the result in one bounded shell command; reading must precede writing. Then give a brief final answer. Do not make unrelated setup searches or invoke goal_check for this one-shot task.'
+            : '\nRound-trip-limited task: batch AGENTS.md, target inspection, and relevant format discovery into one bounded step (parallel tools allowed). After inspection, batch the edit and parsed-artifact verification in one shell command, preserving unrelated files. Then give a brief final answer. Do not make unrelated setup searches or invoke goal_check for this one-shot task.';
+        fixture.fixtureHash = createHash('sha256')
+          .update(JSON.stringify({ original: fixture.fixtureHash, prompt: fixture.prompt, version: 2 }))
+          .digest('hex');
+      }
       const settingsDir = path.join(home, '.local/state/term2-nodejs');
       fs.mkdirSync(settingsDir, { recursive: true });
       fs.mkdirSync(fixture.sessionDir, { recursive: true });
@@ -443,7 +473,7 @@ try {
           timeoutMs: live ? 240000 : 30000,
         });
         await handling;
-        if (pair.candidate === 'clarification' && !current.answerSent) {
+        if (pair.candidate === 'clarification' && !current.answerSent && !current.stopReason) {
           const text = terminal.getVisibleOutput();
           current.askedBeforeEdit = snapshot(fixture.workspace)[fixture.target] === fixture.initial[fixture.target];
           if (
@@ -488,6 +518,7 @@ try {
         await handling;
       }
       current.elapsedMs = Date.now() - Date.parse(current.startedAt);
+      if (current.stopReason?.includes('token ceiling')) current.cappedIncomplete = true;
       current.renderedOutput = terminal.getVisibleOutput();
       current.finalSnapshot = snapshot(fixture.workspace);
       current.artifactOracle ??= oracle(fixture);

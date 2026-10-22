@@ -432,7 +432,7 @@
     ]
   },
   "baseline_job_span_seconds": 172,
-  "candidate_status": "Cold exact-head CI passed. Same-head repeat has mixed Node patch versions and cache states; it is not a controlled warm-cache comparison. Awaiting completion and next pinned-Node CI.",
+  "candidate_status": "Second scheduling experiment pending full Ubuntu CI; previous cold run passed, pinned-runtime full logs pass but per-job publication is delayed.",
   "resource_policy": {
     "runner_count_before": 4,
     "runner_count_after": 4,
@@ -4542,5 +4542,1157 @@
       }
     ],
     "action_sha256": "b5842a7bdd7ce99d464ad623f18dbf00e4bf29f4e5bd39f66db28a42588844f2"
+  },
+  "second_scheduling_experiment": {
+    "status": "awaiting full Ubuntu CI",
+    "reason": "Pinned-runtime experiment exposed a 51-second apt installation and a 63-second sequential CLI invocation; cache the image-specific rg binary and divide CLI into two isolated entries at the existing worker cap.",
+    "source_sha256": {
+      ".github/actions/setup-tests/action.yml": "cb8d6e08ccc9a8c1384b483ab6b1228a91da60ec9a15448705f7115a220c9f9d",
+      ".github/workflows/ci.yml": "5c283dddde7b75af79666a9a82e49561721cad202f2c51040a4d0d25e5c66513",
+      "scripts/run-ci-lane.mjs": "64553f2383161e8fe6d8673875c6a728de4f0e0102d662d38f0eb2e46b68a65f",
+      "source/cli.integration.test.ts": "9613360879d146fb3533eaf4bf9a70d445516ce6f203b43f202ea646c6ca8822",
+      "source/cli-headless.integration.test.ts": "5b227e0fb11f6d4545315f136ce7dc54789e1ec2042804e162aaafad955516cd",
+      "source/cli.integration.scenarios.ts": "a27fe3d12d02b3792b18f9ea91488bc6782bda850c21be4a2538ee284ae49930",
+      "tsconfig.build.json": "4226986d332eef4a2fb677212124b94a67ea7945d5fcb3be1d973e3ba853d89c",
+      "eslint.config.js": "5eb0bb9ee50550f9373553d63ced3ea384d01ff768e3e5e52d1acca8e817ead2"
+    },
+    "cli_mac": {
+      "before": {
+        "label": "ci-cli-before",
+        "variant": "ci-baseline",
+        "workload": "cli",
+        "command": [
+          "pnpm",
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.integration.config.ts",
+          "source/cli.integration.test.ts",
+          "--maxWorkers=2",
+          "--reporter=verbose",
+          "--reporter=json",
+          "--outputFile.json=/Users/qduc/Documents/Codex/2026-10-22/task/evidence/ci-cli-before.vitest.json"
+        ],
+        "cwd": "/Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline",
+        "revision": "81445c7e07f9d80a92e37ec7bac0cabde9c083f1",
+        "started_at": "2026-10-22T14:47:22.045021+00:00",
+        "platform": "macOS-26.6.2-arm64-arm-64bit",
+        "node": "v24.16.0",
+        "pnpm": "11.7.0",
+        "load_before": [3.640625, 3.69873046875, 3.21142578125],
+        "environment_overrides": {
+          "CI": "1",
+          "NODE_ENV": "test",
+          "pnpm_config_verify_deps_before_run": "",
+          "TMPDIR": "/private/var/folders/mf/vt165ks97dg5q2h4bh790cvm0000gn/T"
+        },
+        "cache_policy": "Both revisions use the retained compile-cache implementation. Emitted CLI absent initially, default compilation and fresh disposable V8 priming included. Baseline directory birth time matches run start; candidate emitted directory explicitly removed first.",
+        "outer_timeout_seconds": 900,
+        "exit_code": 1,
+        "elapsed_seconds": 29.606219416018575,
+        "load_after": [3.65283203125, 3.681640625, 3.22021484375],
+        "child_user_seconds": 29.801666,
+        "child_system_seconds": 9.83419,
+        "maxrss_bytes": 1089323008,
+        "counts": {
+          "numTotalTests": 53,
+          "numPassedTests": 51,
+          "numFailedTests": 2,
+          "numPendingTests": 0,
+          "numTodoTests": 0,
+          "success": false
+        },
+        "cases": [
+          {
+            "name": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+            "status": "passed",
+            "duration_ms": 799.661458,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --help documents the available command-line options",
+            "status": "passed",
+            "duration_ms": 378.591083,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI validates goal flags before startup",
+            "status": "passed",
+            "duration_ms": 742.1862500000002,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "interactive launch persists the goal before requiring a terminal",
+            "status": "passed",
+            "duration_ms": 439.66937499999995,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "positional launch durably records its goal before the first provider request",
+            "status": "passed",
+            "duration_ms": 528.4809170000003,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "positional launch closes the goal after a recorded achieved goal_check and reports it",
+            "status": "passed",
+            "duration_ms": 530.2324580000004,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "the shipped CLI verifies a durable goal with verifier.model=",
+            "status": "failed",
+            "duration_ms": 637.3552079999995,
+            "file": "source/cli.integration.test.ts",
+            "failures": [
+              "AssertionError: expected false to be true // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/source/cli.integration.test.ts:537:37\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+            ]
+          },
+          {
+            "name": "the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+            "status": "failed",
+            "duration_ms": 626.8757500000002,
+            "file": "source/cli.integration.test.ts",
+            "failures": [
+              "AssertionError: expected false to be true // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/source/cli.integration.test.ts:537:37\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+            ]
+          },
+          {
+            "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+            "status": "passed",
+            "duration_ms": 860.5649169999997,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI supports the advertised -h and -v aliases",
+            "status": "passed",
+            "duration_ms": 755.6507499999998,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI rejects unknown flags with a clear error",
+            "status": "passed",
+            "duration_ms": 392.3174160000008,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors",
+            "status": "passed",
+            "duration_ms": 434.1168750000006,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --resume ls prints list of conversations and exits",
+            "status": "passed",
+            "duration_ms": 736.0225419999997,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --resume list also works",
+            "status": "passed",
+            "duration_ms": 457.1393340000004,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --resume prints message and exits when no conversation is found",
+            "status": "passed",
+            "duration_ms": 399.43004199999996,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --resume does not suggest --fork for a conversation from another project",
+            "status": "passed",
+            "duration_ms": 388.48099999999977,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --list-models combined with --resume errors instead of misreading the resume id as a search term",
+            "status": "passed",
+            "duration_ms": 382.25937500000146,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --list-models combined with --resume --fork errors",
+            "status": "passed",
+            "duration_ms": 386.9534999999996,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error",
+            "status": "passed",
+            "duration_ms": 391.58258399999977,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --refresh without --list-models errors clearly instead of being silently ignored",
+            "status": "passed",
+            "duration_ms": 388.56316700000025,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --list-models --refresh runs the listing errand, not the flag-conflict error",
+            "status": "passed",
+            "duration_ms": 403.01908399999957,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI prompts before starting in non-lite mode from home directory",
+            "status": "passed",
+            "duration_ms": 394.68683299999975,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI prompts before starting in non-lite mode from root directory",
+            "status": "passed",
+            "duration_ms": 385.5085830000007,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI accepts a custom provider from settings.json in non-interactive mode",
+            "status": "passed",
+            "duration_ms": 388.1095830000013,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --model reports error and exits 1 when no models match pattern",
+            "status": "passed",
+            "duration_ms": 418.0419579999998,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+            "status": "passed",
+            "duration_ms": 478.8224160000009,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --json auto-selects an ambiguous model without asking for input",
+            "status": "passed",
+            "duration_ms": 495.3701250000013,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing",
+            "status": "passed",
+            "duration_ms": 994.1284169999999,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI resolves --model <value> as the last argument to the model, not a prompt",
+            "status": "passed",
+            "duration_ms": 449.5020420000001,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt",
+            "status": "passed",
+            "duration_ms": 450.2037080000009,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous",
+            "status": "passed",
+            "duration_ms": 498.7340000000004,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI \"term2 <prompt>\" with no --model is unchanged",
+            "status": "passed",
+            "duration_ms": 496.02599999999984,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt",
+            "status": "passed",
+            "duration_ms": 429.1098329999986,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+            "status": "passed",
+            "duration_ms": 555.8126249999987,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+            "status": "passed",
+            "duration_ms": 558.9360420000012,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+            "status": "passed",
+            "duration_ms": 571.5549170000013,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids",
+            "status": "passed",
+            "duration_ms": 569.1075830000009,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "every executed shell call is shown on stderr when the provider repeats its id",
+            "status": "passed",
+            "duration_ms": 547.257583999999,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "one approved shell execution prints exactly one [tool] line",
+            "status": "passed",
+            "duration_ms": 562.838749999999,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "a call that reuses a refused call id runs and is saved as run, not as refused",
+            "status": "passed",
+            "duration_ms": 580.3774580000027,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+            "status": "passed",
+            "duration_ms": 540.5448329999999,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+            "status": "passed",
+            "duration_ms": 528.2114580000016,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless full completion in an unsupported workspace reports missing verification",
+            "status": "passed",
+            "duration_ms": 571.1024170000019,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless bare completion in an unsupported workspace reports missing verification",
+            "status": "passed",
+            "duration_ms": 547.4410409999982,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless full has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 521.3497920000009,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless bare has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 505.1844999999994,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless lite has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 497.6310830000002,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless pair has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 521.4052920000031,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless plan has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 510.2646670000031,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless mentor has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 507.76229199999943,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless orchestrator has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 518.1155420000032,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+            "status": "passed",
+            "duration_ms": 515.7551249999997,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless auto-approve at home refuses without printing or waiting for a question",
+            "status": "passed",
+            "duration_ms": 397.8116250000021,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          }
+        ],
+        "suite_messages": [],
+        "original_wrapper_cache_description": "Emitted integration builds initially absent; default setup included. Main has no bytecode-cache setup; candidate creates and primes a disposable cache."
+      },
+      "after": {
+        "label": "ci-cli-after",
+        "variant": "candidate",
+        "workload": "cli",
+        "command": [
+          "pnpm",
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.integration.config.ts",
+          "source/cli.integration.test.ts",
+          "source/cli-headless.integration.test.ts",
+          "--maxWorkers=2",
+          "--reporter=verbose",
+          "--reporter=json",
+          "--outputFile.json=/Users/qduc/Documents/Codex/2026-10-22/task/evidence/ci-cli-after.vitest.json"
+        ],
+        "cwd": "/Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate",
+        "revision": "85f1a1f950a385e5ca1d82dde92932d3c0481f32",
+        "started_at": "2026-10-22T14:49:50.963032+00:00",
+        "platform": "macOS-26.6.2-arm64-arm-64bit",
+        "node": "v24.16.0",
+        "pnpm": "11.7.0",
+        "load_before": [3.96484375, 3.7685546875, 3.3095703125],
+        "environment_overrides": {
+          "CI": "1",
+          "NODE_ENV": "test",
+          "pnpm_config_verify_deps_before_run": "",
+          "TMPDIR": "/private/var/folders/mf/vt165ks97dg5q2h4bh790cvm0000gn/T"
+        },
+        "cache_policy": "Both revisions use the retained compile-cache implementation. Emitted CLI absent initially, default compilation and fresh disposable V8 priming included. Baseline directory birth time matches run start; candidate emitted directory explicitly removed first.",
+        "outer_timeout_seconds": 900,
+        "exit_code": 1,
+        "elapsed_seconds": 19.135569332865998,
+        "load_after": [4.46044921875, 3.88232421875, 3.3603515625],
+        "child_user_seconds": 30.447288,
+        "child_system_seconds": 10.681768,
+        "maxrss_bytes": 1075314688,
+        "counts": {
+          "numTotalTests": 53,
+          "numPassedTests": 51,
+          "numFailedTests": 2,
+          "numPendingTests": 0,
+          "numTodoTests": 0,
+          "success": false
+        },
+        "cases": [
+          {
+            "name": "CLI prompts before starting in non-lite mode from home directory",
+            "status": "passed",
+            "duration_ms": 410.69387499999993,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI prompts before starting in non-lite mode from root directory",
+            "status": "passed",
+            "duration_ms": 424.036917,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI accepts a custom provider from settings.json in non-interactive mode",
+            "status": "passed",
+            "duration_ms": 421.27887499999997,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --model reports error and exits 1 when no models match pattern",
+            "status": "passed",
+            "duration_ms": 456.74129100000005,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+            "status": "passed",
+            "duration_ms": 544.7925830000001,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --json auto-selects an ambiguous model without asking for input",
+            "status": "passed",
+            "duration_ms": 519.2144169999997,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing",
+            "status": "passed",
+            "duration_ms": 933.3666659999999,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI resolves --model <value> as the last argument to the model, not a prompt",
+            "status": "passed",
+            "duration_ms": 496.08050000000003,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt",
+            "status": "passed",
+            "duration_ms": 484.71016599999984,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous",
+            "status": "passed",
+            "duration_ms": 516.2284589999999,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI \"term2 <prompt>\" with no --model is unchanged",
+            "status": "passed",
+            "duration_ms": 525.4382500000002,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt",
+            "status": "passed",
+            "duration_ms": 459.3660829999999,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+            "status": "passed",
+            "duration_ms": 582.2715829999997,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+            "status": "passed",
+            "duration_ms": 600.7282500000001,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+            "status": "passed",
+            "duration_ms": 593.5337089999994,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids",
+            "status": "passed",
+            "duration_ms": 613.4219589999993,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "every executed shell call is shown on stderr when the provider repeats its id",
+            "status": "passed",
+            "duration_ms": 595.7402920000004,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "one approved shell execution prints exactly one [tool] line",
+            "status": "passed",
+            "duration_ms": 584.1073340000003,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "a call that reuses a refused call id runs and is saved as run, not as refused",
+            "status": "passed",
+            "duration_ms": 621.8040839999994,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+            "status": "passed",
+            "duration_ms": 535.2326659999999,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+            "status": "passed",
+            "duration_ms": 545.8634579999998,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless full completion in an unsupported workspace reports missing verification",
+            "status": "passed",
+            "duration_ms": 551.3739580000001,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless bare completion in an unsupported workspace reports missing verification",
+            "status": "passed",
+            "duration_ms": 535.1243750000012,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless full has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 507.92866700000013,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless bare has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 490.70729199999914,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless lite has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 510.7235839999994,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless pair has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 518.1458340000008,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless plan has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 503.8145829999994,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless mentor has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 511.5492919999997,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless orchestrator has unattended instructions and no ask_user capability",
+            "status": "passed",
+            "duration_ms": 513.3306670000002,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+            "status": "passed",
+            "duration_ms": 523.4424159999999,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "headless auto-approve at home refuses without printing or waiting for a question",
+            "status": "passed",
+            "duration_ms": 406.3689579999991,
+            "file": "source/cli-headless.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+            "status": "passed",
+            "duration_ms": 916.3027920000001,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --help documents the available command-line options",
+            "status": "passed",
+            "duration_ms": 397.69399999999996,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI validates goal flags before startup",
+            "status": "passed",
+            "duration_ms": 838.1772500000002,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "interactive launch persists the goal before requiring a terminal",
+            "status": "passed",
+            "duration_ms": 473.80829200000016,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "positional launch durably records its goal before the first provider request",
+            "status": "passed",
+            "duration_ms": 553.6076659999999,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "positional launch closes the goal after a recorded achieved goal_check and reports it",
+            "status": "passed",
+            "duration_ms": 550.5954160000001,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "the shipped CLI verifies a durable goal with verifier.model=",
+            "status": "failed",
+            "duration_ms": 661.9367090000001,
+            "file": "source/cli.integration.test.ts",
+            "failures": [
+              "AssertionError: expected false to be true // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/source/cli.integration.scenarios.ts:741:41\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+            ]
+          },
+          {
+            "name": "the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+            "status": "failed",
+            "duration_ms": 660.5146249999998,
+            "file": "source/cli.integration.test.ts",
+            "failures": [
+              "AssertionError: expected false to be true // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/source/cli.integration.scenarios.ts:741:41\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+            ]
+          },
+          {
+            "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+            "status": "passed",
+            "duration_ms": 924.8307080000004,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI supports the advertised -h and -v aliases",
+            "status": "passed",
+            "duration_ms": 789.2985829999998,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI rejects unknown flags with a clear error",
+            "status": "passed",
+            "duration_ms": 433.6184579999999,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors",
+            "status": "passed",
+            "duration_ms": 462.36612499999956,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --resume ls prints list of conversations and exits",
+            "status": "passed",
+            "duration_ms": 488.2855419999996,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --resume list also works",
+            "status": "passed",
+            "duration_ms": 467.9496250000011,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --resume prints message and exits when no conversation is found",
+            "status": "passed",
+            "duration_ms": 412.126542,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --resume does not suggest --fork for a conversation from another project",
+            "status": "passed",
+            "duration_ms": 416.439042,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --list-models combined with --resume errors instead of misreading the resume id as a search term",
+            "status": "passed",
+            "duration_ms": 430.75308399999994,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --list-models combined with --resume --fork errors",
+            "status": "passed",
+            "duration_ms": 416.4434999999994,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error",
+            "status": "passed",
+            "duration_ms": 435.4111660000017,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --refresh without --list-models errors clearly instead of being silently ignored",
+            "status": "passed",
+            "duration_ms": 425.17562499999985,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          },
+          {
+            "name": "CLI --list-models --refresh runs the listing errand, not the flag-conflict error",
+            "status": "passed",
+            "duration_ms": 414.30854200000067,
+            "file": "source/cli.integration.test.ts",
+            "failures": []
+          }
+        ],
+        "suite_messages": [],
+        "original_wrapper_cache_description": "Emitted integration builds initially absent; default setup included. Main has no bytecode-cache setup; candidate creates and primes a disposable cache."
+      }
+    },
+    "cli_ast_preservation": {
+      "verdict": "pass",
+      "registrations": 42,
+      "helpers": 9,
+      "hooks": 2,
+      "normalized_registration_hashes": [
+        "04183f2b81b88fd58b62a2261387c285681f374ea186c7e8e0e80b8afeb8a60f",
+        "0ba87137dabea8e157d3821b616887987fba6bbc8c027571d3207f1b0822ef48",
+        "0cd9ca50f03ae449696e8d4ba9eacdcc3008a71284e0ac4400d678ab8b5f8dc3",
+        "124f5ba51601b09ee6e63f8c5f602ec6107ba7cfd805dfe6c6f7fa064522ab8b",
+        "1847c1bed846cfb58ffc8d65b72ac56fbf6839b089df1ececa2c3f7f7a6f24f4",
+        "18dcd3f539b74d756c0844df69e3b80bd9443f1743c3c0eee92d0ad359e97e90",
+        "200c8dab18b4019d67860eecc659f7b5795316c8e7db86b7b8145d214311fca8",
+        "26a86c3451774cf77f3ab65947064d476637d5f8a8bfab3ebadb8f0d8a6ea648",
+        "285fe3cbedd60fb721cf29434ed665136367d37ab8550d53d9a912fc29006ba7",
+        "38fa2187dc5eb4b860d74e4fd8d995b340acbcd0cd13bdd29a4617c3696ff813",
+        "3a411c8f234e7181a53c5da1ab11c52fcb0e76996db157984e9e3f609189cef8",
+        "3d53381cc6a0e47ba9dc3bc95652bf8d2f7e15b1a9151cd24706bc5bb6ab627a",
+        "4c5798840081bf5e2642b8834c498aa727ff88de0ad2ffa430b3b51822b61069",
+        "5014555396d45e818552ca29ff774a7556b0c94ea5adc9ce0eb9240afd5e16c7",
+        "52b44adc2446365561074199816eb45479987758aab29cb9b6fe2bdc1f36eb82",
+        "538c632233ccc9c70e99249cefde4dc289b45445592f969befc12d50f956f0fb",
+        "56e5110145ab16b2d25406b06d5511576a3654ea6444a8f28242a0eb62801b57",
+        "6467667c6fd0650dec3e50badfbac5d93d857511174c1f6aa06d664d9d22ad53",
+        "67b5e895e0e4995d4d481385d486caf217db47c93d22885366255dc3c3fbf0d0",
+        "6b67187546979719d99ea14aa3bceb93b8dc05b14e8b44ff4ee7ae72cb2279cd",
+        "7b557b6007fcc995980b9fae6d639dd88583cccf590c7c83055a842c35a2104b",
+        "7c0583bb2a60b71379d7ad9be5e1c2d4d2b88a1b36c0b566cc730abf11febda5",
+        "8de476160290ea17428f90623e1928f52d6a3f56d63425d252e0bd275e276e11",
+        "8f26d3c2255f8fad54c72fa007d4d02d29e506d2a5935266811aae5bf9c69ed8",
+        "98adcf24f5a2e560e108c792d54a9a974d7c7aaf8a69c082f2cfba7745eeb316",
+        "98fcebc0df315c251403e1b8493dde1bd3d1f76398bff8f750c8eedd19bfe4b9",
+        "9b482af2d56ffe5cbb089fcc7ac676f8181a2409998fa2a643d4b14009d874c6",
+        "a373580143b2a419c3da40eae0317e0dbd52d9ee15d516c29cbf7a67da9392f3",
+        "a99937cba0c06279562c0524c17a984da5ae08d9c92bf483bc275e54956d1956",
+        "ad76e6c092ac10f7402699bf6cca7e4a635443b3a9d9df1bc9686372f049d587",
+        "b586d7561c46649fc5b7d963136644c5bf7574a9ec41e101b0285364fd0a4ff8",
+        "bc9a9c2ed9eaad94552c7c543025d0a11560233c9d3eeef56ebf6bcb38984dc8",
+        "bcdd1d6511ed9036284a72dedacf5f35e24991911965ab9cb3625687830e72c8",
+        "bed36c9b4790c43f17f82b46470e62f2ee0e2556e1c16d012aaf891cf05c6e26",
+        "c0bdc9a83239df17667e6759f6580a8915238406fd0dc1d665a55c7994058cd9",
+        "ce78c9829b779ec1361c357806362a9b87904d7e8e2576eca32c7f7bbe3175d6",
+        "e181c670945a965c8da1039a5ed280cc44f2a4edda6dc16f0df702ad7b975d1e",
+        "e92ea6e8a581fd08424537f4ef3eeba45cbbdcbc10783dd405c5d07792180ef9",
+        "f3c7eeb1f76f497ae8ad5ef373cfc7a26ca89a11c781499a6e1f152d2faa836e",
+        "f873229ca831d9e620f3992e19dfe2bdbdab03a20f8b4055527c747bdc5cfd03",
+        "f8f5f2d59fe7a2fdb2ae825f6ad1ba8e5db1a65747dba1e2f5f08bb40f86f56d",
+        "f9b8ed9c61c25deb52d9eecfe053b1937fde83450d0256e47ec90d2b77f547ee"
+      ],
+      "normalized_helper_hashes": {
+        "expectedToolLine": "6a071edd6aac931191d1c16c10fad3f3e4c5ba93c1d2a06d90ce610c9e7daff3",
+        "spawnCli": "c66713f3542184b139244f015853583abe5d35eb408602c0a2698bbebf3f0019",
+        "startModelMock": "ec6dee4ba49b419075187554d27ecc9855777bca2e08d6d66ea2cb1bd8b4e036",
+        "writeSettings": "8947ad006c5872d766e8bf5c045eaee1268b83ef9f9a0c432fe78b9e79d0eada",
+        "shellCallFrames": "d83fcef6966006bec89b32cc5dd19f659ea74ebc374f04394e43195d8c0241e2",
+        "runShellCallsScenario": "926cb1c2541c07e964010338591d0d2b8125881388b5b1db3f02713bad42b0de",
+        "runApprovalReuseScenario": "e08edb9bf0dec5c1826f55f4b8f0809f093f8ec00bf2a66a7b050b6e8ba8091a",
+        "lastWireToolExchange": "99c0b07cee30a13ff65d312241d64dd131e105863ffe43b12369d6ab889588fa",
+        "expectSecondCallRefused": "ef55ea066b4cb44529b9733bb3fb4410f7096129b24459615402844ca574f2fd"
+      },
+      "scope": "All original test registration ASTs, helper functions and lifecycle hooks are identical."
+    },
+    "production_emission": {
+      "baseline_files": 3452,
+      "candidate_files": 3452,
+      "changed": ["build-info.json"],
+      "test_scenarios_emitted": false,
+      "verdict": "3451 emitted files byte-identical; generated build-info.json records the different commit and build time. Shared test registration module is not emitted."
+    },
+    "ripgrep_cache_probe": [
+      {
+        "state": "cold-existing-system-binary",
+        "exit_code": 0,
+        "output": "ripgrep 15.1.0"
+      },
+      {
+        "state": "warm-no-system-binary",
+        "exit_code": 0,
+        "output": "ripgrep 15.1.0"
+      },
+      {
+        "state": "corrupt-binary",
+        "exit_code": 42,
+        "output": ""
+      }
+    ],
+    "inventory": [
+      {
+        "lane": "e2e",
+        "maxWorkers": 2,
+        "plan": [
+          {
+            "tier": "guards",
+            "config": "vitest.config.ts",
+            "total": 7,
+            "files": []
+          },
+          {
+            "tier": "integration",
+            "config": "vitest.integration.config.ts",
+            "total": 23,
+            "files": []
+          },
+          {
+            "tier": "e2e",
+            "config": "vitest.e2e.config.ts",
+            "total": 5,
+            "files": [
+              "scripts/build-output.e2e.test.ts",
+              "scripts/fake-codex-server.e2e.test.ts",
+              "source/cli-tool-rows.e2e.test.ts",
+              "source/cli.e2e.test.ts",
+              "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts"
+            ]
+          },
+          {
+            "tier": "provider",
+            "config": "vitest.provider-black-box.config.ts",
+            "total": 28,
+            "files": [
+              "scripts/provider-black-box/provider-cli.blackbox.ts",
+              "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+              "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+              "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+              "scripts/provider-black-box/provider-session-stateless.blackbox.ts"
+            ]
+          }
+        ]
+      },
+      {
+        "lane": "integration",
+        "maxWorkers": 2,
+        "plan": [
+          {
+            "tier": "guards",
+            "config": "vitest.config.ts",
+            "total": 7,
+            "files": []
+          },
+          {
+            "tier": "integration",
+            "config": "vitest.integration.config.ts",
+            "total": 23,
+            "files": [
+              "source/acp-v2/serve.integration.test.ts",
+              "source/acp-v2/session-backend.integration.test.ts",
+              "source/components/input/menu-system.integration.test.tsx",
+              "source/gateway/runtime-factory.integration.test.ts",
+              "source/gateway/serve.integration.test.ts",
+              "source/lib/subagent-provider-session.integration.test.ts",
+              "source/providers/orcarouter-models.integration.test.ts",
+              "source/providers/provider-presets.integration.test.tsx",
+              "source/services/agent-runtime/agent-runtime.integration.test.ts",
+              "source/services/completion-verification/completion-verification.integration.test.ts",
+              "source/services/conversation/session-index/session-index-concurrency.integration.test.ts",
+              "source/services/conversation/session-index/session-index-recovery.integration.test.ts",
+              "source/services/hooks/hook-system.integration.test.ts",
+              "source/services/models/decision-model-listing.integration.test.ts",
+              "source/services/session/background-subagent-ui-routing.integration.test.ts",
+              "source/services/workflow-evolution/ledger.integration.test.ts",
+              "source/services/workflow-evolution/runtime.integration.test.ts",
+              "source/test-helpers/vitest-cache-isolation.integration.test.ts",
+              "source/tools/agent/list-models.integration.test.ts",
+              "source/tools/system/docker-host-control.integration.test.ts",
+              "source/tools/system/run-code/shell.integration.test.ts"
+            ]
+          },
+          {
+            "tier": "e2e",
+            "config": "vitest.e2e.config.ts",
+            "total": 5,
+            "files": []
+          },
+          {
+            "tier": "provider",
+            "config": "vitest.provider-black-box.config.ts",
+            "total": 28,
+            "files": []
+          }
+        ]
+      },
+      {
+        "lane": "provider-black-box",
+        "maxWorkers": 2,
+        "plan": [
+          {
+            "tier": "guards",
+            "config": "vitest.config.ts",
+            "total": 7,
+            "files": []
+          },
+          {
+            "tier": "integration",
+            "config": "vitest.integration.config.ts",
+            "total": 23,
+            "files": []
+          },
+          {
+            "tier": "e2e",
+            "config": "vitest.e2e.config.ts",
+            "total": 5,
+            "files": []
+          },
+          {
+            "tier": "provider",
+            "config": "vitest.provider-black-box.config.ts",
+            "total": 28,
+            "files": [
+              "scripts/provider-black-box/conversation-loop.blackbox.ts",
+              "scripts/provider-black-box/fake-provider-http-server.fixture.test.ts",
+              "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+              "scripts/provider-black-box/fixture-comparator.test.ts",
+              "scripts/provider-black-box/fixture-drift.test.ts",
+              "scripts/provider-black-box/fixture-envelope.test.ts",
+              "scripts/provider-black-box/fixture-recorder.test.ts",
+              "scripts/provider-black-box/fixture-sanitizer.test.ts",
+              "scripts/provider-black-box/fixture-security.test.ts",
+              "scripts/provider-black-box/fixture-self-validation.test.ts",
+              "scripts/provider-black-box/nested-hide.blackbox.ts",
+              "scripts/provider-black-box/openai-base-url.test.ts",
+              "scripts/provider-black-box/provider-capability-matrix.test.ts",
+              "scripts/provider-black-box/provider-contract.test.ts",
+              "scripts/provider-black-box/provider-crash-window.blackbox.ts",
+              "scripts/provider-black-box/provider-record-security.test.ts",
+              "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+              "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+              "scripts/provider-black-box/provider-test-harness.test.ts",
+              "scripts/provider-black-box/public-hooks.blackbox.ts",
+              "scripts/provider-black-box/turn-decisions.blackbox.ts"
+            ]
+          }
+        ]
+      },
+      {
+        "lane": "test",
+        "maxWorkers": 2,
+        "plan": [
+          {
+            "tier": "guards",
+            "config": "vitest.config.ts",
+            "total": 7,
+            "files": [
+              "source/compatibility-retirement.guard.test.ts",
+              "source/contracts/model-contract-retirement.test.ts",
+              "source/core/core-boundary.test.ts",
+              "source/no-manual-stdout-sync.guard.test.ts",
+              "source/services/application-stream-boundary.test.ts",
+              "source/theme/no-raw-colors.guard.test.ts",
+              "source/tools/system/run-code/run-code-runtime-boundary.test.ts"
+            ]
+          },
+          {
+            "tier": "integration",
+            "config": "vitest.integration.config.ts",
+            "total": 23,
+            "files": ["source/cli-headless.integration.test.ts", "source/cli.integration.test.ts"]
+          },
+          {
+            "tier": "e2e",
+            "config": "vitest.e2e.config.ts",
+            "total": 5,
+            "files": []
+          },
+          {
+            "tier": "provider",
+            "config": "vitest.provider-black-box.config.ts",
+            "total": 28,
+            "files": [
+              "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+              "scripts/provider-black-box/reference-approval.blackbox.ts"
+            ]
+          }
+        ]
+      }
+    ],
+    "coverage": "All 53 Mac case identities and outcomes unchanged (51 pass / same 2 fail). All 63 files assigned exactly once. No passing Mac whole-suite speedup claimed.",
+    "validation": "Typecheck, build, ESLint (31 pre-existing warnings), formatting, no-unit-tests, AST preservation and failure propagation passed.",
+    "rejected_setup_attempts": [
+      "Direct build lacked node_modules/.bin in PATH and failed before compilation; pnpm build with dependency relink disabled subsequently passed.",
+      "Extraction initially fell under production unused-variable lint rules; retained the original test-specific lint policy for the shared scenario module.",
+      "Initial corruption probe tried writing a copied read-only rg binary; repeated using writable permissions on the owned temporary copy, then verified exit 42 propagates."
+    ],
+    "previous_rejected_partition": "Earlier cloud three-way CLI partition remains rejected after timeouts. This two-entry experiment requires fresh complete Ubuntu CI; no deadlines or assertions changed."
   }
 }

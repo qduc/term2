@@ -551,3 +551,41 @@ alone took 63.04 seconds; the same-head repeat took 50.63 seconds. Its 53 cases
 remain sequential. The previously unreliable integration partition remains
 rejected. Full metadata, local outcomes, source hashes, preservation checks,
 and rejected attempts are in [CI loop evidence](./test-suite-speed-2026-10-22.ci-loop.json).
+
+
+### Second bounded scheduling experiment
+
+The pinned-runtime run restored all four dependency caches and verified native
+addons and fresh build inputs, but one runner spent 50.94 seconds installing
+ripgrep (34 seconds downloading 1.55 MB). The complete logs retain every passing
+case. The follow-up caches only the ripgrep executable under an OS, architecture
+and exact hosted-image-version key, verifies it with `--version`, and puts its
+directory on the test PATH. Cold installation retains the visible apt fallback.
+A temporary probe verified copying the existing executable, using the cache
+without a system `rg`, and propagating failure from a corrupt executable.
+
+The sequential CLI invocation also took 63.19 seconds. A new two-entry CLI
+experiment divides the existing registrations into startup and headless groups.
+It is distinct from the earlier rejected three-entry cloud experiment, which
+remains recorded above. Each entry has its own isolated fixture module and
+cleanup; tests stay sequential within each file. The shared registration module
+is excluded from production emission and keeps the original test lint policy.
+A full emitted-file comparison matched 3,451 files byte-for-byte; only generated
+`build-info.json` differed because it records the commit. No test registration
+module was emitted. All 42 registration ASTs, nine helpers and two hooks matched.
+
+Comparable Mac runs covered all 53 CLI cases with cold emitted builds, fresh
+V8 cache priming and two workers: **29.61 → 19.14 seconds**, both 51 passes and
+the same two durable-goal database-path failures. These failed runs support
+preserved local outcomes, not a passing speedup claim. The experiment still
+requires complete Ubuntu CI before adoption.
+
+The four jobs now assign all 63 files exactly once: guards, the two CLI files
+and safety/approval provider files on `test`; the other integration files on
+`integration`; E2E, Responses, stateless and provider CLI files on `e2e`; all
+remaining provider files on `provider-black-box`. Each job retains two workers.
+The integration job no longer builds an unused `dist`; its normal global setup
+still compiles the shared integration CLI. No scenarios, assertions, deadlines,
+retries, skip conditions or isolation settings were changed. Local typecheck,
+build, lint (31 existing warnings), formatting, inventory, failure propagation
+and no-unit-tests checks passed.

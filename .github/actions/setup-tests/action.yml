@@ -19,7 +19,9 @@ runs:
     - name: Identify runner image
       id: image
       shell: bash
-      run: echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
+        echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
     - name: Restore locked dependency installation
       uses: actions/cache@v6
       with:
@@ -51,15 +53,28 @@ runs:
         new ssh2.Client();
         createRequire(require.resolve('ssh2'))('cpu-features')();
         NODE
-    - name: Install ripgrep
+    - name: Restore ripgrep
+      if: inputs.ripgrep == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/term2-ci-ripgrep
+        key: test-ripgrep-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-${{ steps.image.outputs.version }}
+    - name: Prepare ripgrep
       if: inputs.ripgrep == 'true'
       shell: bash
       run: |
-        if ! command -v rg >/dev/null 2>&1; then
-          # Hosted images normally have a usable apt index already. Refresh
-          # only if installation fails; keep both failures visible in logs.
-          if ! sudo apt-get install -y ripgrep; then
-            sudo apt-get update
-            sudo apt-get install -y ripgrep
+        tool_dir="$RUNNER_TEMP/term2-ci-ripgrep"
+        if [ ! -x "$tool_dir/rg" ]; then
+          if ! command -v rg >/dev/null 2>&1; then
+            # Hosted images normally have a usable apt index already. Refresh
+            # only if installation fails; keep both failures visible in logs.
+            if ! sudo apt-get install -y ripgrep; then
+              sudo apt-get update
+              sudo apt-get install -y ripgrep
+            fi
           fi
+          mkdir -p "$tool_dir"
+          cp "$(command -v rg)" "$tool_dir/rg"
         fi
+        "$tool_dir/rg" --version
+        echo "$tool_dir" >> "$GITHUB_PATH"

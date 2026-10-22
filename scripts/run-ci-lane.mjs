@@ -21,14 +21,12 @@ const tiers = [
 
 function owner(tier, file) {
   if (tier === 'guards') return 'test';
-  if (tier === 'integration') return file === 'source/cli.integration.test.ts' ? 'test' : 'integration';
+  if (tier === 'integration')
+    return /^source\/cli(?:-headless)?\.integration\.test\.ts$/.test(file) ? 'test' : 'integration';
   if (tier === 'e2e') return 'e2e';
-  if (file.endsWith('/provider-session-stateless.blackbox.ts')) return 'integration';
-  if (
-    /\/provider-session-responses(?:-tools|-failures)?\.blackbox\.ts$/.test(file) ||
-    /\/(?:provider-ordinary-safety|reference-approval)\.blackbox\.ts$/.test(file)
-  )
-    return 'e2e';
+  if (/\/(?:provider-session-stateless|provider-cli)\.blackbox\.ts$/.test(file)) return 'e2e';
+  if (/\/(?:provider-ordinary-safety|reference-approval)\.blackbox\.ts$/.test(file)) return 'test';
+  if (/\/provider-session-responses(?:-tools|-failures)?\.blackbox\.ts$/.test(file)) return 'e2e';
   return 'provider-black-box';
 }
 

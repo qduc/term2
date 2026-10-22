@@ -589,3 +589,31 @@ still compiles the shared integration CLI. No scenarios, assertions, deadlines,
 retries, skip conditions or isolation settings were changed. Local typecheck,
 build, lint (31 existing warnings), formatting, inventory, failure propagation
 and no-unit-tests checks passed.
+
+
+The complete [two-entry run at `d396a438`](https://github.com/qduc/term2/actions/runs/39800460034)
+reported workflow success. All 488 cases are accounted for: 486 passed and the
+same two skipped. The 53 CLI cases passed in **28.22 seconds**, versus 63.19
+seconds in the preceding pinned-Node run. This supplies the passing Ubuntu
+evidence that the earlier cloud partition lacked; the earlier failed experiment
+is still retained, and this is not a claim about passing Mac integration.
+
+That run exposed a new imbalance: E2E's two invocations took 13.18 and 66.06
+seconds while integration and provider invocations took 28.08 and 31.83 seconds.
+The final assignment moves the stateless provider file back to integration and
+the provider-CLI file back to provider-black-box. E2E keeps its original cases
+and the three Responses files; safety and approval provider cases remain with
+guards and the two CLI integration files. Integration again needs its `dist`
+build for the stateless provider file. The worker and runner limits stay fixed.
+All 63 files still occur exactly once, and an injected tier failure still makes
+the job fail while allowing later tiers to execute.
+
+For completeness, the earlier same-head repeat is now reconciled: 84 seconds
+from first job start to last completion, 86 seconds from attempt creation,
+308 summed runner-seconds, all 488 cases retained. It mixed Node versions and
+cache hits/misses and is not an all-warm measurement. The pinned setup run and
+two-entry run exposed individual job summaries lagging fully completed logs
+even after their workflows reported success. No retry or cancellation was made
+because of that inconsistency. Raw timestamps and snapshots are retained;
+mutable workflow `updated_at` values are recorded separately from job elapsed
+time. The approximately one-minute complete feedback target remains unproven.

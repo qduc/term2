@@ -51,7 +51,9 @@ jobs:
       - uses: ./.github/actions/setup-tests
         with:
           ripgrep: 'true'
-      - name: Run remaining integration cases
+      - name: Build dist
+        run: SKIP_BUILD_BACKUP=1 pnpm build
+      - name: Run remaining integration and stateless provider cases
         run: node scripts/run-ci-lane.mjs integration
 
   e2e:
@@ -62,7 +64,7 @@ jobs:
       - uses: ./.github/actions/setup-tests
       - name: Build dist
         run: SKIP_BUILD_BACKUP=1 pnpm build
-      - name: Run E2E, Responses and CLI provider cases
+      - name: Run E2E and Responses provider cases
         run: node scripts/run-ci-lane.mjs e2e
 
   provider-black-box:

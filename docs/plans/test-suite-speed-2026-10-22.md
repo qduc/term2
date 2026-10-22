@@ -4,6 +4,15 @@ Measured against main `31bf8380137d7f48f463e54f31570a3f3026b4fc`
 (v0.35.0), in an isolated worktree. All providers were local HTTP/SSE/WS
 fixtures. No paid provider calls were made.
 
+The sections below retain the original local measurements and failures. The
+subsequent [CI run 39741934129](https://github.com/qduc/term2/actions/runs/39741934129)
+at PR head `7d9a90114b05e170dc85c06fd67ecf8ddef02816` passed all four jobs:
+guards, integration (204 passed / 1 skipped), E2E, and provider (222 passed /
+1 skipped). Its Vitest durations were 64.96 s for integration and 149.61 s for
+provider. That runner used Node 24.22.0 and pnpm 11.7.0; it is not directly
+comparable to the local environment below. This CI result was rechecked before
+the follow-up optimization, with both the PR head and main unchanged.
+
 ## Changes and coverage
 
 - Compile the integration CLI once in global setup, using the same native
@@ -248,8 +257,127 @@ failure names, representative attempts, and source hashes. Full local logs and
 Vitest JSON reports are `/tmp/term2-*.log` and `/tmp/term2-*-results.json` in the
 execution environment. The temporary scripts/profile are not committed.
 
-Remaining blockers: no reproducibly green complete suite on this host, unstable
+At the original handoff, remaining blockers were no reproducibly green complete suite on this host, unstable
 repeated representative timings, and pending PR CI. No live/paid provider,
 Docker-host opt-in, merge, or deployment check was attempted. The ordinary
 integration suite retains its existing opt-in Docker skip. Main was fetched
 again after validation and remained at the measured baseline commit.
+
+## Follow-up against PR head `7d9a901` (Astra)
+
+The follow-up keeps a provider scheduling improvement and rejects an integration
+scheduling experiment. It does not change application code, provider behavior,
+timeouts, assertions, the two-worker limit, or scenario coverage. The previously
+implemented integration shared build and compile cache remain.
+
+The Responses scenarios now have three entry files: continuity (9 cases), tools
+(11), and failures (14). They register their existing cases from
+`provider-session-responses-scenarios.ts`. Default Vitest file isolation gives
+each entry its own fixture state and cleanup. Cases within each file remain
+sequential. The full provider inventory remains 223 cases, across 27 files.
+
+An experimental CLI partition used options/models (26), durable goals (7), and
+headless behavior (20). It was reverted because the passing representative
+baseline was followed by two candidate runs with timeouts. The final CLI test
+file is byte-for-byte identical to `7d9a901`; integration remains 205 cases in
+22 files. The rejected patch is archived in
+`/tmp/term2-astra-rejected-integration`, with all its measurements retained.
+
+### Limiting mechanism and rejected hypothesis
+
+The prior passing CI run spent 147.05 s in the serial Responses file out of
+149.61 s total Vitest duration. Resilience accounted for another 48.08 s of
+test work; total test work was 259.16 s. Dividing the long Responses file lets
+the existing two workers share that work. It does not increase worker count
+or run scenarios concurrently within a fixture instance.
+
+Three Codex WebSocket cases in that CI run each took about 32 s. A local
+native-error case also took 33.46 s, but a bounded three-case diagnostic did
+not establish a teardown defect: all three passed and total cleanup took
+27.0, 18.7, and 207.9 ms. The diagnostic took 47.77 s, including setup. Its
+temporary tracing was removed; no speculative socket or timeout repair was
+kept. These variable case timings are not attributed to a confirmed cause.
+
+### Comparable workload observations
+
+The follow-up used the same local environment and timing wrapper described
+above. Every measured run used `CI=1`, `NODE_ENV=test`, `--maxWorkers=2`, and a
+fresh disposable Node compile cache including its normal priming. The provider
+used the same already-built `dist/` throughout. Integration used a warm emitted
+build on both sides; the native incremental compiler was explicitly run outside
+timing after adding the experimental helper. No benchmark, build, or lint run
+overlapped another benchmark. A 4.6 s AST comparison did overlap the full CLI
+baseline; that observation is qualified further for this reason.
+
+| Selected complete workload | Before wall | Candidate wall | Before passed/failed | Candidate passed/failed | Decision |
+| --- | ---: | ---: | --- | --- | --- |
+| Responses, all 34 cases | 436.42 s | 243.09 s | 34 / 0 | 34 / 0 | Keep provider partition for full CI |
+| CLI, all 53 cases | 231.80 s | 187.06 s | 52 / 1 | 51 / 2 | Reject CLI partition |
+
+The Responses pair observed 193.33 s (44.3%) less elapsed time. This is one
+passing pair for the affected workload, not repeated proof or a whole-provider
+suite speedup guarantee. The CLI pair does not establish an equally passing
+improvement. Its baseline timed out in goal-flag validation; the candidate timed
+out in generic model listing and bare unsupported-workspace completion.
+
+A separately defined nine-case CLI workload spanned all three experimental
+groups: help, aliases, unknown flags, achieved-goal completion, both verifier
+models, both bare-profile settings, and full unsupported-workspace completion.
+The planned before/after/after/before sequence stopped after two failed
+candidate samples:
+
+| Sample | Wall | Passed | Failed |
+| --- | ---: | ---: | ---: |
+| Before 1 | 58.17 s | 9 | 0 |
+| Candidate 1 | 82.39 s | 8 | 1 |
+| Candidate 2 | 71.66 s | 5 | 4 |
+| Before 2 | Not run after the failure budget was reached | — | — |
+
+Candidate 1 timed out in aliases. Candidate 2 timed out in aliases, achieved-goal
+completion, and both bare-profile settings. No sample was discarded from a
+median and no passing integration speedup is claimed. Host variation and
+additional child-process contention are plausible contributors; the evidence
+does not establish that these failures are unrelated to the experimental split.
+Rejecting that split avoids adopting the observed reliability risk.
+
+### Exact commands and preservation checks
+
+The timing commands, per-case names/statuses/durations, failed attempts, warmup
+history, baseline blobs, and source hashes are in the
+[follow-up evidence](./test-suite-speed-2026-10-22.follow-up.json). Raw logs and
+Vitest JSON remain under `/tmp/term2-astra-*` in the execution environment.
+The baseline commands targeted the original files at `7d9a901`; the provider
+candidate selected all three entries:
+
+```sh
+pnpm exec vitest run --config vitest.provider-black-box.config.ts \
+  scripts/provider-black-box/provider-session-responses.blackbox.ts \
+  --maxWorkers=2 --reporter=verbose --reporter=json \
+  --outputFile.json=/tmp/term2-astra-responses-baseline-1-results.json
+pnpm exec vitest run --config vitest.provider-black-box.config.ts \
+  scripts/provider-black-box/provider-session-responses.blackbox.ts \
+  scripts/provider-black-box/provider-session-responses-tools.blackbox.ts \
+  scripts/provider-black-box/provider-session-responses-failures.blackbox.ts \
+  --maxWorkers=2 --reporter=verbose --reporter=json \
+  --outputFile.json=/tmp/term2-astra-responses-candidate-1-results.json
+```
+
+CPU values from `RUSAGE_CHILDREN` exclude some reparented PTY grandchildren.
+They must not be used to infer that wall time is mostly waiting. Wall timing
+and actual case results are the comparison metrics here.
+
+An independent rerun of the normalized TypeScript AST comparison confirmed
+all 13 provider registrations, 29 fixture functions, and the cleanup hook are
+unchanged. Runtime reports preserve all 34 case names. The same comparison
+also preserved the experimental CLI's 42 declarations, 9 helpers, and lifecycle
+hooks before that experiment was rejected. Original snapshots were independently
+matched to their `7d9a901` Git blobs.
+
+Typecheck, full lint (31 existing warnings, no errors), the no-unit-tests check,
+and the independent preservation/diff checks passed on the complete experimental
+candidate. A first guard run had 27 passes and one 10 s core-import timeout while
+lint and typecheck ran concurrently. A subsequent sequential run passed all
+28 assertions in seven files (8.51 s Vitest). Both logs are retained. Full
+integration, provider, and E2E verification of the retained patch is delegated
+to the PR's CI jobs; their final result is required before this follow-up is
+reported complete. No paid provider, Docker opt-in, merge, or deployment was run.

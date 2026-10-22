@@ -68,9 +68,15 @@ scenario is the one whose CLI never reached the state it waits for.
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.
 - `scripts/provider-black-box/provider-session-responses.blackbox.ts`,
-  `scripts/provider-black-box/provider-session-stateless.blackbox.ts`, and
-  `scripts/provider-black-box/provider-session-resilience.blackbox.ts` own the
-  stateful provider lifecycle scenarios and their exported ledger declarations.
+  `provider-session-responses-tools.blackbox.ts`, and
+  `provider-session-responses-failures.blackbox.ts` register the Responses
+  continuity, tool, and failure groups from `provider-session-responses-scenarios.ts`.
+  Vitest's file isolation gives each group separate fixture state and cleanup;
+  scenarios within a file remain sequential. Keep file isolation enabled.
+  The continuity entry retains the aggregate Responses ledger declaration.
+- `scripts/provider-black-box/provider-session-stateless.blackbox.ts` and
+  `provider-session-resilience.blackbox.ts` own the other stateful provider
+  lifecycle scenarios and their exported ledger declarations.
 
 ## Adding or changing a scenario
 

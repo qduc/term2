@@ -1,0 +1,2611 @@
+{
+  "baseline_commit": "7d9a90114b05e170dc85c06fd67ecf8ddef02816",
+  "max_workers": 2,
+  "cache_policy": "warm shared emitted CLI, disposable freshly primed Node compile cache per invocation",
+  "runs": [
+    {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+        "--maxWorkers=2",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-astra-responses-baseline-1-results.json"
+      ],
+      "elapsed": 436.4215970309997,
+      "user": 56.895217,
+      "system": 13.204366,
+      "maxrss": 195688,
+      "exit": 0,
+      "label": "responses-baseline-1",
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "cases": [
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 7756.295011,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 3712.787839999999,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 16855.748971,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 8963.24441,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex websocket replays full history when the completed response socket is replaced",
+          "status": "passed",
+          "duration_ms": 11905.273595000006,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex websocket preserves completed tool pairs when the producing socket is replaced",
+          "status": "passed",
+          "duration_ms": 14547.631903000001,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI session_search through run_code completes canonical fallback in the shipped CLI",
+          "status": "passed",
+          "duration_ms": 18257.500394000002,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI openai-websocket.retained-connection keeps two chained turns on one retained connection",
+          "status": "passed",
+          "duration_ms": 3892.3602519999986,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex-websocket.retained-connection keeps two chained turns on one retained connection",
+          "status": "passed",
+          "duration_ms": 18214.483437999996,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 12034.383784999998,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 11400.683443999995,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 17205.430983000013,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 18824.68320900001,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 7518.280534999998,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 5072.909264999995,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 18070.075817000004,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 11382.032080999983,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval y and returns one outer tool result",
+          "status": "passed",
+          "duration_ms": 5932.220186999999,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval n and returns one outer tool result",
+          "status": "passed",
+          "duration_ms": 7786.138719999988,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification",
+          "status": "passed",
+          "duration_ms": 11251.674311999988,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 7376.526496000006,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 10936.098704000004,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 22097.736655999965,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 33462.13195399998,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 8516.008564999967,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 8738.667705999978,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 17721.589642000035,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 13209.662309999985,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 7798.753869000007,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 7981.081967000035,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 10236.922194000043,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 17638.53326899995,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' websocket rejects an abnormal close without a fabricated completion",
+          "status": "passed",
+          "duration_ms": 7502.886760000023,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' websocket rejects an abnormal close without a fabricated completion",
+          "status": "passed",
+          "duration_ms": 20508.90136800002,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        }
+      ],
+      "file_counts": {
+        "scripts/provider-black-box/provider-session-responses.blackbox.ts": 34
+      }
+    },
+    {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+        "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+        "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+        "--maxWorkers=2",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-astra-responses-candidate-1-results.json"
+      ],
+      "elapsed": 243.092826529999,
+      "user": 51.775934,
+      "system": 10.707216,
+      "maxrss": 195524,
+      "exit": 0,
+      "label": "responses-candidate-1",
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "cases": [
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 4677.452922,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 3105.230746,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 9277.754324,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 16817.572200000002,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 7221.481191999999,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 7975.316338000004,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 15872.139501000005,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 11645.307896999991,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 7111.914722000001,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 8137.775143000006,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 18868.179464,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 22569.17942300001,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' websocket rejects an abnormal close without a fabricated completion",
+          "status": "passed",
+          "duration_ms": 5043.138107999985,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' websocket rejects an abnormal close without a fabricated completion",
+          "status": "passed",
+          "duration_ms": 11861.025510000007,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 7901.1496210000005,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 4965.078547000001,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 5363.100752000002,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 15358.416385,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 8770.62601,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 11470.074416000003,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 18655.279670000004,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 17678.508387999987,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval y and returns one outer tool result",
+          "status": "passed",
+          "duration_ms": 6787.929781999992,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval n and returns one outer tool result",
+          "status": "passed",
+          "duration_ms": 15605.525102999993,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification",
+          "status": "passed",
+          "duration_ms": 13508.3949,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 4106.24908,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 6481.9513910000005,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 10208.718262999999,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 15732.135125,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex websocket replays full history when the completed response socket is replaced",
+          "status": "passed",
+          "duration_ms": 20409.217874999995,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex websocket preserves completed tool pairs when the producing socket is replaced",
+          "status": "passed",
+          "duration_ms": 11072.366121000006,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI session_search through run_code completes canonical fallback in the shipped CLI",
+          "status": "passed",
+          "duration_ms": 22565.667642,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI openai-websocket.retained-connection keeps two chained turns on one retained connection",
+          "status": "passed",
+          "duration_ms": 6652.87550200001,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex-websocket.retained-connection keeps two chained turns on one retained connection",
+          "status": "passed",
+          "duration_ms": 10166.85050999999,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts"
+        }
+      ],
+      "file_counts": {
+        "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts": 14,
+        "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts": 11,
+        "scripts/provider-black-box/provider-session-responses.blackbox.ts": 9
+      }
+    },
+    {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "--maxWorkers=2",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-astra-cli-baseline-1-results.json"
+      ],
+      "elapsed": 231.79555889499898,
+      "user": 229.610957,
+      "system": 70.455594,
+      "maxrss": 368588,
+      "exit": 1,
+      "label": "cli-baseline-1",
+      "passed": 52,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "name": "CLI validates goal flags before startup",
+          "status": "failed",
+          "duration_ms": 10051.185044,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "cases": [
+        {
+          "name": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+          "status": "passed",
+          "duration_ms": 7558.510411,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --help documents the available command-line options",
+          "status": "passed",
+          "duration_ms": 2037.3162440000015,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI validates goal flags before startup",
+          "status": "failed",
+          "duration_ms": 10051.185044,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "interactive launch persists the goal before requiring a terminal",
+          "status": "passed",
+          "duration_ms": 5360.584348999997,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "positional launch durably records its goal before the first provider request",
+          "status": "passed",
+          "duration_ms": 4312.167877,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "positional launch closes the goal after a recorded achieved goal_check and reports it",
+          "status": "passed",
+          "duration_ms": 2735.773208999999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=",
+          "status": "passed",
+          "duration_ms": 7261.608875000005,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "status": "passed",
+          "duration_ms": 2978.9259569999995,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+          "status": "passed",
+          "duration_ms": 4581.214142000004,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI supports the advertised -h and -v aliases",
+          "status": "passed",
+          "duration_ms": 4529.223892000002,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI rejects unknown flags with a clear error",
+          "status": "passed",
+          "duration_ms": 3186.6268009999985,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors",
+          "status": "passed",
+          "duration_ms": 2078.0942880000002,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume ls prints list of conversations and exits",
+          "status": "passed",
+          "duration_ms": 2647.8401040000026,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume list also works",
+          "status": "passed",
+          "duration_ms": 5641.154463000006,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume prints message and exits when no conversation is found",
+          "status": "passed",
+          "duration_ms": 5271.961506000007,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume does not suggest --fork for a conversation from another project",
+          "status": "passed",
+          "duration_ms": 3561.57046599999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume errors instead of misreading the resume id as a search term",
+          "status": "passed",
+          "duration_ms": 3914.8428279999935,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume --fork errors",
+          "status": "passed",
+          "duration_ms": 2645.9975669999985,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error",
+          "status": "passed",
+          "duration_ms": 2684.8984660000133,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --refresh without --list-models errors clearly instead of being silently ignored",
+          "status": "passed",
+          "duration_ms": 2150.5645109999896,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models --refresh runs the listing errand, not the flag-conflict error",
+          "status": "passed",
+          "duration_ms": 2989.142445000005,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from home directory",
+          "status": "passed",
+          "duration_ms": 5194.650032000005,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from root directory",
+          "status": "passed",
+          "duration_ms": 6249.972710999995,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI accepts a custom provider from settings.json in non-interactive mode",
+          "status": "passed",
+          "duration_ms": 5336.214246999996,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model reports error and exits 1 when no models match pattern",
+          "status": "passed",
+          "duration_ms": 3478.373233999999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+          "status": "passed",
+          "duration_ms": 4509.631536000001,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --json auto-selects an ambiguous model without asking for input",
+          "status": "passed",
+          "duration_ms": 4506.264563000004,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing",
+          "status": "passed",
+          "duration_ms": 6622.286215999993,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves --model <value> as the last argument to the model, not a prompt",
+          "status": "passed",
+          "duration_ms": 5835.445425000013,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt",
+          "status": "passed",
+          "duration_ms": 5722.989680000013,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous",
+          "status": "passed",
+          "duration_ms": 2614.575649000006,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI \"term2 <prompt>\" with no --model is unchanged",
+          "status": "passed",
+          "duration_ms": 2701.3306129999983,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt",
+          "status": "passed",
+          "duration_ms": 2231.078814999986,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+          "status": "passed",
+          "duration_ms": 4739.075886000006,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+          "status": "passed",
+          "duration_ms": 4689.73522599999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+          "status": "passed",
+          "duration_ms": 5220.003281000012,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids",
+          "status": "passed",
+          "duration_ms": 3944.6763780000038,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "every executed shell call is shown on stderr when the provider repeats its id",
+          "status": "passed",
+          "duration_ms": 5413.1272619999945,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "one approved shell execution prints exactly one [tool] line",
+          "status": "passed",
+          "duration_ms": 2504.8326909999887,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "a call that reuses a refused call id runs and is saved as run, not as refused",
+          "status": "passed",
+          "duration_ms": 4721.495419999992,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "passed",
+          "duration_ms": 5999.685710999998,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "passed",
+          "duration_ms": 3834.412956999993,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless full completion in an unsupported workspace reports missing verification",
+          "status": "passed",
+          "duration_ms": 4244.077411999984,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless bare completion in an unsupported workspace reports missing verification",
+          "status": "passed",
+          "duration_ms": 3861.011101000011,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless full has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 3728.9529909999983,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless bare has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 2093.419458999997,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless lite has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 2458.0560340000084,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless pair has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 2459.9081749999896,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless plan has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 2332.3455780000077,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless mentor has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 2368.8971759999986,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless orchestrator has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 2549.18658899999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+          "status": "passed",
+          "duration_ms": 4981.028763000009,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless auto-approve at home refuses without printing or waiting for a question",
+          "status": "passed",
+          "duration_ms": 3117.5841380000056,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "file_counts": {
+        "source/cli.integration.test.ts": 53
+      }
+    },
+    {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "source/cli-goals.integration.test.ts",
+        "source/cli-headless.integration.test.ts",
+        "--maxWorkers=2",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-astra-cli-candidate-1-results.json"
+      ],
+      "elapsed": 187.06206221699904,
+      "user": 332.337961,
+      "system": 95.898144,
+      "maxrss": 374388,
+      "exit": 1,
+      "label": "cli-candidate-1",
+      "passed": 51,
+      "failed": 2,
+      "skipped": 0,
+      "failures": [
+        {
+          "name": "headless bare completion in an unsupported workspace reports missing verification",
+          "status": "failed",
+          "duration_ms": 10029.316588999995,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+          "status": "failed",
+          "duration_ms": 10035.003515,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "cases": [
+        {
+          "name": "CLI validates goal flags before startup",
+          "status": "passed",
+          "duration_ms": 9314.448204,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "interactive launch persists the goal before requiring a terminal",
+          "status": "passed",
+          "duration_ms": 2211.6166749999993,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "positional launch durably records its goal before the first provider request",
+          "status": "passed",
+          "duration_ms": 2853.8806210000002,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "positional launch closes the goal after a recorded achieved goal_check and reports it",
+          "status": "passed",
+          "duration_ms": 3115.508899999999,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=",
+          "status": "passed",
+          "duration_ms": 3693.363357000002,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "status": "passed",
+          "duration_ms": 4286.035154000001,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+          "status": "passed",
+          "duration_ms": 6855.683405,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+          "status": "passed",
+          "duration_ms": 10222.541649,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+          "status": "passed",
+          "duration_ms": 8756.978796999998,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+          "status": "passed",
+          "duration_ms": 10832.017271,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids",
+          "status": "passed",
+          "duration_ms": 11608.417609,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "every executed shell call is shown on stderr when the provider repeats its id",
+          "status": "passed",
+          "duration_ms": 9127.157737999994,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "one approved shell execution prints exactly one [tool] line",
+          "status": "passed",
+          "duration_ms": 12208.051792999999,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "a call that reuses a refused call id runs and is saved as run, not as refused",
+          "status": "passed",
+          "duration_ms": 4720.482119999993,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "passed",
+          "duration_ms": 8024.542468,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "passed",
+          "duration_ms": 4474.165697999997,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless full completion in an unsupported workspace reports missing verification",
+          "status": "passed",
+          "duration_ms": 5939.521219999995,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless bare completion in an unsupported workspace reports missing verification",
+          "status": "failed",
+          "duration_ms": 10029.316588999995,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless full has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 6545.048567000005,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless bare has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 9873.362840000002,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless lite has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 2955.480582999997,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless pair has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 4280.466782000003,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless plan has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 3301.7294929999916,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless mentor has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 4139.112476000009,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless orchestrator has unattended instructions and no ask_user capability",
+          "status": "passed",
+          "duration_ms": 9974.507994000014,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+          "status": "passed",
+          "duration_ms": 8333.845388999995,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless auto-approve at home refuses without printing or waiting for a question",
+          "status": "passed",
+          "duration_ms": 6290.229843999987,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+          "status": "failed",
+          "duration_ms": 10035.003515,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --help documents the available command-line options",
+          "status": "passed",
+          "duration_ms": 4562.170603999999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI supports the advertised -h and -v aliases",
+          "status": "passed",
+          "duration_ms": 8012.432017000001,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI rejects unknown flags with a clear error",
+          "status": "passed",
+          "duration_ms": 3891.2989070000003,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors",
+          "status": "passed",
+          "duration_ms": 4963.465823999999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume ls prints list of conversations and exits",
+          "status": "passed",
+          "duration_ms": 5948.866172999995,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume list also works",
+          "status": "passed",
+          "duration_ms": 4694.645089000005,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume prints message and exits when no conversation is found",
+          "status": "passed",
+          "duration_ms": 2978.9728939999986,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume does not suggest --fork for a conversation from another project",
+          "status": "passed",
+          "duration_ms": 4031.622825999999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume errors instead of misreading the resume id as a search term",
+          "status": "passed",
+          "duration_ms": 7699.857518999997,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume --fork errors",
+          "status": "passed",
+          "duration_ms": 2420.724016,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error",
+          "status": "passed",
+          "duration_ms": 6833.204448000004,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --refresh without --list-models errors clearly instead of being silently ignored",
+          "status": "passed",
+          "duration_ms": 3072.9769020000094,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models --refresh runs the listing errand, not the flag-conflict error",
+          "status": "passed",
+          "duration_ms": 2828.2375670000038,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from home directory",
+          "status": "passed",
+          "duration_ms": 3837.469729000004,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from root directory",
+          "status": "passed",
+          "duration_ms": 3521.7004200000083,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI accepts a custom provider from settings.json in non-interactive mode",
+          "status": "passed",
+          "duration_ms": 6179.625736999995,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model reports error and exits 1 when no models match pattern",
+          "status": "passed",
+          "duration_ms": 8678.264668000003,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+          "status": "passed",
+          "duration_ms": 4194.489849999998,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --json auto-selects an ambiguous model without asking for input",
+          "status": "passed",
+          "duration_ms": 9550.532109000007,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing",
+          "status": "passed",
+          "duration_ms": 4143.156109000003,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves --model <value> as the last argument to the model, not a prompt",
+          "status": "passed",
+          "duration_ms": 4643.611931000007,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt",
+          "status": "passed",
+          "duration_ms": 2480.1894789999933,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous",
+          "status": "passed",
+          "duration_ms": 7610.766608999998,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI \"term2 <prompt>\" with no --model is unchanged",
+          "status": "passed",
+          "duration_ms": 5404.7870440000115,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt",
+          "status": "passed",
+          "duration_ms": 2984.289257000026,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "file_counts": {
+        "source/cli-goals.integration.test.ts": 7,
+        "source/cli-headless.integration.test.ts": 20,
+        "source/cli.integration.test.ts": 26
+      }
+    },
+    {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "--maxWorkers=2",
+        "-t",
+        "CLI --help documents|CLI supports the advertised|CLI rejects unknown flags|positional launch closes the goal|shipped CLI verifies a durable goal|bare profile via|headless full completion in an unsupported",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-astra-cli-representative-baseline-1-results.json"
+      ],
+      "elapsed": 58.17270267999993,
+      "user": 61.273278,
+      "system": 26.723615,
+      "maxrss": 381844,
+      "exit": 0,
+      "label": "cli-representative-baseline-1",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 44,
+      "failures": [],
+      "cases": [
+        {
+          "name": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --help documents the available command-line options",
+          "status": "passed",
+          "duration_ms": 2783.1486139999997,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI validates goal flags before startup",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "interactive launch persists the goal before requiring a terminal",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "positional launch durably records its goal before the first provider request",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "positional launch closes the goal after a recorded achieved goal_check and reports it",
+          "status": "passed",
+          "duration_ms": 6166.3767020000005,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=",
+          "status": "passed",
+          "duration_ms": 4164.209612000001,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "status": "passed",
+          "duration_ms": 7537.991223999999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI supports the advertised -h and -v aliases",
+          "status": "passed",
+          "duration_ms": 8091.872255000002,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI rejects unknown flags with a clear error",
+          "status": "passed",
+          "duration_ms": 4458.451186000002,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume ls prints list of conversations and exits",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume list also works",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume prints message and exits when no conversation is found",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume does not suggest --fork for a conversation from another project",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume errors instead of misreading the resume id as a search term",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume --fork errors",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --refresh without --list-models errors clearly instead of being silently ignored",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models --refresh runs the listing errand, not the flag-conflict error",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from home directory",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from root directory",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI accepts a custom provider from settings.json in non-interactive mode",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model reports error and exits 1 when no models match pattern",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --json auto-selects an ambiguous model without asking for input",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves --model <value> as the last argument to the model, not a prompt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI \"term2 <prompt>\" with no --model is unchanged",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "every executed shell call is shown on stderr when the provider repeats its id",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "one approved shell execution prints exactly one [tool] line",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "a call that reuses a refused call id runs and is saved as run, not as refused",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "passed",
+          "duration_ms": 4413.9563109999945,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "passed",
+          "duration_ms": 2483.205053000005,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless full completion in an unsupported workspace reports missing verification",
+          "status": "passed",
+          "duration_ms": 3076.5379689999972,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless bare completion in an unsupported workspace reports missing verification",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless full has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless bare has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless lite has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless pair has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless plan has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless mentor has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless orchestrator has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "headless auto-approve at home refuses without printing or waiting for a question",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "file_counts": {
+        "source/cli.integration.test.ts": 53
+      }
+    },
+    {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "source/cli-goals.integration.test.ts",
+        "source/cli-headless.integration.test.ts",
+        "--maxWorkers=2",
+        "-t",
+        "CLI --help documents|CLI supports the advertised|CLI rejects unknown flags|positional launch closes the goal|shipped CLI verifies a durable goal|bare profile via|headless full completion in an unsupported",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-astra-cli-representative-candidate-1-results.json"
+      ],
+      "elapsed": 82.39016276899929,
+      "user": 101.997213,
+      "system": 61.168601,
+      "maxrss": 371804,
+      "exit": 1,
+      "label": "cli-representative-candidate-1",
+      "passed": 8,
+      "failed": 1,
+      "skipped": 44,
+      "failures": [
+        {
+          "name": "CLI supports the advertised -h and -v aliases",
+          "status": "failed",
+          "duration_ms": 15410.340440000002,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "cases": [
+        {
+          "name": "CLI validates goal flags before startup",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "interactive launch persists the goal before requiring a terminal",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "positional launch durably records its goal before the first provider request",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "positional launch closes the goal after a recorded achieved goal_check and reports it",
+          "status": "passed",
+          "duration_ms": 5010.948025,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=",
+          "status": "passed",
+          "duration_ms": 4867.269809999999,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "status": "passed",
+          "duration_ms": 6580.218742000001,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "every executed shell call is shown on stderr when the provider repeats its id",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "one approved shell execution prints exactly one [tool] line",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "a call that reuses a refused call id runs and is saved as run, not as refused",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "passed",
+          "duration_ms": 7758.393534000001,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "passed",
+          "duration_ms": 6763.955562000001,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless full completion in an unsupported workspace reports missing verification",
+          "status": "passed",
+          "duration_ms": 7764.027803999999,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless bare completion in an unsupported workspace reports missing verification",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless full has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless bare has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless lite has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless pair has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless plan has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless mentor has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless orchestrator has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless auto-approve at home refuses without printing or waiting for a question",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --help documents the available command-line options",
+          "status": "passed",
+          "duration_ms": 4426.883626999999,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI supports the advertised -h and -v aliases",
+          "status": "failed",
+          "duration_ms": 15410.340440000002,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI rejects unknown flags with a clear error",
+          "status": "passed",
+          "duration_ms": 7202.074987,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume ls prints list of conversations and exits",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume list also works",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume prints message and exits when no conversation is found",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume does not suggest --fork for a conversation from another project",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume errors instead of misreading the resume id as a search term",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume --fork errors",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --refresh without --list-models errors clearly instead of being silently ignored",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models --refresh runs the listing errand, not the flag-conflict error",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from home directory",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from root directory",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI accepts a custom provider from settings.json in non-interactive mode",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model reports error and exits 1 when no models match pattern",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --json auto-selects an ambiguous model without asking for input",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves --model <value> as the last argument to the model, not a prompt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI \"term2 <prompt>\" with no --model is unchanged",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "file_counts": {
+        "source/cli-goals.integration.test.ts": 7,
+        "source/cli-headless.integration.test.ts": 20,
+        "source/cli.integration.test.ts": 26
+      }
+    },
+    {
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "source/cli-goals.integration.test.ts",
+        "source/cli-headless.integration.test.ts",
+        "--maxWorkers=2",
+        "-t",
+        "CLI --help documents|CLI supports the advertised|CLI rejects unknown flags|positional launch closes the goal|shipped CLI verifies a durable goal|bare profile via|headless full completion in an unsupported",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/tmp/term2-astra-cli-representative-candidate-2-results.json"
+      ],
+      "elapsed": 71.65674550699987,
+      "user": 113.025061,
+      "system": 44.501628,
+      "maxrss": 366096,
+      "exit": 1,
+      "label": "cli-representative-candidate-2",
+      "passed": 5,
+      "failed": 4,
+      "skipped": 44,
+      "failures": [
+        {
+          "name": "positional launch closes the goal after a recorded achieved goal_check and reports it",
+          "status": "failed",
+          "duration_ms": 10036.063267000001,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "failed",
+          "duration_ms": 10214.243131,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "failed",
+          "duration_ms": 10017.59321,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "CLI supports the advertised -h and -v aliases",
+          "status": "failed",
+          "duration_ms": 29826.842260999998,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "cases": [
+        {
+          "name": "CLI validates goal flags before startup",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "interactive launch persists the goal before requiring a terminal",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "positional launch durably records its goal before the first provider request",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "positional launch closes the goal after a recorded achieved goal_check and reports it",
+          "status": "failed",
+          "duration_ms": 10036.063267000001,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=",
+          "status": "passed",
+          "duration_ms": 5172.786274999999,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "status": "passed",
+          "duration_ms": 3629.7149960000024,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "resume preserves the replayed goal without flags and replaces it before startup when flags are explicit",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-goals.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "every executed shell call is shown on stderr when the provider repeats its id",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "one approved shell execution prints exactly one [tool] line",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "a call that reuses a refused call id runs and is saved as run, not as refused",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "failed",
+          "duration_ms": 10214.243131,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "status": "failed",
+          "duration_ms": 10017.59321,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless full completion in an unsupported workspace reports missing verification",
+          "status": "passed",
+          "duration_ms": 9706.489768,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless bare completion in an unsupported workspace reports missing verification",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless full has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless bare has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless lite has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless pair has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless plan has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless mentor has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless orchestrator has unattended instructions and no ask_user capability",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "headless auto-approve at home refuses without printing or waiting for a question",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli-headless.integration.test.ts"
+        },
+        {
+          "name": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --help documents the available command-line options",
+          "status": "passed",
+          "duration_ms": 8523.307854,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI supports the advertised -h and -v aliases",
+          "status": "failed",
+          "duration_ms": 29826.842260999998,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI rejects unknown flags with a clear error",
+          "status": "passed",
+          "duration_ms": 6392.359366000004,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume ls prints list of conversations and exits",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume list also works",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume prints message and exits when no conversation is found",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --resume does not suggest --fork for a conversation from another project",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume errors instead of misreading the resume id as a search term",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models combined with --resume --fork errors",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --refresh without --list-models errors clearly instead of being silently ignored",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --list-models --refresh runs the listing errand, not the flag-conflict error",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from home directory",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI prompts before starting in non-lite mode from root directory",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI accepts a custom provider from settings.json in non-interactive mode",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model reports error and exits 1 when no models match pattern",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --json auto-selects an ambiguous model without asking for input",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves --model <value> as the last argument to the model, not a prompt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI \"term2 <prompt>\" with no --model is unchanged",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        },
+        {
+          "name": "CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt",
+          "status": "skipped",
+          "duration_ms": null,
+          "file": "source/cli.integration.test.ts"
+        }
+      ],
+      "file_counts": {
+        "source/cli-goals.integration.test.ts": 7,
+        "source/cli-headless.integration.test.ts": 20,
+        "source/cli.integration.test.ts": 26
+      }
+    }
+  ],
+  "inventory_checks": [
+    {
+      "baseline": "responses-baseline-1",
+      "candidate": "responses-candidate-1",
+      "identical_executed_names": true,
+      "case_count": 34
+    },
+    {
+      "baseline": "cli-baseline-1",
+      "candidate": "cli-candidate-1",
+      "identical_executed_names": true,
+      "case_count": 53
+    },
+    {
+      "baseline": "cli-representative-baseline-1",
+      "candidate": "cli-representative-candidate-1",
+      "identical_executed_names": true,
+      "case_count": 9
+    },
+    {
+      "baseline": "cli-representative-baseline-1",
+      "candidate": "cli-representative-candidate-2",
+      "identical_executed_names": true,
+      "case_count": 9
+    }
+  ],
+  "identity_proof": [
+    {
+      "name": "cli",
+      "original_registrations": 42,
+      "candidate_registrations": 42,
+      "identical_test_statements": true,
+      "original_hashes": [
+        "03bf4253dd090b5611bc1977d6011454212a2a73ce7121b6be44eb26181baf59",
+        "12f6823699e9009a6308ecb6bab0c37891fa5045df4315dc146fbacf2895d3e9",
+        "1bebbd00d3f693e0e2df41933f870bfbabdacf84de617d4319de5b6c8f3f33a0",
+        "24adb989a297655dfee5e043f469119889a88e6c983cc34d6657f79333b765b7",
+        "2ab0c55628e0b7807fa240c43c446b5243e6da55bf781d0b65d5fe8b42fa1b35",
+        "2cdca53ebeaa7d3074882835e103fdca290aede39c86e4d1d59a70315f4bfc7e",
+        "37c0ef0b5feda3223e8a5e06e8b20b4781e293cbf76c844a3e2ec184a049ac23",
+        "3ebf6c7c21c7c83f2924464975cc9028383b09a0e148024a344e6e047a18b5c1",
+        "44f519a9fce6f07ad15fe4dfd3692741f35546bb4a9a5d5f250346ba60c6f7e3",
+        "48312a356fa7c625405a78e667d90e15fb43f4762e5d7559cf9e2e400e2b1ea4",
+        "5477def4cb776c3221312b72c9b7e2175167551b85c802974f1c9c134d34788d",
+        "6bf11b8ade221aa954e59d1891be346c814e42e0b8d901e3e6412f72acfe5837",
+        "6c3007a4c42b0012fbfc4e8e416649559ef12ca7da5f9840358711f8404cfd9f",
+        "7453fc4a54f26f79efe0608731326147479676822b5705b8e277caa2dd89c645",
+        "83ae31fc58752fa789954fe600042bfbfcfdf163539ec4f16a75c808f0bbbd81",
+        "847589aa67a5ead7f893dfc3ed936951e9dae181b77a21ecb02ee54ca8da2a25",
+        "848330a376b8f79892d71fbe319e451b716849e9b56f2829b53bcea55345f390",
+        "879cfb14c96dfc6846c0e1bf76818fb735df1bb95eca3475cf3b33a3c2d5195a",
+        "8b768441e9e29b9336f8720403e8c7a713c9a82374f91e23c3745d4d6c867daa",
+        "8c789f7e0cba26aa4a3d80c580bd873037fb76057063b764cbad27665499196a",
+        "8d5c10b411d2f52dedcdc83d33b02f509ee33f9fb12a3dee7cb9385b3a59d0ce",
+        "93a4f291de3bb68f67bdd51ea04041609babe587caa219be4b049dce2e1c9e58",
+        "95b30122d57ada60b79d0d015d6d4dcc7eef00438abc60bc564798c68c994b88",
+        "9ad8d0294a18892b4510ba46754d47a23b822d5d8456b79f0d88ad98a95978c6",
+        "9c59e0df92b5120b94198500f5859bbf912e495bbbfff07e90e5d48f96ce7eab",
+        "a333878522bcfc9f445007acf780db04b313825fdd13531fcab55159a9f70842",
+        "bc2c3cb85208bc0da16467b1116720b69d182b05965590bae32ef840cfb661b6",
+        "c7c6647761357156a8ab635bf84885e40c5e2c87f8e9d4f715cbb0b9ad22a30e",
+        "caeb33414b148775da470b92151f9d328f3107e9ed25b263c2b1dad8a6d7ded1",
+        "ccd8c1a714febbaf64eaf6a232060ab7b63727e3077f057b1da54ea14e4e40dd",
+        "cdda899bce567d7d00b266ee609c5261a59d45f5486881e7c177be03f9ad94ab",
+        "d06d4345678cccaf117715ead90c5548ce21de0e9148abc540979c095da277e5",
+        "d213a733cc8d3e60b2585f6d0af552363a0608ae4703966d7197f5e7cb0379e3",
+        "d7c59c3441028cda6623e6465350004139faf7bfda864862b6ca5769d0f63167",
+        "d875c2cab8b6fabcf1d869df734748a8b6bdb7da89d2e25ad01be9a7f556beec",
+        "dd43557c2b5b8d876b72166e8431a5a65941e7e5cc1d141346c523ef136d9bc5",
+        "dded8243270b504f740ba93ec62498827dbd932e74c066888660a922e0f1cdff",
+        "e40695364d08ec770e4bd4742de19abeb88ca0c9187de2c0f182f4b9ba10a194",
+        "ea3e166f83666072c4bed2af74e5bcc2c5dd184253a2f7a44630ccefecf0e672",
+        "edc93a7f02b5822482dd65cf6f76ad78a6fd9aa3a47291c68fb694018f03f012",
+        "ee00ee1b4106839804a61ee91a62870125a9a1da25c2969635891732919b61e8",
+        "fc83eddbf4783e41786ce49aa8359fa0215e2896026343051eae4183e0148461"
+      ],
+      "candidate_hashes": [
+        "03bf4253dd090b5611bc1977d6011454212a2a73ce7121b6be44eb26181baf59",
+        "12f6823699e9009a6308ecb6bab0c37891fa5045df4315dc146fbacf2895d3e9",
+        "1bebbd00d3f693e0e2df41933f870bfbabdacf84de617d4319de5b6c8f3f33a0",
+        "24adb989a297655dfee5e043f469119889a88e6c983cc34d6657f79333b765b7",
+        "2ab0c55628e0b7807fa240c43c446b5243e6da55bf781d0b65d5fe8b42fa1b35",
+        "2cdca53ebeaa7d3074882835e103fdca290aede39c86e4d1d59a70315f4bfc7e",
+        "37c0ef0b5feda3223e8a5e06e8b20b4781e293cbf76c844a3e2ec184a049ac23",
+        "3ebf6c7c21c7c83f2924464975cc9028383b09a0e148024a344e6e047a18b5c1",
+        "44f519a9fce6f07ad15fe4dfd3692741f35546bb4a9a5d5f250346ba60c6f7e3",
+        "48312a356fa7c625405a78e667d90e15fb43f4762e5d7559cf9e2e400e2b1ea4",
+        "5477def4cb776c3221312b72c9b7e2175167551b85c802974f1c9c134d34788d",
+        "6bf11b8ade221aa954e59d1891be346c814e42e0b8d901e3e6412f72acfe5837",
+        "6c3007a4c42b0012fbfc4e8e416649559ef12ca7da5f9840358711f8404cfd9f",
+        "7453fc4a54f26f79efe0608731326147479676822b5705b8e277caa2dd89c645",
+        "83ae31fc58752fa789954fe600042bfbfcfdf163539ec4f16a75c808f0bbbd81",
+        "847589aa67a5ead7f893dfc3ed936951e9dae181b77a21ecb02ee54ca8da2a25",
+        "848330a376b8f79892d71fbe319e451b716849e9b56f2829b53bcea55345f390",
+        "879cfb14c96dfc6846c0e1bf76818fb735df1bb95eca3475cf3b33a3c2d5195a",
+        "8b768441e9e29b9336f8720403e8c7a713c9a82374f91e23c3745d4d6c867daa",
+        "8c789f7e0cba26aa4a3d80c580bd873037fb76057063b764cbad27665499196a",
+        "8d5c10b411d2f52dedcdc83d33b02f509ee33f9fb12a3dee7cb9385b3a59d0ce",
+        "93a4f291de3bb68f67bdd51ea04041609babe587caa219be4b049dce2e1c9e58",
+        "95b30122d57ada60b79d0d015d6d4dcc7eef00438abc60bc564798c68c994b88",
+        "9ad8d0294a18892b4510ba46754d47a23b822d5d8456b79f0d88ad98a95978c6",
+        "9c59e0df92b5120b94198500f5859bbf912e495bbbfff07e90e5d48f96ce7eab",
+        "a333878522bcfc9f445007acf780db04b313825fdd13531fcab55159a9f70842",
+        "bc2c3cb85208bc0da16467b1116720b69d182b05965590bae32ef840cfb661b6",
+        "c7c6647761357156a8ab635bf84885e40c5e2c87f8e9d4f715cbb0b9ad22a30e",
+        "caeb33414b148775da470b92151f9d328f3107e9ed25b263c2b1dad8a6d7ded1",
+        "ccd8c1a714febbaf64eaf6a232060ab7b63727e3077f057b1da54ea14e4e40dd",
+        "cdda899bce567d7d00b266ee609c5261a59d45f5486881e7c177be03f9ad94ab",
+        "d06d4345678cccaf117715ead90c5548ce21de0e9148abc540979c095da277e5",
+        "d213a733cc8d3e60b2585f6d0af552363a0608ae4703966d7197f5e7cb0379e3",
+        "d7c59c3441028cda6623e6465350004139faf7bfda864862b6ca5769d0f63167",
+        "d875c2cab8b6fabcf1d869df734748a8b6bdb7da89d2e25ad01be9a7f556beec",
+        "dd43557c2b5b8d876b72166e8431a5a65941e7e5cc1d141346c523ef136d9bc5",
+        "dded8243270b504f740ba93ec62498827dbd932e74c066888660a922e0f1cdff",
+        "e40695364d08ec770e4bd4742de19abeb88ca0c9187de2c0f182f4b9ba10a194",
+        "ea3e166f83666072c4bed2af74e5bcc2c5dd184253a2f7a44630ccefecf0e672",
+        "edc93a7f02b5822482dd65cf6f76ad78a6fd9aa3a47291c68fb694018f03f012",
+        "ee00ee1b4106839804a61ee91a62870125a9a1da25c2969635891732919b61e8",
+        "fc83eddbf4783e41786ce49aa8359fa0215e2896026343051eae4183e0148461"
+      ]
+    },
+    {
+      "name": "responses",
+      "original_registrations": 13,
+      "candidate_registrations": 13,
+      "identical_test_statements": true,
+      "original_hashes": [
+        "252bf2021eab4192ee987cf1c17afa423ec0e300de208c69060a8dcce20aad48",
+        "32f54828851305d675be8cd68209b3ce039e7cc5038c9458def15225b7f7dca5",
+        "357f5d2dc3b390dcf19c2a080f83bac80e5e5c956f2c4bf8d91ec23588a02477",
+        "3cc0508d483aaa0c73c7fa9d9b1765706567df9d7671b93a41ef451eb8b19143",
+        "3ec02f65873f9d10f30c72619791bcc5a25dc4cca741c40f8bfa0e0af3c1588a",
+        "41b601816e1e1e52cf4516e19aeae4947421e01d23b1430fba737993c019b103",
+        "4b2423e549352724624cc110b7b4eb4cb479af47a09ec0cf5bb72c136f041edd",
+        "5272b36893ec42b5d070fd54bbe01ada976037f6d09fd6edc05648fed249fbc7",
+        "6c9d3da46c517462827bbbf2b9dfe728e29b276bc75661117b96cfd19a4aea61",
+        "846d5fab1f851a3b7bc9d2eda7b8d4ae829358e9ad4d563c55c31df1226e7f3c",
+        "9060fe13e0552bb823292f8d3e76d880776d785cccc7ce449ea47773f013b545",
+        "a4c645fc7062935887e5cce8d90f1b4f0e181058933f730be0a900e932e32a39",
+        "ac8c39c338e4a7984e46d9283a4461b3e535243e8ec568b186e56ca93698bd93"
+      ],
+      "candidate_hashes": [
+        "252bf2021eab4192ee987cf1c17afa423ec0e300de208c69060a8dcce20aad48",
+        "32f54828851305d675be8cd68209b3ce039e7cc5038c9458def15225b7f7dca5",
+        "357f5d2dc3b390dcf19c2a080f83bac80e5e5c956f2c4bf8d91ec23588a02477",
+        "3cc0508d483aaa0c73c7fa9d9b1765706567df9d7671b93a41ef451eb8b19143",
+        "3ec02f65873f9d10f30c72619791bcc5a25dc4cca741c40f8bfa0e0af3c1588a",
+        "41b601816e1e1e52cf4516e19aeae4947421e01d23b1430fba737993c019b103",
+        "4b2423e549352724624cc110b7b4eb4cb479af47a09ec0cf5bb72c136f041edd",
+        "5272b36893ec42b5d070fd54bbe01ada976037f6d09fd6edc05648fed249fbc7",
+        "6c9d3da46c517462827bbbf2b9dfe728e29b276bc75661117b96cfd19a4aea61",
+        "846d5fab1f851a3b7bc9d2eda7b8d4ae829358e9ad4d563c55c31df1226e7f3c",
+        "9060fe13e0552bb823292f8d3e76d880776d785cccc7ce449ea47773f013b545",
+        "a4c645fc7062935887e5cce8d90f1b4f0e181058933f730be0a900e932e32a39",
+        "ac8c39c338e4a7984e46d9283a4461b3e535243e8ec568b186e56ca93698bd93"
+      ]
+    },
+    {
+      "file": "source/cli.integration.test.ts",
+      "identical_cli_lifecycle_hooks": true
+    },
+    {
+      "file": "source/cli-goals.integration.test.ts",
+      "identical_cli_lifecycle_hooks": true
+    },
+    {
+      "file": "source/cli-headless.integration.test.ts",
+      "identical_cli_lifecycle_hooks": true
+    },
+    {
+      "name": "cli",
+      "original_helper_functions": 9,
+      "changed_helper_functions": [],
+      "helper_hashes": {
+        "expectedToolLine": "ec9ff2eb944bbe1dcdcc8c06a4758acdb7832b0291c2d070a13cda98aac02fa4",
+        "spawnCli": "ebbe25ec99ebd07143042009a44eb07a40bba4eff094c274c52a90ac7622c9f8",
+        "startModelMock": "24cfb538a84fbd78ecfe2e7e2fd9964be62493722e53f63bf7458918447c30f3",
+        "writeSettings": "01eedd0903f5713b28e85738d1fe73c8a8a9cf073bd7861dea8183f6327a7967",
+        "shellCallFrames": "5a24343129a8f0f66d73b66475806823f8f70765faeee91b0aef9599b47cde1a",
+        "runShellCallsScenario": "4ccbcf7ad4fe9eef64f831f02fc5eed35826a1109fe2a72c3e891689f38f3ddd",
+        "runApprovalReuseScenario": "9087d613b788a1f7f0d1a98fdef32dc902fbb003a8a0a90e2b5c791a556cae12",
+        "lastWireToolExchange": "e3c841356ed1f728b67bedf124acf7fe49e947394287389d5185a1fb63128a67",
+        "expectSecondCallRefused": "5156a9b20dde436046c7220d142515aca35df39492bc7dae99d635cf09f8b052"
+      }
+    },
+    {
+      "name": "responses",
+      "original_helper_functions": 29,
+      "changed_helper_functions": [],
+      "helper_hashes": {
+        "runFailureScenario": "3a1d47e84f64ec715f8385b5522b2f6dea6282711755776157f23825c6398a73",
+        "assertApprovalResume": "e1ef9a16f4d95c9fe17280fdcf0743433c5e63408b2c9c3e509b0169b9fd4718",
+        "createWorkspace": "be86b1dc567b5fb8995db8c9a70c37bf8cf0c7ded82d04962bb740733197372d",
+        "startCli": "72c6bc908c8a6f6678a0c49f1073d578c888cbf4080f34587d90f7367b5997d6",
+        "cleanupWorkspace": "af846ef4e885dcd6cf15a1a5ea58a2b099bfd848e796e31d6f6c74b7872e1df5",
+        "fixtureJwt": "d9622d011d882c3748b0412f4325c932804aea2de31548b711df623de0139d7f",
+        "normalRequests": "4ed6fb0bb879e88b605dde014bac2dd06d68853df9925e88ee1726c34daa327e",
+        "waitForRequests": "d6218b43472a72f0a635d47ca6dee9419e15b409669971e0ecafdf02df9f5d3e",
+        "waitForIdleAfterResponse": "fb26b95f82d0ee0a3d60387a3c5432134fce44b74560253bba1edc522eb2bc2a",
+        "writePrompt": "f174ede6517e97be82559ac43833c32f7a5efba78643195dc6c7ea7cfc7ebc78",
+        "writeApprovalShortcut": "374833e8630a05c95736d325020a82795f29ca01e94cadc0347a2e5dcccd8f9c",
+        "toolResultRequests": "6daf55c38db507f80bdf6fd87dd184c38957e33b5a7843b321fb08a3306eefe9",
+        "toolResultItems": "c64a27ca004308d45db2ea05bd7b07a885beb0bdb23b67cddeea9f185ca6830a",
+        "parseFunctionResultOutput": "aabf3619af633c5bcd004871627fc8cbb9dc7510918181335db7950862acef14",
+        "startResponsesFixtureServer": "433b6d678545ae0e0157648a3f669889ef330dfbb3072cdb94b7f6e03452b9a9",
+        "serveResponse": "f075a9f5422b5915bfda94d42847ede63eed265a1c7d6bd62bef614d4ec33539",
+        "countNormalServed": "18918fe04a19fcf8a45251ccf7dfefc889f19c6d62256e4d0832c8a9e57e8ccc",
+        "toolResultText": "9f4dfb81bf0dd8a8d05e003df91ff7b0b3a013791d133178820fbe0e76ffea85",
+        "createdFrame": "2a4a53f13e0973d6f9bf74c317b59574a904633b793cd27c4b7f836b9d358308",
+        "completedFrame": "ab8b625aed6c287bea0ae7a1cdea6750e0ba34c2fa517d1b0402b4007531d1a7",
+        "messageOutput": "0d76c4b0d449d9832842c8e6d6ad5ef25754cbee6e647af389d1fbf18707afc6",
+        "messageFrames": "c73aa3896ca02c250f3ab1204de489856f330a42b9be4a2bb0a22157b10cb3b0",
+        "toolCallFrames": "c2eeda990cb8d1729016d71c43aaec5efdd5f6b905b900616b2bfcc5ee82bf51",
+        "backgroundShellToolCallFrames": "ec6462cd0eb0f9bfebc85baef0c80fb13f183a681bf4111b03909f54f7591748",
+        "sendFrames": "3d837996dfd71b269eba156dd92bf180a4c8c8d00ede500f9b264a470beb1cae",
+        "readJsonBody": "fca9a3ddbf6fade65775f25a8ce26f0f518650dc606e51430c7e71201257ccce",
+        "parseJsonMessage": "dc0caf0e2d89f701d716a40fccc9f84705da36281157e1a217e8ead79d1bd634",
+        "isRecord": "93c7d2b0c601ac32a29ca04ce3a3e49f5f291ef4f70714dfe5ae786668172d54",
+        "delay": "4ec20826a3e8648b0b9aaec1aecfdfcc8eb36e7ab285956bfb41dd0d11faad5d"
+      }
+    },
+    {
+      "responses_cleanup_identical": true
+    }
+  ],
+  "limitations": [
+    "Single full passing Responses pair; no stable whole-provider-suite speed guarantee.",
+    "Full CLI observations failed and cannot support an equally passing speed claim.",
+    "Host contention/variation uncontrolled.",
+    "A 4.6-second AST identity check ran during the full CLI baseline; no build/lint/other benchmark ran concurrently.",
+    "RUSAGE_CHILDREN undercounts orphaned PTY grandchildren; CPU measurements must not establish waiting versus CPU attribution.",
+    "Integration experimental timing and identity entries are retained evidence, not the adopted patch. The fourth ABBA sample was not run after two candidate failures."
+  ],
+  "warmup_history": [
+    "Provider dist/ was unchanged across baseline, trace and candidate; no build ran during or between those measured provider runs.",
+    "Integration baseline used the existing warm emitted build at node_modules/.cache/term2-integration-cli.",
+    "After adding the stateless CLI fixture helper, the exact native TypeScript incremental build was run outside timing before the candidate.",
+    "Every measured invocation retained its normal global setup, including a fresh disposable bytecode cache and --help priming.",
+    "All representative CLI runs used the same warm emitted build; only excluded test-source topology was swapped."
+  ],
+  "candidate_build_prewarm_command": "node node_modules/typescript-7/bin/tsc --project tsconfig.build.json --outDir node_modules/.cache/term2-integration-cli --incremental --tsBuildInfoFile node_modules/.cache/term2-integration-cli/tsconfig.tsbuildinfo",
+  "diagnostic_trace": {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "--config",
+      "vitest.provider-black-box.config.ts",
+      "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+      "--maxWorkers=2",
+      "-t",
+      "codex.*websocket.*preserves two-turn|codex websocket replays full history|codex.*websocket.*surfaces native",
+      "--reporter=verbose"
+    ],
+    "elapsed": 47.77230180299739,
+    "user": 12.329359,
+    "system": 5.035028,
+    "maxrss": 195896,
+    "exit": 0,
+    "passed": 3,
+    "filtered_out": 31,
+    "workspace_cleanup_ms": [27.03398399999969, 18.660045000000537, 207.87354899999627],
+    "conclusion": "No teardown stall reproduced; no speculative WebSocket change retained."
+  },
+  "decision": {
+    "provider": "Retain Responses file partition, subject to full CI verification.",
+    "integration": "Rejected and reverted: neither full-file observations nor the nine-case repeated comparison established an equally passing improvement. Existing shared build/compile-cache changes from 7d9a901 remain."
+  },
+  "environment": {
+    "os": "Linux x86_64",
+    "cpu": "Intel Xeon Platinum 8573C",
+    "visible_cpus": 5,
+    "cpu_max": "400000 100000",
+    "memory_limit_bytes": 17179869184,
+    "node": "24.19.0",
+    "pnpm": "11.19.0",
+    "vitest": "4.1.9",
+    "CI": "1",
+    "NODE_ENV": "test",
+    "PATH_prefix": "/workspace/.local/usr/bin",
+    "XDG_CACHE_HOME": "/workspace/.cache",
+    "XDG_DATA_HOME": "/workspace/.local/share",
+    "npm_config_store_dir": "/workspace/.cache/pnpm-store",
+    "pnpm_config_verify_deps_before_run": ""
+  },
+  "prior_ci": {
+    "commit": "7d9a90114b05e170dc85c06fd67ecf8ddef02816",
+    "run_id": 39741934129,
+    "url": "https://github.com/qduc/term2/actions/runs/39741934129",
+    "all_four_jobs": "success",
+    "integration": {
+      "passed": 204,
+      "skipped": 1,
+      "vitest_seconds": 64.96
+    },
+    "provider": {
+      "passed": 222,
+      "skipped": 1,
+      "vitest_seconds": 149.61
+    },
+    "node": "24.22.0",
+    "pnpm": "11.7.0"
+  },
+  "identity_scope": "Original versus complete experimental split before rejection of the CLI split; retained provider files are unchanged from that comparison. Root independently reran the identity script and matched original snapshots to baseline git blobs.",
+  "integration_revert_verified": true,
+  "rejected_integration_archive": "/tmp/term2-astra-rejected-integration",
+  "checks": {
+    "typecheck": "passed on complete experimental candidate",
+    "lint": "passed on complete experimental candidate: 31 existing warnings, 0 errors",
+    "guards_first": "27 passed/1 timeout while lint/typecheck ran concurrently; log /tmp/term2-astra-guards.log",
+    "guards_sequential": "28 passed, 7 files, 8.51s Vitest; log /tmp/term2-astra-guards-sequential.log",
+    "no_unit_tests": "passed",
+    "independent_identity_and_diff_check": "passed",
+    "ci": "Awaiting pushed provider-only follow-up; final status will be recorded on PR #35."
+  },
+  "retained_provider_source_sha256": {
+    "scripts/provider-black-box/provider-session-responses.blackbox.ts": "f852d2247a92ca17d6592908c7813e26185858714a7b05689aa6d75f6fe06b1a",
+    "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts": "eb751fe9dd6c0eb548637f74babd085da40740169034ca840fb373111c4a9450",
+    "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts": "4a3273c7e33c4487739c30761db34219be883cbbc02f34bfa066078b8bc3c4ae",
+    "scripts/provider-black-box/provider-session-responses-scenarios.ts": "52dd3162c6c3fe2b4b01cb44ac8df2638a388a13661ce1d21dd167c794183ceb"
+  }
+}

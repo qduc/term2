@@ -1,5 +1,10 @@
 # Cheap Bare additions: capped screens
 
+This report describes the original screen stage. The subsequent user-authorized
+root-cause analysis and bounded retry, including final cumulative accounting of
+244,495 tokens / 20 paid runs, are in [cheap-additions-retry.md](cheap-additions-retry.md).
+Original charges and this stage's evidence remain unchanged.
+
 ## Decision
 
 **Defer all six additions; adopt none from this experiment.** All ten available

@@ -79,7 +79,7 @@ it.sequential.each(['lite', 'bare'])(
       expect(headers).toHaveLength(1);
       expect(headers[0]).toMatchObject({
         activeProfileId: 'builtin:bare',
-        activeProfileVersion: '1.1.0',
+        activeProfileVersion: '1.2.0',
         appMode: { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: false },
       });
       expect(headers[0].activeProfileDigest).toMatch(/^[a-f0-9]{64}$/);

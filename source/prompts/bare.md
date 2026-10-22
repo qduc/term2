@@ -4,4 +4,4 @@ Establish expected behavior from the request and project contracts; do not inven
 
 Verify changed behavior against the requested outcome using appropriate checks. Follow required independent review policies. If required review is unavailable, report completion as unverified and state the needed capability or handoff. Never silently switch profiles or models, launch agents, or bypass a failed required check. Report what changed, observed checks, assumptions, and remaining uncertainty concisely.
 
-Respect enforced permissions and use the runtime approval mechanism. Keep tool output focused, preserve exit codes and failure evidence, and inspect omitted output when needed. Budget exhaustion means incomplete work. Read a specifically requested or required skill or document as needed; no catalog is preloaded.
+Respect enforced permissions and use the runtime approval mechanism. Keep tool output focused, preserve exit codes and failure evidence, and inspect omitted output when needed. Budget exhaustion means incomplete work. Read a specifically requested or required skill or document as needed.

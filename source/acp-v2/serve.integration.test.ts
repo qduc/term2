@@ -15,13 +15,8 @@ import { createTestChildEnv } from '../test-helpers/terminal-e2e.js';
 // stdio one: stdout must carry nothing but JSON-RPC, and the process must exit 0
 // once its client disappears.
 //
-// The child runs the source entry through tsx, the same way cli.e2e.test.ts
-// spawns the CLI. A tsc build into a cache directory would be cheaper to reuse,
-// but `installationVersion` resolves the package version by relative path from
-// its own file (`../../../package.json`), which is only correct when the build
-// output sits directly under a directory holding package.json — as the published
-// `dist/` does and a node_modules/.cache build does not. Running the source
-// entry keeps that resolution honest instead of hand-building the layout.
+// Use the same compiled CLI as the other integration launchers. The initialize
+// response below still verifies that package-version resolution matches the app.
 //
 // The scripted provider crosses the process boundary the way a real operator
 // configures one — a runtime-defined openai-compatible provider in
@@ -29,7 +24,7 @@ import { createTestChildEnv } from '../test-helpers/terminal-e2e.js';
 // registerProvider seam cannot reach into another process.
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
-const cliEntry = path.join(projectRoot, 'source', 'cli.tsx');
+import { integrationCliPath } from '../test-helpers/integration-cli.js';
 
 const packageVersion: string = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).version;
 
@@ -152,7 +147,7 @@ describe('term2 acp (child process)', () => {
 
     const child = spawn(
       process.execPath,
-      ['--import', 'tsx', cliEntry, 'acp', '--provider', 'acpmock', '--model', 'acp-mock-model'],
+      [integrationCliPath(), 'acp', '--provider', 'acpmock', '--model', 'acp-mock-model'],
       {
         cwd: projectRoot,
         env: createTestChildEnv({
@@ -322,7 +317,7 @@ const runAcpChild = async (
 
   const child = spawn(
     process.execPath,
-    ['--import', 'tsx', cliEntry, 'acp', '--provider', 'acpmock', '--model', 'acp-mock-model'],
+    [integrationCliPath(), 'acp', '--provider', 'acpmock', '--model', 'acp-mock-model'],
     {
       cwd: projectRoot,
       env: createTestChildEnv({

@@ -529,6 +529,7 @@ function createPtyChild(options: {
     new Promise<ChildSnapshot>((resolve, reject) => {
       let settled = false;
       let timer: NodeJS.Timeout | undefined;
+      let poll: NodeJS.Timeout | undefined;
 
       const cleanup = (): void => {
         terminal.stdout?.off('data', onStateChange);
@@ -536,6 +537,7 @@ function createPtyChild(options: {
         terminal.off('error', onStateChange);
         terminal.off('close', onStateChange);
         if (timer) clearTimeout(timer);
+        if (poll) clearInterval(poll);
       };
       const finish = (result: { value: ChildSnapshot } | { error: Error }): void => {
         if (settled) return;
@@ -587,9 +589,15 @@ function createPtyChild(options: {
       terminal.stderr?.on('data', onStateChange);
       terminal.on('error', onStateChange);
       terminal.on('close', onStateChange);
-      timer = setTimeout(failForTimeout, timeoutMs);
+      timer = setTimeout(() => {
+        evaluate();
+        if (!settled) failForTimeout();
+      }, timeoutMs);
+      // Predicates can also inspect loopback HTTP captures. Those arrivals
+      // need not produce PTY output, so terminal events alone can miss them.
+      poll = setInterval(evaluate, 20);
       // Check after subscribing so output/events that arrived just before this
-      // call cannot be missed, while still avoiding a polling interval.
+      // call cannot be missed. PTY events still wake output waits immediately.
       evaluate();
     });
 

@@ -2758,6 +2758,16 @@ Ordinary resetWithNewId/clear/shutdown disposal semantics are unchanged.
 Status: implementation in progress; focused/typecheck gates currently pass.
 ```
 
+Turn-end handoff detail: `ConversationService.consumeSessionRolloverRequest()`
+must classify queue ownership with the same `isQueueOwningSubmissions()`
+signal as the final rollover admission check. Queue ownership can become
+visible before `queuedSubmissionCount()` is nonzero; without the matching
+preflight, the app callback can reach the throwing mutation guard. The UI
+turn-end caller also observes callback rejection and presents the preserved
+brief instead of allowing an unhandled promise rejection to terminate the TUI.
+This is a fail-closed block: queued work remains under the queue owner, and the
+brief is offered for manual retry, not automatically resubmitted.
+
 ### ACP v2 per-session prompt admission
 
 The experimental ACP v2 adapter permits one admitted foreground prompt per

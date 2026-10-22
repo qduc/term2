@@ -427,6 +427,7 @@ export class ConversationService {
       this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
       this.#runtime.nestedApproval.getSnapshot() !== null ||
       backgroundWaitingForAnswer ||
+      this.#adapter.isQueueOwningSubmissions() ||
       this.#adapter.queuedSubmissionCount() > 0
     );
   }

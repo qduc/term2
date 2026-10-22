@@ -19,6 +19,7 @@ import type { ISessionContextService, LogMetadataContract } from '../service-int
 import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
 
 const LOG_RETENTION_DAYS = 7;
+const LOG_DIRECTORY_MAX_BYTES = 512 * 1024 * 1024;
 
 const LOG_LEVELS = {
   error: 0,
@@ -61,6 +62,8 @@ interface LoggingServiceConfig {
  */
 export class LoggingService {
   private logger: winston.Logger;
+  private fileLoggingDisabled = false;
+  private trafficCleanupFailureReported = false;
   private correlationId: string | undefined;
   private debugLogging: boolean;
   private suppressConsoleOutput: boolean;
@@ -117,7 +120,6 @@ export class LoggingService {
         if (!fs.existsSync(finalLogDir)) {
           fs.mkdirSync(finalLogDir, { recursive: true });
         }
-        this.cleanupProviderTraffic();
       } catch (error: any) {
         // Graceful degradation: log creation errors to stderr only
         this.emitConsoleError(`[LoggingService] Failed to create log directory: ${error.message}`);
@@ -141,10 +143,13 @@ export class LoggingService {
           level: logLevel,
         });
 
-        // Handle transport errors gracefully
-        fileTransport.on('error', (error: any) => {
-          this.emitConsoleError(`[LoggingService] File transport error: ${error.message}`);
-        });
+        // file-stream-rotator emits write failures on the transport's inner
+        // stream, not just on the Winston transport. Listen at both boundaries
+        // and disable the failed sink once; otherwise later writes can emit
+        // another unhandled error from the same broken stream.
+        const handleFileError = (error: Error): void => this.disableFileLogging(fileTransport, error);
+        fileTransport.logStream.on('error', handleFileError);
+        fileTransport.on('error', handleFileError);
 
         transports.push(fileTransport);
       } catch (error: any) {
@@ -181,6 +186,12 @@ export class LoggingService {
         };
       }
     });
+
+    // Retention is deliberately a startup sweep, not request-path work. The
+    // daily file transport also enforces maxSize/maxFiles for application logs.
+    if (!resolvedDisableLogging) {
+      this.cleanupProviderTraffic();
+    }
   }
 
   /**
@@ -281,14 +292,61 @@ export class LoggingService {
   }
 
   /**
-   * Remove provider and evaluator traffic logs older than maxFiles (default 30d)
+   * Remove old and over-budget provider/evaluator traffic logs at startup.
    */
-  private cleanupProviderTraffic(maxDays = LOG_RETENTION_DAYS): void {
-    this.cleanupTrafficDir(this.providerTrafficDir, maxDays);
-    this.cleanupTrafficDir(this.evaluatorTrafficDir, maxDays);
+  private cleanupProviderTraffic(maxDays = LOG_RETENTION_DAYS, maxBytes = LOG_DIRECTORY_MAX_BYTES): void {
+    this.cleanupRotatedApplicationLogs(path.dirname(this.providerTrafficDir), maxDays, maxBytes);
+    this.cleanupTrafficDir(this.providerTrafficDir, maxDays, maxBytes);
+    this.cleanupTrafficDir(this.evaluatorTrafficDir, maxDays, maxBytes);
   }
 
-  private cleanupTrafficDir(dir: string, maxDays: number): void {
+  private cleanupRotatedApplicationLogs(dir: string, maxDays: number, maxBytes: number): void {
+    try {
+      if (!fs.existsSync(dir)) return;
+      const threshold = new Date(Date.now() - maxDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const groups = new Map<string, Array<{ filePath: string; bytes: number }>>();
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const match = /^term2-(\d{4}-\d{2}-\d{2})\.log(?:\.\d+)?$/.exec(entry.name);
+        if (!match) continue;
+        const filePath = path.join(dir, entry.name);
+        const files = groups.get(match[1]!) ?? [];
+        files.push({ filePath, bytes: fs.statSync(filePath).size });
+        groups.set(match[1]!, files);
+      }
+
+      for (const [dateKey, files] of groups) {
+        if (dateKey < threshold)
+          groups.set(
+            dateKey,
+            files.filter(({ filePath }) => !this.removeLogFile(filePath)),
+          );
+      }
+
+      const orderedDays = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+      let totalBytes = [...groups.values()].flat().reduce((total, file) => total + file.bytes, 0);
+      for (const [, files] of orderedDays) {
+        if (totalBytes <= maxBytes) break;
+        for (const file of files) {
+          if (this.removeLogFile(file.filePath)) totalBytes -= file.bytes;
+        }
+      }
+    } catch (error) {
+      this.reportTrafficCleanupFailure(error);
+    }
+  }
+
+  private removeLogFile(filePath: string): boolean {
+    try {
+      fs.rmSync(filePath, { force: true });
+      return true;
+    } catch (error) {
+      this.reportTrafficCleanupFailure(error);
+      return false;
+    }
+  }
+
+  private cleanupTrafficDir(dir: string, maxDays: number, maxBytes: number): void {
     try {
       if (!fs.existsSync(dir)) {
         return;
@@ -299,9 +357,10 @@ export class LoggingService {
       const thresholdStr = threshold.toISOString().slice(0, 10); // YYYY-MM-DD
 
       const entries = fs.readdirSync(dir, { withFileTypes: true });
+      const datedEntries: Array<{ name: string; fullPath: string; dateKey: string; bytes: number }> = [];
       for (const entry of entries) {
         let dateKey: string | undefined;
-        let isDir = false;
+        const fullPath = path.join(dir, entry.name);
 
         if (entry.isFile()) {
           const match = entry.name.match(/^traffic-(\d{4}-\d{2}-\d{2})\.log$/);
@@ -312,26 +371,55 @@ export class LoggingService {
           const match = entry.name.match(/^(\d{4}-\d{2}-\d{2})$/);
           if (match) {
             dateKey = match[1];
-            isDir = true;
           }
         }
 
-        if (dateKey && dateKey < thresholdStr) {
-          const fullPath = path.join(dir, entry.name);
+        if (!dateKey) continue;
+        if (dateKey < thresholdStr) {
           try {
             fs.rmSync(fullPath, { recursive: true, force: true });
-          } catch (err: any) {
-            this.emitConsoleError(
-              `[LoggingService] Failed to delete old traffic ${isDir ? 'directory' : 'log'} ${entry.name}: ${
-                err.message
-              }`,
-            );
+          } catch (error) {
+            this.reportTrafficCleanupFailure(error);
+            datedEntries.push({ name: entry.name, fullPath, dateKey, bytes: this.measureTrafficBytes(fullPath) });
           }
+          continue;
+        }
+
+        datedEntries.push({ name: entry.name, fullPath, dateKey, bytes: this.measureTrafficBytes(fullPath) });
+      }
+
+      let totalBytes = datedEntries.reduce((total, entry) => total + entry.bytes, 0);
+      for (const entry of datedEntries.sort((a, b) => a.dateKey.localeCompare(b.dateKey))) {
+        if (totalBytes <= maxBytes) break;
+        try {
+          fs.rmSync(entry.fullPath, { recursive: true, force: true });
+          totalBytes -= entry.bytes;
+        } catch (error) {
+          this.reportTrafficCleanupFailure(error);
         }
       }
     } catch (error: any) {
-      this.emitConsoleError(`[LoggingService] Error during provider traffic cleanup: ${error.message}`);
+      this.reportTrafficCleanupFailure(error);
     }
+  }
+
+  private measureTrafficBytes(filePath: string): number {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isDirectory()) return stat.isFile() ? stat.size : 0;
+    return fs
+      .readdirSync(filePath)
+      .reduce((total, name) => total + this.measureTrafficBytes(path.join(filePath, name)), 0);
+  }
+
+  private reportTrafficCleanupFailure(error: unknown): void {
+    if (this.trafficCleanupFailureReported) return;
+    this.trafficCleanupFailureReported = true;
+    const message = error instanceof Error ? error.message : String(error);
+    this.warn('Provider traffic retention cleanup failed', {
+      eventType: 'logging.retention_cleanup_failed',
+      category: 'logging',
+      errorMessage: message,
+    });
   }
 
   private log(level: string, message: string, meta?: LogMetadataContract): void {
@@ -424,5 +512,27 @@ export class LoggingService {
       return;
     }
     console.error(message);
+  }
+
+  private disableFileLogging(transport: DailyRotateFile, error: Error): void {
+    if (this.fileLoggingDisabled) return;
+    this.fileLoggingDisabled = true;
+
+    if (this.logger) {
+      this.logger.remove(transport);
+    }
+    try {
+      transport.close?.();
+    } catch {
+      // The sink has already failed; shutdown is best effort.
+    }
+
+    // Disk errors must be visible even when routine console logging is
+    // suppressed. Never route this warning back through the failed logger.
+    try {
+      process.stderr.write(`[LoggingService] File logging disabled after write failure: ${error.message}\n`);
+    } catch {
+      // A broken stderr must not turn a diagnostic failure into an app crash.
+    }
   }
 }

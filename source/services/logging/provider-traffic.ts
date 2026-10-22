@@ -967,8 +967,9 @@ export class ProviderTrafficArtifactStore {
         body: sanitizeSentTrafficBody(input.sentBody),
       };
       writeTrafficEnvelope(requestPath, { sent: sentRecord, received: emptyTrafficRecord() });
+      let rawCaptureFailure: Error | null = null;
       if (this.#rawCaptureEnabled) {
-        this.#writeRawCapture(requestPath, input);
+        rawCaptureFailure = this.#writeRawCapture(requestPath, input);
       }
       this.#upsertDailyIndex(dayDir, {
         sessionId: input.sessionId,
@@ -984,6 +985,7 @@ export class ProviderTrafficArtifactStore {
         latestMode: input.mode ?? 'unknown',
         modesSeen: [input.mode ?? 'unknown'],
       });
+      if (rawCaptureFailure) throw rawCaptureFailure;
     } catch (error) {
       // A start that did not fully land must not retain a stale correlation
       // entry: a later completion falls back to #pathsFor and writes a fresh
@@ -1034,11 +1036,11 @@ export class ProviderTrafficArtifactStore {
     }
   }
 
-  #writeRawCapture(requestPath: string, input: RequestStartInput): void {
+  #writeRawCapture(requestPath: string, input: RequestStartInput): Error | null {
     // Best-effort by design: a raw sidecar must never fail the request it
     // observes, nor disturb the sanitized artifact. Swallow write failures
-    // silently (the sanitized envelope + winston record remain the source of
-    // truth; ProviderTraffic's residual boundary already covers those).
+    // without disrupting the sanitized envelope; report its failure through
+    // ProviderTraffic's once-only residual warning boundary.
     try {
       const rawPath = rawCapturePathForRequestPath(requestPath);
       fs.mkdirSync(path.dirname(rawPath), { recursive: true });
@@ -1058,8 +1060,9 @@ export class ProviderTrafficArtifactStore {
         )}\n`,
         'utf8',
       );
-    } catch {
-      // Intentionally silent: see above.
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error : new Error(String(error));
     }
   }
 
@@ -1319,6 +1322,7 @@ function summarizeWebsocketResponse(response: unknown): ReceivedTrafficSummary {
 }
 
 export class ProviderTraffic implements IProviderTraffic {
+  #artifactStoreFailureReported = false;
   constructor(
     private readonly loggingService: Pick<ILoggingService, 'debug' | 'warn' | 'error' | 'getCorrelationId'>,
     private readonly sessionContextService: ISessionContextService,
@@ -1335,6 +1339,8 @@ export class ProviderTraffic implements IProviderTraffic {
     try {
       run();
     } catch (error) {
+      if (this.#artifactStoreFailureReported) return;
+      this.#artifactStoreFailureReported = true;
       try {
         this.loggingService.warn('Provider traffic artifact write failed', {
           eventType: 'provider.traffic.artifact_write_failed',

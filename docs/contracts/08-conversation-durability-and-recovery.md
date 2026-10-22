@@ -61,6 +61,37 @@ history (`history-service.ts`), and log decoding and replay recovery
 > It manages file locks, write-ahead logs, and sequence reconstruction, governed
 > by this contract (Contract 08) rather than the diagnostic logging port (Contract 07 / SB-05).
 
+### Write-failure behavior visible to the user
+
+`ConversationLogWriterImpl.#logWriteFailure` emits one stderr warning per writer
+(`Conversation persistence: Write failed; this session may not be recoverable`)
+and a structured error when the diagnostic logger accepts it. Critical canonical
+events (user input, tool/approval lifecycle, settled assistant turns, goals, and
+other `CONVERSATION_FSYNC_EVENTS`) latch and rethrow the original storage error;
+the caller must stop the affected session operation rather than claim durable
+success. Streaming journal deltas are best-effort: a failed sidecar write warns
+but does not interrupt generation, and the warning says recovery data may be
+missing. This is distinct from diagnostic log and provider-traffic writes, which
+fail open and disable/refrain from using the failed diagnostic sink.
+
+### Sibling write-path audit
+
+- `HistoryService.save` stages its synchronous write and rename inside a
+  `try/catch`; failure is logged and the current process keeps its in-memory
+  history, but that update is not durable.
+- Settings persistence uses a same-directory temporary file, `fsyncSync`, and
+  atomic rename. Its public save path catches I/O errors, logs them, and returns
+  `undefined`; it does not leave a write-stream error event unhandled.
+- `createSessionQueuePersistence.replace` uses synchronous staged writes; the
+  queue controller awaits the serialized write and converts rejection to
+  `persistence_failed` recovery state.
+- `saveLastConversation` is deliberately best-effort and catches temp-write or
+  rename errors. It affects the last-session shortcut, not the canonical
+  conversation journal.
+- Workflow-evolution evidence (`appendEvent`) and large subagent-result
+  artifacts use awaited `fs/promises` operations, not long-lived write streams;
+  filesystem errors reject their owning async operation.
+
 ## 3. Execution paths that share the contract
 
 - **Startup CLI Resume:**

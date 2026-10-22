@@ -25,8 +25,11 @@ evaluator lane are accepted behavior, now characterized by green tests.
   - `LoggingService` (`source/services/logging/logging-service.ts`) — owns Winston file and console logger transports, log level filtering, category filtering (`LOG_CATEGORIES`), runtime log schema validation fallback, and correlation tracking.
   - `ProviderTraffic` & `ProviderTrafficArtifactStore` (`source/services/logging/provider-traffic.ts`) — owns provider wire request/response serialization, instruction truncation, `encrypted_content` redaction, daily directory layout (`<logDir>/provider-traffic/<date>/<session>/`), daily index (`index.jsonl`), and in-memory `#requestPaths` correlation.
 - **Recovery:**
-  - `LoggingService.cleanupTrafficDir` — prunes daily log folders older than retention limits (`LOG_RETENTION_DAYS = 7`).
-  - `ProviderTraffic` / `ProviderTrafficArtifactStore` — intended recovery fails open for the primary operation and emits a best-effort structured warning (`provider.traffic.artifact_write_failed`).
+  - `LoggingService.cleanupProviderTraffic` — at startup prunes dated provider/evaluator traffic folders older than `LOG_RETENTION_DAYS = 7`, then removes oldest dated folders until each tree is at most `LOG_DIRECTORY_MAX_BYTES = 512 MiB`.
+  - `LoggingService.cleanupRotatedApplicationLogs` — applies the same 7-day age and 512 MiB per-directory caps to `term2-YYYY-MM-DD.log[.N]` files. Winston's existing `maxSize: 10m` / `maxFiles: 7d` rotation remains in place; the startup sweep enforces an aggregate cap too.
+  - These are startup-only sweeps; no per-request traversal or periodic timer is used. There is no user-facing logging-retention setting today, so limits are conservative code defaults rather than settings-schema additions.
+  - `LoggingService.disableFileLogging` — on the DailyRotateFile inner stream or transport error, removes and closes that sink and emits one direct stderr warning; subsequent application logs do not retry the failed sink. An enabled console transport remains available.
+  - `ProviderTraffic` / `ProviderTrafficArtifactStore` — fails open for the primary provider operation and emits at most one best-effort structured warning (`provider.traffic.artifact_write_failed`) per `ProviderTraffic` instance, including a failed opt-in raw sidecar write. The sanitized artifact and index remain independent of raw-sidecar success.
 
 ## 3. Execution paths that share the contract
 
@@ -84,7 +87,7 @@ Aligned with Contract 05 runtime guards and effect safety:
   - Intended Settlement: Fails open for diagnostic capture with a structured warning; preserves the original upstream provider network/timeout error.
   - Status: **met for store errors** — the fetch middleware `catch` block preserves the original upstream error (`composer.test.ts:842`). A throw from the unguarded winston call in `recordRequestFailed` would still mask it.
 - **Warning Observability Target:**
-  - Any swallowed diagnostic store error must be reported as exactly one warning to `this.loggingService.warn('Provider traffic artifact write failed', { eventType: 'provider.traffic.artifact_write_failed', ... })`. If logging the warning itself fails, the primary operation still must not fail (residual error boundary).
+  - The first swallowed diagnostic store error per `ProviderTraffic` instance is reported to `this.loggingService.warn('Provider traffic artifact write failed', { eventType: 'provider.traffic.artifact_write_failed', ... })`. Further store errors are suppressed to avoid a warning storm. If the warning's configured log sink is unavailable, `LoggingService` reports the sink failure directly to stderr and disables that sink; the primary provider operation still must not fail.
 
 ## 6. Observability
 
@@ -99,7 +102,7 @@ Aligned with Contract 05 runtime guards and effect safety:
   - Provider traffic artifact lane: replaces `encrypted_content` with `""`.
   - App-log lane: `sanitizeLogMetadata` removes `reasoning` and `reasoning_content`.
 - **Known Diagnostics Gaps:**
-  - Dropped or failed provider-traffic artifact writes produce no telemetry in production.
+  - Failures after the once-only provider artifact warning are intentionally not counted or individually reported; the first warning identifies the best-effort artifact failure class, not every affected request.
   - `RuntimeLogSchema` uses `.passthrough()`, allowing unvalidated properties to cross into structured logs.
   - `ILoggingService` declares `meta?: any`, bypassing compile-time contract enforcement at caller sites.
   - When `RuntimeLogSchema` fails validation, `eventType` is overwritten with `'log.contract_validation_failed'`, completely losing the original event identity, and category filtering occurs before schema validation for non-error levels.

@@ -1,0 +1,59 @@
+name: Set up test dependencies
+description: Reuse the locked installation, including native addons, without caching test or build output.
+inputs:
+  ripgrep:
+    description: Install the search binary needed by integration cases.
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      id: node
+      with:
+        node-version: 24
+    - name: Install pnpm
+      shell: bash
+      run: npm install -g pnpm@11.7.0
+    - name: Identify runner image
+      id: image
+      shell: bash
+      run: echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
+    - name: Restore locked dependency installation
+      uses: actions/cache@v6
+      with:
+        path: |
+          node_modules
+          !node_modules/.cache
+          !node_modules/.vite
+          !node_modules/.vite-temp
+          web-client/node_modules
+          !web-client/node_modules/.cache
+          !web-client/node_modules/.vite
+        key: test-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'web-client/package.json', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
+    - name: Verify and install locked dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+    - name: Verify native addons and clean build inputs
+      shell: bash
+      run: |
+        test ! -e node_modules/.cache/term2-integration-cli
+        test ! -e dist
+        node --input-type=module <<'NODE'
+        import { createRequire } from 'node:module';
+        const require = createRequire(import.meta.url);
+        const Database = require('better-sqlite3');
+        const db = new Database(':memory:');
+        if (db.prepare('SELECT 1 AS value').get().value !== 1) throw new Error('SQLite native addon failed');
+        db.close();
+        const ssh2 = require('ssh2');
+        new ssh2.Client();
+        createRequire(require.resolve('ssh2'))('cpu-features')();
+        NODE
+    - name: Install ripgrep
+      if: inputs.ripgrep == 'true'
+      shell: bash
+      run: |
+        if ! command -v rg >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+        fi

@@ -1,0 +1,3783 @@
+{
+  "goal_seconds": 60,
+  "baseline_head": "81445c7e07f9d80a92e37ec7bac0cabde9c083f1",
+  "baseline_ci_run": 39788751714,
+  "baseline_ci_jobs": {
+    "total_count": 4,
+    "jobs": [
+      {
+        "id": 119858816857,
+        "run_id": 39788751714,
+        "workflow_name": "CI",
+        "head_branch": "perf/test-suite-speed",
+        "run_url": "https://api.github.com/repos/qduc/term2/actions/runs/39788751714",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOQcHVcc8AAAAb6CRnWQ",
+        "head_sha": "81445c7e07f9d80a92e37ec7bac0cabde9c083f1",
+        "url": "https://api.github.com/repos/qduc/term2/actions/jobs/119858816857",
+        "html_url": "https://github.com/qduc/term2/actions/runs/39788751714/job/119858816857",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-10-22T13:39:20Z",
+        "started_at": "2026-10-22T13:39:22Z",
+        "completed_at": "2026-10-22T13:41:25Z",
+        "name": "integration",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-22T13:39:23Z",
+            "completed_at": "2026-10-22T13:39:24Z"
+          },
+          {
+            "name": "Check out repository",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-22T13:39:24Z",
+            "completed_at": "2026-10-22T13:39:27Z"
+          },
+          {
+            "name": "Set up Node.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-22T13:39:27Z",
+            "completed_at": "2026-10-22T13:39:29Z"
+          },
+          {
+            "name": "Install pnpm",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-22T13:39:29Z",
+            "completed_at": "2026-10-22T13:39:31Z"
+          },
+          {
+            "name": "Install dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-22T13:39:31Z",
+            "completed_at": "2026-10-22T13:39:57Z"
+          },
+          {
+            "name": "Install ripgrep",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-22T13:39:57Z",
+            "completed_at": "2026-10-22T13:40:06Z"
+          },
+          {
+            "name": "Run integration test suite",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-22T13:40:06Z",
+            "completed_at": "2026-10-22T13:41:22Z"
+          },
+          {
+            "name": "Post Set up Node.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13,
+            "started_at": "2026-10-22T13:41:22Z",
+            "completed_at": "2026-10-22T13:41:22Z"
+          },
+          {
+            "name": "Post Check out repository",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 14,
+            "started_at": "2026-10-22T13:41:22Z",
+            "completed_at": "2026-10-22T13:41:23Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 15,
+            "started_at": "2026-10-22T13:41:23Z",
+            "completed_at": "2026-10-22T13:41:23Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/qduc/term2/check-runs/119858816857",
+        "labels": ["ubuntu-latest"],
+        "runner_id": 1000002661,
+        "runner_name": "GitHub Actions 1000002661",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      },
+      {
+        "id": 119858817497,
+        "run_id": 39788751714,
+        "workflow_name": "CI",
+        "head_branch": "perf/test-suite-speed",
+        "run_url": "https://api.github.com/repos/qduc/term2/actions/runs/39788751714",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOQcHVcc8AAAAb6CRp2Q",
+        "head_sha": "81445c7e07f9d80a92e37ec7bac0cabde9c083f1",
+        "url": "https://api.github.com/repos/qduc/term2/actions/jobs/119858817497",
+        "html_url": "https://github.com/qduc/term2/actions/runs/39788751714/job/119858817497",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-10-22T13:39:20Z",
+        "started_at": "2026-10-22T13:39:22Z",
+        "completed_at": "2026-10-22T13:39:58Z",
+        "name": "e2e",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-22T13:39:22Z",
+            "completed_at": "2026-10-22T13:39:23Z"
+          },
+          {
+            "name": "Check out repository",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-22T13:39:23Z",
+            "completed_at": "2026-10-22T13:39:25Z"
+          },
+          {
+            "name": "Set up Node.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-22T13:39:25Z",
+            "completed_at": "2026-10-22T13:39:25Z"
+          },
+          {
+            "name": "Install pnpm",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-22T13:39:25Z",
+            "completed_at": "2026-10-22T13:39:27Z"
+          },
+          {
+            "name": "Install dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-22T13:39:27Z",
+            "completed_at": "2026-10-22T13:39:43Z"
+          },
+          {
+            "name": "Build dist",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-22T13:39:43Z",
+            "completed_at": "2026-10-22T13:39:46Z"
+          },
+          {
+            "name": "Run e2e suite",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-22T13:39:46Z",
+            "completed_at": "2026-10-22T13:39:56Z"
+          },
+          {
+            "name": "Post Set up Node.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13,
+            "started_at": "2026-10-22T13:39:56Z",
+            "completed_at": "2026-10-22T13:39:56Z"
+          },
+          {
+            "name": "Post Check out repository",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 14,
+            "started_at": "2026-10-22T13:39:56Z",
+            "completed_at": "2026-10-22T13:39:56Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 15,
+            "started_at": "2026-10-22T13:39:56Z",
+            "completed_at": "2026-10-22T13:39:56Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/qduc/term2/check-runs/119858817497",
+        "labels": ["ubuntu-latest"],
+        "runner_id": 1000002662,
+        "runner_name": "GitHub Actions 1000002662",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      },
+      {
+        "id": 119858817529,
+        "run_id": 39788751714,
+        "workflow_name": "CI",
+        "head_branch": "perf/test-suite-speed",
+        "run_url": "https://api.github.com/repos/qduc/term2/actions/runs/39788751714",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOQcHVcc8AAAAb6CRp-Q",
+        "head_sha": "81445c7e07f9d80a92e37ec7bac0cabde9c083f1",
+        "url": "https://api.github.com/repos/qduc/term2/actions/jobs/119858817529",
+        "html_url": "https://github.com/qduc/term2/actions/runs/39788751714/job/119858817529",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-10-22T13:39:20Z",
+        "started_at": "2026-10-22T13:39:22Z",
+        "completed_at": "2026-10-22T13:42:14Z",
+        "name": "provider-black-box",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-22T13:39:23Z",
+            "completed_at": "2026-10-22T13:39:24Z"
+          },
+          {
+            "name": "Check out repository",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-22T13:39:24Z",
+            "completed_at": "2026-10-22T13:39:26Z"
+          },
+          {
+            "name": "Set up Node.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-22T13:39:26Z",
+            "completed_at": "2026-10-22T13:39:29Z"
+          },
+          {
+            "name": "Install pnpm",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-22T13:39:29Z",
+            "completed_at": "2026-10-22T13:39:32Z"
+          },
+          {
+            "name": "Install dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-22T13:39:32Z",
+            "completed_at": "2026-10-22T13:40:02Z"
+          },
+          {
+            "name": "Run provider black-box suite",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-22T13:40:02Z",
+            "completed_at": "2026-10-22T13:42:10Z"
+          },
+          {
+            "name": "Post Set up Node.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11,
+            "started_at": "2026-10-22T13:42:10Z",
+            "completed_at": "2026-10-22T13:42:10Z"
+          },
+          {
+            "name": "Post Check out repository",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 12,
+            "started_at": "2026-10-22T13:42:10Z",
+            "completed_at": "2026-10-22T13:42:11Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13,
+            "started_at": "2026-10-22T13:42:11Z",
+            "completed_at": "2026-10-22T13:42:11Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/qduc/term2/check-runs/119858817529",
+        "labels": ["ubuntu-latest"],
+        "runner_id": 1000002663,
+        "runner_name": "GitHub Actions 1000002663",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      },
+      {
+        "id": 119858817628,
+        "run_id": 39788751714,
+        "workflow_name": "CI",
+        "head_branch": "perf/test-suite-speed",
+        "run_url": "https://api.github.com/repos/qduc/term2/actions/runs/39788751714",
+        "run_attempt": 1,
+        "node_id": "CR_kwDOQcHVcc8AAAAb6CRqXA",
+        "head_sha": "81445c7e07f9d80a92e37ec7bac0cabde9c083f1",
+        "url": "https://api.github.com/repos/qduc/term2/actions/jobs/119858817628",
+        "html_url": "https://github.com/qduc/term2/actions/runs/39788751714/job/119858817628",
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-10-22T13:39:20Z",
+        "started_at": "2026-10-22T13:39:22Z",
+        "completed_at": "2026-10-22T13:40:23Z",
+        "name": "test",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-22T13:39:23Z",
+            "completed_at": "2026-10-22T13:39:24Z"
+          },
+          {
+            "name": "Check out repository",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-22T13:39:24Z",
+            "completed_at": "2026-10-22T13:39:27Z"
+          },
+          {
+            "name": "Set up Node.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-22T13:39:27Z",
+            "completed_at": "2026-10-22T13:39:29Z"
+          },
+          {
+            "name": "Install pnpm",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-22T13:39:29Z",
+            "completed_at": "2026-10-22T13:39:32Z"
+          },
+          {
+            "name": "Install dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-22T13:39:32Z",
+            "completed_at": "2026-10-22T13:39:51Z"
+          },
+          {
+            "name": "Install ripgrep",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-22T13:39:51Z",
+            "completed_at": "2026-10-22T13:40:17Z"
+          },
+          {
+            "name": "Reject committed unit tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-22T13:40:17Z",
+            "completed_at": "2026-10-22T13:40:17Z"
+          },
+          {
+            "name": "Run repository guard tests",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 8,
+            "started_at": "2026-10-22T13:40:17Z",
+            "completed_at": "2026-10-22T13:40:20Z"
+          },
+          {
+            "name": "Post Set up Node.js",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 15,
+            "started_at": "2026-10-22T13:40:20Z",
+            "completed_at": "2026-10-22T13:40:21Z"
+          },
+          {
+            "name": "Post Check out repository",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 16,
+            "started_at": "2026-10-22T13:40:21Z",
+            "completed_at": "2026-10-22T13:40:21Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 17,
+            "started_at": "2026-10-22T13:40:21Z",
+            "completed_at": "2026-10-22T13:40:21Z"
+          }
+        ],
+        "check_run_url": "https://api.github.com/repos/qduc/term2/check-runs/119858817628",
+        "labels": ["ubuntu-latest"],
+        "runner_id": 1000002664,
+        "runner_name": "GitHub Actions 1000002664",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      }
+    ]
+  },
+  "baseline_job_span_seconds": 172,
+  "candidate_status": "awaiting Ubuntu CI experiment",
+  "resource_policy": {
+    "runner_count_before": 4,
+    "runner_count_after": 4,
+    "workers_per_runner": 2,
+    "runner_type": "ubuntu-latest"
+  },
+  "candidate_source_sha256": {
+    ".github/workflows/ci.yml": "a5833df426bed059aafa17d50aed4f438962bd03ea830f527d99ca8cb86ceab7",
+    ".github/actions/setup-tests/action.yml": "3446ae0269821a7b51f51c2486ed2af8ed9b295eca7de4d92202bc7ea69afca4",
+    "scripts/run-ci-lane.mjs": "6f5d3c54e02ac085d1c2baae42c058eff8f515680cdc6a18a7cec21d0386a99d",
+    "scripts/provider-black-box/provider-session-resilience.blackbox.ts": "3fa688b7a6b6cb01b32c09121f4bea030b8d6ab82733d23ee45d7c538605c2d3",
+    "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts": "fb415bfb9fb000b2e2ca10c4b3d7a9c8e4e6815d4467ab83cd46fcfc4f50f99f",
+    "scripts/provider-black-box/provider-session-resilience-scenarios.ts": "1605d7636fc79340a737e9cc870bfed40ccfd728f14d6b430d125e60d49fc5dc"
+  },
+  "mac_full_provider": {
+    "before": {
+      "label": "ci-full-provider-before",
+      "variant": "ci-baseline",
+      "workload": "provider",
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "--maxWorkers=2",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/Users/qduc/Documents/Codex/2026-10-22/task/evidence/ci-full-provider-before.vitest.json"
+      ],
+      "cwd": "/Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline",
+      "revision": "81445c7e07f9d80a92e37ec7bac0cabde9c083f1",
+      "started_at": "2026-10-22T14:03:25.650306+00:00",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "node": "v24.16.0",
+      "pnpm": "11.7.0",
+      "load_before": [2.5478515625, 2.62744140625, 2.5634765625],
+      "environment_overrides": {
+        "CI": "1",
+        "NODE_ENV": "test",
+        "pnpm_config_verify_deps_before_run": "",
+        "TMPDIR": "/private/var/folders/mf/vt165ks97dg5q2h4bh790cvm0000gn/T"
+      },
+      "cache_policy": "Separate warm emitted CLI per revision; fresh disposable bytecode cache with normal priming included",
+      "outer_timeout_seconds": 900,
+      "exit_code": 1,
+      "elapsed_seconds": 66.15451041702181,
+      "load_after": [5.70703125, 3.8701171875, 3.0556640625],
+      "child_user_seconds": 40.544332000000004,
+      "child_system_seconds": 13.389325999999999,
+      "maxrss_bytes": 362463232,
+      "counts": {
+        "numTotalTests": 223,
+        "numPassedTests": 217,
+        "numFailedTests": 5,
+        "numPendingTests": 1,
+        "numTodoTests": 0,
+        "success": false
+      },
+      "cases": [
+        {
+          "name": "edits and retracts pending steering while one turn crosses two manual approvals, then handles release and cancellation without duplicate fallback",
+          "status": "passed",
+          "duration_ms": 1609.292292,
+          "file": "scripts/provider-black-box/conversation-loop.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture HTTP replay replays a recorded response and validates the outbound request",
+          "status": "passed",
+          "duration_ms": 15.432459000000009,
+          "file": "scripts/provider-black-box/fake-provider-http-server.fixture.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture HTTP replay exposes a canonical diff for a request mutation",
+          "status": "passed",
+          "duration_ms": 3.072541000000001,
+          "file": "scripts/provider-black-box/fake-provider-http-server.fixture.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay validates ordered sends and replays receives",
+          "status": "passed",
+          "duration_ms": 9.030292000000003,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a reordered send",
+          "status": "passed",
+          "duration_ms": 2.4726670000000013,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay does not pass vacuously when no session ever connects",
+          "status": "passed",
+          "duration_ms": 51.43287500000001,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a non-WebSocket fixture before starting a vacuous replay server",
+          "status": "passed",
+          "duration_ms": 0.37675000000001546,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a empty turn without a meaningful exchange",
+          "status": "passed",
+          "duration_ms": 0.13358300000001577,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a receive-only turn without a meaningful exchange",
+          "status": "passed",
+          "duration_ms": 0.11562499999999432,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a send-only turn without a meaningful exchange",
+          "status": "passed",
+          "duration_ms": 0.06895799999998076,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a turn containing non-WebSocket frames instead of filtering them",
+          "status": "passed",
+          "duration_ms": 0.10999999999998522,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay fails validation when a client closes before the replay cursor completes",
+          "status": "passed",
+          "duration_ms": 52.01720800000001,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay drives the deterministic success scenario with ordered, non-empty frames",
+          "status": "passed",
+          "duration_ms": 2.163250000000005,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay drives the deterministic native-error scenario with ordered, non-empty frames",
+          "status": "passed",
+          "duration_ms": 1.2864170000000001,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay drives the deterministic incomplete scenario with ordered, non-empty frames",
+          "status": "passed",
+          "duration_ms": 0.8745420000000195,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay drives the deterministic abnormal-close scenario with ordered, non-empty frames",
+          "status": "passed",
+          "duration_ms": 0.7039170000000183,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects an outbound ordering mismatch in a generated scenario",
+          "status": "passed",
+          "duration_ms": 0.7210420000000113,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "compares requests semantically and ignores transport/SDK churn fields",
+          "status": "passed",
+          "duration_ms": 0.8002089999999953,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "compares JSON tool arguments independent of whitespace",
+          "status": "passed",
+          "duration_ms": 0.12504100000000307,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "reports a canonicalized request mutation",
+          "status": "passed",
+          "duration_ms": 0.1215830000000011,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "treats a redacted expected header value as matching any actual value",
+          "status": "passed",
+          "duration_ms": 0.10129099999999625,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "ignores SDK platform headers that vary across recording environments",
+          "status": "passed",
+          "duration_ms": 0.06358299999999417,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "still compares nonvolatile recorded headers",
+          "status": "passed",
+          "duration_ms": 0.050667000000004236,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture transport SDK drift fails loudly when a fixture major/minor differs from the installed SDK",
+          "status": "passed",
+          "duration_ms": 4.274749999999997,
+          "file": "scripts/provider-black-box/fixture-drift.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope validates all frame kinds and cross-frame placeholders",
+          "status": "passed",
+          "duration_ms": 0.9275420000000025,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope parses JSON envelopes",
+          "status": "passed",
+          "duration_ms": 0.12791599999999903,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope rejects placeholder collisions",
+          "status": "passed",
+          "duration_ms": 0.3239579999999975,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope rejects unmapped placeholder references",
+          "status": "passed",
+          "duration_ms": 0.10958400000000523,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope accepts ordinary angle-bracketed text in frames",
+          "status": "passed",
+          "duration_ms": 0.12320900000000279,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope rejects non-monotonic frame order",
+          "status": "passed",
+          "duration_ms": 0.1096250000000012,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture recorder parses logical SSE events, including multiline data and DONE",
+          "status": "passed",
+          "duration_ms": 0.8715420000000051,
+          "file": "scripts/provider-black-box/fixture-recorder.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture recorder captures request, response head, and response events without consuming response",
+          "status": "passed",
+          "duration_ms": 9.126166999999995,
+          "file": "scripts/provider-black-box/fixture-recorder.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts request secrets and canonicalizes IDs inside response payloads",
+          "status": "passed",
+          "duration_ms": 2.070332999999991,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts plaintext model reasoning while preserving response protocol structure",
+          "status": "passed",
+          "duration_ms": 0.21962499999999352,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer does not flag relative provider URL paths and redacts opaque thought signatures",
+          "status": "passed",
+          "duration_ms": 0.22704099999999983,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts Google thought text while preserving the thought part shape",
+          "status": "passed",
+          "duration_ms": 0.1197920000000039,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts Anthropic thinking deltas while preserving event structure",
+          "status": "passed",
+          "duration_ms": 0.11466699999999719,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts chat reasoning deltas and provider fingerprints",
+          "status": "passed",
+          "duration_ms": 0.11829099999999926,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts provider identifiers in response headers and canonicalizes request IDs",
+          "status": "passed",
+          "duration_ms": 0.19637499999998909,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer canonicalizes Responses reasoning and function item IDs and removes encrypted content",
+          "status": "passed",
+          "duration_ms": 0.16437500000000682,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "committed fixture security rejects common secret forms",
+          "status": "passed",
+          "duration_ms": 0.8420419999999993,
+          "file": "scripts/provider-black-box/fixture-security.test.ts",
+          "failures": []
+        },
+        {
+          "name": "committed fixture security does not flag benign prose or URLs as high-entropy secrets",
+          "status": "passed",
+          "duration_ms": 0.13250000000000028,
+          "file": "scripts/provider-black-box/fixture-security.test.ts",
+          "failures": []
+        },
+        {
+          "name": "committed fixture security contains no likely secrets in committed fixture JSON",
+          "status": "passed",
+          "duration_ms": 14.205209000000004,
+          "file": "scripts/provider-black-box/fixture-security.test.ts",
+          "failures": []
+        },
+        {
+          "name": "record-from-fake self-validation (plan D4) records from the fake provider, replays to identity, and writes an honestly-labeled envelope",
+          "status": "passed",
+          "duration_ms": 21.78425,
+          "file": "scripts/provider-black-box/fixture-self-validation.test.ts",
+          "failures": []
+        },
+        {
+          "name": "P1 nested hide result chain approves a hidden nested editor through the scripted adapter and preserves result-chain identity",
+          "status": "failed",
+          "duration_ms": 87.41479200000003,
+          "file": "scripts/provider-black-box/nested-hide.blackbox.ts",
+          "failures": [
+            "AssertionError: expected [] to have a length of 1 but got +0\n    at Proxy.<anonymous> (file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+expect@4.1.9/node_modules/@vitest/expect/dist/index.js:1389:20)\n    at Proxy.<anonymous> (file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+expect@4.1.9/node_modules/@vitest/expect/dist/index.js:1156:15)\n    at Proxy.methodWrapper (file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/chai@6.2.2/node_modules/chai/index.js:1700:25)\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/scripts/provider-black-box/nested-hide.blackbox.ts:195:20\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "OpenAI endpoint redirection proves the installed OpenAI client honors OPENAI_BASE_URL without fetch rewriting",
+          "status": "passed",
+          "duration_ms": 91.468625,
+          "file": "scripts/provider-black-box/openai-base-url.test.ts",
+          "failures": []
+        },
+        {
+          "name": "OpenAI endpoint redirection routes the application-owned OpenAI provider to OPENAI_BASE_URL",
+          "status": "passed",
+          "duration_ms": 13.467959000000008,
+          "file": "scripts/provider-black-box/openai-base-url.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix declares every target route with transport, lifecycle, and required scenarios",
+          "status": "passed",
+          "duration_ms": 2.423500000000004,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix unit-tests the accounting primitive with representative execution entries",
+          "status": "passed",
+          "duration_ms": 0.958041999999999,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix accounts the real lifecycle ledgers without importing their test modules",
+          "status": "passed",
+          "duration_ms": 0.19758300000000162,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix fails when a row has neither an executed scenario nor a documented exclusion",
+          "status": "passed",
+          "duration_ms": 0.1196249999999992,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix accepts an exclusion only when it carries a reason and evidence",
+          "status": "passed",
+          "duration_ms": 0.24720799999999343,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix rejects an execution that does not belong to the row required-scenario set",
+          "status": "passed",
+          "duration_ms": 0.1389169999999993,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box runs a bounded handoff through the real supervisor, private pipe, and built CLI",
+          "status": "failed",
+          "duration_ms": 36.37733299999999,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": [
+            "AssertionError: \nunsupported_platform: Verified process ownership currently requires Linux /proc\n: expected 1 to be +0 // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/scripts/provider-black-box/provider-cli.blackbox.ts:56:69\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "assembled provider CLI black-box rejects excessive input before the shipped CLI makes any provider request",
+          "status": "passed",
+          "duration_ms": 476.15716599999996,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box applies the supervised output profile on the actual wire while allowing useful work",
+          "status": "passed",
+          "duration_ms": 499.19949999999994,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box runs the shipped CLI through a runtime provider and captures a complete request",
+          "status": "passed",
+          "duration_ms": 491.16708300000005,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box prints terminal-only response text exactly once",
+          "status": "passed",
+          "duration_ms": 494.66754200000014,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box reports provider errors without fabricating successful output",
+          "status": "passed",
+          "duration_ms": 11694.002875,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry llama.cpp keeps reasoning translation scoped to its adapter",
+          "status": "passed",
+          "duration_ms": 21.282959000000005,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry openai-compatible keeps reasoning translation scoped to its adapter",
+          "status": "passed",
+          "duration_ms": 4.199791000000005,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry OpenCode 'chat-completions' preserves session affinity across recreated models",
+          "status": "passed",
+          "duration_ms": 4.635291999999993,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry OpenCode 'responses' preserves session affinity across recreated models",
+          "status": "passed",
+          "duration_ms": 4.3257919999999785,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry OpenCode 'anthropic' preserves session affinity across recreated models",
+          "status": "passed",
+          "duration_ms": 13.049417000000005,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry SDK adapter 2 preserves explicit reasoning settings over selected effort",
+          "status": "passed",
+          "duration_ms": 2.156958999999972,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry SDK adapter 3 preserves explicit reasoning settings over selected effort",
+          "status": "passed",
+          "duration_ms": 4.776749999999993,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry SDK adapter 4 preserves explicit reasoning settings over selected effort",
+          "status": "passed",
+          "duration_ms": 3.3754580000000374,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"39.676606339s\",\"expected\":39677}",
+          "status": "passed",
+          "duration_ms": 4.298249999999996,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"59.999s\",\"expected\":59999}",
+          "status": "passed",
+          "duration_ms": 3.0465829999999983,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60s\",\"expected\":60000}",
+          "status": "passed",
+          "duration_ms": 2.003499999999974,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60.001s\"}",
+          "status": "passed",
+          "duration_ms": 1.197749999999985,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"120s\"}",
+          "status": "passed",
+          "duration_ms": 0.9875829999999723,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"-1s\",\"expected\":500}",
+          "status": "passed",
+          "duration_ms": 2.0869590000000358,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"not-a-duration\",\"expected\":500}",
+          "status": "passed",
+          "duration_ms": 2.734207999999967,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"message\":\"Quota exceeded. https://ai.google.dev/gemini-api/docs/rate-limits. Please retry in 9.592042673s.\",\"expected\":9593}",
+          "status": "passed",
+          "duration_ms": 4.276457999999991,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryAfter\":\"2.5\",\"expected\":2500}",
+          "status": "passed",
+          "duration_ms": 2.563874999999996,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry keeps the built-in registry surface available",
+          "status": "passed",
+          "duration_ms": 0.1279999999999859,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry pilot Chat Completions provider replays a synthetic chat-completions fixture through the registry",
+          "status": "passed",
+          "duration_ms": 2.3390420000000063,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real OpenAI Responses capture replays tool continuation through the built-in registry",
+          "status": "passed",
+          "duration_ms": 4.071458000000064,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real OpenRouter capture replays tool continuation through the built-in registry",
+          "status": "passed",
+          "duration_ms": 23.782290999999987,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real OpenCode Chat Completions capture replays tool continuation through the registry",
+          "status": "passed",
+          "duration_ms": 4.81737499999997,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real OpenCode Anthropic capture replays tool continuation through the registry",
+          "status": "passed",
+          "duration_ms": 3.7381670000000895,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real Google capture replays tool continuation through the registry",
+          "status": "passed",
+          "duration_ms": 3.0542090000000144,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 1.380542000000105,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Chat Completions' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 1.089207999999985,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Anthropic' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 1.196042000000034,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Google' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 0.8760839999999916,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenRouter' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 1.1235420000000431,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 1.0175840000000562,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Chat Completions' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 1.0242499999999382,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Anthropic' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 1.1334590000000162,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Google' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 0.9039999999999964,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenRouter' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 0.8852500000000418,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 0.9292080000000169,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Chat Completions' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 1.3052920000000086,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Anthropic' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 1.3835000000000264,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Google' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 1.081166000000053,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenRouter' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 1.2985419999999976,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry replays OpenAI-compatible native reasoning_content through the registry tool continuation boundary",
+          "status": "passed",
+          "duration_ms": 1.5803750000000036,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry captures OpenRouter-style delta.reasoning and replays it through the registry tool continuation boundary",
+          "status": "passed",
+          "duration_ms": 1.4919999999999618,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry reassembles Chat Completions tool fragments with the authoritative tool ID",
+          "status": "passed",
+          "duration_ms": 0.9539579999999432,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry retries an in-band 502 that follows trivial whitespace and succeeds",
+          "status": "passed",
+          "duration_ms": 1.7749999999999773,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "crash after tool effect but before the tool result keeps the executed call in the resumed provider history without repeating the effect",
+          "status": "passed",
+          "duration_ms": 1377.092333,
+          "file": "scripts/provider-black-box/provider-crash-window.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "completes ordinary useful work with fresh safety defaults and keeps a resumable session",
+          "status": "passed",
+          "duration_ms": 493.67466699999994,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "admits input beyond the old universal ceiling when known capacity permits",
+          "status": "failed",
+          "duration_ms": 367.38154199999997,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": [
+            "AssertionError: \nWarning: Detected unsettled top-level await at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/yoga-layout@3.2.1/node_modules/yoga-layout/dist/src/index.js:13\nconst Yoga = wrapAssembly(await loadYoga());\n                          ^\n\n\n\n: expected 13 to be +0 // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/scripts/provider-black-box/provider-ordinary-safety.blackbox.ts:76:65\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "pauses before dispatch on a known small model with fresh defaults",
+          "status": "passed",
+          "duration_ms": 465.646083,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "enforces an explicit smaller input ceiling with escalation=undefined and retains a locator",
+          "status": "failed",
+          "duration_ms": 359.29937500000005,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": [
+            "AssertionError: \nWarning: Detected unsettled top-level await at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/yoga-layout@3.2.1/node_modules/yoga-layout/dist/src/index.js:13\nconst Yoga = wrapAssembly(await loadYoga());\n                          ^\n\n\n\n: expected 13 to be 2 // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/scripts/provider-black-box/provider-ordinary-safety.blackbox.ts:107:67\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "enforces an explicit smaller input ceiling with escalation=warn and retains a locator",
+          "status": "failed",
+          "duration_ms": 374.300833,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": [
+            "AssertionError: \nWarning: Detected unsettled top-level await at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/yoga-layout@3.2.1/node_modules/yoga-layout/dist/src/index.js:13\nconst Yoga = wrapAssembly(await loadYoga());\n                          ^\n\n\n\n: expected 13 to be 2 // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/scripts/provider-black-box/provider-ordinary-safety.blackbox.ts:107:67\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/ci-baseline/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "parks an unattended critical budget under explicit contain without auto-granting and retains completed tool evidence",
+          "status": "passed",
+          "duration_ms": 1178.1735829999998,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "retains unknown-model work after structured provider overflow without retrying",
+          "status": "passed",
+          "duration_ms": 483.9183330000001,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "completes a tiny small-model request with real fresh and reloaded settings",
+          "status": "passed",
+          "duration_ms": 1041.8183330000002,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "provider recorder credential isolation refuses an Anthropic credential for the OpenCode provider",
+          "status": "passed",
+          "duration_ms": 803.360208,
+          "file": "scripts/provider-black-box/provider-record-security.test.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openai-http.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 501.5414999999999,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openai-http.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 504.773333,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openai-http.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 491.2810830000001,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience codex-http.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 500.9815420000002,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience codex-http.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 493.38245800000004,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience codex-http.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 507.3420000000001,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openrouter-http.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 478.2739580000002,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openrouter-http.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 488.89295800000036,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openrouter-http.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 495.2332919999999,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 489.8809999999994,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 500.06733299999996,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 501.1239169999999,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-anthropic-messages.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 499.5845419999996,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-anthropic-messages.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 487.43645900000047,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-anthropic-messages.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 507.84858299999996,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-google-generate-content.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 493.43645800000013,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-google-generate-content.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 490.6419999999998,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-google-generate-content.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 486.57929200000035,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning openai-http.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 486.49304200000006,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning codex-http.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 479.41699999999946,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning openrouter-http.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 475.8795829999999,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning runtime-openai-compatible-chat.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 508.1501670000016,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning runtime-anthropic-messages.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 502.68316700000105,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning runtime-google-generate-content.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 495.22520899999836,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience openai-websocket.native-error fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 498.2006659999988,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience openai-websocket.incomplete fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 482.6032919999998,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience openai-websocket.abnormal-close fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 498.77716599999985,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience codex-websocket.native-error fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 494.3689169999998,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience codex-websocket.incomplete fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 493.5604579999999,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience codex-websocket.abnormal-close fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 492.3445840000004,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned WebSocket response-side reasoning openai-websocket.reasoning preserves response-side reasoning and final output",
+          "status": "skipped",
+          "duration_ms": 493.8557090000013,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned WebSocket response-side reasoning codex-websocket.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 493.4426249999997,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider restart continuity resumes a completed conversation from full history, then establishes fresh chaining",
+          "status": "passed",
+          "duration_ms": 1410.9907919999987,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider restart continuity settles an interrupted approval-pending 'OpenAI Responses' tool into resumed history without an orphan or stale response id",
+          "status": "passed",
+          "duration_ms": 1252.978874999997,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider restart continuity settles an interrupted approval-pending 'Codex Responses' tool into resumed history without an orphan or stale response id",
+          "status": "passed",
+          "duration_ms": 1251.6315419999992,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned context compaction black-box lifecycle persists a compaction item and sends it after save/resume",
+          "status": "passed",
+          "duration_ms": 1303.3615409999984,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned context compaction black-box lifecycle sends the next Codex turn after native compaction",
+          "status": "passed",
+          "duration_ms": 781.3323749999981,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned context compaction black-box lifecycle refuses a switched-provider request when native compaction coverage is unknown",
+          "status": "passed",
+          "duration_ms": 1247.8187499999985,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned context compaction black-box lifecycle does not re-execute a tool after its turn is replaced by compaction",
+          "status": "passed",
+          "duration_ms": 1366.934957999998,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "Codex WebSocket corrupt-history recovery codex-websocket.orphan-chain-recovery (standard model) sends paired full history after a stale resume chain",
+          "status": "passed",
+          "duration_ms": 712.9061249999977,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "Codex WebSocket corrupt-history recovery codex-websocket.orphan-chain-recovery (Responses Lite (gpt-5.6-luna)) sends paired full history after a stale resume chain",
+          "status": "passed",
+          "duration_ms": 695.9955829999999,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 607.424833,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 600.839834,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 1436.226875,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 1579.9105000000004,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 680.5027500000006,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 621.9599579999995,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 1628.3146659999993,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 1925.6891670000005,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 620.1117909999994,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 640.2491669999999,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 1739.5867500000004,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 1795.7427079999998,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' websocket rejects an abnormal close without a fabricated completion",
+          "status": "passed",
+          "duration_ms": 600.346458,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' websocket rejects an abnormal close without a fabricated completion",
+          "status": "passed",
+          "duration_ms": 1766.0308750000004,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 713.0195,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 679.807333,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 1727.933958,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 1724.2519160000002,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 703.5543749999997,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 697.3130000000001,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 1795.398542,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 1705.1432919999997,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval y and returns one outer tool result",
+          "status": "passed",
+          "duration_ms": 691.7639579999995,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval n and returns one outer tool result",
+          "status": "passed",
+          "duration_ms": 714.2226250000003,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification",
+          "status": "passed",
+          "duration_ms": 1702.3647500000006,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 713.0965000000001,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 721.2244580000001,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 2300.121083,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 1695.0343750000002,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex websocket replays full history when the completed response socket is replaced",
+          "status": "passed",
+          "duration_ms": 2808.392499999999,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex websocket preserves completed tool pairs when the producing socket is replaced",
+          "status": "passed",
+          "duration_ms": 2609.943874999999,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI session_search through run_code completes canonical fallback in the shipped CLI",
+          "status": "passed",
+          "duration_ms": 2319.403792000001,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI openai-websocket.retained-connection keeps two chained turns on one retained connection",
+          "status": "passed",
+          "duration_ms": 718.0559590000012,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex-websocket.retained-connection keeps two chained turns on one retained connection",
+          "status": "passed",
+          "duration_ms": 2104.3033749999995,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Built-in OpenRouter' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1030.2727499999999,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime openai' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1011.9019589999998,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime openai-compatible' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1008.476709,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime llama.cpp' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1010.9986250000002,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime Anthropic' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1030.164541,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime Google' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1014.8742500000008,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'OpenCode Chat route' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1027.8245420000003,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'OpenCode Anthropic route' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1058.226458,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness observes HTTP arrivals without further PTY output and still rejects an unmet state",
+          "status": "passed",
+          "duration_ms": 115.25329099999999,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness passes bounded retry settings to isolated root removal",
+          "status": "passed",
+          "duration_ms": 0.35874999999998636,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness reuses one isolated lease across PTY child launches and relaunches",
+          "status": "passed",
+          "duration_ms": 83.58812500000002,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness waits for composer idle through the harness file, not a prompt glyph",
+          "status": "passed",
+          "duration_ms": 59.331124999999986,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness gives waitForIdleInput the shared PTY ceiling when no timeout is passed",
+          "status": "passed",
+          "duration_ms": 74.79929100000004,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness fails waitForIdleInput fast when the child exits without publishing idle",
+          "status": "passed",
+          "duration_ms": 42.23841700000003,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness writes through the PTY and waits for visible state before exit",
+          "status": "passed",
+          "duration_ms": 42.28562500000004,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness waits for application-owned composer acknowledgement before writing Enter",
+          "status": "passed",
+          "duration_ms": 0.15179200000000037,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness isolates HOME and Windows USERPROFILE for child processes",
+          "status": "passed",
+          "duration_ms": 40.973209000000054,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness does not inherit the host CI marker into an interactive PTY child",
+          "status": "passed",
+          "duration_ms": 41.380250000000046,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness awaits termination after a bounded timeout",
+          "status": "passed",
+          "duration_ms": 89.40933299999995,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness reaps a timed-out one-shot child tree",
+          "status": "passed",
+          "duration_ms": 1009.4133749999999,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness reaps a live PTY child when the owning process is signalled without cleanup",
+          "status": "passed",
+          "duration_ms": 506.49537499999997,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness retries concurrent workspace cleanup after a transient owned failure",
+          "status": "passed",
+          "duration_ms": 1.5187080000000606,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness rejects new work while cleanup is active and after a failed attempt",
+          "status": "passed",
+          "duration_ms": 42.3015419999997,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness reclaims the root when preparation fails",
+          "status": "passed",
+          "duration_ms": 0.9157920000002377,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness preserves persistent acquisition cleanup errors",
+          "status": "passed",
+          "duration_ms": 0.8699590000001081,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness runs callback cleanup even when the callback fails",
+          "status": "passed",
+          "duration_ms": 0.6182079999998678,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "public hooks through the packaged CLI loads a TypeScript user hook and delivers status.change in non-interactive mode",
+          "status": "passed",
+          "duration_ms": 587.769917,
+          "file": "scripts/provider-black-box/public-hooks.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "public hooks through the packaged CLI loads a TypeScript user hook and delivers status.change in interactive mode",
+          "status": "passed",
+          "duration_ms": 761.466583,
+          "file": "scripts/provider-black-box/public-hooks.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "public hooks through the packaged CLI runs TypeScript user hooks before trusted project hooks in deterministic order",
+          "status": "passed",
+          "duration_ms": 546.4680000000001,
+          "file": "scripts/provider-black-box/public-hooks.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'bare' reference approval preserves user context and enforces 'authorized' advice",
+          "status": "passed",
+          "duration_ms": 531.070375,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'bare' reference approval preserves user context and enforces 'high-risk' advice",
+          "status": "passed",
+          "duration_ms": 520.6353750000001,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'bare' reference approval preserves user context and enforces 'unknown' advice",
+          "status": "passed",
+          "duration_ms": 551.9239169999998,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'full' reference approval preserves user context and enforces 'authorized' advice",
+          "status": "passed",
+          "duration_ms": 573.3398749999999,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'full' reference approval preserves user context and enforces 'high-risk' advice",
+          "status": "passed",
+          "duration_ms": 555.7999169999998,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'full' reference approval preserves user context and enforces 'unknown' advice",
+          "status": "passed",
+          "duration_ms": 553.032917,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "resumes repeated questions once per decision and settles cancellation before the next turn",
+          "status": "passed",
+          "duration_ms": 970.8437080000001,
+          "file": "scripts/provider-black-box/turn-decisions.blackbox.ts",
+          "failures": []
+        }
+      ],
+      "suite_messages": []
+    },
+    "after": {
+      "label": "ci-full-provider-after",
+      "variant": "candidate",
+      "workload": "provider",
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "--maxWorkers=2",
+        "--reporter=verbose",
+        "--reporter=json",
+        "--outputFile.json=/Users/qduc/Documents/Codex/2026-10-22/task/evidence/ci-full-provider-after.vitest.json"
+      ],
+      "cwd": "/Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate",
+      "revision": "81445c7e07f9d80a92e37ec7bac0cabde9c083f1",
+      "started_at": "2026-10-22T14:05:35.606551+00:00",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "node": "v24.16.0",
+      "pnpm": "11.7.0",
+      "load_before": [3.9189453125, 3.720703125, 3.06005859375],
+      "environment_overrides": {
+        "CI": "1",
+        "NODE_ENV": "test",
+        "pnpm_config_verify_deps_before_run": "",
+        "TMPDIR": "/private/var/folders/mf/vt165ks97dg5q2h4bh790cvm0000gn/T"
+      },
+      "cache_policy": "Separate warm emitted CLI per revision; fresh disposable bytecode cache with normal priming included",
+      "outer_timeout_seconds": 900,
+      "exit_code": 1,
+      "elapsed_seconds": 63.99946254212409,
+      "load_after": [3.50830078125, 3.697265625, 3.10205078125],
+      "child_user_seconds": 41.082453,
+      "child_system_seconds": 13.7983,
+      "maxrss_bytes": 362594304,
+      "counts": {
+        "numTotalTests": 223,
+        "numPassedTests": 217,
+        "numFailedTests": 5,
+        "numPendingTests": 1,
+        "numTodoTests": 0,
+        "success": false
+      },
+      "cases": [
+        {
+          "name": "edits and retracts pending steering while one turn crosses two manual approvals, then handles release and cancellation without duplicate fallback",
+          "status": "passed",
+          "duration_ms": 1634.6535840000001,
+          "file": "scripts/provider-black-box/conversation-loop.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture HTTP replay replays a recorded response and validates the outbound request",
+          "status": "passed",
+          "duration_ms": 16.079250000000002,
+          "file": "scripts/provider-black-box/fake-provider-http-server.fixture.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture HTTP replay exposes a canonical diff for a request mutation",
+          "status": "passed",
+          "duration_ms": 3.215082999999993,
+          "file": "scripts/provider-black-box/fake-provider-http-server.fixture.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay validates ordered sends and replays receives",
+          "status": "passed",
+          "duration_ms": 9.014083,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a reordered send",
+          "status": "passed",
+          "duration_ms": 2.6464169999999996,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay does not pass vacuously when no session ever connects",
+          "status": "passed",
+          "duration_ms": 51.6105,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a non-WebSocket fixture before starting a vacuous replay server",
+          "status": "passed",
+          "duration_ms": 0.595249999999993,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a empty turn without a meaningful exchange",
+          "status": "passed",
+          "duration_ms": 0.23416700000001356,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a receive-only turn without a meaningful exchange",
+          "status": "passed",
+          "duration_ms": 0.1433330000000126,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a send-only turn without a meaningful exchange",
+          "status": "passed",
+          "duration_ms": 0.0901670000000081,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects a turn containing non-WebSocket frames instead of filtering them",
+          "status": "passed",
+          "duration_ms": 0.15687500000001364,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay fails validation when a client closes before the replay cursor completes",
+          "status": "passed",
+          "duration_ms": 53.28750000000002,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay drives the deterministic success scenario with ordered, non-empty frames",
+          "status": "passed",
+          "duration_ms": 2.4656249999999886,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay drives the deterministic native-error scenario with ordered, non-empty frames",
+          "status": "passed",
+          "duration_ms": 2.022041999999999,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay drives the deterministic incomplete scenario with ordered, non-empty frames",
+          "status": "passed",
+          "duration_ms": 1.2837499999999977,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay drives the deterministic abnormal-close scenario with ordered, non-empty frames",
+          "status": "passed",
+          "duration_ms": 0.9282500000000198,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture WebSocket replay rejects an outbound ordering mismatch in a generated scenario",
+          "status": "passed",
+          "duration_ms": 0.9253750000000025,
+          "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+          "failures": []
+        },
+        {
+          "name": "compares requests semantically and ignores transport/SDK churn fields",
+          "status": "passed",
+          "duration_ms": 0.9429579999999973,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "compares JSON tool arguments independent of whitespace",
+          "status": "passed",
+          "duration_ms": 0.15987499999999955,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "reports a canonicalized request mutation",
+          "status": "passed",
+          "duration_ms": 0.16491699999999554,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "treats a redacted expected header value as matching any actual value",
+          "status": "passed",
+          "duration_ms": 0.12804100000000318,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "ignores SDK platform headers that vary across recording environments",
+          "status": "passed",
+          "duration_ms": 0.07745800000000003,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "still compares nonvolatile recorded headers",
+          "status": "passed",
+          "duration_ms": 0.07554100000000119,
+          "file": "scripts/provider-black-box/fixture-comparator.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture transport SDK drift fails loudly when a fixture major/minor differs from the installed SDK",
+          "status": "passed",
+          "duration_ms": 5.4600830000000045,
+          "file": "scripts/provider-black-box/fixture-drift.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope validates all frame kinds and cross-frame placeholders",
+          "status": "passed",
+          "duration_ms": 0.8878750000000011,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope parses JSON envelopes",
+          "status": "passed",
+          "duration_ms": 0.13250000000000028,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope rejects placeholder collisions",
+          "status": "passed",
+          "duration_ms": 0.3242079999999987,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope rejects unmapped placeholder references",
+          "status": "passed",
+          "duration_ms": 0.10879200000000111,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope accepts ordinary angle-bracketed text in frames",
+          "status": "passed",
+          "duration_ms": 0.09354199999999935,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture envelope rejects non-monotonic frame order",
+          "status": "passed",
+          "duration_ms": 0.09395800000000065,
+          "file": "scripts/provider-black-box/fixture-envelope.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture recorder parses logical SSE events, including multiline data and DONE",
+          "status": "passed",
+          "duration_ms": 0.9413330000000002,
+          "file": "scripts/provider-black-box/fixture-recorder.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture recorder captures request, response head, and response events without consuming response",
+          "status": "passed",
+          "duration_ms": 10.981082999999998,
+          "file": "scripts/provider-black-box/fixture-recorder.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts request secrets and canonicalizes IDs inside response payloads",
+          "status": "passed",
+          "duration_ms": 1.9104170000000025,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts plaintext model reasoning while preserving response protocol structure",
+          "status": "passed",
+          "duration_ms": 0.20295800000000952,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer does not flag relative provider URL paths and redacts opaque thought signatures",
+          "status": "passed",
+          "duration_ms": 0.24295800000000156,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts Google thought text while preserving the thought part shape",
+          "status": "passed",
+          "duration_ms": 0.10337499999999977,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts Anthropic thinking deltas while preserving event structure",
+          "status": "passed",
+          "duration_ms": 0.11291699999999594,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts chat reasoning deltas and provider fingerprints",
+          "status": "passed",
+          "duration_ms": 0.10666599999998994,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer redacts provider identifiers in response headers and canonicalizes request IDs",
+          "status": "passed",
+          "duration_ms": 0.17549999999999955,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "fixture sanitizer canonicalizes Responses reasoning and function item IDs and removes encrypted content",
+          "status": "passed",
+          "duration_ms": 0.1437919999999906,
+          "file": "scripts/provider-black-box/fixture-sanitizer.test.ts",
+          "failures": []
+        },
+        {
+          "name": "committed fixture security rejects common secret forms",
+          "status": "passed",
+          "duration_ms": 1.1513339999999985,
+          "file": "scripts/provider-black-box/fixture-security.test.ts",
+          "failures": []
+        },
+        {
+          "name": "committed fixture security does not flag benign prose or URLs as high-entropy secrets",
+          "status": "passed",
+          "duration_ms": 0.15100000000000335,
+          "file": "scripts/provider-black-box/fixture-security.test.ts",
+          "failures": []
+        },
+        {
+          "name": "committed fixture security contains no likely secrets in committed fixture JSON",
+          "status": "passed",
+          "duration_ms": 14.623207999999991,
+          "file": "scripts/provider-black-box/fixture-security.test.ts",
+          "failures": []
+        },
+        {
+          "name": "record-from-fake self-validation (plan D4) records from the fake provider, replays to identity, and writes an honestly-labeled envelope",
+          "status": "passed",
+          "duration_ms": 22.215542,
+          "file": "scripts/provider-black-box/fixture-self-validation.test.ts",
+          "failures": []
+        },
+        {
+          "name": "P1 nested hide result chain approves a hidden nested editor through the scripted adapter and preserves result-chain identity",
+          "status": "failed",
+          "duration_ms": 91.80183299999999,
+          "file": "scripts/provider-black-box/nested-hide.blackbox.ts",
+          "failures": [
+            "AssertionError: expected [] to have a length of 1 but got +0\n    at Proxy.<anonymous> (file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+expect@4.1.9/node_modules/@vitest/expect/dist/index.js:1389:20)\n    at Proxy.<anonymous> (file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+expect@4.1.9/node_modules/@vitest/expect/dist/index.js:1156:15)\n    at Proxy.methodWrapper (file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/chai@6.2.2/node_modules/chai/index.js:1700:25)\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/scripts/provider-black-box/nested-hide.blackbox.ts:195:20\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "OpenAI endpoint redirection proves the installed OpenAI client honors OPENAI_BASE_URL without fetch rewriting",
+          "status": "passed",
+          "duration_ms": 91.87254099999998,
+          "file": "scripts/provider-black-box/openai-base-url.test.ts",
+          "failures": []
+        },
+        {
+          "name": "OpenAI endpoint redirection routes the application-owned OpenAI provider to OPENAI_BASE_URL",
+          "status": "passed",
+          "duration_ms": 13.587957999999986,
+          "file": "scripts/provider-black-box/openai-base-url.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix declares every target route with transport, lifecycle, and required scenarios",
+          "status": "passed",
+          "duration_ms": 2.425167000000002,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix unit-tests the accounting primitive with representative execution entries",
+          "status": "passed",
+          "duration_ms": 0.8699590000000086,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix accounts the real lifecycle ledgers without importing their test modules",
+          "status": "passed",
+          "duration_ms": 0.18191700000001276,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix fails when a row has neither an executed scenario nor a documented exclusion",
+          "status": "passed",
+          "duration_ms": 0.10491700000000037,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix accepts an exclusion only when it carries a reason and evidence",
+          "status": "passed",
+          "duration_ms": 0.18412499999999454,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider capability matrix rejects an execution that does not belong to the row required-scenario set",
+          "status": "passed",
+          "duration_ms": 0.10229199999999139,
+          "file": "scripts/provider-black-box/provider-capability-matrix.test.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box runs a bounded handoff through the real supervisor, private pipe, and built CLI",
+          "status": "failed",
+          "duration_ms": 37.77737499999999,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": [
+            "AssertionError: \nunsupported_platform: Verified process ownership currently requires Linux /proc\n: expected 1 to be +0 // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/scripts/provider-black-box/provider-cli.blackbox.ts:56:69\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "assembled provider CLI black-box rejects excessive input before the shipped CLI makes any provider request",
+          "status": "passed",
+          "duration_ms": 486.309833,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box applies the supervised output profile on the actual wire while allowing useful work",
+          "status": "passed",
+          "duration_ms": 532.7600409999999,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box runs the shipped CLI through a runtime provider and captures a complete request",
+          "status": "passed",
+          "duration_ms": 517.1407920000001,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box prints terminal-only response text exactly once",
+          "status": "passed",
+          "duration_ms": 533.9517089999999,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled provider CLI black-box reports provider errors without fabricating successful output",
+          "status": "passed",
+          "duration_ms": 11796.095667000001,
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry llama.cpp keeps reasoning translation scoped to its adapter",
+          "status": "passed",
+          "duration_ms": 20.074000000000012,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry openai-compatible keeps reasoning translation scoped to its adapter",
+          "status": "passed",
+          "duration_ms": 3.885582999999997,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry OpenCode 'chat-completions' preserves session affinity across recreated models",
+          "status": "passed",
+          "duration_ms": 4.343250000000012,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry OpenCode 'responses' preserves session affinity across recreated models",
+          "status": "passed",
+          "duration_ms": 3.9098749999999995,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry OpenCode 'anthropic' preserves session affinity across recreated models",
+          "status": "passed",
+          "duration_ms": 13.528624999999977,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry SDK adapter 2 preserves explicit reasoning settings over selected effort",
+          "status": "passed",
+          "duration_ms": 2.1534169999999904,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry SDK adapter 3 preserves explicit reasoning settings over selected effort",
+          "status": "passed",
+          "duration_ms": 5.0420839999999885,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry SDK adapter 4 preserves explicit reasoning settings over selected effort",
+          "status": "passed",
+          "duration_ms": 2.7529579999999783,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"39.676606339s\",\"expected\":39677}",
+          "status": "passed",
+          "duration_ms": 4.351041000000009,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"59.999s\",\"expected\":59999}",
+          "status": "passed",
+          "duration_ms": 2.118916000000013,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60s\",\"expected\":60000}",
+          "status": "passed",
+          "duration_ms": 2.0310830000000237,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60.001s\"}",
+          "status": "passed",
+          "duration_ms": 2.1068750000000023,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"120s\"}",
+          "status": "passed",
+          "duration_ms": 1.38816700000001,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"-1s\",\"expected\":500}",
+          "status": "passed",
+          "duration_ms": 1.928416000000027,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"not-a-duration\",\"expected\":500}",
+          "status": "passed",
+          "duration_ms": 4.685084000000018,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"message\":\"Quota exceeded. https://ai.google.dev/gemini-api/docs/rate-limits. Please retry in 9.592042673s.\",\"expected\":9593}",
+          "status": "passed",
+          "duration_ms": 2.3072500000000105,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryAfter\":\"2.5\",\"expected\":2500}",
+          "status": "passed",
+          "duration_ms": 2.0456669999999804,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry keeps the built-in registry surface available",
+          "status": "passed",
+          "duration_ms": 0.1522499999999809,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry pilot Chat Completions provider replays a synthetic chat-completions fixture through the registry",
+          "status": "passed",
+          "duration_ms": 3.6959170000000086,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real OpenAI Responses capture replays tool continuation through the built-in registry",
+          "status": "passed",
+          "duration_ms": 5.081875000000025,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real OpenRouter capture replays tool continuation through the built-in registry",
+          "status": "passed",
+          "duration_ms": 24.375541,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real OpenCode Chat Completions capture replays tool continuation through the registry",
+          "status": "passed",
+          "duration_ms": 4.611084000000005,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real OpenCode Anthropic capture replays tool continuation through the registry",
+          "status": "passed",
+          "duration_ms": 3.5209590000000617,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry real Google capture replays tool continuation through the registry",
+          "status": "passed",
+          "duration_ms": 2.476374999999962,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 1.4533330000000433,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Chat Completions' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 1.20150000000001,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Anthropic' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 1.3151659999999765,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Google' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 0.9821249999999964,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenRouter' succeeds with one authoritative completion",
+          "status": "passed",
+          "duration_ms": 1.0137080000000651,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 1.1266669999999976,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Chat Completions' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 1.1707920000000058,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Anthropic' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 1.3444580000000315,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Google' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 1.00324999999998,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenRouter' preserves request roles, tools, reasoning, and provider options",
+          "status": "passed",
+          "duration_ms": 0.9868749999999409,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 0.9903329999999642,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Chat Completions' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 1.2846669999998994,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Anthropic' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 1.2204590000000053,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'Google' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 0.7655420000000959,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry 'OpenRouter' propagates a provider error instead of fabricating completion",
+          "status": "passed",
+          "duration_ms": 1.1651669999999967,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry replays OpenAI-compatible native reasoning_content through the registry tool continuation boundary",
+          "status": "passed",
+          "duration_ms": 2.2477499999999964,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry captures OpenRouter-style delta.reasoning and replays it through the registry tool continuation boundary",
+          "status": "passed",
+          "duration_ms": 1.5405420000000731,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry reassembles Chat Completions tool fragments with the authoritative tool ID",
+          "status": "passed",
+          "duration_ms": 0.7923750000001064,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider boundary contracts through the registry retries an in-band 502 that follows trivial whitespace and succeeds",
+          "status": "passed",
+          "duration_ms": 1.7859580000000506,
+          "file": "scripts/provider-black-box/provider-contract.test.ts",
+          "failures": []
+        },
+        {
+          "name": "crash after tool effect but before the tool result keeps the executed call in the resumed provider history without repeating the effect",
+          "status": "passed",
+          "duration_ms": 1371.970875,
+          "file": "scripts/provider-black-box/provider-crash-window.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "completes ordinary useful work with fresh safety defaults and keeps a resumable session",
+          "status": "passed",
+          "duration_ms": 500.54216699999995,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "admits input beyond the old universal ceiling when known capacity permits",
+          "status": "failed",
+          "duration_ms": 367.57837499999994,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": [
+            "AssertionError: \nWarning: Detected unsettled top-level await at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/yoga-layout@3.2.1/node_modules/yoga-layout/dist/src/index.js:13\nconst Yoga = wrapAssembly(await loadYoga());\n                          ^\n\n\n\n: expected 13 to be +0 // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/scripts/provider-black-box/provider-ordinary-safety.blackbox.ts:76:65\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "pauses before dispatch on a known small model with fresh defaults",
+          "status": "passed",
+          "duration_ms": 460.03154199999994,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "enforces an explicit smaller input ceiling with escalation=undefined and retains a locator",
+          "status": "failed",
+          "duration_ms": 363.49195800000007,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": [
+            "AssertionError: \nWarning: Detected unsettled top-level await at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/yoga-layout@3.2.1/node_modules/yoga-layout/dist/src/index.js:13\nconst Yoga = wrapAssembly(await loadYoga());\n                          ^\n\n\n\n: expected 13 to be 2 // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/scripts/provider-black-box/provider-ordinary-safety.blackbox.ts:107:67\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "enforces an explicit smaller input ceiling with escalation=warn and retains a locator",
+          "status": "failed",
+          "duration_ms": 365.93654200000014,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": [
+            "AssertionError: \nWarning: Detected unsettled top-level await at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/yoga-layout@3.2.1/node_modules/yoga-layout/dist/src/index.js:13\nconst Yoga = wrapAssembly(await loadYoga());\n                          ^\n\n\n\n: expected 13 to be 2 // Object.is equality\n    at /Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/scripts/provider-black-box/provider-ordinary-safety.blackbox.ts:107:67\n    at file:///Users/qduc/Documents/Codex/2026-10-22/task/term2-pr35/.worktrees/candidate/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ]
+        },
+        {
+          "name": "parks an unattended critical budget under explicit contain without auto-granting and retains completed tool evidence",
+          "status": "passed",
+          "duration_ms": 1163.503917,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "retains unknown-model work after structured provider overflow without retrying",
+          "status": "passed",
+          "duration_ms": 488.0420830000003,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "completes a tiny small-model request with real fresh and reloaded settings",
+          "status": "passed",
+          "duration_ms": 989.7029170000001,
+          "file": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "provider recorder credential isolation refuses an Anthropic credential for the OpenCode provider",
+          "status": "passed",
+          "duration_ms": 805.601125,
+          "file": "scripts/provider-black-box/provider-record-security.test.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider restart continuity resumes a completed conversation from full history, then establishes fresh chaining",
+          "status": "passed",
+          "duration_ms": 1490.229333,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider restart continuity settles an interrupted approval-pending 'OpenAI Responses' tool into resumed history without an orphan or stale response id",
+          "status": "passed",
+          "duration_ms": 1340.604417,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider restart continuity settles an interrupted approval-pending 'Codex Responses' tool into resumed history without an orphan or stale response id",
+          "status": "passed",
+          "duration_ms": 1324.140625,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned context compaction black-box lifecycle persists a compaction item and sends it after save/resume",
+          "status": "passed",
+          "duration_ms": 1382.146084,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned context compaction black-box lifecycle sends the next Codex turn after native compaction",
+          "status": "passed",
+          "duration_ms": 808.0770000000002,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned context compaction black-box lifecycle refuses a switched-provider request when native compaction coverage is unknown",
+          "status": "passed",
+          "duration_ms": 1307.5167089999995,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned context compaction black-box lifecycle does not re-execute a tool after its turn is replaced by compaction",
+          "status": "passed",
+          "duration_ms": 1462.311458000001,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "Codex WebSocket corrupt-history recovery codex-websocket.orphan-chain-recovery (standard model) sends paired full history after a stale resume chain",
+          "status": "passed",
+          "duration_ms": 779.2796249999992,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "Codex WebSocket corrupt-history recovery codex-websocket.orphan-chain-recovery (Responses Lite (gpt-5.6-luna)) sends paired full history after a stale resume chain",
+          "status": "passed",
+          "duration_ms": 764.7679579999985,
+          "file": "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openai-http.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 493.701583,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openai-http.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 503.03999999999996,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openai-http.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 497.1600410000001,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience codex-http.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 534.972,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience codex-http.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 497.8465419999998,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience codex-http.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 498.5705829999997,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openrouter-http.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 488.3299999999999,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openrouter-http.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 504.36983299999974,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience openrouter-http.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 497.91483400000016,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 493.8226249999998,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 498.2339579999998,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 511.01645800000006,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-anthropic-messages.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 504.5465830000003,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-anthropic-messages.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 504.276167,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-anthropic-messages.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 525.5567499999997,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-google-generate-content.native-error does not become empty success",
+          "status": "passed",
+          "duration_ms": 497.8189999999995,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-google-generate-content.early-close does not become empty success",
+          "status": "passed",
+          "duration_ms": 498.67491599999994,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider HTTP resilience runtime-google-generate-content.incomplete does not become empty success",
+          "status": "passed",
+          "duration_ms": 536.7078750000001,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning openai-http.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 516.0580830000017,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning codex-http.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 512.5626670000001,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning openrouter-http.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 569.6365000000005,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning runtime-openai-compatible-chat.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 566.3304590000007,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning runtime-anthropic-messages.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 539.4502080000002,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider response-side reasoning runtime-google-generate-content.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 525.7450840000001,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience openai-websocket.native-error fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 496.79820800000016,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience openai-websocket.incomplete fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 535.9669579999991,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience openai-websocket.abnormal-close fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 488.6205000000009,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience codex-websocket.native-error fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 495.0510830000003,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience codex-websocket.incomplete fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 495.4514170000002,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned provider WebSocket resilience codex-websocket.abnormal-close fails without fabricated completion",
+          "status": "passed",
+          "duration_ms": 490.19016700000066,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned WebSocket response-side reasoning openai-websocket.reasoning preserves response-side reasoning and final output",
+          "status": "skipped",
+          "duration_ms": 498.3977500000001,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned WebSocket response-side reasoning codex-websocket.reasoning preserves response-side reasoning and final output",
+          "status": "passed",
+          "duration_ms": 501.0440830000007,
+          "file": "scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 629.365709,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 644.7842500000002,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 1473.9627500000001,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' surfaces native terminal failure",
+          "status": "passed",
+          "duration_ms": 2305.181292,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 638.6118329999999,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 623.015625,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 1704.455,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' rejects an incomplete stream",
+          "status": "passed",
+          "duration_ms": 1555.4134999999997,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 640.2207500000004,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 620.5842090000006,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 1453.5451250000006,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' stops runaway streamed output",
+          "status": "passed",
+          "duration_ms": 1691.0187079999996,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'openai' websocket rejects an abnormal close without a fabricated completion",
+          "status": "passed",
+          "duration_ms": 623.5335840000007,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses terminal failure lifecycle 'codex' websocket rejects an abnormal close without a fabricated completion",
+          "status": "passed",
+          "duration_ms": 1688.2323340000003,
+          "file": "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 699.830958,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 678.8316659999999,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 1574.8072080000002,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes an approved tool from its producing response",
+          "status": "passed",
+          "duration_ms": 1716.8545829999998,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 701.4795839999997,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 742.936584,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 1699.7524169999997,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes a rejected tool exactly once",
+          "status": "passed",
+          "duration_ms": 1689.3071249999994,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval y and returns one outer tool result",
+          "status": "passed",
+          "duration_ms": 690.4936249999992,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval n and returns one outer tool result",
+          "status": "passed",
+          "duration_ms": 712.1872500000009,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification",
+          "status": "passed",
+          "duration_ms": 1693.4290419999998,
+          "file": "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 738.983209,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 746.250416,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 2461.201792,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' preserves two-turn response chaining",
+          "status": "passed",
+          "duration_ms": 1873.0874999999996,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex websocket replays full history when the completed response socket is replaced",
+          "status": "passed",
+          "duration_ms": 2780.6007500000005,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex websocket preserves completed tool pairs when the producing socket is replaced",
+          "status": "passed",
+          "duration_ms": 2399.0491249999995,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI session_search through run_code completes canonical fallback in the shipped CLI",
+          "status": "passed",
+          "duration_ms": 2226.412875,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI openai-websocket.retained-connection keeps two chained turns on one retained connection",
+          "status": "passed",
+          "duration_ms": 733.082375,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "application-owned Responses lifecycle through the shipped CLI codex-websocket.retained-connection keeps two chained turns on one retained connection",
+          "status": "passed",
+          "duration_ms": 2367.7712919999994,
+          "file": "scripts/provider-black-box/provider-session-responses.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Built-in OpenRouter' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1045.5470420000001,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime openai' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1004.112459,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime openai-compatible' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1032.1015000000002,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime llama.cpp' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1040.7275,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime Anthropic' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1114.8060409999998,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'Runtime Google' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1046.1472919999997,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'OpenCode Chat route' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1032.6854999999996,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "assembled stateless provider lifecycle black-box 'OpenCode Anthropic route' executes two user turns and approval continuations through its registry route",
+          "status": "passed",
+          "duration_ms": 1064.454291,
+          "file": "scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness observes HTTP arrivals without further PTY output and still rejects an unmet state",
+          "status": "passed",
+          "duration_ms": 114.88970800000001,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness passes bounded retry settings to isolated root removal",
+          "status": "passed",
+          "duration_ms": 0.32166600000002177,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness reuses one isolated lease across PTY child launches and relaunches",
+          "status": "passed",
+          "duration_ms": 80.169084,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness waits for composer idle through the harness file, not a prompt glyph",
+          "status": "passed",
+          "duration_ms": 61.66108400000002,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness gives waitForIdleInput the shared PTY ceiling when no timeout is passed",
+          "status": "passed",
+          "duration_ms": 77.57854100000003,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness fails waitForIdleInput fast when the child exits without publishing idle",
+          "status": "passed",
+          "duration_ms": 43.10416699999996,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness writes through the PTY and waits for visible state before exit",
+          "status": "passed",
+          "duration_ms": 42.75312500000001,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness waits for application-owned composer acknowledgement before writing Enter",
+          "status": "passed",
+          "duration_ms": 0.16999999999995907,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness isolates HOME and Windows USERPROFILE for child processes",
+          "status": "passed",
+          "duration_ms": 41.619624999999985,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness does not inherit the host CI marker into an interactive PTY child",
+          "status": "passed",
+          "duration_ms": 39.46741599999996,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness awaits termination after a bounded timeout",
+          "status": "passed",
+          "duration_ms": 91.56770899999992,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness reaps a timed-out one-shot child tree",
+          "status": "passed",
+          "duration_ms": 1006.057166,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness reaps a live PTY child when the owning process is signalled without cleanup",
+          "status": "passed",
+          "duration_ms": 525.8440830000002,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness retries concurrent workspace cleanup after a transient owned failure",
+          "status": "passed",
+          "duration_ms": 1.1655420000001868,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness rejects new work while cleanup is active and after a failed attempt",
+          "status": "passed",
+          "duration_ms": 45.1811660000003,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness reclaims the root when preparation fails",
+          "status": "passed",
+          "duration_ms": 0.769832999999835,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness preserves persistent acquisition cleanup errors",
+          "status": "passed",
+          "duration_ms": 0.8691249999997126,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "provider black-box harness runs callback cleanup even when the callback fails",
+          "status": "passed",
+          "duration_ms": 0.8371250000000146,
+          "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+          "failures": []
+        },
+        {
+          "name": "public hooks through the packaged CLI loads a TypeScript user hook and delivers status.change in non-interactive mode",
+          "status": "passed",
+          "duration_ms": 565.7535,
+          "file": "scripts/provider-black-box/public-hooks.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "public hooks through the packaged CLI loads a TypeScript user hook and delivers status.change in interactive mode",
+          "status": "passed",
+          "duration_ms": 748.0012090000001,
+          "file": "scripts/provider-black-box/public-hooks.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "public hooks through the packaged CLI runs TypeScript user hooks before trusted project hooks in deterministic order",
+          "status": "passed",
+          "duration_ms": 546.7105000000001,
+          "file": "scripts/provider-black-box/public-hooks.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'bare' reference approval preserves user context and enforces 'authorized' advice",
+          "status": "passed",
+          "duration_ms": 528.3012500000001,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'bare' reference approval preserves user context and enforces 'high-risk' advice",
+          "status": "passed",
+          "duration_ms": 505.41145900000004,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'bare' reference approval preserves user context and enforces 'unknown' advice",
+          "status": "passed",
+          "duration_ms": 503.07375,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'full' reference approval preserves user context and enforces 'authorized' advice",
+          "status": "passed",
+          "duration_ms": 550.6075410000001,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'full' reference approval preserves user context and enforces 'high-risk' advice",
+          "status": "passed",
+          "duration_ms": 537.9455419999999,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "'full' reference approval preserves user context and enforces 'unknown' advice",
+          "status": "passed",
+          "duration_ms": 553.1601249999999,
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "failures": []
+        },
+        {
+          "name": "resumes repeated questions once per decision and settles cancellation before the next turn",
+          "status": "passed",
+          "duration_ms": 974.8072080000001,
+          "file": "scripts/provider-black-box/turn-decisions.blackbox.ts",
+          "failures": []
+        }
+      ],
+      "suite_messages": []
+    }
+  },
+  "mac_limit": "Both full provider runs failed identically: 217 pass, 5 fail, 1 existing skip. No passing full-suite or CI speedup inferred. Candidate measurement HEAD denotes its base; source hashes identify the dirty test split.",
+  "resilience_ast_preservation": {
+    "verdict": "pass",
+    "registrations": 11,
+    "helpers": 49,
+    "hooks": 1,
+    "normalized_registration_hashes": [
+      "14772f6a6b661529f61ea7b1428bd75f2bb04feab7ab064cfe5b89faa52b4feb",
+      "212866cb45ceb1605cd2596667e88b79076032a2f3f9904c03707c3d722a56dd",
+      "35e32ebccb1c94d34180f07704db5626e59b90b6c82b6bc8df99bb244e492287",
+      "4248a82c037d4ba389127fbd496e8e5bfea2a8a5a1c5c5a6794620195fda4e1a",
+      "43b2e01fcc57ad4cea5a4276326ea5b1089459a93beafb74171a40de47d8f34a",
+      "5505b14467f6d644455919b67fdb0ad487f5d59935bcec200b2661a96125c33b",
+      "63d9daa09b18ec49a9e98484bf70cd7bbde7a6bdcb4551d4cc06dee6ec3fe2ac",
+      "77b924fe65778efd0039e2ee8464a3de522d78ab441cd0e7249674203041c312",
+      "875b10160c265a21124b8e9f71cd4ce00b0e7943f44127cc3f646d2933733edf",
+      "97e2030441584714d0aa4dce92bfb701c61fb0cddba7b777c66af22460faa8ab",
+      "a3f00b7dff47c27f2a46317812917a956d3f2fa05267a31cf0e4252e72055bdc"
+    ],
+    "normalized_helper_hashes": {
+      "runOneShot": "b5ca3182f83d4a6879cfdebf53470a360f15694714fbbaad57217eef52eedbef",
+      "createWorkspace": "51b3ed76f63885addf13808a34d9799d79069abbb75bd1662dd9ac426e4492df",
+      "writeSettings": "602d2e007305b88256cf87786b20cf45d9f16e054bf543a7c2c1947138bc2d44",
+      "enableTransientRetries": "1602617d4d4155d9671ec61d7a204dec3b244d5adf860eae00c4605bb8a1b1fc",
+      "writeCorruptCodexResume": "f91f415090fc73aa06a09247d75a78ac096d0c0f9d32b77bf16b3f295b82deca",
+      "writeFixtureCodexAuth": "f1b4ac94b7802811e0e52784fb2d51c177078e7eae728f3dd9c0fd89a1dd5507",
+      "startInteractive": "26ee8ddc9988105cad189576a4400b2c74cb5acf113fc7df1e374c4a9f0deeef",
+      "submitPrompt": "ee3089d8d640dfd75a7115d3531d16cee4380e312aebc6bf1f80d2a2bc3d3243",
+      "waitForConversationId": "78f401dd403a0d474c8980e1bfd47c9b4dc2456cd8b891ffac91c9cd0e461c3d",
+      "readConversation": "a0a263f18f25c94547edbf15c447d8c1a827b96109b5c07782ad23a624e58fdb",
+      "waitForConversationContent": "d2482754bd9c048eec06518dc0f0234f4d6c1a735c082a892ab9c16b143debc9",
+      "readProviderTraffic": "0dfdf35bbb28cca48141a54e11ce502946c782bb3a89ee74e97e540422e6e5d4",
+      "collectJsonFiles": "9b88286ce4108e0a71b06d8952d2ca6d35c56c45838db8fbabc3a5d5e4bebb29",
+      "collectConversationArtifacts": "a92501bc8c376fe2dfc36f255e8f15c180c02b13a7d454a0db8e7ef49ac4590a",
+      "collectFiles": "dc9959b00c0bee9ef01ca4e88e318e8cf6b6e030b045362d43f7499094fea11c",
+      "startResilienceHttpServer": "c2f4493b68a86eaaaf1444049c1f2ff4844a685845b8111dd86d072eda075f07",
+      "startResilienceWebSocketServer": "65c7fa5d42f68a33b10b43d67dfa331841c197917f2a69fd34cf6156b1b775b0",
+      "responseFramesFor": "94caadf1b299f92ebcd7c36539df866f5581a348c7be21f1bbd94536196de0f3",
+      "nativeErrorFrames": "665eb235ee3a4c2e73a4a91df83da99848f61b82da526d9e107c050635f059da",
+      "incompleteFrames": "49dc22ea5dd971e8120a8868b67802f4d6107fef430b5605864e084d06c22dfe",
+      "reasoningFrames": "72ae38d835ed50d5f07612be614cd8595a66b2550c6dcfa33c05d6d66b83c399",
+      "successFrames": "f42399a1a189fecac68f5c80308b0a01a775e7581e54e354e0324ce49d4fc072",
+      "interruptedToolFrames": "0b420e4a7f74e02bf7d04d108dfb823c410c1aa0edca42bec52d4615b8bc84c0",
+      "openAiCompletedFrame": "32d0e3cb2610193a591adc2dcf58dc10e134b4b532460929239c668c104a951d",
+      "openAiCompletedResponse": "838c643023d3b258aeb168491b1bbf53206ac08335ddbe0aebdc050e59a03718",
+      "compactionOutput": "6a0fffda7cb4b77ad341fa5b09d1530e60a6326525787364d4995075fc29caf4",
+      "codexCompactionFrames": "1c4868e40edd3fb97e304e1e8414c14098d92fb4c6b5e2bc0a92cd71163a0547",
+      "compactionToolCallFrames": "ab65ac0fbf574c4c2e98214e9514a8540879c6c16885d876815b97d9c5e06508",
+      "responseFramesForWs": "235c14ff64c42cff417fd68d1e9b1a8f3c5dcf64f37f2cce138b1dd1b8de0c7b",
+      "nativeErrorUsesHttpStatus": "10f14a7510ac8898449bbccaad537a8680f863c294ef053764e8fc7564bcd790",
+      "isChatFamily": "b284e4e4bf625118ed75643f3475ab27758a63616bfb9fc1a62e7224b155df16",
+      "contentTypeFor": "bacb62ff662bf01739b1a6c1cf079c3726dc52a1b7e7db8732c9fdf9b1df2784",
+      "serverUrl": "0a61ff072c91aa75c8648df56532f77fd8f272580e63893eae5c5aeebe21bd1d",
+      "isResponseCreate": "86bbfff888990791524205b1c0da37c962f72862131abb21bb223df6f260b87d",
+      "firstOrphanToolOutputCallId": "44c238e44e13aa7d5b51a237a78179f30fa01cbc190a21432def21f05a9065b9",
+      "flattenResponseFrames": "36067f21e5e72c57833dcbd7642e3c13d9b7106aeb0faa6e45f9e60b4a16fc9b",
+      "flattenStrings": "eae46ca8cb97e9febfc57a41fcd3e93621c45bd9b50ea6d7a949a2a5152a5cfc",
+      "inputText": "76188437689c91e6aace2b163dac06ae8f3f69c92c0ce76fbe843eb434ce967e",
+      "inputItems": "85a7841835d6335a478fd3d5f1a14580906c1e9bac3551f6ef6410136669ba33",
+      "callIdOf": "df9d75f3cc9dcbc882b9b4ce649810ee99111124ae610f67016cc75bf1049df5",
+      "asRecord": "bb320a9e85c9ace05e5514c23939ddb85cc078b8c706f48e3db97df2a339dde7",
+      "parseJson": "7e6b901fdd266a953cd2a84b1cbfb5b628b7b74837d7f3b50a5b06ac80a0f801",
+      "readRequestBody": "3328b2fb15f42299222b96ba305004e6afbc4aef771784ab448adf37e3b8b8d6",
+      "listen": "6dfa7fe79f3b2b916da7e45904462a283a4322b23ed132d86bcac8bcd73e1dda",
+      "closeHttpServer": "9a169f28a012d32fee5faf36554e39d5504014dcd21f81da9021491dc459d6cb",
+      "closeWsServer": "1d0c894cbfd70d7dc742559de6898696ea721cfdb8ec8bc900cc12437281140b",
+      "sendWs": "cfdeb30f5f7ad597554f5bb779f4e2b872f615493be15be7b81a93ebded5e5bb",
+      "waitForCapturedCount": "da8cc24b57e9ec7d610211e8359ef4c3f97f5eb0a9938aa84572db361b0550fb",
+      "delay": "1d4c40616687ea8565b1a8d0ad36e590eae3d94cf4e23eec5975251cacba48aa"
+    },
+    "scope": "All original test registration ASTs, helper functions and lifecycle hooks are identical."
+  },
+  "validation": {
+    "typecheck": "passed direct node_modules/.bin/tsc --noEmit",
+    "eslint": "passed 0 errors, 31 existing warnings",
+    "prettier": "passed",
+    "no_unit_tests": "passed",
+    "failure_propagation": "temporary child_process injection: first selected tier fails with status 7, later provider tier runs, final script status 1; worker cap and provider-only bail preserved",
+    "native_addons": "SQLite query, ssh2 Client and cpu-features load passed on Mac; CI will repeat after restore",
+    "file_inventory": "62 files, exact-once union: guards7 integration22 e2e5 provider28"
+  },
+  "rejected_attempts": [
+    {
+      "attempt": "Discover tests via pnpm exec under sandbox",
+      "result": "pnpm tried relinking dependencies for a different store and failed network setup before tests. Stopped; restored offline installation; use locked Vitest executable directly after setup verifies dependencies."
+    },
+    {
+      "attempt": "Local pnpm validation wrappers under sandbox",
+      "result": "pnpm refused dependency purge without TTY; underlying installed tsc, eslint, prettier and guard commands subsequently passed. No test result treated as success from setup failure."
+    }
+  ]
+}

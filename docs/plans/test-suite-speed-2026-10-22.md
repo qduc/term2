@@ -481,3 +481,46 @@ and measurement records remain under
 and AST-check scripts are beside that directory. The cloud's `/tmp` paths above
 refer to its original environment and are not available on the Mac. The
 committed cloud evidence and GitHub logs were sufficient for this continuation.
+
+## Complete CI feedback follow-up
+
+The goal is approximately 60 seconds including setup and cleanup, using the same
+four `ubuntu-latest` runners and two Vitest workers per runner. The baseline
+[`81445c7` run](https://github.com/qduc/term2/actions/runs/39788751714) passed all
+four jobs in 172 seconds from first job start to last job completion. Its
+provider step took about 128 seconds and dependency installation 31 seconds;
+the integration step took 76 seconds. These Linux observations are separate
+from the Mac measurements.
+
+This bounded candidate redistributes existing files across the four jobs,
+including moving CLI integration to the guard runner and provider work to the
+E2E and integration runners. The 65-second resilience file is separated into
+transport and continuity entries with unchanged scenario registrations,
+helpers and cleanup. Discovery uses each real tier configuration and assigns
+all 62 files exactly once. New files receive a default owner. Each tier retains
+its configuration, worker cap, isolation and failure policy; failures remain
+nonzero and do not suppress subsequent tiers within a job. Published local
+suite commands are unchanged.
+
+An exact-key installed-dependency cache includes native addons. The key covers
+OS/image, architecture, resolved Node version, pnpm version, manifests, lockfile,
+workspace build policy and vendored packages. Frozen installation still runs;
+SQLite and SSH native loads are checked after restore. Generated `.cache` and
+Vite state are excluded, and `dist` is outside the cached paths. Setup checks
+that integration's emitted CLI and `dist` are absent before the current-source
+build. This prevents restored JS or prompts from surviving source deletions.
+Cache restore/save and builds remain inside the measured CI interval. A cold
+cache is expected to be slower; it is not omitted from the experiment.
+
+The comparable full-provider Mac runs took 66.15 and 64.00 seconds, each with
+217 passes, the same five failures and one existing skip (223 identical case
+identities/outcomes). These failed runs do not establish a passing full-suite
+speedup. They also do not measure the distributed CI layout. AST checks matched
+all 11 resilience test registrations, 49 helpers and the cleanup hook.
+Typecheck, ESLint (31 existing warnings), formatting, and the no-unit-tests
+guard passed. A temporary failure-injection check confirmed later tiers still
+run and the script exits nonzero after an earlier failure.
+
+Ubuntu CI results and the one-minute target are pending. Full baseline job
+metadata, local outcomes, source hashes, preservation checks and rejected
+setup attempts are in [CI loop evidence](./test-suite-speed-2026-10-22.ci-loop.json).

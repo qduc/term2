@@ -74,9 +74,19 @@ scenario is the one whose CLI never reached the state it waits for.
   Vitest's file isolation gives each group separate fixture state and cleanup;
   scenarios within a file remain sequential. Keep file isolation enabled.
   The continuity entry retains the aggregate Responses ledger declaration.
-- `scripts/provider-black-box/provider-session-stateless.blackbox.ts` and
-  `provider-session-resilience.blackbox.ts` own the other stateful provider
-  lifecycle scenarios and their exported ledger declarations.
+- `scripts/provider-black-box/provider-session-stateless.blackbox.ts` owns the
+  stateless lifecycle scenarios and its exported ledger declaration.
+- `provider-session-resilience.blackbox.ts` and
+  `provider-session-resilience-continuity.blackbox.ts` register transport and
+  continuity groups from `provider-session-resilience-scenarios.ts`. They retain
+  separate fixture state through file isolation; cases within a file stay
+  sequential. The transport entry retains the aggregate resilience ledger.
+
+CI uses `scripts/run-ci-lane.mjs` to distribute the complete tier inventories
+across the same four jobs. Each lane invokes the original tier configuration
+with two workers; provider invocations retain `--bail=1`. Discovery assigns new
+files automatically, and a failed tier still causes its job to fail while later
+tiers run. The published full-suite commands above remain available locally.
 
 ## Adding or changing a scenario
 

@@ -10,7 +10,9 @@ runs:
     - uses: actions/setup-node@v7
       id: node
       with:
-        node-version: 24
+        # Match the measured baseline and avoid mixed native-cache keys while
+        # GitHub rolls newer Node patches across ubuntu-latest images.
+        node-version: 24.21.0
     - name: Install pnpm
       shell: bash
       run: npm install -g pnpm@11.7.0
@@ -54,6 +56,10 @@ runs:
       shell: bash
       run: |
         if ! command -v rg >/dev/null 2>&1; then
-          sudo apt-get update
-          sudo apt-get install -y ripgrep
+          # Hosted images normally have a usable apt index already. Refresh
+          # only if installation fails; keep both failures visible in logs.
+          if ! sudo apt-get install -y ripgrep; then
+            sudo apt-get update
+            sudo apt-get install -y ripgrep
+          fi
         fi

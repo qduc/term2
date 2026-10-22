@@ -521,6 +521,33 @@ Typecheck, ESLint (31 existing warnings), formatting, and the no-unit-tests
 guard passed. A temporary failure-injection check confirmed later tiers still
 run and the script exits nonzero after an earlier failure.
 
-Ubuntu CI results and the one-minute target are pending. Full baseline job
-metadata, local outcomes, source hashes, preservation checks and rejected
-setup attempts are in [CI loop evidence](./test-suite-speed-2026-10-22.ci-loop.json).
+### Complete-CI measurements
+
+The first candidate, `88b2cc6`, passed all four jobs in
+[run 39794433963, attempt 1](https://github.com/qduc/term2/actions/runs/39794433963/attempts/1):
+486 passes and the same two skips across all 488 cases. All four dependency
+caches missed. First job start to last completion was **109 seconds**, down
+from 172 seconds (36.6%); run creation to last completion was **112 seconds**,
+including three seconds before the first job. Setup, builds, native compilation,
+cache saving and cleanup are included. Summed runner time increased from
+392 to 426 seconds in this cold sample (8.7%); the runner count and peak worker
+cap stayed unchanged. These are individual observations, not a stable guarantee.
+
+The same-head repeat selected Node 24.21.0, 24.22.0 and 24.22.1 on different
+hosted images. Two jobs restored the cache and verified dependencies in under
+one second, while two correctly missed the cache after the Node change. This
+is not a controlled all-warm comparison. Native addon checks and the checks
+for absent generated CLI/dist output passed after restoration.
+
+The setup follow-up pins Node to the baseline's 24.21.0 and first attempts
+ripgrep installation using the hosted image's existing apt index. It refreshes
+the index and retries only on failure. A temporary subprocess probe checked
+successful installation, stale-index recovery, update failure and final install
+failure; final failures remain nonzero. This targets the observed 8–12 seconds
+of unconditional apt update/install without changing test deadlines or cases.
+
+The one-minute goal remains unverified. The cold CLI integration invocation
+alone took 63.04 seconds; the same-head repeat took 50.63 seconds. Its 53 cases
+remain sequential. The previously unreliable integration partition remains
+rejected. Full metadata, local outcomes, source hashes, preservation checks,
+and rejected attempts are in [CI loop evidence](./test-suite-speed-2026-10-22.ci-loop.json).

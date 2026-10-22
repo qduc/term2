@@ -1772,6 +1772,7 @@ it.each(['flag', 'config'])(
       expect(system).toContain('GLOBAL_GUIDANCE_SENTINEL');
       expect(system).toContain('report blocked');
       expect(system).toContain('BARE_SKILL_CATALOG_SENTINEL');
+      expect(system).toContain(`cwd (you're already here, don't \`cd\` to it): ${repo}`);
       expect(system).toContain('Follow required independent review policies');
       expect(system).not.toContain('run_code');
       expect(mock.capturedModels()).toHaveLength(2);
@@ -1782,7 +1783,7 @@ it.each(['flag', 'config'])(
       expect(emitted[0]).toMatchObject({
         type: 'session_start',
         activeProfileId: 'builtin:bare',
-        activeProfileVersion: '1.2.0',
+        activeProfileVersion: '1.3.0',
         activeProfileDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
       const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;

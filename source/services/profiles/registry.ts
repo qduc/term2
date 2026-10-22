@@ -150,13 +150,14 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
         sources: [
           { id: 'project-instructions', source: 'project-instructions' },
           { id: 'skills-catalog', source: 'skills-catalog' },
+          { id: 'environment', source: 'environment' },
         ],
       },
       tools: { kind: 'tools', include: ['shell', 'filesystem-write', 'skills'] },
       enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
       presentation: { kind: 'presentation', displayName: 'Bare', label: 'BARE', color: 'cyan' },
     }),
-    version: '1.2.0',
+    version: '1.3.0',
   },
   builtinProfile(
     'lite',

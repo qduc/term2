@@ -113,15 +113,8 @@ export async function collectTerminalResult(
         return {
           type: 'approval_required',
           approval: {
-            agentName: event.approval.agentName,
-            toolName: event.approval.toolName,
-            argumentsText: event.approval.argumentsText,
+            ...event.approval,
             rawInterruption: getRawInterruption?.(),
-            callId: event.approval.callId,
-            llmAdvisory: event.approval.llmAdvisory,
-            postExecute: event.approval.postExecute,
-            runBudgetEvent: event.approval.runBudgetEvent,
-            checkIn: event.approval.checkIn,
           },
           ...(usage ? { usage } : {}),
           ...(costRecords?.length ? { costRecords } : {}),

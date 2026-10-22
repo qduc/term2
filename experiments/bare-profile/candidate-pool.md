@@ -55,6 +55,33 @@ Wasted-call causes already seen:
   approval detour.
 - Checksum and permission errors inside the sandbox.
 
+## The underlying gap: local knowledge
+
+The model already knows coding in general. What it can never know is anything
+local: the user, the machine, the harness, the project, and the repository's
+current state. Each wasted call is the model buying, or guessing wrong about,
+a local fact. That explains the scores so far:
+
+- Hired: environment and skills both supply local facts.
+- Rejected: read tools and sessions are capabilities, not knowledge.
+- Clarification fetches local facts, but by asking the human, which is the
+  most expensive round trip.
+
+Local-knowledge gaps, ranked by expected value:
+
+1. **User**: preferences and past corrections. This is **memory**.
+2. **Harness**: sandbox temp dir, network proxy, approval model.
+3. **Machine**: installed tools and shell quirks. State the consequence, not
+   just the fact. Environment says `shell: zsh`, yet the model still broke
+   `!` quoting; "zsh: put scripts in a heredoc" would have helped.
+4. **Project commands**: package manager and build, test and lint commands.
+   Running `npm` in a `pnpm` repo gives `EBADDEVENGINES`, one wasted call.
+5. **Repository state**: branch, dirty files, worktrees.
+
+Prediction: candidates that supply local facts, ideally already turned into
+their consequences, win. Generic capabilities (`run_code`, subagents, web,
+background tasks, code-context) lose unless the task requires them.
+
 ## Open applications
 
 ### Prompt fragments

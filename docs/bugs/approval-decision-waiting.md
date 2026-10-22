@@ -52,11 +52,13 @@ three original experiment commands or call a paid provider.
   ordinary approval/denial and automatic continuation paths across providers.
 - Fake-Codex network: 16/16 pass. Static guards: 28/28 pass. Typecheck and lint
   pass; lint reports 31 warnings in untouched files. No-unit-test guard passes.
-- Full integration tier: 198 passed, 6 failed, 1 skipped. All six failures also
-  reproduce with both changed source files byte-identical to HEAD: five CLI
-  assertions expect RED/cannot-execute wording but get a YELLOW refusal, and the
-  headless Bare outside-workspace edit fixture creates its target. These are not
-  fixed or attributed to this patch.
+- Full integration tier on the implementer's host: 198 passed, 6 failed, 1 skipped;
+  the same six failed with both changed source files reverted. On the independent
+  reviewer's host the tier ran 204 passed, 1 skipped, 0 failed both with and
+  without the fix, so those six failures are host-specific, not caused by this patch.
+- Independent review (Claude Opus): approved with notes. Reverting the two source
+  files to main makes deny, allow-once and auto-approve fail with the exact error;
+  Escape passes on main too, so it is regression coverage, not a reproduction.
 
 Run the focused reproduction after `pnpm build`:
 
@@ -73,8 +75,10 @@ no system package or repository dependency was installed.
 ## Sibling audit and prevention
 
 - Both executable terminal/event conversion sites now derive their public
-  descriptors rather than maintaining drifting field lists. The collector also
-  previously dropped `deniedRead`, `dockerHostControl`, and `outsideWorkspaceEdit`.
+  descriptors rather than maintaining drifting field lists. Only the
+  `toTerminalEvent` change fixes this bug: the collector already passed
+  `postExecute` on main, but it dropped `deniedRead`, `dockerHostControl`,
+  `outsideWorkspaceEdit` and `workspaceRoot`, which it now keeps.
 - A temporary probe verified roundtrip preservation of those fields, workspace
   root and the post-execution token, plus exclusion of the private interruption
   from the public event. The temporary file was removed, not committed.

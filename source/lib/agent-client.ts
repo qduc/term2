@@ -8,6 +8,7 @@ import { resolveModelContextPolicy, resolveRequestOutput } from '../services/age
 import type { ModelSelection } from '../services/settings/model-selection.js';
 import {
   normalizeApplicationInput,
+  toModelTools,
   type ApplicationAgent,
   type ApplicationRunLoopDiagnosticOptions,
   type ApplicationRequestPreparation,
@@ -78,6 +79,7 @@ import type { NestedApprovalOwner } from '../services/approval/nested-approval-o
 import {
   ContextCompactionHardFitError,
   LocalContextCompactor,
+  type ContextSummaryGenerator,
 } from '../services/agent-runtime/context-compaction/local-context-compactor.js';
 import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
 import type { ModelRequestCost } from '../services/cost/model-cost.js';
@@ -188,6 +190,7 @@ export class AgentClient {
   #blockedCompactionRearmAtEstimatedTokens?: number;
   #blockedCompactionUserTurnCount?: number;
   #lastLogicalSessionId?: string;
+  #lastPromptCacheKey?: string;
 
   #clearStreamedModelCache(): void {
     for (const cached of this.#streamedModelCache.values()) {
@@ -333,6 +336,81 @@ export class AgentClient {
     }
   }
 
+  /**
+   * Freeze the live request envelope for both manual and automatic compaction.
+   * Summary transport history is isolated from the root while cache affinity
+   * stays rooted in the same session, including across logical rollover.
+   */
+  createContextSummaryGenerator(
+    sessionId?: string,
+    promptCacheKey?: string,
+    instructions?: string,
+  ): ContextSummaryGenerator {
+    const context = this.#sessionContextService.getContext();
+    const id = sessionId ?? context?.sessionId ?? this.#lastLogicalSessionId;
+    const cacheKey = promptCacheKey ?? context?.promptCacheKey ?? this.#lastPromptCacheKey ?? id;
+    const isRoot =
+      !this.#agentConfig.isTransientClient && context?.providerHistoryKey === undefined && !context?.evaluator;
+    const historyKey = context?.providerHistoryKey ?? id;
+    const configured = this.#agentConfig.getApplicationAgent(id, cacheKey);
+    const agent = {
+      ...configured,
+      instructions: instructions ?? configured.resolveInstructionsForRequest?.() ?? configured.instructions,
+    };
+    const provider = this.#agentConfig.getProvider();
+    const model = this.#agentConfig.getModel();
+    const summaryContext = id
+      ? {
+          ...context,
+          sessionId: id,
+          sessionStartedAt: context?.sessionStartedAt ?? new Date().toISOString(),
+          promptCacheKey: cacheKey,
+        }
+      : undefined;
+    return {
+      requestContext: { instructions: agent.instructions, tools: toModelTools(agent.tools) },
+      generate: async ({ history, renderedInput, maxOutputTokens, signal }) => {
+        const helperHistoryKey = `${historyKey}:context-summary:${crypto.randomUUID()}`;
+        const generate = () =>
+          history
+            ? this.#chatService.summarizeHistory(history, renderedInput, agent, provider, maxOutputTokens, signal)
+            : this.#chatService.chatDetailed(renderedInput, {
+                provider,
+                model,
+                reasoningEffort: this.#settings.get('agent.reasoningEffort'),
+                instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
+                maxTokens: maxOutputTokens,
+                signal,
+              });
+        let result;
+        try {
+          result = await (summaryContext
+            ? this.#sessionContextService.runWithContext(
+                {
+                  ...summaryContext,
+                  // Never reuse helper chain state, including between serialized
+                  // fallback chunks. Only the raw-prefix path benefits from root
+                  // socket affinity, and it runs exclusively at a root boundary.
+                  providerHistoryKey: helperHistoryKey,
+                  rootContextCompaction: history && isRoot ? true : undefined,
+                },
+                generate,
+              )
+            : generate());
+        } finally {
+          if (summaryContext) await this.#chatService.releaseSummaryHistory(provider, model, helperHistoryKey);
+        }
+        return {
+          text: result.text,
+          usage: result.usage
+            ? { inputTokens: result.usage.prompt_tokens, outputTokens: result.usage.completion_tokens }
+            : undefined,
+          costRecords: result.costRecords,
+        };
+      },
+    };
+  }
+
   #boundaryCompaction() {
     const enabled = this.#settings.get('agent.contextCompaction.enabled');
     if (!enabled) return undefined;
@@ -359,7 +437,6 @@ export class AgentClient {
         const mode = this.#settings.get('agent.contextCompaction.mode') ?? 'native';
         const provider = this.#agentConfig.getProvider();
         const model = this.#agentConfig.getModel();
-        const reasoningEffort = this.#settings.get('agent.reasoningEffort');
         const catalog = getCatalogModel(provider, model);
         const openaiInlineNative =
           getProvider(provider)?.capabilities?.supportsContextCompaction === true &&
@@ -392,35 +469,24 @@ export class AgentClient {
           this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens,
         );
         let started = false;
+        const generator = this.createContextSummaryGenerator(undefined, undefined, instructions);
         const compactor = new LocalContextCompactor({
-          generate: async ({ renderedInput, maxOutputTokens, signal: summarySignal }) => {
+          requestContext: generator.requestContext,
+          generate: async (request) => {
             if (!started) {
               started = true;
               onStarted(provider);
             }
             let result;
             try {
-              result = await this.#chatService.chatDetailed(renderedInput, {
-                provider,
-                model,
-                reasoningEffort,
-                instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
-                maxTokens: maxOutputTokens,
-                signal: summarySignal,
-              });
+              result = await generator.generate(request);
             } catch (error) {
               if (error instanceof AgentChatFailure && error.costRecords.length) recordCostRecords?.(error.costRecords);
               throw error;
             }
             if (result.costRecords?.length && recordCostRecords && !recordCostRecords(result.costRecords))
               throw new Error('Run budget exhausted while reducing context; original history retained.');
-            return {
-              text: result.text,
-              usage: result.usage
-                ? { inputTokens: result.usage.prompt_tokens, outputTokens: result.usage.completion_tokens }
-                : undefined,
-              costRecords: result.costRecords,
-            };
+            return result;
           },
         });
         const checkpoint = history.find(isLocalContextSummary)?.contextSummary;
@@ -1516,6 +1582,7 @@ export class AgentClient {
     const startController = new AbortController();
     this.#activeStartController = startController;
     if (options.sessionId) this.#lastLogicalSessionId = options.sessionId;
+    if (options.sessionId) this.#lastPromptCacheKey = options.promptCacheKey ?? options.sessionId;
     try {
       await this.#prepareStart(userInput, options, startController.signal);
       if (startController.signal.aborted) {

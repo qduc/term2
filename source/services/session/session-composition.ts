@@ -6,6 +6,7 @@ import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../../prompts/context-compactio
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import {
   LocalContextCompactor,
+  type ContextSummaryGenerator,
   type LocalCompactionOutcome,
 } from '../agent-runtime/context-compaction/local-context-compactor.js';
 import { estimateContext, type ContextEstimate } from '../agent-runtime/context-compaction/index.js';
@@ -1114,46 +1115,52 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         droppedOpaqueItems: 0,
       };
     }
-    const compactor = new LocalContextCompactor({
-      generate: async ({ renderedInput, maxOutputTokens, signal }) => {
-        if (signal?.aborted) throw abortError();
-        const chatOptions = {
-          provider,
-          model,
-          reasoningEffort,
-          instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
-          maxTokens: maxOutputTokens,
-          signal,
-        };
-        const aborted = new Promise<never>((_, reject) => {
-          signal?.addEventListener(
-            'abort',
-            () => {
-              getMethod<[], void>(agentClient, 'abort')?.call(agentClient);
-              reject(abortError());
-            },
-            { once: true },
-          );
-        });
-        const generate = async () => {
-          if (agentClient.chatDetailed) {
-            const result = await agentClient.chatDetailed(renderedInput, chatOptions);
-            return {
-              text: result.text,
-              usage: result.usage
-                ? {
-                    inputTokens: result.usage.prompt_tokens,
-                    outputTokens: result.usage.completion_tokens,
-                  }
-                : undefined,
-              costRecords: result.costRecords,
-            };
-          }
-          return { text: await agentClient.chat(renderedInput, chatOptions) };
-        };
-        return signal ? Promise.race([generate(), aborted]) : generate();
+    const liveGenerator = getMethod<[string, string], ContextSummaryGenerator>(
+      agentClient,
+      'createContextSummaryGenerator',
+    )?.call(agentClient, identity.current, identity.promptCacheKey);
+    const compactor = new LocalContextCompactor(
+      liveGenerator ?? {
+        generate: async ({ renderedInput, maxOutputTokens, signal }) => {
+          if (signal?.aborted) throw abortError();
+          const chatOptions = {
+            provider,
+            model,
+            reasoningEffort,
+            instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
+            maxTokens: maxOutputTokens,
+            signal,
+          };
+          const aborted = new Promise<never>((_, reject) => {
+            signal?.addEventListener(
+              'abort',
+              () => {
+                getMethod<[], void>(agentClient, 'abort')?.call(agentClient);
+                reject(abortError());
+              },
+              { once: true },
+            );
+          });
+          const generate = async () => {
+            if (agentClient.chatDetailed) {
+              const result = await agentClient.chatDetailed(renderedInput, chatOptions);
+              return {
+                text: result.text,
+                usage: result.usage
+                  ? {
+                      inputTokens: result.usage.prompt_tokens,
+                      outputTokens: result.usage.completion_tokens,
+                    }
+                  : undefined,
+                costRecords: result.costRecords,
+              };
+            }
+            return { text: await agentClient.chat(renderedInput, chatOptions) };
+          };
+          return signal ? Promise.race([generate(), aborted]) : generate();
+        },
       },
-    });
+    );
     const outcome = await compactor.compactAtBoundary({
       history: snapshot.history,
       provider,

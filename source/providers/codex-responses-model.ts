@@ -1839,7 +1839,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     // Root rollovers still retain their physical cache affinity.
     const cacheAffinity = request.codex?.promptCacheKey ?? sessionContext?.promptCacheKey ?? logicalSessionId;
     const transportSessionId =
-      sessionContext?.providerHistoryKey && sessionContext.providerHistoryKey !== sessionContext.sessionId
+      sessionContext?.providerHistoryKey &&
+      sessionContext.providerHistoryKey !== sessionContext.sessionId &&
+      !sessionContext.rootContextCompaction
         ? logicalSessionId
         : cacheAffinity;
     const threadId = logicalSessionId;

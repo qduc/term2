@@ -69,10 +69,13 @@ The local algorithm is deliberately conservative:
    safe user-turn boundary.
 3. Preserve a recent hot tail verbatim and keep every tool call paired with its
    result.
-4. Serialize the cold prefix with old tool payloads truncated for the
-   summarizer only.
-5. Reduce the cold prefix in bounded sequential chunks into one structured
-   summary, with load-bearing facts copied verbatim rather than summarized.
+4. Prefer a one-shot summary request with the live instructions, tools,
+   provider-compatible history and prompt-cache affinity unchanged, followed by
+   an appended host summarization request. Include the hot tail in that request
+   to preserve the live prefix; it still stays verbatim after the checkpoint.
+5. If that full request does not fit the existing input/output reservations,
+   fall back to serialized cold-prefix reduction in bounded sequential chunks.
+   Only that fallback truncates old tool payloads for the summarizer.
 6. Replace provider-facing history with a synthetic summary checkpoint plus
    the hot tail, clear provider chaining, and continue from a self-contained
    request.
@@ -85,10 +88,31 @@ complete new user turn exists and the rendered input has grown by the larger of
 8,000 estimated tokens or 10% of the effective threshold. Manual `/compact`
 remains independent of that cap.
 
-Do not start with parallel or hierarchical map/reduce. A sequential running
-summary is bounded, deterministic to test, and preserves cross-chunk context.
-Parallel reduction and structured patch-based reduction are both later options,
-gated by the Milestone 3.5 evaluation rather than adopted up front.
+The four-session October 23 comparison favored raw-history one-shot over
+serialized folding (blind recall score 35/96 versus 13/96; 169 versus 850
+seconds). This is a comparison of those implementations, not proof that one-shot
+preserves every necessary fact: both lost historical details. A Codex
+`gpt-6-luna` control reused 99,968 of 100,289 input tokens when the compaction
+request was appended with stable cache affinity; changing the system prompt
+reduced the reported cache hit to zero. The original benchmark omitted cache
+affinity and did not establish a warmed live prefix, so its zero cache counts
+were not evidence against prefix reuse.
+
+`AgentClient.createContextSummaryGenerator` freezes the live envelope and gives
+each summary call a fresh provider-history key while retaining root cache
+affinity. On Codex, the root-only `rootContextCompaction` traffic marker also
+retains physical socket affinity: a body cache key alone does not override
+nested-history socket isolation. Transient clients and nested provider-history
+scopes do not receive this marker. Grok and OpenCode likewise keep their root
+sticky-routing keys for marked helpers rather than routing by the disposable
+helper-history key. Helper chain bookkeeping is released by its exact key after
+success or failure; the shared root transport is not closed. A live call through the implemented generator
+reported 115,840 cached tokens out of 115,920 input tokens, with one paid request
+and unchanged source history. Summary tool schemas stay present for prefix matching, but their
+executable bodies and approval callbacks are replaced: an unexpected tool call
+fails the helper rather than executing a session tool. Native compaction is
+unchanged. Parallel reduction and structured patch-based reduction remain later
+options, rather than additional default mechanisms.
 
 What does change now is what the summarizer is allowed to touch: active user
 constraints, current decisions, exact identifiers, completed side effects, and

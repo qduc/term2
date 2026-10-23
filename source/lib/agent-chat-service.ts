@@ -17,6 +17,7 @@ import { selectAgentStreamItems } from '../services/agent-stream.js';
 import type { AgentClientChatOptions, AgentClientChatResult } from '../services/conversation-agent-client.js';
 import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import { normalizeUsage } from '../utils/ai/token-usage.js';
+import type { ProviderInputItem } from '../contracts/provider-input.js';
 
 /** A failed dispatched helper still owns its request accounting. */
 export class AgentChatFailure extends Error {
@@ -73,6 +74,17 @@ export class AgentChatService {
   /** Abort every active simple or structured chat operation. */
   abort(): void {
     for (const loop of this.#activeRunLoops) loop.abort();
+  }
+
+  /** Release one helper's chain bookkeeping without closing the shared root transport. */
+  async releaseSummaryHistory(provider: string, model: string, providerHistoryKey: string): Promise<void> {
+    const cached = this.#modelCache.get(`${provider}\0${model}`);
+    if (!cached) return;
+    try {
+      (await cached).resetConversationState?.({ providerHistoryKey });
+    } catch {
+      this.#deps.logger.warn('Could not release context-summary provider history.');
+    }
   }
 
   async #getModel(providerId: string, modelId: string): Promise<StreamedModelTurn> {
@@ -151,6 +163,46 @@ export class AgentChatService {
 
   async chat(message: string, options: AgentClientChatOptions = {}): Promise<string> {
     return (await this.chatDetailed(message, options)).text;
+  }
+
+  /**
+   * Summarize through the live agent's envelope without granting tool execution.
+   * Keep schemas and model options intact for caching; an unexpected tool call
+   * fails the helper run, never the real tool body.
+   */
+  async summarizeHistory(
+    history: readonly ProviderInputItem[],
+    request: string,
+    agent: ApplicationAgent,
+    provider: string,
+    maxTokens: number,
+    signal?: AbortSignal,
+  ): Promise<AgentClientChatResult> {
+    const summaryAgent: ApplicationAgent = {
+      ...agent,
+      resolveInstructionsForRequest: undefined,
+      resolveRequestSnapshot: undefined,
+      defaultRunOptions: undefined,
+      modelSettings: { ...agent.modelSettings, maxTokens },
+      tools: agent.tools.map((tool) => ({
+        ...tool,
+        needsApproval: () => false,
+        execute: async () => {
+          throw new Error('Tools cannot execute during context summarization.');
+        },
+      })),
+    };
+    const result = await this.#runAgentWithProvider(
+      provider,
+      summaryAgent,
+      [...history, { type: 'message', role: 'user', content: request }],
+      { signal, maxTurns: 1 },
+    );
+    return {
+      text: typeof result.finalOutput === 'string' ? result.finalOutput : '',
+      usage: normalizeUsage(result.runUsage),
+      ...(Array.isArray(result.runCostRecords) ? { costRecords: result.runCostRecords } : {}),
+    };
   }
 
   async chatDetailed(message: string, options: AgentClientChatOptions = {}): Promise<AgentClientChatResult> {

@@ -37,6 +37,8 @@ export type SessionTrafficContext = {
   /** Stable root prompt-cache affinity; logical sessionId may rotate on rollover. */
   promptCacheKey?: string;
   providerHistoryKey?: string;
+  /** Root-only, serialized compaction helper: isolate history but retain the root's physical cache affinity. */
+  rootContextCompaction?: true;
   mode?: string;
   traceId?: string;
   evaluator?: boolean;

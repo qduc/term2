@@ -2180,7 +2180,8 @@ function normalizeModelUsage(usage: unknown) {
   });
 }
 
-function toModelTools(tools: ToolRegistry): StreamedModelToolDefinition[] {
+/** The provider-facing tool catalog, shared by normal and prefix-preserving summary requests. */
+export function toModelTools(tools: ToolRegistry): StreamedModelToolDefinition[] {
   return tools.map((tool) =>
     tool.modelTool
       ? {

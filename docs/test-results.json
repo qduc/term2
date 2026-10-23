@@ -163,6 +163,199 @@
         "Branch codex/integration-approval-failures was not merged when this observation was recorded. No integrated-main green result is implied; append one after integration.",
         "Additional passing environment control: TMPDIR=/tmp pnpm test:integration source/cli.integration.test.ts -t 'does not approve a later call|reuses a refused call id|bare retains|bare permits' (7 passed, 48 skipped)."
       ]
+    },
+    {
+      "id": "2026-10-24-integration-main-12dabc92-first",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-23T23:49:17+00:00",
+      "finished_at": "2026-10-23T23:51:40+00:00",
+      "commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": "a296f1e223d58a076f20b4a73336b9db270831bf",
+      "revision_kind": "committed_source_with_unrelated_dirty_ledger",
+      "base_commit": "0a9f25258f4c5bdca6202c9eaebc9224714805b8",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 142.539,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "TEMP": null,
+          "TMP": null,
+          "NODE_ENV": "production",
+          "CI": null,
+          "TZ": null
+        },
+        "notes": "Command script sets NODE_ENV=test. Integrated committed source; only unrelated primary task-ledger rows dirty, preserved and excluded from commit. Not a wholly clean checkout."
+      },
+      "dirty_paths": ["docs/experiments/evidence-driven-development/tasks.jsonl"],
+      "result": {
+        "passed": 223,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 23,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+          "expected": "Completes within the existing 10000ms test deadline",
+          "actual": "Test timed out in 10000ms (observed case duration 10033ms)"
+        }
+      ],
+      "comparison": {
+        "classification": "timeout_observed_after_integration",
+        "baseline_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+        "resolves_run_ids": [],
+        "notes": "All six original approval cases passed; one different first CLI case timed out. Its helper recompiles the CLI synchronously on first use, and cache files were rebuilt during the run; load average 7.53 was observed afterward. Build/startup contention is a hypothesis, not an established cause or a pre-existing-failure classification."
+      },
+      "evidence": [
+        {
+          "kind": "git_commit",
+          "commit": "12dabc925efc1b72a63b885829a05c38a437ef69"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/integration-approval-integrated-main-20261024.log",
+          "sha256": "1a2c2b15f524c6606273f7a04ad30588abbefa57aa75d7d1a8f34d496c23067a"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/integration-approval-integrated-main-20261024-run.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/integration-approval-verifier-20261024.md"
+        }
+      ],
+      "independent_verification": {
+        "verdict": "accept_reviewed_patch",
+        "notes": "Retained fresh-agent approval-fixture verdict applies: integrated test/doc hashes exactly match reviewed 26f0b0f5. Post-integration full runs were executed by implementer, not independently rerun."
+      },
+      "snapshot_checksums": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "sha256": "93111c47182796990348e90901779f1ba10b3fe174744f5f46c319abded4299b"
+        },
+        {
+          "file": "docs/agent-context.md",
+          "sha256": "dc3e1101edcd9e5adbbbc9a9ec64f25277eb481b362a72c60b1b3d2019f6da6b"
+        }
+      ],
+      "other_checks": {
+        "typecheck": "passed_after_integration",
+        "static_guards_passed": 28,
+        "no_unit_tests": "passed_after_integration",
+        "full_e2e": "not_run",
+        "provider_black_box": "not_run"
+      },
+      "notes": [
+        "Source commit existed before execution; this observation is appended in a later documentation commit.",
+        "Integrated on main from reviewed 26f0b0f596d056bffd7726c434382ed9607b38fb with accurate provenance, without merging unrelated dirty ledger rows.",
+        "Only unrelated tasks.jsonl rows were dirty during this run; committed source and test files matched HEAD. This is not a claim of a wholly clean checkout.",
+        "No deadlines or approval policies changed. Native macOS/Windows and abrupt runner termination cleanup remain untested."
+      ]
+    },
+    {
+      "id": "2026-10-24-integration-main-12dabc92-rerun",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-23T23:52:09+00:00",
+      "finished_at": "2026-10-23T23:54:34+00:00",
+      "commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": "a296f1e223d58a076f20b4a73336b9db270831bf",
+      "revision_kind": "committed_source_with_unrelated_dirty_ledger",
+      "base_commit": "0a9f25258f4c5bdca6202c9eaebc9224714805b8",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 144.582,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "TEMP": null,
+          "TMP": null,
+          "NODE_ENV": "production",
+          "CI": null,
+          "TZ": null
+        },
+        "notes": "Command script sets NODE_ENV=test. Integrated committed source; only unrelated primary task-ledger rows dirty, preserved and excluded from commit. Not a wholly clean checkout."
+      },
+      "dirty_paths": ["docs/experiments/evidence-driven-development/tasks.jsonl"],
+      "result": {
+        "passed": 224,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 24,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "passing_rerun_same_committed_source",
+        "baseline_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+        "resolves_run_ids": ["2026-10-24-integration-b093ad0d", "2026-10-24-integration-main-12dabc92-first"],
+        "notes": "Unchanged source and deadline. Exact timed-out case passed in isolation (1 passed, 54 skipped; Vitest 4.08s), then this full tier passed. The original six approval failures remain resolved. This passing rerun does not establish a permanent fix for the first-run timeout."
+      },
+      "evidence": [
+        {
+          "kind": "git_commit",
+          "commit": "12dabc925efc1b72a63b885829a05c38a437ef69"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/integration-approval-integrated-main-20261024-rerun.log",
+          "sha256": "5be9e20c806f6a9c2d3a8962eafc4e49fa63f6ae4a0b5d274ca8edfa2143d7cf"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/integration-approval-integrated-main-20261024-rerun-run.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/integration-approval-verifier-20261024.md"
+        }
+      ],
+      "independent_verification": {
+        "verdict": "accept_reviewed_patch",
+        "notes": "Retained fresh-agent approval-fixture verdict applies: integrated test/doc hashes exactly match reviewed 26f0b0f5. Post-integration full runs were executed by implementer, not independently rerun."
+      },
+      "snapshot_checksums": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "sha256": "93111c47182796990348e90901779f1ba10b3fe174744f5f46c319abded4299b"
+        },
+        {
+          "file": "docs/agent-context.md",
+          "sha256": "dc3e1101edcd9e5adbbbc9a9ec64f25277eb481b362a72c60b1b3d2019f6da6b"
+        }
+      ],
+      "other_checks": {
+        "typecheck": "passed_after_integration",
+        "static_guards_passed": 28,
+        "no_unit_tests": "passed_after_integration",
+        "full_e2e": "not_run",
+        "provider_black_box": "not_run"
+      },
+      "notes": [
+        "Source commit existed before execution; this observation is appended in a later documentation commit.",
+        "Integrated on main from reviewed 26f0b0f596d056bffd7726c434382ed9607b38fb with accurate provenance, without merging unrelated dirty ledger rows.",
+        "Only unrelated tasks.jsonl rows were dirty during this run; committed source and test files matched HEAD. This is not a claim of a wholly clean checkout.",
+        "No deadlines or approval policies changed. Native macOS/Windows and abrupt runner termination cleanup remain untested."
+      ]
     }
   ]
 }

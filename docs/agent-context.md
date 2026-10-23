@@ -8,6 +8,8 @@ revisited when new evidence supports doing so.
 
 Read the relevant documents before touching these areas, starting with **Resume here** where present. Keep milestone status, measurements, and implementation history in the linked documents, not this index.
 
+- **Architecture and turn flow:** [Overview](architecture/architecture-overview.md), [conversation core](architecture/conversation-core.md), and [conversation loop](architecture/conversation-loop.md)
+- **Reference guides:** [Logging](reference/logging.md), [public hooks](reference/public-hooks.md), [model discovery](reference/agent-model-discovery.md), [Docker sandbox](reference/docker-host-control-sandbox.md), and [workflow evolution](reference/workflow-evolution.md)
 - **Agent assembly:** [Bounded feature composition and deferral criteria](plans/agent-runtime/agent-assembly-migration.md)
 - **Gateway:** [Web client gateway](plans/web-client/web-client-gateway-completion.md)
 - **`run_code` runtime:** [Lifecycle and contracts](plans/tools/run-code/run-code-codemode-improvements.md)
@@ -21,7 +23,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Session retrieval UX:** [Observed usage](research/session-retrieval-observed-usage.md), [seek/tail cell](research/session-retrieval-seek-cell.md), [paired protocol](research/session-retrieval-paired-protocol.md), and [cursor format](plans/context-and-memory/memory-progressive-disclosure.md)
 - **Modes:** [Profile architecture](profiles/README.md)
 - **Model/effort step-down:** [Benchmark](plans/providers/model-effort-step-down-benchmark.md) and [cache economics](research/model-effort-step-down-cache-economics.md)
-- **Audited tests:** [Test suite audit](plans/engineering/test-suite-audit.md) and `docs/test-audit/graph.yaml` — historical; most audited files were removed with the unit suite (tag `unit-suite-baseline`)
+- **Audited tests:** [Test suite audit](plans/engineering/test-suite-audit.md) — historical; most audited files and `docs/test-audit/` were removed with the unit suite (tags `unit-suite-baseline` / `3eb16591`)
 - **Service contracts:** [Boundary completion](plans/engineering/service-boundary-contract-completion.md) and [contracts](contracts/)
 - **UI/business ownership:** [Separation map](plans/engineering/ui-business-layer-separation/MAP.md)
 - **OAuth:** [Provider independence](plans/providers/provider-oauth-independence.md)

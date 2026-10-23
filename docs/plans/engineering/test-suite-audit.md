@@ -1,6 +1,6 @@
 # Test suite audit
 
-Status: Milestones 1-3 complete. Calibration wave ran 2026-09-02 and PASSED its
+Status: Milestones 1-4 complete (historical; audited unit tests removed at `unit-suite-baseline`, and `docs/test-audit/` artifacts retained in Git history at `3eb16591`). Calibration wave ran 2026-09-02 and PASSED its
   go/no-go (report: `docs/test-audit/calibration-report.md`). Milestone 3 (domain
   exploration) closed 2026-09-03: all 585 test files at the `d36c392a` inventory
   have validated graph records (28 reviewer artifacts + coordinator

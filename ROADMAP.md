@@ -28,7 +28,7 @@ This roadmap outlines the core engineering initiatives, architectural foundation
 ### 3. Test Suite Stewardship & Quality Graph
 - **Objective**: Maintain a verifiable, non-destructive evidence graph linking tests to public behavior contracts and operational invariants.
 - **Current Status**: Auditing foundation and graph tools merged (`pnpm test-audit`). Active governance over deterministic fast-lane tests (`pnpm test:lane`) and provider black-box wire suites (`pnpm test:provider-black-box`).
-- **Reference**: [`docs/plans/engineering/test-suite-audit.md`](./docs/plans/engineering/test-suite-audit.md), [`docs/test-audit/README.md`](./docs/test-audit/README.md).
+- **Reference**: [`docs/plans/engineering/test-suite-audit.md`](./docs/plans/engineering/test-suite-audit.md).
 
 ---
 

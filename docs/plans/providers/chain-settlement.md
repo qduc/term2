@@ -84,7 +84,7 @@ request. A provider compaction boundary (`projectProviderHistory`'s replacement
 boundary) makes that projection refuse to insert durable completed pairs behind
 the boundary, so a healthy mid-turn continuation was misclassified
 `unrecoverable` and killed the turn
-(`docs/bugs/2026-09-28-midturn-invalid-previous-response-id.md`).
+(`docs/research/2026-09-28-midturn-invalid-previous-response-id.md`).
 
 Now a provider-state rejection is admitted whenever every live-turn tool has
 completed locally (`completedToolCount > 0 && allToolsCompleted`,

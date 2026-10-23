@@ -11,7 +11,7 @@ Make debugging model and tool behavior fast by producing traceable, low-noise lo
 - Create a canonical JSON schema for all runtime logs.
 - Required fields: `timestamp`, `level`, `eventType`, `traceId`, `sessionId`, `messageId`, `provider`, `model`, `phase`.
 - Optional fields: `toolName`, `toolCallId`, `retryType`, `retryAttempt`, `errorCode`, `errorMessage`, `payloadRef`.
-- Add `docs/logging.md` with event taxonomy and examples.
+- Add `docs/reference/logging.md` with event taxonomy and examples.
 
 2. Add correlation and event taxonomy in code paths
 

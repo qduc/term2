@@ -1,7 +1,0 @@
-source/services/approval/approval-state.ts: matched
-source/services/approval/tool-approval-batch-coordinator.ts: matched
-source/services/conversation/conversation-result-builder.ts: matched
-source/services/session/continuation-plan-applier.ts: matched
-source/services/session/continuation-recovery-handler.ts: matched
-source/services/session/session-turn-adapter.ts: matched
-source/services/session/turn-projection-state.ts: matched

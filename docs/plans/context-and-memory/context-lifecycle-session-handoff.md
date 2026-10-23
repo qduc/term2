@@ -9,8 +9,7 @@ after the prior batch. Both implementation worktrees and branches were removed.
 ## Context lifecycle outcome
 
 Evidence/decision remains merged in `eaadf2a5`: reproducible corpus analyzer and
-report under `docs/research/context-lifecycle-economics/` and
-`docs/research/context-lifecycle-economics.md`. Parent reran artifacts exactly
+report in `docs/research/context-lifecycle-economics.md` (with historical scripts at `3eb16591`). Parent reran artifacts exactly
 and 7 analyzer tests passed in the predecessor session. Decision remains
 optional phase-boundary rollover, no new default threshold or automatic schedule.
 
@@ -25,7 +24,7 @@ See `docs/plans/sessions/session-rollover-handoff.md`.
 
 ## Retry incident outcome
 
-Canonical findings: `docs/bugs/invalid-chain-worker-recovery.md`. Parent found
+Canonical findings: `docs/research/invalid-chain-worker-recovery.md`. Parent found
 the missing time dimension: a prior recovery starts a 90-second deadline that
 never ended during successful work in the same logical turn. The regression
 now drives an actual earlier WebSocket failure, successful tool-producing model

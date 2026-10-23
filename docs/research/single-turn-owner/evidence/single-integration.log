@@ -1,9 +1,0 @@
-$ cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts
-
- RUN  v4.1.9 /home/qduc/term2/.worktrees/single-turn-owner
-
-[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l
- Test Files  15 passed | 1 skipped (16)
-      Tests  121 passed | 1 skipped (122)
-   Start at  22:05:57
-   Duration  98.23s (transform 8.70s, setup 693ms, import 25.71s, tests 164.39s, environment 2ms)

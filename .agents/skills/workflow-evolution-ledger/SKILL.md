@@ -8,7 +8,7 @@ description: Record one bounded workflow-improvement experiment in Term2 with fr
 Compose the public [agentic-loop](https://github.com/qduc/skills/blob/b29db03f876a0a5965767785c185357577e3488d/skills/agentic-loop/SKILL.md)
 and [workflow-evolution](https://github.com/qduc/skills/blob/b29db03f876a0a5965767785c185357577e3488d/skills/workflow-evolution/SKILL.md)
 methods. This skill supplies the Term2 recording adapter; it does not replace
-those methods or confer authority. Read [the invocation and trust contract](../../../docs/workflow-evolution.md).
+those methods or confer authority. Read [the invocation and trust contract](../../../docs/reference/workflow-evolution.md).
 
 1. Do useful ordinary work with the incumbent. Retain artifact/check traces,
    outcomes, retry counts and human interventions. Record the exact harness

@@ -27,7 +27,7 @@ evidence exposed one memory mutation followed by a result-shape failure that the
 receipt ledger did not represent. All 37 parse failures carried an edit payload
 inside a JavaScript string, and 35 used template literals. That narrower
 code/data composition problem is the next candidate for a controlled experiment.
-See [the failure and recovery audit](../../../reports/run-code-failure-recovery-audit-2026-09-13.md).
+See [the failure and recovery audit (historical)](https://github.com/qduc/term2/blob/3eb1659181eeda00bb32f971ef15096911380172/docs/reports/run-code-failure-recovery-audit-2026-09-13.md).
 
 ## Goal and limits
 

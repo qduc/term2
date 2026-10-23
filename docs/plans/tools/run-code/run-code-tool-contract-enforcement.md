@@ -89,7 +89,7 @@ and describe the post-`serializeResult` value. Two conventions:
   *and* failure) gets `z.string()`; the envelope prose stays in
   `scriptedReturnShape`, which the header renders as `(guidance: …)`. This is
   where the recovery audit's memory result-shape misread comes from
-  (`docs/reports/run-code-failure-recovery-audit-2026-09-13.md`, Finding 2): the
+  (`docs/reports/run-code-failure-recovery-audit-2026-09-13.md` at `3eb16591`, Finding 2): the
   script-visible value really is a string.
 - Object envelopes use `.strict()`. Zod strips undeclared keys by default, and
   `validateScriptedReturn` delivers `parsed.data`, so a non-strict schema would

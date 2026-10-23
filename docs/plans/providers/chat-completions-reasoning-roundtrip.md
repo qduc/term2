@@ -63,7 +63,7 @@ started capturing the reasoning is what exposed it.
 
 ## What was measured
 
-`docs/opencode-chat-completions-wire-shapes.md` records a live survey of all 15
+`docs/research/opencode-chat-completions-wire-shapes.md` records a live survey of all 15
 opencode models that route to chat completions (11 reachable; 4 fail upstream).
 The findings this plan depends on:
 

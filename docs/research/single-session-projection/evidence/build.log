@@ -1,3 +1,0 @@
-$ node scripts/build-with-rollback.mjs
-$ cp -r source/prompts dist/ && chmod +x dist/cli.js
-[build] previous build kept at dist.bak/ (roll back with: pnpm build:restore)

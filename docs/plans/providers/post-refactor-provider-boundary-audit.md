@@ -30,7 +30,7 @@ This plan is intended to be sufficient context for a fresh session. The audit ha
 - `.claude/skills/architecture/SKILL.md`
 - `.claude/skills/architecture/reference/runtime-path.md`
 - `AGENTS.md`
-- `docs/architecture-overview.md`
+- `docs/architecture/architecture-overview.md`
 
 Do not modify, stash, discard, or absorb those unrelated changes. Re-check `git status` because shared-checkout state may have changed since this handoff.
 

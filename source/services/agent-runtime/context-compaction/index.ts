@@ -185,15 +185,22 @@ export function planLocalCompaction(input: {
   const tailTokensAt = (cut: number) => Math.ceil(serializedBytes(filterHistoryForEstimate(tailAt(cut))) / 4);
   // Prefer the latest two whole user turns while they fit the hot-tail budget.
   // Past it, cut at a settled tool round instead: every user request stays
-  // verbatim regardless, and the older tool output belongs in the summary. Only
-  // when nothing fits the budget does the tail grow toward the usable window.
+  // verbatim regardless, and the older tool output belongs in the summary.
   const preferred =
     turns.length >= 3 && userBoundaries.has(turns[turns.length - 2]!.start) ? turns[turns.length - 2]!.start : 0;
-  let cut = 0;
-  for (const budget of [Math.min(hotTailBudgetTokens, input.usableInputTokens), input.usableInputTokens]) {
-    if (preferred > 0 && tailTokensAt(preferred) <= budget) cut = preferred;
-    else cut = roundBoundaries.slice(0, -1).find((boundary) => tailTokensAt(boundary) <= budget) ?? 0;
-    if (cut) break;
+  const rounds = roundBoundaries.slice(0, -1);
+  const budget = Math.min(hotTailBudgetTokens, input.usableInputTokens);
+  let cut =
+    preferred > 0 && tailTokensAt(preferred) <= budget
+      ? preferred
+      : rounds.find((boundary) => tailTokensAt(boundary) <= budget) ?? 0;
+  if (!cut) {
+    // Nothing fits the budget, typically because the newest round alone is
+    // large. Keep the smallest admissible tail, not the largest: the latest cut
+    // still retains the newest complete round. A later cut never has a larger
+    // tail, so if it does not fit the request, no earlier one does either.
+    const latest = Math.max(preferred, rounds.at(-1) ?? 0);
+    if (latest > 0 && tailTokensAt(latest) <= input.usableInputTokens) cut = latest;
   }
   if (cut <= 0)
     return {

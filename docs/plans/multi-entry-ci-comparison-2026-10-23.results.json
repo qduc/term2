@@ -1,0 +1,1613 @@
+{
+  "baselineRevision": "9e598ab60485bbae0fe8568b60d052b3336d3c79",
+  "order": ["baseline", "runtime", "runtime", "baseline", "baseline", "runtime"],
+  "startedAt": "2026-10-23T15:25:58.711777+00:00",
+  "observations": [
+    {
+      "index": 1,
+      "variant": "baseline",
+      "sha": "8408be2f11c1ba197556bf88bbab9408845d6722",
+      "pushedAt": "2026-10-23T15:26:02.832523+00:00",
+      "runId": 39978230929,
+      "url": "https://github.com/qduc/term2/actions/runs/39978230929",
+      "terminalObservedAt": "2026-10-23T15:28:20.831770+00:00",
+      "conclusion": "success",
+      "watchExitCode": 0,
+      "feedbackMetadataSeconds": 128,
+      "terminalObservedSeconds": 132.83177,
+      "jobSpanSeconds": 124,
+      "aggregateJobSeconds": 404,
+      "preFirstJobSeconds": 3,
+      "jobs": [
+        {
+          "name": "integration",
+          "conclusion": "success",
+          "seconds": 124,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 5
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 57
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run remaining integration and stateless provider cases",
+              "conclusion": "success",
+              "seconds": 48
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "e2e",
+          "conclusion": "success",
+          "seconds": 84,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 24
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run E2E and Responses provider cases",
+              "conclusion": "success",
+              "seconds": 44
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "test",
+          "conclusion": "success",
+          "seconds": 116,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 72
+            },
+            {
+              "name": "Reject committed unit tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 5
+            },
+            {
+              "name": "Run guards, CLI integration and safety provider cases",
+              "conclusion": "success",
+              "seconds": 28
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "provider-black-box",
+          "conclusion": "success",
+          "seconds": 80,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 22
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run resilience and remaining provider cases",
+              "conclusion": "success",
+              "seconds": 43
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        }
+      ],
+      "testSummaries": [
+        "159 passed | 1 skipped (160)",
+        "66 passed (66)",
+        "95 passed (95)",
+        "166 passed | 1 skipped (167)"
+      ],
+      "cacheLines": [
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:22.0222100Z Cache not found for input keys: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:40.9785085Z Cache not found for input keys: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:18.5678288Z Cache not found for input keys: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:20.3989118Z Cache not found for input keys: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:48.5610708Z Cache not found for input keys: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:17.1002209Z Cache not found for input keys: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb"
+      ],
+      "inventory": {
+        "passed": 486,
+        "skipped": 2,
+        "total": 488
+      },
+      "cacheMissLines": [
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:22.0222100Z Cache not found for input keys: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:40.9785085Z Cache not found for input keys: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:18.5678288Z Cache not found for input keys: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:20.3989118Z Cache not found for input keys: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:48.5610708Z Cache not found for input keys: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:26:17.1002209Z Cache not found for input keys: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb"
+      ],
+      "resourceSamples": {
+        "User time (seconds)": [11.82, 58.48, 11.56, 24.23, 8.47, 47.25, 11.58, 62.46],
+        "System time (seconds)": [0.71, 18.8, 0.74, 3.96, 0.55, 10.52, 0.74, 10.96],
+        "Maximum resident set size (kbytes)": [1085252, 468536, 1095684, 387220, 1114148, 430372, 1108116, 450312]
+      },
+      "buildAndTestCpuSeconds": 282.83,
+      "phaseSeconds": {
+        "setup": {
+          "total": 175,
+          "maximum": 72,
+          "samples": [57, 24, 72, 22]
+        },
+        "build": {
+          "total": 23,
+          "maximum": 6,
+          "samples": [6, 6, 5, 6]
+        },
+        "test": {
+          "total": 163,
+          "maximum": 48,
+          "samples": [48, 44, 28, 43]
+        },
+        "cleanup": {
+          "total": 15,
+          "maximum": 4,
+          "samples": [3, 0, 3, 1, 3, 0, 4, 1]
+        }
+      }
+    },
+    {
+      "index": 2,
+      "variant": "runtime",
+      "sha": "e691f78fabf2f5eb37abb66568b47ce65a03f26e",
+      "pushedAt": "2026-10-23T15:28:29.809056+00:00",
+      "runId": 39978576252,
+      "url": "https://github.com/qduc/term2/actions/runs/39978576252",
+      "terminalObservedAt": "2026-10-23T15:30:14.582578+00:00",
+      "conclusion": "success",
+      "watchExitCode": 0,
+      "feedbackMetadataSeconds": 76,
+      "terminalObservedSeconds": 100.582578,
+      "jobSpanSeconds": 72,
+      "aggregateJobSeconds": 264,
+      "preFirstJobSeconds": 3,
+      "jobs": [
+        {
+          "name": "test",
+          "conclusion": "success",
+          "seconds": 62,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 12
+            },
+            {
+              "name": "Reject committed unit tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run guards, CLI integration and safety provider cases",
+              "conclusion": "success",
+              "seconds": 36
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "provider-black-box",
+          "conclusion": "success",
+          "seconds": 65,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 8
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run resilience and remaining provider cases",
+              "conclusion": "success",
+              "seconds": 43
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "e2e",
+          "conclusion": "success",
+          "seconds": 65,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 7
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run E2E and Responses provider cases",
+              "conclusion": "success",
+              "seconds": 47
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "integration",
+          "conclusion": "success",
+          "seconds": 72,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 11
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run remaining integration and stateless provider cases",
+              "conclusion": "success",
+              "seconds": 49
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        }
+      ],
+      "testSummaries": [
+        "95 passed (95)",
+        "166 passed | 1 skipped (167)",
+        "66 passed (66)",
+        "159 passed | 1 skipped (160)"
+      ],
+      "cacheLines": [
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:47.8594116Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:51.6522078Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:52.9248605Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:53.5793264Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:44.9529642Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:48.6387646Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:43.0130260Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:46.2138048Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:47.6570869Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:50.8912503Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:52.1015205Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:28:52.3447015Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24"
+      ],
+      "inventory": {
+        "passed": 486,
+        "skipped": 2,
+        "total": 488
+      },
+      "cacheMissLines": [],
+      "resourceSamples": {
+        "User time (seconds)": [12.45, 67.67, 12.09, 62.57, 12.07, 27.8, 11.66, 59.47],
+        "System time (seconds)": [0.89, 13.04, 0.8, 9.32, 0.87, 4.29, 0.87, 18.8],
+        "Maximum resident set size (kbytes)": [1138540, 424440, 1101184, 442264, 1100732, 382264, 1055028, 447544]
+      },
+      "buildAndTestCpuSeconds": 314.65999999999997,
+      "phaseSeconds": {
+        "setup": {
+          "total": 38,
+          "maximum": 12,
+          "samples": [12, 8, 7, 11]
+        },
+        "build": {
+          "total": 24,
+          "maximum": 6,
+          "samples": [6, 6, 6, 6]
+        },
+        "test": {
+          "total": 175,
+          "maximum": 49,
+          "samples": [36, 43, 47, 49]
+        },
+        "cleanup": {
+          "total": 4,
+          "maximum": 1,
+          "samples": [1, 0, 1, 0, 1, 0, 0, 1]
+        }
+      }
+    },
+    {
+      "index": 3,
+      "variant": "runtime",
+      "sha": "c655dc5e8c9a49edbff15d2f3bd213a152c2d6b4",
+      "pushedAt": "2026-10-23T15:30:23.887324+00:00",
+      "runId": 39978854905,
+      "url": "https://github.com/qduc/term2/actions/runs/39978854905",
+      "terminalObservedAt": "2026-10-23T15:32:08.982178+00:00",
+      "conclusion": "success",
+      "watchExitCode": 0,
+      "feedbackMetadataSeconds": 76,
+      "terminalObservedSeconds": 99.982178,
+      "jobSpanSeconds": 73,
+      "aggregateJobSeconds": 248,
+      "preFirstJobSeconds": 2,
+      "jobs": [
+        {
+          "name": "test",
+          "conclusion": "success",
+          "seconds": 59,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 11
+            },
+            {
+              "name": "Reject committed unit tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run guards, CLI integration and safety provider cases",
+              "conclusion": "success",
+              "seconds": 35
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "e2e",
+          "conclusion": "success",
+          "seconds": 69,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 12
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run E2E and Responses provider cases",
+              "conclusion": "success",
+              "seconds": 46
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "integration",
+          "conclusion": "success",
+          "seconds": 72,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 10
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run remaining integration and stateless provider cases",
+              "conclusion": "success",
+              "seconds": 49
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "provider-black-box",
+          "conclusion": "success",
+          "seconds": 48,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run resilience and remaining provider cases",
+              "conclusion": "success",
+              "seconds": 31
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        }
+      ],
+      "testSummaries": [
+        "95 passed (95)",
+        "66 passed (66)",
+        "159 passed | 1 skipped (160)",
+        "166 passed | 1 skipped (167)"
+      ],
+      "cacheLines": [
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:41.8590280Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:45.0526772Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:46.2408955Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:46.4620672Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:42.4511601Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:46.4300635Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:39.9486966Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:43.9848509Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:45.8712480Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:46.6131470Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:37.6838227Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:30:40.8076364Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb"
+      ],
+      "inventory": {
+        "passed": 486,
+        "skipped": 2,
+        "total": 488
+      },
+      "cacheMissLines": [],
+      "resourceSamples": {
+        "User time (seconds)": [11.9, 66.87, 11.8, 25.71, 12.27, 58.54, 7.16, 38.31],
+        "System time (seconds)": [0.89, 12.88, 0.84, 4.54, 0.86, 18.89, 0.58, 8.16],
+        "Maximum resident set size (kbytes)": [1090556, 423872, 1094620, 380232, 1149068, 499572, 1125340, 415444]
+      },
+      "buildAndTestCpuSeconds": 280.2,
+      "phaseSeconds": {
+        "setup": {
+          "total": 39,
+          "maximum": 12,
+          "samples": [11, 12, 10, 6]
+        },
+        "build": {
+          "total": 22,
+          "maximum": 6,
+          "samples": [6, 6, 6, 4]
+        },
+        "test": {
+          "total": 161,
+          "maximum": 49,
+          "samples": [35, 46, 49, 31]
+        },
+        "cleanup": {
+          "total": 2,
+          "maximum": 1,
+          "samples": [1, 0, 0, 0, 1, 0, 0, 0]
+        }
+      }
+    },
+    {
+      "index": 4,
+      "variant": "baseline",
+      "sha": "494863aebaf7213abd3358ebecf156b03e1958de",
+      "pushedAt": "2026-10-23T15:32:17.851373+00:00",
+      "runId": 39979132884,
+      "url": "https://github.com/qduc/term2/actions/runs/39979132884",
+      "terminalObservedAt": "2026-10-23T15:34:02.270277+00:00",
+      "conclusion": "success",
+      "watchExitCode": 0,
+      "feedbackMetadataSeconds": 73,
+      "terminalObservedSeconds": 100.270277,
+      "jobSpanSeconds": 69,
+      "aggregateJobSeconds": 249,
+      "preFirstJobSeconds": 3,
+      "jobs": [
+        {
+          "name": "test",
+          "conclusion": "success",
+          "seconds": 50,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 7
+            },
+            {
+              "name": "Reject committed unit tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run guards, CLI integration and safety provider cases",
+              "conclusion": "success",
+              "seconds": 31
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "e2e",
+          "conclusion": "success",
+          "seconds": 62,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 10
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 5
+            },
+            {
+              "name": "Run E2E and Responses provider cases",
+              "conclusion": "success",
+              "seconds": 40
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "provider-black-box",
+          "conclusion": "success",
+          "seconds": 69,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 10
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run resilience and remaining provider cases",
+              "conclusion": "success",
+              "seconds": 44
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "integration",
+          "conclusion": "success",
+          "seconds": 68,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 8
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run remaining integration and stateless provider cases",
+              "conclusion": "success",
+              "seconds": 48
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        }
+      ],
+      "testSummaries": [
+        "95 passed (95)",
+        "66 passed (66)",
+        "166 passed | 1 skipped (167)",
+        "159 passed | 1 skipped (160)"
+      ],
+      "cacheLines": [
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:33.1214856Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:35.9799216Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:37.0184075Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:37.7701327Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:35.5356918Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:38.7315320Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:33.7947045Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:39.3912584Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:32.4749846Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:35.8095235Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:37.6070382Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:32:37.7360958Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24"
+      ],
+      "inventory": {
+        "passed": 486,
+        "skipped": 2,
+        "total": 488
+      },
+      "cacheMissLines": [],
+      "resourceSamples": {
+        "User time (seconds)": [9.38, 54.72, 9.21, 19.04, 11.93, 63.77, 11.91, 57.05],
+        "System time (seconds)": [0.64, 9.39, 0.64, 2.68, 0.72, 11.39, 0.73, 18.21],
+        "Maximum resident set size (kbytes)": [1090596, 416640, 1092484, 386608, 1104928, 450216, 1148804, 497776]
+      },
+      "buildAndTestCpuSeconds": 281.40999999999997,
+      "phaseSeconds": {
+        "setup": {
+          "total": 35,
+          "maximum": 10,
+          "samples": [7, 10, 10, 8]
+        },
+        "build": {
+          "total": 21,
+          "maximum": 6,
+          "samples": [4, 5, 6, 6]
+        },
+        "test": {
+          "total": 163,
+          "maximum": 48,
+          "samples": [31, 40, 44, 48]
+        },
+        "cleanup": {
+          "total": 1,
+          "maximum": 1,
+          "samples": [0, 0, 0, 0, 1, 0, 0, 0]
+        }
+      }
+    },
+    {
+      "index": 5,
+      "variant": "baseline",
+      "sha": "55cd61ffc4799094ef34ba8d029e1c46dbd3618e",
+      "pushedAt": "2026-10-23T15:34:11.532639+00:00",
+      "runId": 39979412493,
+      "url": "https://github.com/qduc/term2/actions/runs/39979412493",
+      "terminalObservedAt": "2026-10-23T15:36:02.734761+00:00",
+      "conclusion": "success",
+      "watchExitCode": 0,
+      "feedbackMetadataSeconds": 72,
+      "terminalObservedSeconds": 104.734761,
+      "jobSpanSeconds": 69,
+      "aggregateJobSeconds": 231,
+      "preFirstJobSeconds": 3,
+      "jobs": [
+        {
+          "name": "provider-black-box",
+          "conclusion": "success",
+          "seconds": 64,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 8
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run resilience and remaining provider cases",
+              "conclusion": "success",
+              "seconds": 45
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "integration",
+          "conclusion": "success",
+          "seconds": 69,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 9
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run remaining integration and stateless provider cases",
+              "conclusion": "success",
+              "seconds": 47
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "e2e",
+          "conclusion": "success",
+          "seconds": 57,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 9
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 5
+            },
+            {
+              "name": "Run E2E and Responses provider cases",
+              "conclusion": "success",
+              "seconds": 36
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "test",
+          "conclusion": "success",
+          "seconds": 41,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 8
+            },
+            {
+              "name": "Reject committed unit tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run guards, CLI integration and safety provider cases",
+              "conclusion": "success",
+              "seconds": 22
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        }
+      ],
+      "testSummaries": [
+        "166 passed | 1 skipped (167)",
+        "159 passed | 1 skipped (160)",
+        "66 passed (66)",
+        "95 passed (95)"
+      ],
+      "cacheLines": [
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:28.3189491Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:31.7607983Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:30.3595332Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:33.5260760Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:34.6239970Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:34.8316198Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:31.5781398Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:34.9440497Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:28.9768760Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:32.2734357Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:33.4719758Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:34:34.1510436Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24"
+      ],
+      "inventory": {
+        "passed": 486,
+        "skipped": 2,
+        "total": 488
+      },
+      "cacheMissLines": [],
+      "resourceSamples": {
+        "User time (seconds)": [11.41, 64.46, 11.28, 56.59, 9.3, 18.87, 7.17, 38.84],
+        "System time (seconds)": [0.72, 11.2, 0.67, 17.9, 0.62, 2.6, 0.5, 8.51],
+        "Maximum resident set size (kbytes)": [1079948, 440508, 1061048, 460724, 1138988, 377268, 1144880, 402184]
+      },
+      "buildAndTestCpuSeconds": 260.64,
+      "phaseSeconds": {
+        "setup": {
+          "total": 34,
+          "maximum": 9,
+          "samples": [8, 9, 9, 8]
+        },
+        "build": {
+          "total": 21,
+          "maximum": 6,
+          "samples": [6, 6, 5, 4]
+        },
+        "test": {
+          "total": 150,
+          "maximum": 47,
+          "samples": [45, 47, 36, 22]
+        },
+        "cleanup": {
+          "total": 4,
+          "maximum": 1,
+          "samples": [1, 0, 1, 0, 1, 0, 0, 1]
+        }
+      }
+    },
+    {
+      "index": 6,
+      "variant": "runtime",
+      "sha": "706e0050653967167a3e7def714c65c38ad0eeee",
+      "pushedAt": "2026-10-23T15:36:11.695490+00:00",
+      "runId": 39979696491,
+      "url": "https://github.com/qduc/term2/actions/runs/39979696491",
+      "terminalObservedAt": "2026-10-23T15:37:55.615415+00:00",
+      "conclusion": "success",
+      "watchExitCode": 0,
+      "feedbackMetadataSeconds": 74,
+      "terminalObservedSeconds": 99.615415,
+      "jobSpanSeconds": 71,
+      "aggregateJobSeconds": 250,
+      "preFirstJobSeconds": 3,
+      "jobs": [
+        {
+          "name": "test",
+          "conclusion": "success",
+          "seconds": 63,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 14
+            },
+            {
+              "name": "Reject committed unit tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 6
+            },
+            {
+              "name": "Run guards, CLI integration and safety provider cases",
+              "conclusion": "success",
+              "seconds": 33
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "e2e",
+          "conclusion": "success",
+          "seconds": 65,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 2
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 7
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 7
+            },
+            {
+              "name": "Run E2E and Responses provider cases",
+              "conclusion": "success",
+              "seconds": 46
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "integration",
+          "conclusion": "success",
+          "seconds": 71,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 9
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 7
+            },
+            {
+              "name": "Run remaining integration and stateless provider cases",
+              "conclusion": "success",
+              "seconds": 48
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        },
+        {
+          "name": "provider-black-box",
+          "conclusion": "success",
+          "seconds": 51,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 3
+            },
+            {
+              "name": "Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 7
+            },
+            {
+              "name": "Build dist",
+              "conclusion": "success",
+              "seconds": 4
+            },
+            {
+              "name": "Run resilience and remaining provider cases",
+              "conclusion": "success",
+              "seconds": 34
+            },
+            {
+              "name": "Post Run ./.github/actions/setup-tests",
+              "conclusion": "success",
+              "seconds": 0
+            },
+            {
+              "name": "Post Run actions/checkout@v7",
+              "conclusion": "success",
+              "seconds": 1
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0
+            }
+          ]
+        }
+      ],
+      "testSummaries": [
+        "95 passed (95)",
+        "66 passed (66)",
+        "159 passed | 1 skipped (160)",
+        "166 passed | 1 skipped (167)"
+      ],
+      "cacheLines": [
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:33.6382248Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:37.2955066Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:38.6792591Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "test\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:39.6516084Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:25.3779066Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "e2e\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:28.7272366Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:28.2584245Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:31.7185651Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:32.8092306Z Cache hit for: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "integration\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:33.3087963Z Cache restored from key: test-ripgrep-v2-Linux-X64-ubuntu24",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:26.0293226Z Cache hit for: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb",
+        "provider-black-box\tRun ./.github/actions/setup-tests\t2026-10-23T15:36:29.6224701Z Cache restored from key: test-deps-v1-Linux-X64-ubuntu24-nodev24.21.0-pnpm11.7.0-09ca0d97d1a10ca7c9fa5948ec420df1ae35ba7e0d527e836565f9458525dcbb"
+      ],
+      "inventory": {
+        "passed": 486,
+        "skipped": 2,
+        "total": 488
+      },
+      "cacheMissLines": [],
+      "resourceSamples": {
+        "User time (seconds)": [12.02, 65.1, 12.45, 26.21, 11.36, 56.1, 7.61, 40.71],
+        "System time (seconds)": [0.81, 10.31, 0.94, 4.29, 0.94, 20.08, 0.64, 8.39],
+        "Maximum resident set size (kbytes)": [1104780, 459760, 1123920, 380944, 1077828, 461328, 1115124, 418628]
+      },
+      "buildAndTestCpuSeconds": 277.96,
+      "phaseSeconds": {
+        "setup": {
+          "total": 37,
+          "maximum": 14,
+          "samples": [14, 7, 9, 7]
+        },
+        "build": {
+          "total": 24,
+          "maximum": 7,
+          "samples": [6, 7, 7, 4]
+        },
+        "test": {
+          "total": 161,
+          "maximum": 48,
+          "samples": [33, 46, 48, 34]
+        },
+        "cleanup": {
+          "total": 2,
+          "maximum": 1,
+          "samples": [1, 0, 0, 0, 0, 0, 0, 1]
+        }
+      }
+    }
+  ],
+  "stoppedAt": "2026-10-23T15:34:46.712314+00:00",
+  "duplicateRuns": [
+    {
+      "runId": 39979408575,
+      "sha": "55cd61ffc4799094ef34ba8d029e1c46dbd3618e",
+      "conclusion": "cancelled",
+      "createdAt": "2026-10-23T15:34:17Z",
+      "updatedAt": "2026-10-23T15:34:20Z",
+      "jobCount": 4,
+      "aggregateJobSeconds": 8,
+      "reason": "Two push-event workflows for the same exact head; existing concurrency automatically cancelled one. No manual cancellation or repeat push."
+    }
+  ],
+  "driverInterruption": "RuntimeError('Expected one exact-head workflow; found 2')",
+  "completedAt": "2026-10-23T15:38:00.598444+00:00"
+}

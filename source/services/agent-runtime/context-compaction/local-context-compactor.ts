@@ -127,7 +127,59 @@ const addUsage = (
 const checkpointSummaryText = (item: ProviderInputItem): string | null => {
   if (!isLocalContextSummary(item) || typeof item.content !== 'string') return null;
   const match = /<summary>\n?([\s\S]*?)\n?<\/summary>/.exec(item.content);
-  return match?.[1]?.trim() ?? item.content;
+  // Checkpoints written before receipts moved outside <summary> embed them in
+  // the summary text. They are rebuilt from metadata, so feeding them to the
+  // summarizer again would only grow the prior summary.
+  return (match?.[1] ?? item.content)
+    .replace(/\s*<recorded-tool-receipts>[\s\S]*?<\/recorded-tool-receipts>/g, '')
+    .trim();
+};
+
+type ToolReceipt = NonNullable<ContextSummaryMarker['toolReceipts']>[number];
+
+/**
+ * The full receipt list stays in checkpoint metadata, which is never sent to
+ * the provider. The model sees only the newest calls, one short line each:
+ * enough to notice a side effect the summary dropped without replaying every
+ * read the session ever made.
+ */
+const RENDERED_RECEIPT_LIMIT = 40;
+
+const clip = (text: string, max: number): string => {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+};
+
+const receiptArguments = (preview: string): string => {
+  try {
+    const args = JSON.parse(preview) as Record<string, unknown>;
+    // Prefer what the host executed over the model's description of it.
+    for (const key of ['command', 'path', 'file_path', 'url', 'query', 'description'] as const) {
+      if (typeof args[key] === 'string') return args[key];
+    }
+  } catch {
+    // Previews are cut at 256 characters, so most are not valid JSON.
+  }
+  const quoted = /"(?:command|path|file_path|url|query)":"((?:[^"\\]|\\.)*)/.exec(preview)?.[1];
+  if (quoted === undefined) return preview;
+  try {
+    return JSON.parse(`"${quoted}"`) as string;
+  } catch {
+    return quoted; // cut inside an escape sequence
+  }
+};
+
+const renderToolReceipts = (receipts: readonly ToolReceipt[]): string => {
+  const shown = receipts.slice(-RENDERED_RECEIPT_LIMIT);
+  const omitted = receipts.length - shown.length;
+  const lines = shown.map((receipt) => {
+    const output = receipt.outputPreview.split('\n').find((line) => line.trim() && !line.startsWith('[truncated'));
+    return `- ${receipt.name}: ${clip(receiptArguments(receipt.argumentsPreview), 100)} → ${clip(
+      output ?? '(no output)',
+      60,
+    )}`;
+  });
+  return [...(omitted > 0 ? [`(${omitted} earlier calls omitted)`] : []), ...lines].join('\n');
 };
 
 /**
@@ -392,11 +444,8 @@ export class LocalContextCompactor {
 
     const uniqueReceipts = [...new Map(receipts.map((receipt) => [receipt.callId, receipt])).values()];
     const content = wrapContextSummary(
-      `${
-        summary ?? ''
-      }\n\n<recorded-tool-receipts>\nHost-observed tool responses, not proof of domain success. Do not blindly repeat these actions; reconcile effects first. Previews are bounded; use original session evidence for full details.\n${JSON.stringify(
-        uniqueReceipts,
-      )}\n</recorded-tool-receipts>`,
+      summary ?? '',
+      uniqueReceipts.length > 0 ? renderToolReceipts(uniqueReceipts) : undefined,
     );
     const postEstimate = estimateContext({
       ...input,

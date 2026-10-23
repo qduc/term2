@@ -3703,3 +3703,31 @@ approval denial. Commands: `pnpm test:integration` and
 `pnpm test:provider-black-box`; final results are recorded in the experiment task
 ledger. Existing diagnostic fields and notices identify the action and cause.
 Rollback is Bare goal-tool/context wiring and stop-policy selection together.
+
+### Rendered compaction tool receipts (2026-10-23)
+
+Local compaction checkpoints rendered every host-observed tool receipt as raw
+JSON (call ID, argument SHA-256, 256-character argument preview, 128-character
+output preview) inside `<summary>`, and carried all prior receipts forward. On a
+real 183k-token gemini-4-argon session the 71-call receipt block was 38 KB of a
+47 KB checkpoint, and because `checkpointSummaryText` read everything inside
+`<summary>`, the next compaction fed those receipts back to the summarizer as
+prior summary, so the block grew with every checkpoint until compaction would
+eventually be refused as non-reducing.
+
+`LocalContextCompactor` now renders receipts after `</summary>` as one line per
+call (`name: executed command or path → first output line`), capped at the newest
+40 (`RENDERED_RECEIPT_LIMIT`) with an omitted-count line. The complete receipt list
+stays in `contextSummary.toolReceipts`, which estimates and providers never see.
+`checkpointSummaryText` strips receipt blocks, including those embedded by older
+checkpoints. The checkpoint header also says that messages after it are newer
+than the summary and take precedence when they disagree. The limit only affects
+what the model is shown. Older side effects remain covered by the summary's
+mandatory "Tool side effects already performed" section and by metadata. Nothing
+is blocked or discarded from persistence.
+
+Evidence: replaying that session's recorded 146-item cold prefix with its real
+summary cut the checkpoint from 47,315 to 15,072 characters, and a second
+compaction stayed at 14,802 with 75 metadata receipts. A legacy checkpoint's prior
+summary dropped from 47,315 to 9,115 characters with all seven headings intact.
+Rollback is the renderer and wrapper change together.

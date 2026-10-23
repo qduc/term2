@@ -1,5 +1,0 @@
-{
-  "service": "southwind",
-  "releaseChannel": "stable-mink-11",
-  "replicas": 2
-}

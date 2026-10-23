@@ -1,1 +1,0 @@
-What billing contact identifier is recorded for Northwind in project memory? Reply with only that identifier.

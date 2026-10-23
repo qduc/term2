@@ -1,5 +1,0 @@
-{
-  "name": "gateway",
-  "listenPort": 8080,
-  "protocol": "http"
-}

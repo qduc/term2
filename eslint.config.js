@@ -28,8 +28,6 @@ export default tseslint.config(
       'tools/log_viewer/**',
       '.junie/**',
       'eval/**',
-      // Captured fixture source is evidence, not part of this TypeScript project.
-      'experiments/run-code-reliability/evidence/**',
       '*.config.ts',
       '*.config.js',
       'scripts/**',
@@ -95,24 +93,6 @@ export default tseslint.config(
       'react-hooks/refs': 'off',
       'react-hooks/purity': 'off',
       'react-hooks/error-boundaries': 'warn',
-    },
-  },
-  {
-    files: ['experiments/conversation-actor/*.ts'],
-    languageOptions: {
-      parserOptions: { project: ['./experiments/conversation-actor/tsconfig.json'] },
-    },
-  },
-  {
-    files: ['experiments/conversation-actor/v2/*.ts'],
-    languageOptions: {
-      parserOptions: { project: ['./experiments/conversation-actor/v2/tsconfig.json'] },
-    },
-  },
-  {
-    files: ['experiments/agent-assembly-prototypes/*.ts'],
-    languageOptions: {
-      parserOptions: { project: ['./experiments/agent-assembly-prototypes/tsconfig.json'] },
     },
   },
   // Production code is held to a higher standard: unused vars are an error.

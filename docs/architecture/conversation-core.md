@@ -87,7 +87,7 @@ physical work that may still produce effects remains an execution-owner concern.
 
 Open `#runTurn` first, then follow the relevant operation. The
 [detailed design](conversation-loop.md) maps the boundaries and remaining
-complexity. The [v2 experiment](../../experiments/conversation-actor/v2/DESIGN.md)
+complexity. The [v2 experiment (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/conversation-actor/v2/DESIGN.md)
 is historical ownership and cancellation evidence; its event-driven actor is not
 the production execution structure. Earlier implementation evidence remains in
 [WORK.md (historical)](https://github.com/qduc/term2/blob/3eb1659181eeda00bb32f971ef15096911380172/docs/research/single-turn-owner/WORK.md). Source structure and passing

@@ -183,7 +183,7 @@ The next call verified the mutation rather than replaying it.
 
 The existing TypeScript plan already requires return declarations to use only
 machine-readable `scriptedReturnSchema`, with missing contracts exposed as
-`unknown` ([Authoritative tool types](../plans/run-code-typescript.md#authoritative-tool-types)). Before reopening a
+`unknown` ([Authoritative tool types](../plans/tools/run-code/run-code-typescript.md#authoritative-tool-types)). Before reopening a
 compiler, the six shape cases should be checked against actual contract
 coverage. A precise contract for a high-use tool may be a smaller fix; nullable
 dynamic matches remain runtime concerns.
@@ -198,7 +198,7 @@ policy-hidden `grep`/`glob`; and hidden editing tools such as `create_file` and
 `search_replace`, sometimes through `tools.describe`. This agrees with the
 earlier registry analysis, which found every inspected unknown name deliberately
 absent rather than omitted from discovery
-([Milestone 4](../plans/run-code-codemode-improvements.md#milestone-4--measure-and-if-justified-improve-discovery)). Static declarations
+([Milestone 4](../plans/tools/run-code/run-code-codemode-improvements.md#milestone-4--measure-and-if-justified-improve-discovery)). Static declarations
 could reject them earlier but cannot grant the missing capability.
 
 The 11 nested-call failures included missing paths, a malformed regular
@@ -234,7 +234,7 @@ task success are separate states ([Completion telemetry is not success telemetry
 The effect ledger is also incomplete for this decision. The memory-update case
 above demonstrates a nested mutation followed by a runtime failure despite an
 empty effect ledger. The TypeScript plan's proposed mutation-before-type-error
-acceptance test remains sensible ([Acceptance and measurement](../plans/run-code-typescript.md#acceptance-and-measurement)),
+acceptance test remains sensible ([Acceptance and measurement](../plans/tools/run-code/run-code-typescript.md#acceptance-and-measurement)),
 but current telemetry cannot measure that safety case for every mutating tool.
 
 ## Disposition
@@ -258,7 +258,7 @@ but current telemetry cannot measure that safety case for every mutating tool.
 
 The proposed TypeScript reconsideration criterion asks whether statically
 preventable failures materially cause retries, false completion, or repeated
-effects ([Completion telemetry](../plans/run-code-typescript.md#completion-telemetry-implemented-2026-09-10)). The present sample shows
+effects ([Completion telemetry](../plans/tools/run-code/run-code-typescript.md#completion-telemetry-implemented-2026-09-10)). The present sample shows
 some cheap self-repair, no identical replay, no observed false completion, and
 one canonically visible mutation-before-result-shape-failure that the effect
 ledger missed. That is enough to keep measuring and to improve the narrower

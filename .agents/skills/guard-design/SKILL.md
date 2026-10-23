@@ -17,11 +17,11 @@ reported false positive.
 
 Before changing a guard:
 
-1. Read `docs/plans/guard-ledger.md` completely, including its **Resume here**
+1. Read `docs/plans/approvals-and-sandbox/guard-ledger.md` completely, including its **Resume here**
    section, inventory, test contracts, dependencies, and excluded leads.
 2. Follow any owner plan linked from the relevant ledger row. In particular,
    turn, time, cost, token-budget, and identical-failure escalation remain owned
-   by `docs/plans/run-budget-stall-escalation.md` unless that plan authorizes
+   by `docs/plans/agent-runtime/run-budget-stall-escalation.md` unless that plan authorizes
    implementation.
 3. Read the `testing` skill before writing tests. Use `provider-testing` for any
    provider, bridge, run-loop, registry, or non-interactive change. Use
@@ -171,7 +171,7 @@ Run focused tests, `pnpm typecheck`, and formatting for changed files. Run
 registry, or non-interactive changes. Run the broader suite required by the
 `testing` skill for shared utilities or architecture.
 
-Update `docs/plans/guard-ledger.md` in the same change with:
+Update `docs/plans/approvals-and-sandbox/guard-ledger.md` in the same change with:
 
 - source-backed effective value and precedence;
 - signal, action, recovery path, class, status, and owner;

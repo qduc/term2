@@ -702,7 +702,7 @@ function createPtyChild(options: {
       }
       // Inherit the harness's shared PTY ceiling instead of the idle lib's
       // tighter 15s default: readiness under shared-runner contention is the
-      // recorded flake class in docs/plans/guard-ledger.md, and --bail=1
+      // recorded flake class in docs/plans/approvals-and-sandbox/guard-ledger.md, and --bail=1
       // bounds a genuine hang to one scenario.
       const effectiveTimeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
       const idleWait = waitForHarnessIdleGeneration(idlePath, { after, timeoutMs: effectiveTimeoutMs }).then(

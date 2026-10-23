@@ -20,14 +20,14 @@ Phase 2 and only on a red proof through an owning public boundary.
 | 02 | [Provider input, continuity, and effect settlement](./02-provider-input-continuity-and-effect-settlement.md) | `ConversationRecord` (private ledger/journal/history), `ProviderContinuity`, `SessionInputPlanner`, `filterChainedModelInput`, `SessionTurnAdapter` acceptance callbacks, retry/recovery policy | 14 files, 355 tests — green 2026-08-14 |
 | 03 | [Child-run identity, authority, and lifecycle](./03-child-run-identity-authority-and-lifecycle.md) | `createSubagentRuntime` runners, `SubagentBridge`, session traffic context | 12 files, 262 tests — green 2026-08-14 |
 | 04 | [Settings consumption](./04-settings-consumption.md) | Settings schema/resolution, runtime consumers, `ConversationConfigurationService` + `runtime-setting-router`, `/settings` | 14 files, 303 tests — green 2026-08-14 |
-| 05 | [Runtime guards and retention](./05-runtime-guards-and-retention.md) | Guard owners per `docs/plans/guard-ledger.md` and linked owner plans | 26 files, 423 passing tests — 2026-08-14; the retained expected-failure characterization became two passing tests when Phase 2 repaired it on 2026-08-15 |
+| 05 | [Runtime guards and retention](./05-runtime-guards-and-retention.md) | Guard owners per `docs/plans/approvals-and-sandbox/guard-ledger.md` and linked owner plans | 26 files, 423 passing tests — 2026-08-14; the retained expected-failure characterization became two passing tests when Phase 2 repaired it on 2026-08-15 |
 | 10 | [Settings durability, migration, and sensitive bytes](./10-settings-durability-migration-and-sensitive-bytes.md) | `settings-persistence.ts` bytes/lock/recovery, `SettingsService` settlement + recovery result, `/settings` command rendering, settings schema/merger/migration | 9-file Contract 10 matrix — 189 passing tests, 1 expected fail (R10.2, excluded), 1 known schema baseline failure; black-box 166 passed / 1 skipped — repaired 2026-08-16 |
 | 11 | [Destructive approval authority](./11-destructive-approval-authority.md) | `ToolApprovalBatchCoordinator`, `ApprovalDecisionExecutor`, `ConversationAdapter`, `SubagentToolPolicy`, durable log events | audit draft 2026-08-15; 3 retained public-boundary reds (C11-D5/D8/D10), tests/docs-only |
 
 All focused commands for completed contracts 01–05 re-ran with exit code 0 on 2026-08-14 (76 file
 invocations / 1,683 passing test invocations plus one retained expected-failure
 characterization). The authoritative Phase 0 baseline
-(`docs/plans/validation-baseline-2026-08-14.md`) records these commands and
+([historical validation-baseline-2026-08-14.md](https://github.com/qduc/term2/blob/1cc5a0a91e164215edbcbb4291ffb0c0c1726cc2/docs/plans/validation-baseline-2026-08-14.md)) records these commands and
 results, alongside its full-suite, typecheck, lint, and provider black-box
 results for the same production-source commit. Phase 1 added tests but made no
 production changes, so those broader results remain the truthful recorded

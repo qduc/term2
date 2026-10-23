@@ -2,7 +2,7 @@
 
 Status: proposal (design doc, revised for compatibility-first rollout).
 
-Follow-up to `docs/plans/sandboxing-proposal.md` (V1), which shipped network-denial, workspace write, env scrubbing, and a denylist of credential read paths. This doc proposes the next security tightening: **hardening home-resident reads and named system paths** (the runtime's read model is allow-by-default outside `denyOnly`, so we deny the home tree + a small system set and re-allow the workspace carve-out) and closing a **fail-open** gap, while keeping friction low for normal coding work.
+Follow-up to `docs/plans/approvals-and-sandbox/sandboxing-proposal.md` (V1), which shipped network-denial, workspace write, env scrubbing, and a denylist of credential read paths. This doc proposes the next security tightening: **hardening home-resident reads and named system paths** (the runtime's read model is allow-by-default outside `denyOnly`, so we deny the home tree + a small system set and re-allow the workspace carve-out) and closing a **fail-open** gap, while keeping friction low for normal coding work.
 
 Rollout principle: the fail-open fix is mandatory because it preserves the sandbox approval contract. The broader read policy should ship behind an explicit compatibility setting first, with a project-scoped approval escape hatch for legitimate development paths. Do not silently turn existing working projects into broken ones without an actionable path to remember narrowly scoped read allowances.
 

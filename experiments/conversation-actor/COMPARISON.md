@@ -64,8 +64,8 @@ Relevant implementation sources:
   `SessionInputPlanner.build` in
   [session-input-planner.ts](../../source/services/session/session-input-planner.ts).
 - Real background ownership/transfer and rollover constraints in the
-  [background control map](../../docs/plans/background-work-control/MAP.md) and
-  [session rollover plan](../../docs/plans/session-rollover-handoff.md).
+  [background control map](../../docs/plans/background-work/background-work-control/MAP.md) and
+  [session rollover plan](../../docs/plans/sessions/session-rollover-handoff.md).
 
 ## What the experiment changes our understanding of
 

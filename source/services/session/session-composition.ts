@@ -373,7 +373,7 @@ export type PublicStatusInputs = {
  * Projects session-owned work into the coarse public lifecycle state.
  * Waiting interactions take precedence over unrelated active work: a caller
  * must never observe `working` while an approval is waiting for input.
- * Subagents are isolated from public hook status (docs/plans/public-hooks-system.md);
+ * Subagents are isolated from public hook status (docs/plans/agent-runtime/public-hooks-system.md);
  * only root foreground work and background shell jobs drive public status.
  */
 export function computePublicStatus({
@@ -691,7 +691,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   // Wakes the launching agent to check on a still-running background shell
   // job or subagent while the session is otherwise idle. See
-  // docs/plans/background-work-control/agent-checkin.md. Settings are read
+  // docs/plans/background-work/background-work-control/agent-checkin.md. Settings are read
   // fresh on every tick so a runtime change takes effect without restarting
   // the timer.
   const backgroundCheckInScheduler = new BackgroundCheckInScheduler({

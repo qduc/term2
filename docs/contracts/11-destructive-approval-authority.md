@@ -129,7 +129,7 @@ failures; see the test files for the exact observed failure text.
   metadata-less advisory (`isYellowCommandApproved`). D10 `require_interactive_equivalent_provenance`
   requires rejection without equivalent provenance. Retained red; repair separately authorized and
   provider black-box validated.
-- **Tracker reconciliation (paper):** `docs/plans/service-boundary-contract-completion.md`
+- **Tracker reconciliation (paper):** `docs/plans/engineering/service-boundary-contract-completion.md`
   (protected untracked on primary; corrected copy lives only in this worktree) contains the stale
   sentence "Approval still awaits D5/D8/D10 owner decisions." in the Contract 10 section. The C11
   v2 decision cycle is terminally complete (D5 `record_rejected`, D8 `additive_grant_kind`, D10

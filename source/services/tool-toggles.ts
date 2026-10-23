@@ -1,7 +1,7 @@
 import { SETTING_KEYS } from './settings/settings-schema.js';
 
 /**
- * Per-tool-group kill switches for the main agent (docs/plans/tool-toggle-setting-design.md).
+ * Per-tool-group kill switches for the main agent (docs/plans/settings/tool-toggle-setting-design.md).
  *
  * Phase 1 contract: each toggle masks one capability group from the resolved
  * profile's tool capabilities. Masking happens after profile resolution, so

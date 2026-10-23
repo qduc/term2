@@ -163,7 +163,7 @@ tool is re-executed.
 
 ## Relevant prior art
 
-- docs/plans/chain-settlement.md (read it; its Premises and the 2026-08-30 model-switch
+- docs/plans/providers/chain-settlement.md (read it; its Premises and the 2026-08-30 model-switch
   section define the invariants; update its status if behavior changes)
 - Existing coverage: retry-classifier.test.ts:415, continuation-recovery-handler.test.ts:32,
   initial-turn-recovery-handler.test.ts:29, conversation-session.lifecycle.test.ts:816,

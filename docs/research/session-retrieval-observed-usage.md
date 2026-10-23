@@ -287,7 +287,7 @@ only a scaling observation (no cell). An in-progress local worktree
 not a seek/tail API, and is not part of this study.
 
 The acceptance bar remains the one in
-`docs/plans/session-rollover-handoff.md`: multiple task shapes, both rollover
+`docs/plans/sessions/session-rollover-handoff.md`: multiple task shapes, both rollover
 and ordinary-resume flows, outcome evidence, and concrete failure cases before
 any tuning proposal is accepted.
 

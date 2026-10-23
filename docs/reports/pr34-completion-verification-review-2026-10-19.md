@@ -105,7 +105,7 @@ Live evidence (run E, non-Git working directory):
 Contrast run C (INCONCLUSIVE), which left a BLOCKED row with a precise reason and a logged transition.
 
 The blocking behavior is correct and fail-closed. The *outcome* is not what the plan documents:
-`docs/plans/adaptive-independent-verification.md` states that non-Git/oversized/unsupported snapshots
+`docs/plans/agent-runtime/adaptive-independent-verification.md` states that non-Git/oversized/unsupported snapshots
 "cannot authorize an achieved proposal" and that "the initial policy prefers an explicit
 unsupported-workspace outcome", and it directs operators to `completion_verification.transition` and
 `completion_verification.operational_alert` for diagnosis. For this class of failure neither exists.

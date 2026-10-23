@@ -1,6 +1,6 @@
 # Contract 13 — Gateway ↔ ChatForge Web Wire
 
-**Status:** M0 deliverable of [web client gateway completion](../plans/web-client-gateway-completion.md).
+**Status:** M0 deliverable of [web client gateway completion](../plans/web-client/web-client-gateway-completion.md).
 Docs-only; records the wire as it exists at term2 source commit `fbec9bb6` (branch
 `wg-m0-wire`). Nothing here is merged, and no production file changed.
 

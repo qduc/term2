@@ -355,7 +355,7 @@ const writeTrafficEnvelope = (requestPath: string, envelope: TrafficEnvelope): v
  * Redacts an `encrypted_content` field wherever it appears, at any depth.
  * OpenAI Responses reasoning items (requested via `include:
  * ['reasoning.encrypted_content']` on every request — openai-responses-model.ts)
- * and `provider_opaque` compaction items (docs/plans/openai-context-compaction.md
+ * and `provider_opaque` compaction items (docs/plans/context-and-memory/openai-context-compaction.md
  * Step 1/2) both carry it directly on the item rather than nested under
  * `reasoning_details` the way the Chat Completions shape does (see
  * `sanitizeReasoningDetails` above, which stays as the Chat-Completions-specific
@@ -550,7 +550,7 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
     const extractedId = firstDefinedString(parsed.id, asRecord(parsed.response)?.id);
     // A non-streaming Responses body's `output` array can carry reasoning
     // items (encrypted_content requested on every request) and, once Step 3/4
-    // of docs/plans/openai-context-compaction.md land, compaction items —
+    // of docs/plans/context-and-memory/openai-context-compaction.md land, compaction items —
     // both have it directly on the item. This is stored verbatim in the
     // on-disk traffic artifact and passed to the winston debug log by
     // ProviderTraffic.recordResponseReceived, so it must be redacted here.

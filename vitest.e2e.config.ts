@@ -1,4 +1,4 @@
-// e2e tier configuration (suite topology; docs/plans/test-suite-audit.md).
+// e2e tier configuration (suite topology; docs/plans/engineering/test-suite-audit.md).
 //
 // The process-level e2e files (terminal UI smoke test, package build/rollback
 // round trip, fake-codex network scenarios) are excluded from the default unit

@@ -31,7 +31,7 @@ export const CODEX_REDIRECT_PORTS = [1455, 1457];
 const CODEX_REDIRECT_PORT = CODEX_REDIRECT_PORTS[0];
 const codexRedirectUri = (port: number) => `http://localhost:${port}/auth/callback`;
 export const CODEX_REDIRECT_URI = codexRedirectUri(CODEX_REDIRECT_PORT);
-/** Matches the codex CLI's scope set exactly; see docs/plans/provider-oauth-independence.md. */
+/** Matches the codex CLI's scope set exactly; see docs/plans/providers/provider-oauth-independence.md. */
 const CODEX_SCOPES = ['openid', 'profile', 'email', 'offline_access', 'api.connectors.read', 'api.connectors.invoke'];
 
 export type CodexTokens = {

@@ -19,7 +19,7 @@ responses/canonical events, not terminal echo.
 
 Main baseline/build: 1103a9d0e85814b2a1d6dd6a426ba4aa695ef222. Parent ran pnpm
 build successfully immediately before launch. Pre-existing untracked user file
-docs/plans/run-code-nested-approval-preflight.md untouched.
+[historical run-code-nested-approval-preflight.md](https://github.com/qduc/term2/blob/1cc5a0a91e164215edbcbb4291ffb0c0c1726cc2/docs/plans/run-code-nested-approval-preflight.md) untouched.
 Disposable owned worktree/branch: .worktrees/live-verify-subject /
 live-verify-subject. Initial child launch through pane run:
 `cd /home/qduc/term2/.worktrees/live-verify-subject && node /home/qduc/term2/dist/cli.js -p codex -m gpt-5.6-luna -r high`

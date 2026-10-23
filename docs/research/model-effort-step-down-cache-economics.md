@@ -2,7 +2,7 @@
 
 Status: **research complete; step-down design premises materially changed.** This
 doc records the online research done after the benchmark rounds in
-`docs/plans/model-effort-step-down-benchmark.md`. The doc's validation results
+`docs/plans/providers/model-effort-step-down-benchmark.md`. The doc's validation results
 (quality data, tasks, judge scores) all stand; this file records **how the
 mechanism design must change** in response to cache-economics evidence that was
 not available in the doc.

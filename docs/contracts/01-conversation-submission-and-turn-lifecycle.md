@@ -80,7 +80,7 @@ Status: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after 
 - **Ambiguous/stale:** stale approval decision after a later continuation is
   ignored (`conversation-orchestrator.test.ts:523`); `TurnOutcome.kind: 'stale'`
   emits nothing and does not call `complete()`
-  (`turn-status-machine.ts:86-101`; `docs/plans/turn_coordinator_refactor.md:459-464`).
+  (`turn-status-machine.ts:86-101`; `docs/plans/agent-runtime/turn_coordinator_refactor.md:459-464`).
 
 ## 6. Observability
 

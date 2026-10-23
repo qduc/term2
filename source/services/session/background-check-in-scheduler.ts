@@ -146,7 +146,7 @@ function taskDetails(
  * Periodically checks whether any still-running background task (shell job or
  * async subagent) is due a proactive check-in, and emits one `background_
  * check_in_due` event per due task through the existing settlement-
- * notification pipeline (see docs/plans/background-work-control/agent-checkin.md).
+ * notification pipeline (see docs/plans/background-work/background-work-control/agent-checkin.md).
  *
  * Owns no execution state of its own — `getRunningTasks` reads the unified
  * task snapshot the notification store already maintains. Per-task due time,

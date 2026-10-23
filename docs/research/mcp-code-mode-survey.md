@@ -2,7 +2,7 @@
 
 > **Provenance and verification (2026-09-17).** Drafted by an agy (Gemini 3.8 Flash) research
 > worker; spot-checked by Claude. Decisions for term2 live in
-> [`docs/plans/mcp-code-mode.md`](../plans/mcp-code-mode.md) and override the recommendations below.
+> [`docs/plans/tools/run-code/mcp-code-mode.md`](../plans/tools/run-code/mcp-code-mode.md) and override the recommendations below.
 >
 > - **Verified:** current spec is `2026-07-28` and is handshake-less (`server/discover`, per-request
 >   `_meta` protocol version; handshake revisions `2025-11-25` and earlier need a back-compat path).

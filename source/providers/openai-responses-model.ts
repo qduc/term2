@@ -255,7 +255,7 @@ function toResponsesOutputFormat(
 /** Shared allowlist for Responses `context_management` (OpenAI + Codex). */
 export function supportsContextCompactionModel(model: string): boolean {
   // Server-side context_management is model-dependent: gpt-5.1/gpt-5.2 returned
-  // opaque 500s when the threshold fired (docs/plans/openai-context-compaction.md).
+  // opaque 500s when the threshold fired (docs/plans/context-and-memory/openai-context-compaction.md).
   // OpenAI's compaction guide demos gpt-5.3-codex; the compact endpoint enum and
   // product usage cover gpt-5.5 and the full gpt-5.6 family (sol/terra/luna).
   // Default-deny unmeasured families (e.g. bare gpt-5.3, gpt-5.10).

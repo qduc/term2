@@ -13,7 +13,7 @@ probes below were run against the live tool in this session, not inferred.
 
 ## Resolution (2026-09-05, M2a)
 
-Fixed for the canonical browser (`SessionBrowser.read` in `source/services/conversation/session-browser.ts`, branch `sqi-m2a`, commit `569f9e3b`; contract in `docs/plans/session-query-index.md`, "Tail and page contract repair"):
+Fixed for the canonical browser (`SessionBrowser.read` in `source/services/conversation/session-browser.ts`, branch `sqi-m2a`, commit `569f9e3b`; contract in `docs/plans/sessions/session-query-index.md`, "Tail and page contract repair"):
 
 - **Tail anchor (symptom 1 and the `tail`-shape finding's core need).** An initial `from: "end"` read now starts at projected ordinal `max(0, total - effectiveLimit)` and returns that region chronologically; the existing forward cursor pages through the region (chunk continuations included) and disappears once it is consumed. Last-N access needs no new parameter. The report's "no cursor is ever returned" claim was too broad — an oversized final record already returned chunk cursors — but the final-record anchor still made every other tail record unreachable, which was the real defect.
 - **`omitted` accounting (symptom 3).** `read` now reports page-local counts: `omitted = total - items.length`, so `total - omitted` equals records represented on the page on every page shape, including partial and resumed chunks. The old calculation measured cumulative remaining records and disagreed with the description on continuation pages.

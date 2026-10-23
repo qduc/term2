@@ -10,7 +10,7 @@ import type { RunCodeDiagnosticCode, RunCodeExecution } from './run-code-executi
  * One event per invocation, written through the application logger so it lands
  * in the same durable JSONL app log as every other structured event. It exists
  * to answer the question that gates the type-checked TypeScript slice
- * (docs/plans/run-code-typescript.md): do statically preventable nested-call
+ * (docs/plans/tools/run-code/run-code-typescript.md): do statically preventable nested-call
  * failures actually cause retries, false completion, or replay? The answer is
  * derived by querying these events, not by re-reading conversations, so the
  * event carries the join keys (sessionId, sourceDigest, outcome, timestamp) as

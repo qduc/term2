@@ -3,7 +3,7 @@
 Status: **owner-reviewed 2026-08-14; focused command green. The one red product
 defect was repaired in Phase 2 on 2026-08-15; its residual ambiguous case is an
 approved deferral recorded in §10.** Owners: the guard
-inventory and contracts recorded in [`docs/plans/guard-ledger.md`](../plans/guard-ledger.md)
+inventory and contracts recorded in [`docs/plans/approvals-and-sandbox/guard-ledger.md`](../plans/approvals-and-sandbox/guard-ledger.md)
 plus the linked owner plans (`run-budget-stall-escalation`, `tool-output-and-effect-safety`,
 `chain-settlement`, `background-shell-monitor`, `provider-neutral-context-compaction`).
 This record names the contract-level invariants and the deterministic matrix;

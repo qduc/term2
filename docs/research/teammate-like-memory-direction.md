@@ -717,7 +717,7 @@ Term2 anchors read at commit `65a76cb9`:
 `source/tools/agent/run-subagent-async.ts`,
 `source/tools/session-browser/session-browser-tools.ts`,
 `source/components/message/CommandMessage.tsx`,
-`docs/plans/memory_feature.md`,
+`docs/plans/context-and-memory/memory_feature.md`,
 `docs/research/context-lifecycle-economics.md`.
 
 ## Decision

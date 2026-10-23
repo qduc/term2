@@ -81,4 +81,4 @@ scenario is the one whose CLI never reached the state it waits for.
   the test-only change to the pre-fix parent and record that it fails before
   relying on green results after the fix.
 
-The design and acceptance details live in `docs/plans/integration-test-improvement.md`; update the suite and this skill together when its workflow or ownership changes.
+The design and acceptance details live in `docs/plans/engineering/integration-test-improvement.md`; update the suite and this skill together when its workflow or ownership changes.

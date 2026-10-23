@@ -13,16 +13,16 @@ Both defects are fixed. Compaction can rely on:
 two of them were live bugs. More importantly, compaction cannot own either
 guarantee: a summary is not a mechanism for at-most-once execution, and a
 compaction policy cannot bound a tool result that was already unbounded when it
-entered history. `docs/plans/provider-neutral-context-compaction.md` depends on
+entered history. `docs/plans/context-and-memory/provider-neutral-context-compaction.md` depends on
 this plan's Milestones 1 and 2; its `blocked: single_turn_too_large` outcome and
 its "completed calls must not be executed again" invariant are only enforceable
 once these land.
 
 Before touching this area, also read:
 
-- `docs/plans/chain-settlement.md` for outstanding tool debt and continuity;
-- `docs/plans/provider-neutral-context-compaction.md` for the consumer;
-- `docs/plans/background-shell-monitor/MAP.md` for the background output store,
+- `docs/plans/providers/chain-settlement.md` for outstanding tool debt and continuity;
+- `docs/plans/context-and-memory/provider-neutral-context-compaction.md` for the consumer;
+- `docs/plans/background-work/background-shell-monitor/MAP.md` for the background output store,
   which already solves an adjacent overflow problem;
 - the `architecture`, `testing`, and `provider-testing` skills.
 

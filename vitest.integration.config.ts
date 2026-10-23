@@ -1,4 +1,4 @@
-// Integration tier configuration (suite topology; docs/plans/slow-test-suite.md).
+// Integration tier configuration (suite topology; docs/plans/engineering/slow-test-suite.md).
 //
 // The integration files drive real child processes, PTYs, sqlite index workers
 // and session runtimes, so they extend the critical path of the default unit

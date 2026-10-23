@@ -26,16 +26,16 @@ tool-output/effect-safety plans.
 
 The reviewed contracts were:
 
-- `docs/plans/log-friction-improvements-2026-09-07.md`: live observation and
+- `docs/plans/engineering/log-friction-improvements-2026-09-07.md`: live observation and
   guardrail against arbitrary cap increases and automatic replay.
-- `docs/plans/run-code-authoring-friction.md`: top-level `clip` already saves a
+- `docs/plans/tools/run-code/run-code-authoring-friction.md`: top-level `clip` already saves a
   retrieval artifact; the deferred M4 per-item redesign is not justified by the
   post-M1 measurement in that plan.
-- `docs/plans/tool-output-and-effect-safety.md`: bounded context results must
+- `docs/plans/tools/tool-output-and-effect-safety.md`: bounded context results must
   preserve a retrievable payload, and completed or ambiguous effects must not be
   silently replayed.
-- `docs/plans/tool-performance-followup.md` and the run-code row in
-  `docs/plans/guard-ledger.md`: the run-code display owner is the existing
+- `docs/plans/tools/tool-performance-followup.md` and the run-code row in
+  `docs/plans/approvals-and-sandbox/guard-ledger.md`: the run-code display owner is the existing
   artifact writer and formatter, with spool failure reported as unavailable
   output rather than execution failure.
 

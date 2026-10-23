@@ -101,7 +101,7 @@ Workthrough across the 11 systemic checklist items:
    - *Audit*: Audited sibling tools; aligned both code-context tools and their declared return shapes. Domain tools (e.g. `session-browser-tools.ts`) that return structured result envelopes without throwing were audited and confirmed intentional.
 9. **Knowledge Gap**:
    - *Problem*: The contract that scripted tools must reject rather than return error strings was documented informally in prompt text but not formalized in tool definitions.
-   - *Improvement*: Documented guard policies in `docs/plans/guard-ledger.md` and updated `scriptedReturnShape` contracts.
+   - *Improvement*: Documented guard policies in `docs/plans/approvals-and-sandbox/guard-ledger.md` and updated `scriptedReturnShape` contracts.
 10. **Observability**:
     - *Problem*: Truncated strings silently failed in the VM worker without indicating what was lost or where complete data could be found.
     - *Improvement*: Generic overflows now spool full content to disk and reject with the specific artifact path and completed-effects disclosure.

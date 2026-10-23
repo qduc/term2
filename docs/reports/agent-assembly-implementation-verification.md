@@ -39,9 +39,9 @@ The paused Agent Assembly production migration has been implemented end-to-end a
 
 ### Documentation & Ledgers
 - `docs/agent-context.md`: Indexed Agent Assembly plans in Plans and Area-Specific Context.
-- `docs/plans/agent-assembly-migration.md`: Updated "Resume here" to record completion.
-- `docs/plans/agent-assembly-implementation.md`: Documented completed implementation phases.
-- `docs/plans/agent-assembly-verification.md`: Recorded verified acceptance criteria.
+- `docs/plans/agent-runtime/agent-assembly-migration.md`: Updated "Resume here" to record completion.
+- `docs/plans/agent-runtime/agent-assembly-implementation.md`: Documented completed implementation phases.
+- `docs/plans/agent-runtime/agent-assembly-verification.md`: Recorded verified acceptance criteria.
 - `docs/experiments/evidence-driven-development/tasks.jsonl`: Recorded task `2026-10-18-agent-assembly-production-migration`.
 
 ---

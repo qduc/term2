@@ -10,7 +10,7 @@ thresholdTokens 300000}`; model window 1,024,000 → effective auto threshold
 Intent (hints, not truth — code and log win): `docs/plans/
 provider-neutral-context-compaction.md` (local compaction = fallback for
 providers without native compaction; needs ≥1 complete cold turn) and
-`docs/plans/session-rollover-handoff.md` (agent-triggered handoff as *the*
+`docs/plans/sessions/session-rollover-handoff.md` (agent-triggered handoff as *the*
 compaction alternative; agent writes brief, successor starts at ~20k).
 
 Premise check first: it is NOT true that compaction contributed nothing. The

@@ -40,7 +40,7 @@ The inspected budget owners do not establish the experiment's required
   `source/services/agent-runtime/run-budget.ts` computes stages from recorded
   request costs. Its token dimension counts unpriced requests rather than every
   request's total usage. This is not an all-call reservation ledger.
-- `docs/plans/run-budget-stall-escalation.md`, under **Resume here**, explicitly
+- `docs/plans/agent-runtime/run-budget-stall-escalation.md`, under **Resume here**, explicitly
   records unclamped mentor/async runs and siblings exceeding a parent's remainder.
 - `experiments/bare-profile/README.md`, under **Accounting**, records that
   completion-verifier charges are additional to the foreground footer and

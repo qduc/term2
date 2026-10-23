@@ -39,9 +39,9 @@ Measured on 2026-09-06 (`term2-2026-09-06.log.1`), the same minute that automati
 
 Ratio ≈ 1.5× (303k est vs ~203k counted). Caveat: the usage record carries a different log `correlationId` (`3a530b62`) than the compaction warn, so the pairing is directional, not a controlled same-request measurement; the structural inflation is independently clear from the code above. Earlier same-window samples trend the same way (160,742 at 00:51:13; 168,917 at 00:51:56; provider count climbing toward the estimate at ~1.5–1.9× behind).
 
-Why this reads as "fires sooner than the setting": the setting UI text describes the ceiling in tokens, the plan contract calls it "an optional raw estimated-token ceiling" (`docs/plans/provider-neutral-context-compaction.md`), but the number the user compares against — the gauge, and any mental model of "tokens the model actually sees" — is the provider count. The app fires at 300k *estimate* ≈ 200k *real* tokens.
+Why this reads as "fires sooner than the setting": the setting UI text describes the ceiling in tokens, the plan contract calls it "an optional raw estimated-token ceiling" (`docs/plans/context-and-memory/provider-neutral-context-compaction.md`), but the number the user compares against — the gauge, and any mental model of "tokens the model actually sees" — is the provider count. The app fires at 300k *estimate* ≈ 200k *real* tokens.
 
-The plan for the OpenAI native lane already lists exactly this calibration as future work: "estimator calibration at zero cost. Recorded traffic carries real usage" (`docs/plans/openai-context-compaction.md:788`). The local lane has the same uncalibrated estimator and no calibration work was done for it.
+The plan for the OpenAI native lane already lists exactly this calibration as future work: "estimator calibration at zero cost. Recorded traffic carries real usage" (`docs/plans/context-and-memory/openai-context-compaction.md:788`). The local lane has the same uncalibrated estimator and no calibration work was done for it.
 
 ## Root cause B — a blocked automatic trigger does not re-arm, so it re-fires on every request boundary
 

@@ -10,7 +10,7 @@ import { createContext, useContext } from 'react';
  * ChatForge's auth API. This client has no login flow: the thin server owns
  * identity and injects the gateway assertion subject, so the browser only needs
  * a stable viewer id to namespace its own state. See
- * `docs/plans/web-client-composable-redesign.md` ("ChatForge salvage boundary"
+ * `docs/plans/web-client/web-client-composable-redesign.md` ("ChatForge salvage boundary"
  * — *Replace: ChatForge auth ... with a minimal single local-owner identity*).
  *
  * The module keeps the slice's import path (`contexts/AuthContext`) so no

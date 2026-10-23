@@ -4,7 +4,7 @@ Date: 2026-09-04 · Scope: Milestone 4 cleanup batches B1–B10, the Topology ba
 and the follow-up rewrite (`a2b56bd6`) (cli.e2e retier, runtime-history location,
 mutation-testing recommendation). Source of truth for counts:
 `docs/test-audit/baseline.md` (runtime history table), plan
-`docs/plans/test-suite-audit.md`, graph `docs/test-audit/graph.yaml`.
+`docs/plans/engineering/test-suite-audit.md`, graph `docs/test-audit/graph.yaml`.
 
 ## Test counts
 

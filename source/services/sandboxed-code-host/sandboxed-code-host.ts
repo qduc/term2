@@ -316,7 +316,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           // to change the shape of its result or the amount of it. Only the
           // size branch is reachable in practice — host-worker.ts rejects
           // non-JSON output before it is sent — but conflating them cost a
-          // real run its fan-out (docs/plans/code-mode-field-test.md).
+          // real run its fan-out (docs/plans/tools/run-code/code-mode-field-test.md).
           if (!isJsonValue(message.output)) {
             fail('invalid_output', `${subject} return value is not JSON-safe`);
           } else if (bytes(message.output) > limits.maxOutputBytes) {

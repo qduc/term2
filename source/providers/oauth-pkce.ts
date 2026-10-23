@@ -13,7 +13,7 @@ import {
  *
  * Both providers term2 logs in to (Grok and Codex) borrow the official CLI's
  * registered client id, so the redirect URI is *their* registered value and is
- * not negotiable — see docs/plans/provider-oauth-independence.md. The only
+ * not negotiable — see docs/plans/providers/provider-oauth-independence.md. The only
  * thing that differs between them is endpoints, scopes, and how the token
  * endpoint wants its request body encoded, so all of that is configuration and
  * the flow itself lives here once.

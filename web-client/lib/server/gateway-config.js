@@ -8,7 +8,7 @@ import crypto from 'crypto';
  * Socket mode (default): TERM2_GATEWAY_SOCKET_PATH — the gateway's Unix socket,
  * the only transport this client is meant to use in the composable topology
  * (the gateway never binds the network; see
- * docs/plans/web-client-composable-redesign.md "Deployment topology").
+ * docs/plans/web-client/web-client-composable-redesign.md "Deployment topology").
  * Network TLS mode exists for parity with the reference client but is unused.
  */
 

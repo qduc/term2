@@ -202,7 +202,7 @@ selected a 60-second cost-containment policy, accepting that an unusually long
 valid call may be cancelled. `ToolArgumentRunawayGuard` now applies only to that
 chained Luna request shape and requires the observed rate, delta size, and active
 gap signature before aborting. The full contract and verification record live in
-the Luna row of `docs/plans/guard-ledger.md`.
+the Luna row of `docs/plans/approvals-and-sandbox/guard-ledger.md`.
 
 ## Candidate repairs (not implemented)
 

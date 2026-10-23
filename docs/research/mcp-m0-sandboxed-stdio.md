@@ -2,7 +2,7 @@
 
 **Status:** complete — spike only, no production `source/` change. Worker `W-ds`, branch
 `mcp-m0-sandbox`, 2026-09-17. Brief: `.coord/mcp-code-mode/briefs/M0-sandbox.md`. Backs Decision 4
-of [`docs/plans/mcp-code-mode.md`](../plans/mcp-code-mode.md).
+of [`docs/plans/tools/run-code/mcp-code-mode.md`](../plans/tools/run-code/mcp-code-mode.md).
 
 Spike code: [`spikes/mcp/sandbox/`](../../spikes/mcp/sandbox/) (README there describes each script).
 

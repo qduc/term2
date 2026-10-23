@@ -5,7 +5,7 @@
 User FIX-AUTHORIZED. Both source fixes merged to main: worker bootstrap
 merge e5dad4ba (implementation dc5042fa), Codex compaction identity merge
 183d7072 (implementation 6172b63c). No push. User untracked
-docs/plans/run-code-nested-approval-preflight.md untouched.
+[historical run-code-nested-approval-preflight.md](https://github.com/qduc/term2/blob/1cc5a0a91e164215edbcbb4291ffb0c0c1726cc2/docs/plans/run-code-nested-approval-preflight.md) untouched.
 
 Final integrated combined gate completed at main183d7072: build/typecheck,
 e2e12passed and provider177passed/1skipped; full suite20failed/8348passed.

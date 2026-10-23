@@ -1,7 +1,7 @@
 /**
  * Contract between the MCP connection layer (`source/services/mcp/`) and its
  * only consumer, the `run_code` script surface. MCP tools are never direct
- * model tools; see docs/plans/mcp-code-mode.md, Decision 1.
+ * model tools; see docs/plans/tools/run-code/mcp-code-mode.md, Decision 1.
  *
  * This file is types only. Implementations must not widen it without updating
  * both sides and the plan.

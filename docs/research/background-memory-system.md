@@ -101,7 +101,7 @@ poison the agent?
   both scopes with `rankMemorySearchResults`, and keeps a memory only if a query
   word appears as a whole word in its id, title, tags, or summary. This filter
   was added after a noisy-injection incident recorded in
-  `docs/plans/guard-ledger.md` ("Root-turn automatic memory selection
+  `docs/plans/approvals-and-sandbox/guard-ledger.md` ("Root-turn automatic memory selection
   precision"). The budget is `memory.contextBudgetChars` (default 8,000).
 - **Prompt drift.** The `memory.md` fragment (loaded by `buildPromptSpec` in
   `prompt-constructor.ts` whenever memory is enabled) still says "The initial
@@ -223,7 +223,7 @@ cheap tier.
   checkpoint in `eval/teammate-memory/README.md` showed B recalling an older
   decision that A missed. That is recall evidence only.
 - **Reversed, needs explicit sign-off:**
-  `docs/plans/memory-progressive-disclosure.md` §10 lists "automatically
+  `docs/plans/context-and-memory/memory-progressive-disclosure.md` §10 lists "automatically
   promoting a session transcript to persistent memory" as out of scope. §5.1
   of the same plan says no session text is "automatically injected into … memory
   storage." The distiller proposed here does exactly that, through a validator.
@@ -696,7 +696,7 @@ Term2 anchors (`e34f208a`): `source/services/memory/memory-capabilities.ts`
 `source/services/hooks/hook-contracts.ts`,
 `source/services/logging/conversation-log-events.ts`,
 `source/services/logging/provider-traffic.ts`,
-`docs/plans/guard-ledger.md`, `eval/teammate-memory/README.md`.
+`docs/plans/approvals-and-sandbox/guard-ledger.md`, `eval/teammate-memory/README.md`.
 
 Local data: `~/.local/state/term2-nodejs/logs/provider-traffic/2026-09-23/`
 and `2026-09-25/` (fingerprints and usage only), and

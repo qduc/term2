@@ -6,7 +6,7 @@ This report covers the provider traffic logger, the HTTP fetch logging path
 that delegates to it, and `CodexResponsesWSModel` stream accounting. It does
 not change retry, chaining, compaction, UI, or conversation recovery policy.
 The canonical coordination record is
-`docs/plans/log-friction-improvements-2026-09-07.md`; its evidence window is
+`docs/plans/engineering/log-friction-improvements-2026-09-07.md`; its evidence window is
 2026-09-06 07:43:49 through 2026-09-07 07:43:49 local UTC+7.
 
 ## Evidence found

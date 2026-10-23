@@ -202,7 +202,7 @@ export const createFindFilesToolDefinition = (
       // makes whatever the script computes from it wrong. Observed in the
       // field test: a script asked for every file under source/tools, received
       // 50 of 86, and reported the wrong longest file
-      // (docs/plans/code-mode-field-test.md).
+      // (docs/plans/tools/run-code/code-mode-field-test.md).
       const limit = max_results ?? (isScriptedToolCall(context) ? SCRIPTED_GLOB_MAX_RESULTS : 50);
       const cwd = executionContext?.getCwd() || process.cwd();
 
@@ -277,7 +277,7 @@ export const createFindFilesToolDefinition = (
       // "results were capped" in sentences, which a script splitting on
       // newlines reads as more paths — the failure that made a model examine 33
       // of 51 files and miss the one it was asked for
-      // (docs/plans/code-mode-field-test.md).
+      // (docs/plans/tools/run-code/code-mode-field-test.md).
       if (isScriptedToolCall(context)) {
         return {
           paths: cleanedLines.slice(0, limit),

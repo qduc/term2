@@ -1,0 +1,3705 @@
+# Term2 Guard Ledger and Remediation Plan
+
+## Authorized reference retrieval in headless approval (2026-10-22)
+
+Incident: the paused Bare/Full pilot's Bare reference task could not fetch its
+explicitly requested local reference. The fallback reviewer received no task
+context: `runWithSession` tried an optional `exportState` on the production
+`ConversationAdapter`, which has no such method. The fallback prompt also
+classified network effects as high risk regardless of an authorized read.
+
+Contract: prevent unrequested external effects while admitting an explicitly
+requested, informational HTTP GET without credentials, cookies, private payloads,
+or response execution. Localhost is not evidence of safety or authorization;
+unknown/admin/state-changing endpoints, uploads and authenticated requests remain
+outside this case. The complete command is reviewed. This is the existing
+approval admission boundary, not a Bare-specific bypass. Its enforcement owners
+remain `NonInteractiveApprovalPolicy` and the shared evaluator; interactive
+approval or a later authorized request owns recovery. Prior work is preserved on
+rejection; no command dispatch, retry, model fallback or budget changes are added.
+
+Evidence is the live runtime transcript, wired explicitly through
+`getApprovalHistory`; compatibility callers retain their optional session export.
+The reviewer separately receives the latest genuine user request (3,000 chars),
+excluding synthetic summaries and stripping memory/steering wrappers. Recent
+activity remains last 8 items, 500 chars each, 3,000 chars total. Truncation is
+marked and remains uncertainty, never authorization. These are context retention
+bounds; full evidence remains in the session. No settings, defaults, environment
+overrides, persisted migration, cancellation or provider continuity changes.
+
+The measured signal is command effects plus user intent. Missing intent was a
+proxy for danger and rejected legitimate work; public/reference retrieval is not
+itself exfiltration. Prompt v12 distinguishes them, retaining RED/sensitive-path
+heuristics and risk/authorization derivation. Existing advisory metadata exposes
+risk, authorization, confidence, source and reason; no new payload logging.
+Rollback is the history wiring, bounded latest-user context and prompt revision.
+
+Red proof: the new built-CLI reference fixture failed on the baseline for both
+Bare and Full when forced through headless continuation: user context was absent.
+After repair, six loopback CLI checks pass (both profiles, authorized/high-risk/
+unknown advice); only authorized reads reach the actual reference server.
+Independent temporary checks cover long tool history, synthetic/tool injection,
+newer restrictions, RED/sensitive paths and malformed responses. A single
+Neuralwatt `deepseek-v4.1-flash` advisory request (2,751 tokens) approved requested
+curl/Node reads and rejected unrelated admin GET/upload; credentials were rejected
+by the system heuristic. Commands in that live advisory check were data only.
+The paired pilot remains paused; its earlier outcomes are unchanged.
+
+Status: repaired in `721795e1`; focused evidence passes. Broader gate outcomes and independent
+verification disposition are recorded in the experiment task ledger.
+
+## Agent model discovery pages (2026-10-19)
+
+Harm prevented: a discovery query injecting hundreds of verbose catalog rows into
+agent context (live baseline: 638 models / 86,280 characters). Class: context
+presentation bound with explicit retrieval, not execution admission. Owner:
+`source/tools/agent/list-models.ts`; caller owns continuation via `nextOffset`.
+Direct signal: filtered model-row count. Large legitimate catalogs are expected;
+no model or catalog work is cancelled because of size. Default page is 50, offset
+zero; per-call positive integer `limit` overrides the default without a hidden
+maximum. There are no setting/env/role overrides, persisted migration, or clamping.
+Names are opt-in; IDs and totals remain present. Omitted rows remain retrievable
+with the same filters/sort and returned offset. Pages are live, not snapshot-bound,
+so changes may reorder rows. No automatic retries, history cache, provider
+substitution or new request timeout. Runtime cancellation reaches catalog fetches.
+Observability: `totalModels`, `offset`, `nextOffset`, per-provider catalog status,
+and explicit history status; no credentials, raw errors or conversation content.
+Rollback: revert discovery pagination and its documentation/tests together.
+
+Red evidence: the pre-optimization executor returned all 300 fixture models and
+60,333 characters for every measured mode. The same local-I/O harness after the
+change returns a 50-row page, approximately 5.8KB, without losing retrieval.
+Filesystem-backed integration checks retrieve 50/50/20 rows for a 120-row catalog,
+verify uniqueness and total, empty terminal pages, an explicit larger limit,
+and null continuation at completion. Typecheck, lint, three focused integrations,
+28 static guards and 215 provider black-box checks pass (one skipped). Independent
+fresh-agent real-use recheck accepted; durable trace and limitations are recorded
+in the agent-model-discovery design doc.
+
+## Gemini rate-limit retry hints (2026-10-17)
+
+Incident: the 17:08 local log records Gemini asking for 39.676606339 seconds,
+while in-loop recovery waited 454ms and 903ms and exhausted its two retries.
+The shared policy read `headers`, but the Google AI SDK exposes
+`responseHeaders` and raw `responseBody` containing `google.rpc.RetryInfo`.
+
+Contract: `getRetryAfterMs` normalizes numeric Retry-After response headers,
+then structured Google RetryInfo, then a Google-documentation-linked retry
+message. Nonnegative finite seconds round upward to safe integer milliseconds;
+malformed hints retain existing backoff. `classifyUpstreamRetryableError`
+applies the existing 60-second reasonable-wait ceiling to classified HTTP 429
+errors across SDK/generic/provider-status paths. Exactly 60 seconds is eligible;
+greater delays are refused, not shortened. Transient classification must not
+override that refusal through its generic status fallback.
+
+Class: retry containment/recovery. Enforcement owner: shared upstream policy;
+recovery owners: RetryingModel, in-loop recovery and session retry classifier.
+The provider delay is direct scheduling evidence, not proof of a permanent
+billing failure. Legitimate longer cooldowns surface the original error for
+later manual retry. No new configuration, precedence, clamping, persisted
+migration, fallback or provider-continuity change. Existing retry counts,
+remaining recovery-time checks, cancellation and committed-output protections
+remain authoritative. No tool effect is replayed by this normalization.
+Existing retry diagnostics expose attempt and effective delay; no new payload
+logging is introduced. Rollback is the shared hint parsing/cap and the transient
+refusal check together.
+
+Red proof: focused `provider-contract.test.ts` baseline passed 26 tests; the
+added loopback HTTP/real Google SDK matrix failed seven of nine cases before
+the production repair. After repair, all 35 focused tests and typecheck passed,
+independently repeated by a separate verifier. Cases cover fractional hints,
+59.999/60/60.001 seconds, 120 seconds, invalid/negative hints, message fallback
+and SDK response headers. Sleep injection checks scheduling without a real
+minute-long wait. Cancellation/budget/partial-output safeguards were inspected,
+not newly fault-injected. Broader gate outcomes are recorded in the experiment
+task ledger.
+
+Retro: preventable boundary-contract gap, origin unknown. Header-only delay
+extraction silently discarded the SDK's scheduling metadata. Timing assumptions
+and a missing real-Google-error regression made rapid retries look correct.
+One shared normalization point and a category matrix protect both the run-loop
+and provider wrapper; all shared classification callers were inspected. No
+duplicate setting/state, implicit persistence coupling or migration applies.
+Static typing alone cannot validate external error bodies. Existing retry logs
+made the mismatch observable once inspected; no additional broad mechanism is
+needed for this bounded repair.
+
+Opt-in workflow evolution decision admission is documented in
+[workflow-evolution.md](../../workflow-evolution.md), with enforcement in
+`applyEvent` in `services/workflow-evolution/experiment.ts`. It retains the
+incumbent and all evidence when frozen comparison coverage is insufficient or
+uncertain, and rejects observed regressions. Its sample floors do not claim
+statistical confidence; it changes no execution, approval or recovery budget.
+
+Current ordinary defaults are documented in [ordinary safe runs](../agent-runtime/ordinary-safe-runs.md).
+The October 7 change supersedes historical compaction-off/advisory defaults;
+the extra input ceiling remains optional and explicit supervised overrides remain.
+
+## Full-history admission accounting (2026-10-07)
+
+A full-history Codex run was refused on its second model request with
+`capacity_exceeded`: admission estimated roughly 214k tokens while preceding
+provider usage was roughly 117k. Automatic compaction was enabled, but its
+single-history estimate correctly remained below the soft trigger.
+
+The regression originated in request-admission wiring in `e8bbefb8`.
+`ApplicationRunLoop` established `previousResponseId` after the first completed
+response, then admission used that ID to infer that `state.history` was a delta.
+The run had actually started self-contained (`usesDeltaHistory = false`). The
+snapshot merge could duplicate settled pairs or fail user alignment and prepend
+the complete snapshot again. Neither case represented the actual outbound input.
+
+Guard contract: prevent false capacity/explicit-ceiling refusal of self-contained
+tool continuations, including continuations after local replacement. Class and
+owner remain request admission in `ApplicationRunLoop`; existing retained-work
+recovery belongs to the session. History representation is direct state evidence;
+serialized-byte estimation and preceding provider usage remain capacity proxies.
+Large legitimate full histories may still exceed the real bound, and those
+refusals remain enforced. Admission now requires both a response ID and
+`usesDeltaHistory` before reconstructing a snapshot-backed delta. The same local
+predicate controls merge, fallback accounting and chained-context observability.
+True delta chains still require an aligned full snapshot. No input is truncated,
+no tool is replayed, and no admitted/sibling work is cancelled.
+
+Configuration/defaults/precedence/clamping remain unchanged: model capacity minus
+selected output and 10% estimation reserve, additionally bounded by an explicit
+`agent.maxRequestInputTokens` ceiling; live settings resolution still applies.
+No persisted migration, retry, provider-continuity, output-allocation, or diagnostic
+schema change is introduced. Existing refusal diagnostics retain estimates,
+observed usage, effective limit, reserves, reason, action and retained-work
+recovery without logging content. Rollback is the admission predicate and its
+public-boundary regressions, independently of capacity/compaction policy.
+
+Red proof: `pnpm exec cross-env NODE_ENV=test vitest run
+source/services/agent-runtime/request-input-limit.test.ts -t 'self-contained history once'`
+failed both initial full-history and successful-replacement cases with the exact
+capacity error (estimated 220127, observed 116856, input budget 212800). After
+repair, the focused request-admission and AgentClient suites passed 83 tests.
+Additional rows cover settled-pair snapshot merges as well as user-mismatch
+fallback; the AgentClient test verifies a high raw compaction trigger cannot waive
+the model-aware soft trigger. Final broad verification is recorded below.
+
+Retro: the invalid inference was representable because transport continuity and
+history representation are separate facts. Admission conflated them even though
+boundary compaction already used the correct discriminator. Existing tests
+covered initial self-contained admission and pre-existing delta chains, not the
+transition from a self-contained request to a response-backed tool continuation.
+The shared predicate plus the two-history-shape/replacement matrix protects that
+category without a new state machine or heuristic. Both snapshot-merge call sites
+were audited; boundary compaction already honors `usesDeltaHistory`, and local
+replacement resets it. No settings, persistence, authorization, or external API
+boundary changed (N/A for migration/security failure classes). Existing aggregate
+logs exposed the inflated estimate but did not distinguish accounting duplication;
+the deterministic transition regression now detects it before dispatch. No paid
+call or trace-content publication was needed.
+
+Source repair: `e0bfe62ac470f1d5120efdad271c651afc14c688`.
+Verification (all jobs have finite timeouts; elapsed times are command wall time):
+
+- Focused admission/AgentClient: 83 passed; 5.27s, exit 0.
+- Full unit: 706 files / 10,938 passed, 3 expected failures, 2 skipped;
+  159.50s, exit 0.
+- Integration: 12 passed files / 106 passed tests, 1 skipped file/test;
+  42.51s, exit 0.
+- Provider black-box: 22 files / 193 passed, 1 skipped; 93.07s, exit 0.
+- Final `pnpm test:related ./source/services/agent-runtime/application-run-loop.ts`
+  and `pnpm test:changed`: each 144 files / 2,905 passed, 2 expected failures;
+  76.70s / 66.58s, exit 0.
+- Final `pnpm typecheck`: 4.84s, exit 0, after correcting test-only nullable
+  response-ID typing and a missing fixture formatter; the initial validation
+  attempt failed only those two test declarations.
+- Scoped ESLint and Prettier passed; three pre-existing `require-yield` warnings
+  remain in unchanged generator fixtures. `git diff --check` passed.
+
+## October 6 supervised-worker token incident (branch-local repair)
+
+Harm prevented: an oversized supervisor handoff, unchecked main-worker request
+context, or surviving previous worker silently repeating the October 6 incident.
+Contract and operational adoption: [supervised worker workflow](../../../tools/supervised-term2/README.md).
+
+| Owner / class | Signal, effective configuration and action | Recovery / rollback |
+| --- | --- | --- |
+| `tools/supervised-term2/supervisor.mjs`; context admission | Fixed 32,768 UTF-8 handoff bytes; bounded read and rejection before spawn, never truncation. Atomic task lock rejects replacement even when stale. | Original artifacts retained; compact explicit handoff. Verify group exit and reconcile effects before stale-lock recovery. Revert launcher and its task-local adapter together. |
+| Supervisor + `worker-owner.mjs`; owned lifecycle containment | Owned process group; TERM then five-second grace then KILL, release only after proven exit. Child checks Linux PID start identity every 250ms, including zombie state. | Retain lock on unproven exit/owner SIGKILL; no automatic replay. Signals never target unrelated groups. Linux-only; escaped/remote processes excluded. |
+| `ApplicationRunLoop`; configured request admission | `agent.maxRequestInputTokens`: null normally; supervised env 80,000. CLI > env > persisted > defaults; runtime values override startup. Check rendered estimate and latest usage after preparation/compaction. | Typed pre-dispatch rejection retains work, emits no fake cost, and refuses session retry. Explicit compact/handoff/ceiling increase. No security/authority changes. Revert request-limit wiring independently. |
+| `SettingsService`; deadline provenance preservation | An explicit persisted 300,000ms deadline is preserved, as are zero and other customized values. Missing values still use zero default. | No origin guessing or restoration of already-rewritten values. Revert separately from request admission. |
+
+Supervised profile uses local compaction at 60k and an 8,192 output default; ordinary
+compaction-off, 32k output, reasoning, retries, parallelism and staged run-budget
+defaults remain intact. The ceiling is independent of compaction: newest-two-turn
+safe-cut refusal and per-run cap cannot waive it. Byte/4 estimation and prior
+usage are containment proxies, not exact provider tokens or USD guarantees.
+Delta-history chains without a ready full snapshot fail closed even when older
+usage is available. One-shot workers inherit selected output, character, request
+deadline and idle controls; explicit role output overrides retain precedence.
+
+Red proof: new request-limit boundary tests failed on baseline (provider called;
+continued tool loop reached the legacy max-turn backstop). Updated five-minute
+deadline test failed because baseline changed 300,000 to zero. Launcher contract
+tests initially failed because no ownership implementation existed. Final gates
+and exact results are recorded in the branch verification handoff; no live paid
+provider is required. Guard diagnostics expose code/action/limit/estimated and
+observed tokens or ownership IDs, never prompt content or credentials.
+
+Detection gap: normal compaction tests covered safe complete cold turns and
+failure preserving history, but preservation alone let the next large request
+dispatch. Shell cancellation was treated as worker exit without PID/group proof.
+The new admission and lifecycle tests exercise those public boundaries; source
+history, completed tool effects and uncertain external outcomes remain retained.
+
+## Codex socket-affinity admission (2026-10-05)
+
+Harm prevented: sending a Codex `store:false` anchor to a replacement physical
+WebSocket, or recovering by dropping the anchor from an incomplete delta.
+Scope: Codex WebSocket streaming and transport acquisition callback. Class:
+admission guard. Enforcement: `CodexResponsesWSModel.#onConnectionAcquired` and
+`CodexResponsesTransport.fetchResponse`, before stream setup/frame dispatch.
+Recovery: existing provider complete-history fallback or application bounded
+chain recovery for caller-supplied deltas and tool continuations.
+
+Signal: acquired lease `connectionId`/`reused`, compared with the connection
+remembered for the logical history key. This is direct transport evidence,
+not age, repetition, output size, or timeout. Legitimate socket replacement is
+expected; only the stale anchor is rejected. Retained sockets keep chaining.
+Completed tool pairs remain in durable history. The rejected request is unsent;
+the acquired lease remains reusable for self-contained recovery.
+
+No new setting/default/clamping/migration; existing retry configuration remains
+authoritative, including zero retries. Diagnostics retain logical history key,
+physical connection ID and reuse state; rejection has `previous_response_not_found`
+code. State reset clears the logical connection binding. Rollback is confined to
+acquisition admission and lease release; no socket-age policy change.
+
+Disposition: 49 recorded cross-connection invalid anchors repaired by predispatch
+admission. [Repair evidence](../../research/session-search-and-codex-reconnect-repair.md)
+contains full-history, caller-delta, retained-socket and completed-tool workflows.
+The session-worker deadline is unchanged and does not cancel running CPU work;
+the UI-thread fallback defect is repaired through worker ownership.
+
+Status: **Discovery and candidate characterization complete. The
+`maxParallelToolCalls` defect is repaired and merged (`f09b55ec`, merge
+`87b7224c`); characterization is merged (`b75e36db`, merge `f12181e0`), with
+four confirmed defects and one downgraded candidate. The four repair
+dispositions were approved on 2026-08-14; implementation is deferred to a new
+session.**
+
+## Goal
+
+Repair harness guards whose proxy signal can destroy legitimate work.
+
+The governing rule is:
+
+> The harness may measure and contain work. It must not silently interpret a
+> weak proxy as proof that productive work is invalid.
+
+### Interactive foreground cancellation proof settlement
+
+The queue's bounded cancellation wait is a fail-closed containment boundary: a
+timeout does not prove the active execution stopped, so submissions remain queued
+while the captured execution owns the session. The adapter captures the active
+queue execution identity and the coordinator's abort-completion promise. If the
+bounded wait expires, only settlement of that exact promise can issue the
+identity-fenced `cancellation_settled` transition; projected stream failures
+are not cancellation proof. The controller applies the retained-work decision
+captured at stop: an empty queue at stop releases to idle and dispatches fresh
+input submitted during the wait, while pre-existing queued work is retained in
+a manual pause. The controller's surviving stop-retained item IDs own that
+decision throughout cancellation, including while the driver's cleanup is
+pending. Removing an item deletes its ID; discarding the queue clears those IDs.
+When none survive, proven settlement releases to idle and dispatches fresh
+post-stop input. Queue mutation keeps active ownership fail-closed until proof
+settles. Ordinary execution failures continue to use
+failure-pause policy. If proof never settles, the queue remains fail-closed; runtime abandon /
+reset isolation is a separate product decision. The shell SSH adapter forwards
+the caller's signal and timeout to `SSHService`, which settles the local wait
+but cannot guarantee termination of the remote process.
+
+Cancellation-retention repair contract: prevent deleted stop-time follow-ups
+from blocking fresh foreground input or creating an empty manual pause.
+Class: lifecycle containment with retained-work recovery; `QueueController`
+owns both enforcement and settlement. Surviving stop-time IDs and the driver's
+matching cancellation proof are direct evidence. Fresh submissions are not
+retained stop-time work, even when they arrive before cleanup completes. The
+adapter's injected `activeCancelTimeoutMs` still overrides its fixed 10,000ms
+default; no configuration, clamping, settings migration, retry, fallback,
+provider-continuity, or telemetry change is introduced. Queued content stays
+available through `state()`, and an unproven stop retains its active execution.
+Existing state kind, active execution identity, queue contents, and pause reason
+expose the decision without adding content logging. Rollback is confined to the
+controller's retention bookkeeping and its public-boundary tests.
+
+Red proof: `pnpm exec cross-env NODE_ENV=test vitest run
+source/services/queue/queue-controller.test.ts` failed eight tests before the
+repair: remove/discard during pending cleanup, true/false driver proof, and
+fresh/empty settlement. The same command passed 70 tests afterward (0.274s).
+The matrix also protects surviving retained work and removal of fresh IDs.
+Detection gap: older removal tests mutated only after a false driver result;
+older deferred-cleanup tests never removed retained work. Deleting the duplicate
+retained counts makes the ID set the single decision source for both proof paths.
+Verification on 2026-10-03: `pnpm typecheck` passed (8.11s wall time), and
+changed-file formatting, ESLint, and `git diff --check` passed. Related and
+changed gates each selected 34 files: 670 passed, one expected failure, and one
+unrelated failure in the unknown-role status assertion (expected `failed`, got
+`cancelled`); elapsed wall times were 56.37s and 26.74s. The exact related command
+on unchanged queue files reproduced that sole failure (26.16s); the exact changed
+command with base production behavior and the same selected dependencies
+reproduced it plus the eight new regression failures (29.89s). The narrowed
+repair does not claim either failing gate is green. No full-suite or provider
+gate was run for this controller-only change.
+
+Budget judgment for turns, time, cost, and stall evidence is owned by
+[`../agent-runtime/run-budget-stall-escalation.md`](../agent-runtime/run-budget-stall-escalation.md), not here.
+Shell changes must preserve [`../background-work/background-shell-monitor/MAP.md`](../background-work/background-shell-monitor/MAP.md).
+Provider or run-loop changes require the provider black-box suite.
+
+## Resume here
+
+The September 6 invalid-chain incident supersedes the historical per-logical-
+turn retry envelope below: the shared budget now bounds consecutive recovery
+episodes. ApplicationRunLoop ends an episode only after accepting a terminal
+model completion; partial output, failed streams, and tool activity do not reset
+it. Limits remain 90,000ms / 3 recovery dispatches / 1 automatic replay. Separate
+total-run containment is unchanged. See
+[the incident contract and red proof](../../bugs/invalid-chain-worker-recovery.md).
+The old lifetime allowed 15 minutes of successful work after a recovered failure
+to expire the next unrelated recovery before its first replacement request.
+
+The retry/recovery budget contract is that ordinary successful tool-loop
+continuations do not consume the physical recovery-attempt allowance. Recovery
+handlers claim the physical dispatch when they schedule a `retry_fresh` plan,
+while `RetryingModel` claims only its own post-failure provider retries. The
+regression is covered by `source/providers/retrying-model.test.ts`.
+
+Discovery is done and **it did not pay**. Five keyword sweeps produced 3,738 raw
+hits across ~150 non-test files and ~30 enforcement owners; 260 non-test `throw
+new` sites were enumerated and traced. That yielded exactly **one** confirmed
+defect — a three-line wiring omission — plus four reasoned candidates.
+
+Two consequences, both deliberate:
+
+1. **Do not re-run the sweeps.** They are recorded below, they were exhaustive
+   for named constants and throws, and by construction they cannot catch a guard
+   written as an inline literal comparison. Another pass buys nothing. Future
+   guard work starts from an observed incident or from the candidate list.
+2. **The reference table is not a work queue.** Roughly 25 guards were catalogued
+   with no hypothesized failure mode. They are listed so the next reader does not
+   re-derive them — not because each owes a characterization test.
+
+Open work, in order:
+
+- **Completed:** `agent.maxParallelToolCalls` repair approved, verified, and
+  merged (`f09b55ec`, merge `87b7224c`).
+- **Completed:** all five candidates characterized and merged (`b75e36db`,
+  merge `f12181e0`); results are recorded below.
+- **Completed:** the four repair dispositions below were approved on
+  2026-08-14. This approval changes no runtime or test behavior.
+- **Completed:** the subagent steering mailbox repair is implemented and
+  verified and merged (`74323696`, merge `fa328291`).
+- **Completed:** tool ownership lifecycle repair is implemented and merged
+  (`184db508`, merge `faa737c5`).
+- **Completed and merged (`8d0e7f7a`):** `GenerationGuard` reasoning-length
+  false positive. Verbose high-effort reasoning of ~100k characters on one
+  request was aborting the turn as `reasoning_characters` /
+  `unsafeToReplay`. The 100k cap is retained as a truncate bound; it no
+  longer fails the request. See the repair record below.
+- **Completed and merged (`dd80e755`; repair `d16bd5e3`):** destructive repetition
+  inference is removed from both execution owners while the typed
+  100,000-character aggregate visible-output cap remains. The InputSurgeGuard
+  capability repair remains a separate worktree and rollback boundary.
+- **Completed and merged (`43f3d978`, from `retry-recovery-contract`):** the
+  retry/recovery containment budget (`RetryRecoveryBudget`: 90s / 3 physical
+  attempts / 1 automatic replay) and its never-replay-after-committed-output
+  precondition. Four confirmed false-positive/settlement defects repaired
+  across seven commits (`a00a899f` `3d9dab32` `839d2781` `66abfcec`
+  `e353680f` `28a18aab` `a7e44292`); see the full entry below.
+
+## Guard classes
+
+### run_code failed-script nested-result recovery
+
+Harm prevented: completed sibling reads or mutations being repeated because a
+failed script discarded their returned values. Scope: `createRunCodeRuntime`
+tool calls and `renderResult` failed-script presentation; agent capability
+results are not included. Class: information-loss recovery, with no new guard.
+Enforcement stays with existing `RUN_CODE_LIMITS` and final display clipping.
+`settleResolved` owns normalized per-call snapshots; the renderer and
+`saveOutputArtifact` own display and retrieval. Only settled normalized results
+are retained, bounded per call and by the existing admitted-call count; raw
+media stays represented by inert references. No settings, defaults, admission,
+timeouts, provider continuity, retry or approval behavior changes.
+
+On failure, recover completed results and call identities; never replay tools
+or infer domain success from resolution. Clipped string values preserve their
+full output in an artifact, or report unavailable storage honestly. Structured
+overflow keeps its existing reject-with-retrieval contract. The aggregate display
+uses the existing 30,000-character clip and retrieval artifact. Recovery data is
+not emitted in completion telemetry. Rollback is confined to call recovery
+fields, string overflow preservation and failed-script rendering.
+
+Red proof: public `run-code.test.ts` tests for recovered siblings and clipped
+string retrieval both failed before implementation. The baseline suite passed
+129 tests. Final verification is recorded with the delivery task `1fdc6148`.
+Detection gap: the previous test pinned a warning rather than retained data;
+category tests also exercise later errors, mutation non-replay, immutable
+snapshots and unavailable artifact storage.
+
+### Idle interactive large-uncached-input confirmation
+
+Harm prevented: idle Enter silently submitting a large uncached turn because
+the composer's delivery preference was mistaken for evidence of an active turn.
+Scope: interactive `ConversationAdmissionWorkflow.submit`; this does not add
+enforcement to non-interactive or provider-request paths. Class: advisory
+confirmation. Enforcement and recovery owner: `ConversationAdmissionWorkflow`;
+approval sends the staged turn, decline returns it without recording or sending.
+
+Signal: `ConversationService.isQueueActive()` at each synchronous admission
+attempt, followed by the existing `previewLargeUncachedInput` decision. Queue
+activity is direct lifecycle evidence; payload size and cache-risk reasons are
+estimates. `busyMode` remains a delivery preference and supplies no activity
+evidence. Legitimate large idle work still reaches confirmation; an actually
+active foreground turn bypasses this advisory, including when the preference is
+omitted. Input-surge confirmation continues to take precedence in both states.
+
+Configuration, precedence, and clamping: unchanged. The session planner creates
+`LargeUncachedInputGuard` with its fixed defaults: enabled, 64,000 estimated tokens
+(UTF-8 bytes divided by four, rounded up), and a five-minute idle threshold.
+No persisted setting or migration is introduced. The workflow stages a warning
+before history or send side effects; already admitted work is untouched. Retry,
+fallback, provider continuity, and content-bound surge approval are unchanged.
+Observability retains `large_uncached_input_warning_shown`, estimated token/byte
+counts, and cache-risk reasons, without logging turn content. Rollback is the
+workflow's activity dependency and gate plus its regression tests.
+
+Ledger disposition: confirmed bypass repaired and covered at the owning public
+boundary. Detection gap: the previous test explicitly equated a set `busyMode`
+with a running agent. The replacement matrix varies real activity independently
+of steer, follow-up, and omitted preferences, and checks busy-to-idle transition.
+Sibling review: the app's preview is advisory only; the orchestrator independently
+queries queue ownership for routing. Neither supplies this confirmation's state.
+
+Red proof: `pnpm test source/services/conversation/conversation-admission-workflow.test.ts`
+failed four regressions before the repair (both idle preferences, active without
+a preference, and a busy-to-idle transition). Verification on 2026-10-03: focused
+tests passed (16 tests, 0.22s), `pnpm test:related
+./source/services/conversation/conversation-admission-workflow.ts` and
+`pnpm test:changed` each passed eight files / 74 tests (2.03s and 2.00s), and
+`pnpm typecheck`, changed-source ESLint, changed-file Prettier, and
+`git diff --check` passed. No provider, bridge, run-loop, registry, non-interactive,
+or project-wide configuration behavior changed; no full-suite or live-provider
+run was needed for this localized admission repair.
+
+### Subagent tier-pool entry health (branch-local implementation)
+
+Harm prevented: a first-request billing or credential rejection for one
+configured tier-pool entry failing a delegated task when another configured
+entry can execute it. Scope: fresh foreground `NestedSubagentRunner.runAsTool`
+calls, fresh background `SubagentAsyncRegistry.startRun` segments, and
+reviewer-owned explorer dispatches, excluding mentor fanout, continuations,
+and the root agent. Class: temporary admission
+filter; `SubagentRolePoolSelector` owns session-scoped provider/model health
+and `NestedSubagentRunner` / `SubagentAsyncRegistry` / `createSubagentRuntime`
+own their respective
+first-request recovery. The direct signal is an HTTP 402, HTTP 401/403, or
+recognized insufficient-balance/credit/quota code/message; transient 429 and
+5xx are excluded. A provider that recovers early may be skipped until the
+fixed 10-minute cooldown expires; every entry remains eligible afterward.
+No setting or migration is introduced. Fresh configured pools are read live;
+there is no independent environment override. An eligible failed entry is
+marked unhealthy, the next healthy entry is selected at most once per pool
+entry, and an exhausted pool returns an error listing entries and failure
+classes. A committed stream, tool action, continuation, cancellation, or
+adopted foreground run is not replayed. The background status model and
+pre-adoption foreground lease model update on takeover; a privacy-safe warning
+contains role, provider/model IDs, and failure class, not provider response
+bodies or secrets. Rollback: revert the selector health, classification, and
+the two spawn-path fallback changes together. This branch has focused
+regression tests; final validation is recorded in the assignment report.
+
+### Interactive automatic-memory canary admission
+
+The local CLI opt-in in `AutomaticMemoryCanary.record()` admits at most one
+direct first-party preference write per session. This is an admission limit,
+not a turn/run-loop budget. It prevents an unvalidated candidate selector from
+silently accumulating many durable writes. The direct signal is a successful
+write on that canary instance; the second eligible input is skipped before any
+storage action. Legitimate additional preferences are deferred to ordinary
+explicit `memory_create` or a later session, not discarded from the conversation.
+The separate 280-character exact-form eligibility filter limits untrusted or
+ambiguous promotion but does not claim broad extraction recall. Configuration is
+the interactive CLI environment opt-in `TERM2_AUTOMATIC_MEMORY_CANARY=1` with
+`memory.enabled`; absent means off. Read-only/plan-mode checks run at settlement.
+No provider request, retry, partial model work, or persisted setting changes are
+introduced. Success and source appear in the receipt; a storage error disables
+the current session's canary and emits a failure card. Undo is the ordinary
+`memory_delete` tool. Roll back by disabling the environment opt-in; the
+memory canary and its root-session wiring are independently removable. Pilot
+contract and verification limits: [automatic-memory-canary.md](../context-and-memory/automatic-memory-canary.md).
+
+### Teammate-memory single-turn checkpoint admission (pilot-only)
+
+Harm prevented: a two-call experimental probe silently expanding into
+unbounded Codex requests or being reported as a $0.50/arm billing guarantee.
+Scope: `scripts/teammate-memory/checkpoint.ts` only; the original multi-session
+pilot remains blocked. Class: admission limit with fail-closed settlement.
+Enforcement and recovery owner: the checkpoint script, not the application run
+loop. It admits exactly one unchained tool-free WebSocket model stream per arm,
+serially, using SDK and Term2 retryAttempts=0 and no compaction method. No
+session context or previous-response ID is supplied, so the Codex server-history
+fallback does not apply. Each stream has its own 120-second abort signal and
+closes its model before the next arm; a timeout leaves its charge unknown and
+cannot be scored.
+Measured signal: UTF-8 bytes of the text instructions plus user question before
+dispatch (32,000 maximum), one physical stream per arm, terminal token usage.
+The 1,024-token protocol allowance and provider-published 128,000 maximum output
+tokens are conservative reservation assumptions; bytes are a proxy for text
+tokens, not a tokenizer result. The action is to reject oversized input before
+dispatch and stop before the next arm when usage or stream settlement is
+ambiguous, without replaying an already-dispatched request. A long valid answer
+may use the full physical output allowance; no client-side truncation changes
+the experimental answer. There are no configurable sources, persisted setting
+changes, fallback, or autonomous recovery. The experiment saves each settled
+arm in a one-shot output directory; an uncertain arm is not labeled success.
+Observability: prompt digest, arm, usage, response, and API-list-price-equivalent
+reservation; actual Codex-plan credits/USD are unknown. Rollback: remove the
+checkpoint script and its fixture instructions without changing product guards.
+`checkpoint.test.ts` covers isolation, admission, terminal usage, unexpected
+tool settlement, and suppression of provider error headers. A first live arm A
+attempt returned HTTP 400 without a body, left no success artifact, and did not
+dispatch B; a read-only Codex model-list request confirmed `gpt-6-luna` is
+listed, but the invalid wire field remains unknown. Do not replay that attempt
+as if its charge were zero. This guard does **not** authorize paid calls for the
+multi-session pilot.
+
+### Sandboxed source-and-input admission bound
+
+Harm prevented: a `run_code` payload bypassing the existing bounded source
+channel by moving arbitrarily large inert data into a separate input channel.
+
+Scope and execution paths: `SandboxedCodeHostImpl.run` calls that provide
+`HostRunInput.inputData`. Callers that omit input data retain the original
+code-only `HostLimits.maxCodeBytes` measurement and no `inputs` global.
+
+Guard class: admission limit.
+
+Enforcement owner: `SandboxedCodeHostImpl.run`; `sandbox.ts` owns the one-time
+JSON serialization used by both measurement and worker transport.
+
+Recovery owner: the invoking tool. `run_code` reports the existing structured
+`code_too_large` outcome so the model can reduce or split code and data.
+
+Measured signal and observation boundary: UTF-8 bytes of executable source plus
+UTF-8 bytes of the serialized JSON input object, measured before worker creation.
+This is direct size evidence. Serialization itself occurs before the byte check;
+the public Zod JSON schema bounds the value class but no separate pre-serialization
+byte guard exists.
+
+Legitimate work that can produce the same signal: large patches, generated file
+bodies, and other syntax-heavy edit payloads. They are rejected rather than
+truncated because changing exact edit data would be unsafe; callers can split the
+work into smaller invocations.
+
+Configuration sources, precedence, defaults, and clamping: unchanged
+per-invocation `HostLimits.maxCodeBytes`. `run_code` continues to supply 65,536
+bytes. Its always-present empty `{}` input consumes two serialized bytes; shared
+host callers that omit `inputData` preserve the exact old code-only boundary.
+
+Action and justification: reject before worker creation or capability dispatch
+with `code_too_large`. For input-bearing calls the diagnostic reports measured
+combined bytes and the effective limit without including source or input text.
+
+Partial-work settlement: none; rejection precedes worker and capability
+creation. Retry, fallback, provider continuity, settings migration, and approval
+semantics are unchanged. Invalid internal non-JSON input returns a structured
+`runtime_error` before worker creation.
+
+Observability: `code_too_large`, measured combined bytes, and effective limit are
+available in the terminal result. Privacy-safe completion telemetry keeps
+`sourceBytes`, `sourceLines`, and `sourceDigest` scoped to executable source; it
+does not add raw input or input hashes.
+
+Rollback boundary: `run_code.inputs`, `HostRunInput.inputData`, its worker
+binding, and the combined-byte measurement.
+
+Ledger row: **verified admission contract** — public and shared-host boundary
+tests cover rejection before startup, exact and above-threshold acceptance,
+empty input cost, multibyte UTF-8 accounting, serialization failure, omitted
+bindings, and VM-realm isolation.
+
+### Admitted nested-call settlement barrier
+
+Harm prevented: `run_code` or another shared-host caller reporting a terminal
+result while an admitted capability call can still settle, mutate state, or
+disappear from final evidence.
+
+Scope and execution paths: normal script success/failure in
+`SandboxedCodeHostImpl.run`, including serial/default lanes and nested approval;
+timeout, deadline, and parent cancellation retain their existing abort paths.
+
+Guard class: lifecycle settlement barrier with containment-budget interaction.
+Enforcement owner: `SandboxedCodeHostImpl.run` and its worker protocol.
+Recovery owner: the host for abort and terminal settlement; capability adapters
+remain responsible for call/action evidence.
+
+Measured signal and observation boundary: the worker's script-body terminal
+message and the host's direct admitted-but-unsettled call count. These are direct
+lifecycle signals; elapsed time remains the existing containment proxy.
+
+Legitimate work that can produce the same signal: slow successful calls,
+`Promise.race` losers, serial-lane waiters, and interactive approval waits.
+
+Configuration sources, precedence, defaults, and clamping: unchanged invocation
+timeout, parent signal, and host long-stop deadline. No setting or persisted value
+changes.
+
+Action and justification: close admission when the script body settles. Drain
+already admitted calls before ordinary terminal rendering; timeout, deadline, or
+parent cancellation aborts without extending either clock. Every admitted call
+must end with a terminal or honest `unknown` record.
+
+Partial-work settlement: host-observed action receipts remain authoritative. An
+unobserved rejected call changes otherwise-successful script execution to
+`unhandled_nested_failure`; no automatic replay is added.
+
+Retry, fallback, provider continuity, and migration: unchanged; no migration.
+
+Observability: stable call identities/outcomes, action receipts, host error code,
+and existing privacy-safe completion telemetry. The structured execution outcome
+remains owned by Milestone 2 of
+[`../tools/run-code/run-code-codemode-improvements.md`](../tools/run-code/run-code-codemode-improvements.md).
+
+Rollback boundary: the host/worker settlement barrier plus conversion of the
+eight public-boundary expected-failure pins to ordinary passing tests.
+
+Ledger row: **confirmed defect** — public-boundary evidence merged in `89e7e0ab`;
+production repair is Milestone 1 of the owner plan.
+
+### Non-interactive background-work drain bound
+
+Harm prevented: a one-shot non-interactive process exiting successfully while
+admitted background subagents are still running, losing their results.
+
+Scope and execution paths: non-interactive sessions using the parameterized
+run_subagent tool with execution: background; legacy run_subagent_async,
+ask_user, and background shell execution remain blocked.
+
+Guard class: containment budget with an information-loss consequence.
+Enforcement owner: runWithSession in source/non-interactive.ts.
+Recovery owner: NonInteractiveBackgroundWork.cancel, wired to the session's
+background registries; the existing notification store and formatter deliver
+settled results to a further model turn.
+
+Measured signal and observation boundary: after each model turn settles, the
+runtime's background-task control port is queried for active running or
+cancelling tasks and the durable notification queue is checked. Completion
+notifications are drained and sent through the same model-only notification
+turn content used by the interactive orchestrator.
+
+Direct evidence or proxy: active registry status and queued completion events
+are direct lifecycle evidence. Wall-clock time is only a finite containment
+proxy for a child that never settles; ordinary progress does not reset or waive
+the bound.
+
+Legitimate work that can produce the same signal: a slow but productive review,
+provider retry, approval wait, or child waiting on another child. Such work is
+allowed up to the finite bound and receives every completion notification that
+arrives before it. A child that remains active at the deadline is cancelled and
+reported as unfinished rather than reported as success.
+
+Configuration sources and precedence: the internal backgroundWaitTimeoutMs
+runtime seam is used by tests and callers; absent, non-finite, or omitted values
+use the five-minute default. Effective values are floored to at least 1ms and
+capped at 24 hours. No persisted setting is changed.
+
+Action and why the signal justifies it: wait and wake on lifecycle notification
+until no active work and no pending notification remain. At the deadline or a
+SIGINT/SIGTERM, cancel the background registries, abort the active parent turn,
+emit a structured non-zero terminal error, and do not emit completed.
+
+Partial-work settlement: completed work is delivered and can produce the final
+answer. Cut-off work is named with its id, kind, and status in human output and
+in the structured JSON error's outstanding field; pending undelivered
+notifications are counted. NDJSON remains one JSON object per line.
+
+Retry, fallback, and provider-continuity semantics: no provider wire format or
+retry policy changes; notification turns use the existing session and provider
+continuity path. run_subagent_async and background shell rejection remain
+separate capability guards.
+
+Observability fields: background_work_timeout or
+background_work_interrupted, error text, signal when applicable, outstanding
+task descriptors, and pending-notification count are emitted to JSON and the
+logger; human mode prints the same ids/statuses to stderr.
+
+Persisted-setting migration, if any: none.
+Rollback boundary: revert the non-interactive drain and its focused tests; the
+interactive orchestrator and background registries remain unchanged apart from
+exporting their existing notification formatter for reuse.
+
+Ledger row: confirmed defect — non-interactive background subagent work loss.
+
+| Class | Examples | Correct contract |
+| --- | --- | --- |
+| Inactivity watchdog | WebSocket first/inter-frame silence | Reset only on activity that proves the watched transport is alive; expire into a typed, recoverable transport failure. |
+| Containment budget | wall time, cost, turns, workflow runtime | Progress is evidence, not an automatic unlimited extension. Warn or escalate before destructive settlement where the owner design permits it. |
+| Admission limit | child count, depth, concurrency, workflow run count | Reject before starting new work; never abort unrelated admitted work. |
+| Context/loss bound | tool result bytes, retained messages | Preserve or make the omitted material retrievable, and tell the consumer exactly what happened. |
+| Runaway detector | repeated model output, identical failures | Require evidence specific to the runaway class; do not equate ordinary repetition with a loop. |
+| Advisory guard | repeated-failure guidance | May steer behavior, but must not fabricate execution failure or become stale after the evidence is invalidated. |
+
+There is deliberately no rule that "visible progress disables a limit." A noisy
+infinite process is still infinite. Progress resets an *inactivity* detector; for
+a containment budget it is evidence supplied to the judge described by the
+run-budget plan.
+
+`boundToolResultText` is the reference design for a context bound: it bounds
+model context, spools the complete payload to an artifact, and appends a
+retrieval path. It is the only row that arrived `verified safe`.
+
+### OpenRouter Decisions request containment
+
+Harm prevented: Decisions requests accumulating while an OpenRouter proxy stalls, retaining request evidence and network connections. The approval request is a live fast path, while the root-agent pilot remains observational and never selects a tool, changes retry behavior, or changes foreground settlement.
+
+Scope and execution paths: `evaluateShellAutoApprovalAdvisories` plus root `AgentClient` run-loop-failure observations when the shared `agent.decisionModel` is configured. Approval evaluation awaits the Decisions result: low/medium-risk, explicit/implied results with finite confidence of at least `0.8` authorize directly; every other result or request failure falls back to the chore reviewer. Deterministic rejections run first and are sent to neither model. Root pilot observations are fire-and-forget with synchronous admission records; there is no shutdown drain. Session recovery can follow a run-loop failure, so its comparison is labelled `run_loop_failed`, not final session failure. Agent-override clients do not create the pilot.
+
+Guard class and owners: the shared transport has a per-request containment deadline. Each observational `DecisionShadowPilot` also admits at most four outstanding failure-triage observations. `requestOpenRouterDecisions` aborts every request after 10,000ms. Approval owns recovery by falling back to the chore reviewer; the pilot owns recovery by logging a skipped or failed comparison and preserving the foreground outcome.
+
+Signals: each active or retained pilot comparison count is direct admission evidence. Elapsed time is a proxy for a stalled network request; a legitimate slow response can exceed 10 seconds. For approval, expiry adds fallback latency before the chore reviewer runs but cannot authorize the request. A busy pilot can skip a legitimate fifth comparison. Pilot signals do not change tool dispatch, retry, provider continuity, or foreground settlement.
+
+Configuration and precedence: both shadow models are opt-in and unset by default; the four-request limits and 10,000ms deadline are fixed. No persisted value is rewritten or clamped. The OpenRouter key and base URL use existing settings, with `OPENROUTER_API_KEY` as the API-key fallback.
+
+Settlement and recovery: a skipped pilot request is never sent. A timed-out, malformed, non-authorizing, or otherwise failed approval request falls back without retry; route telemetry omits command text and credentials. Pilot failures are logged and swallowed, and capacity skips include the active count and limit. Partial provider responses are discarded. Pilot comparison logs omit request input, credentials, and raw provider responses; runtime failure classifications are kept outside prediction evidence. Invalid billed predictions retain reported cost. Started pilot requests without settlement remain incomplete evaluation cases. Pilot capacity is checked before synchronous evidence cloning, but there is no payload-size cap or representative overhead measurement.
+
+Rollback boundary: the approval fast path and root pilot are separately gated by the opt-in model setting; the pilot's admission accounting and the shared transport deadline are independently removable. Approval tests cover direct authorization, deterministic rejection, all fallback categories, mixed-batch routing, and transport failure. Pilot tests cover the shared fourth/fifth boundary, synchronous evidence snapshots, malformed or failed predictions, throwing loggers, and unchanged run-loop outcomes. Ledger row: **verified bounded approval fallback and optional-observation containment**.
+
+Red proof: focused provider, settings-source, and approval tests failed on the dropped proxy prefix, omitted setting source, misleading comparison, and lost non-interactive wait before the repairs. Verification: focused tests passed (4 files, 50 tests), `pnpm test:related` and `pnpm test:changed` each passed 166 files / 2,970 tests (2 expected failures, 1 skip), `pnpm typecheck` passed, and `pnpm test:provider-black-box` passed 20 files / 177 tests (1 skip). A live two-request Jev call returned four typed choice answers through the adapter.
+
+Pilot extension verification (2026-09-19): all final gates exited 0. Focused factory, decision-shadow and run-loop tests passed (8 files / 78 tests, 4.69s); related and changed each passed 231 files / 3,851 tests (2 expected failures, 1 skip; 92.92s and 91.87s). Typecheck passed (5.35s); provider black-box passed 20 files / 177 tests (1 skip, 70.95s). Full unit passed 644 files / 8,802 tests (3 expected failures, 2 skips, 144.28s); integration passed 10 files / 85 tests (1 file/test skipped, 31.28s). Factory-boundary regression tests reproduce and prevent lost nested-execution metadata. No live provider call was made for the pilot extension; these gates establish implementation behavior, not model quality.
+
+## Confirmed defect: `agent.maxParallelToolCalls` never reaches the run loop
+
+The chain breaks at the last hop:
+
+```text
+settings-schema.ts:87-92     agent.maxParallelToolCalls, int, positive, default 3
+settings-schema.ts:956       DEFAULT_SETTINGS.agent.maxParallelToolCalls = 3
+settings-sources.ts:26       exposed with a value/source pair
+utils/settings-command.ts    shown in /settings; on change the UI reports
+                             "takes effect on the next request."
+        --- no consumer ---
+application-run-loop.ts:169  deps.maxParallelToolCalls?: number  (declared, never supplied)
+application-run-loop.ts:343  Math.max(1, Math.floor(deps.maxParallelToolCalls ?? 4))
+```
+
+All three construction sites — `lib/agent-client.ts:373`,
+`services/subagents/nested-runner.ts:397`, `services/subagents/mentor-runner.ts:304`
+— omit the field. A repo-wide search returns only the schema, source map,
+settings UI, and the run loop itself.
+
+So the effective width is always the code fallback `4`, never the schema default
+`3`, on every path including subagents. A user who lowers the value to reduce
+concurrency silently keeps four parallel calls, and the UI confirms a change that
+did not happen.
+
+**Repair (needs approval — it changes the effective default from 4 to 3 for every
+user):** pass the resolved setting at the three construction sites, assert the
+effective value through the public owner, and use the `setting-wiring` skill.
+
+**Follow-up that closes the class:** `maxTurns` shows the same divergence shape
+(interactive `100` versus AgentRuntime fallback `20`). A contract test asserting
+every `SETTING_KEYS` entry has a consumer outside the schema, source map, and
+settings UI would catch this defect class automatically.
+
+### Approved repair contract (2026-08-14)
+
+```text
+Harm prevented: configured concurrency silently exceeding the user's limit.
+Scope and execution paths: root, nested-subagent, and mentor run loops.
+Guard class: concurrency containment (admission batching; calls are deferred, not rejected).
+Enforcement owner: ApplicationRunLoop tool-plan settlement.
+Recovery owner: ApplicationRunLoop ordered batch settlement.
+Measured signal and observation boundary: contiguous parallel-safe calls in one completed model response.
+Direct evidence or proxy: direct count of calls admitted to the current batch.
+Legitimate work that can produce the same signal: a response containing many independent safe calls.
+Configuration sources and precedence: ISettingsService resolution, including persisted/user values over schema default.
+Effective default and clamping: 3; floor to an integer and clamp to at least 1 at each response settlement.
+Action and why the signal justifies it: dispatch at most the effective width and defer the remainder to later batches.
+Partial-work settlement: unchanged; results remain ordered and every admitted call settles once.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: batch diagnostic includes call ids, order, parallel flag, and effective width.
+Persisted-setting migration, if any: none; no stored value is rewritten.
+Rollback boundary: one independently revertible commit.
+Ledger row: confirmed defect, agent.maxParallelToolCalls.
+```
+
+Approval: user approved changing the effective default from 4 to 3 on
+2026-08-14. Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm test source/lib/agent-client.application-run-loop.test.ts
+FAIL applies a changed maxParallelToolCalls setting to the next request
+expected ["first"], received ["first", "second"]
+```
+
+Disposition: **repaired in `f09b55ec` and merged in `87b7224c`.** The run loop
+now resolves the effective setting at each completed-response settlement, so a
+runtime change applies to the next dispatch boundary without resizing a batch
+already in flight. Root, nested, and mentor construction paths all supply the
+resolver; the owner fallback now agrees with the schema default of 3.
+
+Detection gap: schema, persistence, and settings-command tests proved only that
+the value existed and could be changed. Nothing exercised the configured value
+through the execution owner. The new AgentClient public-boundary regression
+covers both runtime refresh and the exact-width/one-over boundary. The proposed
+all-settings consumer contract remains coupled to the `maxTurns` divergence
+owned by `../agent-runtime/run-budget-stall-escalation.md`, so it was not introduced here.
+
+Verification (2026-08-14):
+
+```text
+NODE_ENV=test pnpm test source/lib/agent-client.application-run-loop.test.ts \
+  source/tools/agent/run-subagent.test.ts \
+  source/services/subagents/nested-runner.test.ts \
+  source/services/subagents/mentor-runner.test.ts \
+  source/hooks/settings-completion-logic.test.ts \
+  source/components/menu/SettingsSelectionMenu.test.tsx \
+  source/utils/settings-command.test.ts \
+  source/services/settings/settings-schema.test.ts
+PASS 8 files, 111 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 166 tests; 1 skipped
+
+NODE_ENV=test pnpm test
+PASS 480 files; 1 skipped. 6149 tests; 2 skipped.
+Note: emitted an existing TimeoutNaNWarning; no test failed.
+```
+
+## Candidates to characterize
+
+This is the original candidate list. Each named a mechanism-level contradiction,
+not a hunch; the characterization results below supersede its initial
+`candidate` status.
+
+| Guard | Source | Contradiction | Test to write |
+| --- | --- | --- | --- |
+| Subagent steering mailbox | `subagent-run-control.ts`; 4 messages / 4000 chars | Shifts the oldest message off and prepends `[Earlier steering omitted]`. The marker announces the omission but the text is spooled nowhere, so it is irrecoverable — this fails the context-bound contract. | Burst of user steering during one subagent turn. |
+| Conversation log event size | `conversation-log-writer.ts`; `MAX_EVENT_BYTES=256KiB`, strings over 1024 chars truncated, then a stub event | This is persisted replay state, so the logging-only exclusion does not apply. | Replay a session containing a truncated `tool_result`. |
+| Tool ownership claim eviction | `tool-ownership-registry.ts`; `DEFAULT_LIMIT=500`, evicts oldest | The code comment assumes claims are dead weight after approval, but eviction is count-based, not liveness-based. | Can a still-pending approval lose its owner? |
+| Duplicate repetition detectors | shared `GenerationGuard` (100k chars/channel, 4096x3 periodic suffix, typed `unsafeToReplay`) and the foreground session detector (200 repeated chars over 8 repetitions, throws an older untyped error) | Two owners, different thresholds, incompatible recovery. The foreground one trips at a far smaller repetition. | Characterize both together: valid exact-periodic output above 200 and above 4096 chars; threshold minus one / threshold / plus one; genuine runaway. If the foreground guard can reject valid output, prefer deleting it over tuning two detectors. |
+| `InputSurgeGuard` bypass scope | blocks 3 duplicated call/result IDs at 2 copies, or 20 duplicated signatures at 4 copies; pauses dispatch for explicit confirmation with a one-turn bypass | A bypass that leaks across turns is a cross-turn authorization defect. | Legitimate full-history input reaches confirmation; cancel and confirm paths; the bypass cannot attach to replacement or queued input. |
+
+Use fake timers and fake providers/processes. Never place destructive command
+examples in ad-hoc shell probes — keep them as data in fixture files.
+
+**Gate:** each candidate has one fast deterministic command already run red
+against the exact suspected false positive, or is downgraded with evidence.
+Present the results before any behavior change.
+
+### Characterization results
+
+- **Subagent steering mailbox — confirmed defect (2026-08-14).** A public
+  `SubagentAsyncRegistry` characterization queued five messages while one tool
+  was active. Every `sendMessage` returned `{ ok: true, delivery: "queued" }`,
+  but the continuation contained only messages 2–5 plus
+  `[Earlier steering omitted]`; message 1 was neither delivered nor
+  retrievable. Red command:
+  `NODE_ENV=test pnpm test source/services/subagents/subagent-async-registry.test.ts -t "delivers every steering message it acknowledges as queued"`.
+  The temporary characterization test was removed after recording the failure;
+  no behavior change has been made.
+- **Conversation log event size — downgraded; no runtime guard (2026-08-14).**
+  `truncateForLog` and `MAX_EVENT_BYTES` have no production caller; the helper
+  is only exposed through `__testing`. `ConversationLogWriter.append` serializes
+  the sanitized event directly. A writer-to-decoder-to-replay test persisted a
+  300,000-character `tool_result` with a tail retrieval reference and recovered
+  that reference successfully. Green command:
+  `NODE_ENV=test pnpm test source/services/logging/conversation-log-writer.test.ts -t "preserves a large tool result retrieval reference through replay"`.
+  The regression test is retained; the dead helper may be removed separately
+  but cannot truncate replay state today.
+- **Tool ownership claim eviction — confirmed defect (2026-08-14).** Claims
+  are created only when a nested approval is surfaced, but production has no
+  `ToolOwnershipRegistry.release` caller. The registry therefore has no
+  liveness evidence when count overflow evicts its oldest claim. A temporary
+  characterization with `limit: 2` kept the first claim unreleased, added two
+  later claims, and observed `ownerOf("pending")` fall back from the worker to
+  `{ kind: "parent" }`. Red command:
+  `NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts -t "does not evict an unreleased pending ownership claim"`.
+  The temporary test was removed; no behavior change has been made.
+- **Duplicate repetition detectors — confirmed defect (2026-08-14).** Both
+  owners reject legitimate exact-periodic fixed-width data based on repetition
+  alone. The foreground `RepetitionDetector` returned `true` for a
+  200-character block (`"..........##########"` repeated ten times); its
+  existing split-chunk test already pins 195 characters as allowed and 200 as
+  rejected. Red command:
+  `NODE_ENV=test pnpm test source/services/session/repetition-detector.test.ts -t "does not flag a legitimate fixed-width periodic data block at 200 characters"`.
+  The shared `ApplicationRunLoop` guard rejected a 4,096-character block with
+  `GenerationGuardError { code: "repetitive_text", unsafeToReplay: true }`.
+  Red command:
+  `NODE_ENV=test pnpm test source/services/agent-runtime/application-run-loop.test.ts -t "allows a legitimate fixed-width periodic data block at the default repetition boundary"`.
+  Existing tests retain genuine-runaway coverage. The temporary false-positive
+  tests were removed; no behavior change has been made.
+- **`InputSurgeGuard` bypass scope — confirmed replacement leak
+  (2026-08-14).** Existing `ConversationAdmissionWorkflow` tests prove that a
+  caller-supplied bypass is stripped, only a matching surge approval creates
+  one, decline sends nothing, and stale/repeated confirmation IDs cannot create
+  a later bypass. The queued edit path is different: `editSubmission` replaces
+  the message input but preserves its options. A temporary adapter test edited
+  an approved queued surge and observed the replacement start with
+  `bypassInputSurgeGuard: true`. Red command:
+  `NODE_ENV=test pnpm test source/services/conversation/conversation-adapter.test.ts -t "does not attach an approved input-surge bypass to replacement queued content"`.
+  The temporary test was removed; no behavior change has been made.
+
+Characterization checkpoint verification:
+
+```text
+NODE_ENV=test pnpm test source/services/logging/conversation-log-writer.test.ts
+PASS 1 file, 15 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check docs/plans/approvals-and-sandbox/guard-ledger.md \
+  source/services/logging/conversation-log-writer.test.ts
+PASS
+```
+
+### Approved repair dispositions
+
+Approved on 2026-08-14 for implementation in a new session. This decision
+record does not authorize unrelated guard changes and does not itself change
+runtime or test behavior.
+
+1. **Subagent steering mailbox — reject before overflow.** Treat the four-message
+   and 4,000-character bounds as admission limits. Reject a new steering message
+   before enqueueing it when either effective bound would be exceeded, and
+   return a typed non-success acknowledgement that reports the effective limits
+   and current occupancy. Never acknowledge a message as queued and then discard
+   it. Preserve already admitted guidance and the current active-tool and
+   continuation semantics.
+2. **Tool ownership claims — make retention lifecycle-aware.** Pending ownership
+   claims must not be count-evicted. Release each claim exactly once when its
+   approval settles through success, rejection, cancellation, failure, or
+   session cleanup. Bounded cleanup may remove only released or otherwise proven
+   dead claims. Public-owner tests must cover each settlement path and prove the
+   oldest live claim retains its owner under pressure.
+3. **Duplicate repetition detectors — remove destructive repetition inference.**
+   Remove both repetition-only abort paths: the foreground 200-character/8-copy
+   detector and the shared 4,096-character/3-copy detector. Retain the explicit
+   100,000-character generation-output containment limit. Repetition may remain
+   diagnostic or advisory, but must not fabricate a terminal failure or an
+   `unsafeToReplay` classification. Tests must prove valid periodic output
+   survives and genuine unbounded output reaches the retained containment owner.
+4. **`InputSurgeGuard` bypass — bind approval to immutable submitted content.**
+   Replace the free/leaky bypass boolean with an approval capability bound to the
+   exact submitted turn identity and content. Editing or replacing that content
+   invalidates the capability and sends the replacement through normal admission
+   and confirmation. Preserve the existing decline, stale-confirmation, repeated-
+   confirmation, and caller-supplied-bypass protections.
+
+### InputSurgeGuard content-bound approval repair
+
+Disposition: **implemented in `c3c8ef25`.**
+`InputSurgeApproval` is an opaque, one-use capability whose module-private
+provenance record carries a canonical normalized `UserTurn` snapshot: text,
+every image field, and every skill field. The admission workflow issues it only
+when the matching surge confirmation is approved. The execution admission owner
+(`InitialInputPreparer`) consumes and validates it against the exact normalized
+submitted turn before allowing a blocked provider request. A caller-supplied
+lookalike has no module-private provenance and cannot bypass the guard. Queue replacement drops
+the stored capability before the edited message starts, so replacement content
+follows ordinary surge blocking rather than inheriting the prior confirmation.
+The aborted-approval internal path issues the same narrowly scoped,
+content-bound one-use capability for the attempt it is resolving; it no longer
+has a free boolean bypass.
+
+```text
+Harm prevented: an approval for one surge input authorizing edited, replacement,
+  or caller-injected input on a later execution boundary.
+Scope and execution paths: admission confirmation, foreground queue storage and
+  edit, adapter-to-session start options, initial provider-request preparation,
+  and aborted-approval internal resolution.
+Guard class: advisory confirmation plus content-bound admission authority.
+Enforcement owner: InitialInputPreparer at provider-request admission.
+Recovery owner: ConversationAdmissionWorkflow confirmation; unchanged decline
+  and stale/repeated-decision settlement.
+Measured signal and observation boundary: exact normalized UserTurn content at
+  the provider-request admission boundary, not a caller option or queue id.
+Direct evidence or proxy: direct normalized text, images, and skill content.
+Legitimate work that can produce the same signal: an unchanged queued turn after
+  explicit approval; its capability is admitted once.
+Action and why the signal justifies it: consume only a workflow-issued matching
+  capability; otherwise retain the existing surge block and normal re-admission
+  path.
+Partial-work settlement: unchanged; an invalid capability blocks before a
+  provider request and rolls back the just-added user turn as before.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: existing input_surge.blocked fields; no turn payload or
+  capability is logged.
+Persisted-setting migration, if any: none.
+Rollback boundary: `c3c8ef25`.
+Ledger row: InputSurgeGuard bypass scope.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm test source/services/conversation/conversation-admission-workflow.test.ts \
+  source/services/conversation/conversation-adapter.test.ts \
+  source/services/session/initial-input-preparer.test.ts
+FAIL: approved surge send supplied bypassInputSurgeGuard: true instead of a
+      capability; the capability contract module did not yet exist.
+```
+
+Detection gap: prior workflow tests proved only that a boolean was stripped at
+the UI-facing admission call and that a confirmation id was one-shot. They did
+not follow approval authority through queued-message replacement to the
+execution admission boundary, nor mutate nested image or skill content after
+approval. The new contract tests cover issued-only authority, one-use admission,
+nested image and skill mutation, caller forgery, edit-away/edit-back invalidation,
+mode-notice separation, workflow-to-orchestrator capability transport, and the
+retained decline/stale/repeated-confirmation behavior.
+
+Focused verification (`c3c8ef25`):
+
+```text
+NODE_ENV=test pnpm test source/services/conversation/conversation-admission-workflow.test.ts \
+  source/services/conversation/conversation-adapter.test.ts \
+  source/services/session/conversation-session.input-surge.test.ts \
+  source/services/session/initial-input-preparer.test.ts \
+  source/services/session/turn-coordinator.test.ts \
+  source/services/conversation/conversation-orchestrator.test.ts \
+  source/hooks/use-conversation.clear.test.tsx
+PASS 7 files, 139 tests
+
+NODE_ENV=test pnpm typecheck
+PASS
+
+NODE_ENV=test pnpm test:related <changed production files>
+KNOWN BASELINE FAILURE: 73 files and 1,083 tests passed; the sole failure was
+source/hooks/stop-processing-probe.test.tsx:75, the pre-existing blank final
+frame recorded in MORNING.md.
+
+NODE_ENV=test pnpm test:changed
+KNOWN BASELINE FAILURE: same sole stop-processing probe failure; 73 files and
+1,083 tests passed, with 2 expected failures.
+
+NODE_ENV=test pnpm test:provider-black-box
+PASS 19 files, 171 tests; 1 skipped
+
+NODE_ENV=test pnpm test
+KNOWN BASELINE FAILURE: 543 files passed, 1 failed, 1 skipped; 6,956 tests
+passed, 1 failed, 3 expected failures, 2 skipped. The sole failure was the same
+stop-processing probe and does not exercise input-surge admission.
+```
+
+### Duplicate repetition detector repair
+
+ Disposition: **implemented and verified in `d16bd5e3`; merged into `main`.**
+`GenerationGuard` no longer treats repeated text or reasoning as a terminal
+failure, and `SessionStreamProcessor` no longer owns a second foreground
+repetition abort. `RepetitionDetector` remains only as a bounded boolean
+diagnostic primitive with no production enforcement caller. The direct aggregate
+visible-output budget remains the enforcement owner: output beyond 100,000
+characters still aborts the active request as typed `output_characters` and is
+unsafe to replay, while already-forwarded output remains available.
+
+```text
+Harm prevented: legitimate periodic text or reasoning terminating a productive
+  turn and being falsely classified unsafe to replay.
+Scope and execution paths: shared ApplicationRunLoop model-stream consumption
+  and the foreground SessionStreamProcessor path.
+Guard class: repetition is an inconclusive runaway proxy; aggregate output is a
+  containment budget.
+Enforcement owner: GenerationGuard aggregate visible-output accounting.
+Recovery owner: ApplicationRunLoop abort and ambiguous-outcome settlement for
+  the retained output-character cap; repetition has no recovery path because it
+  no longer fabricates failure.
+Measured signal and observation boundary: cumulative visible text and streamed
+  tool-argument characters on one provider request.
+Direct evidence or proxy: direct character count for containment; periodicity is
+  a proxy and no longer authorizes termination.
+Legitimate work that can produce the removed signal: fixed-width tables, logs,
+  generated data, and periodic reasoning split across provider chunks.
+Configuration sources and precedence: existing GenerationGuard options and
+  model settings; no value or precedence changed.
+Effective default and clamping: aggregate visible output remains 100,000
+  characters by default; existing positive-integer resolution is unchanged.
+Action and why the signal justifies it: repetition has no terminal action;
+  exceeding the explicit aggregate budget aborts and reports output_characters.
+Partial-work settlement: already-forwarded output is retained; cap overflow
+  aborts before forwarding the triggering chunk.
+Retry, fallback, and provider-continuity semantics: cap overflow remains an
+  AmbiguousModelOutcomeError and unsafe to replay; repetition no longer enters
+  retry classification.
+Observability fields: retained typed output_characters code and counts; removed
+  repetitive_text, repetitive_reasoning, repetitive_model_output terminal codes.
+Persisted-setting migration, if any: none.
+Rollback boundary: independently revertible `d16bd5e3`.
+Ledger row: duplicate repetition detectors.
+```
+
+Red proof before production edits:
+
+```text
+NODE_ENV=test pnpm test source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts \
+  source/services/session/session-stream-processor.test.ts
+FAIL 5 tests: legitimate periodic output terminated as repetitive_text or
+repetitive_model_output; the aggregate-cap test was preempted by repetition.
+```
+
+Detection gap: both owners' tests encoded repetition-only termination as desired
+behavior. They did not challenge the proxy with legitimate periodic output at
+the public execution boundaries or assert that the explicit aggregate budget,
+rather than repetition, remained the terminal containment owner.
+
+Verification is recorded in `EXPERIMENT-P2.md`; implementation commit:
+`d16bd5e3`.
+
+### Subagent steering mailbox repair
+
+Disposition: **repaired in `74323696` and merged in `fa328291`.**
+`SubagentRunControl` now treats its four-message and 4,000-character
+bounds as admission limits. `enqueueSteering` returns false before either bound
+would be exceeded, without mutating the mailbox or interrupting the active
+segment. `SubagentAsyncRegistry.sendMessage` translates that result into the
+typed `mailbox_full` non-success acknowledgement with the effective limits and
+current occupancy. Already admitted messages retain their order and are all
+delivered in the next continuation.
+
+```text
+Harm prevented: acknowledged user steering being silently discarded.
+Scope and execution paths: active async subagent runs addressed by run id or name.
+Guard class: admission limit with a secondary retention consequence.
+Enforcement owner: SubagentRunControl mailbox admission.
+Recovery owner: SubagentAsyncRegistry acknowledgement and normal continuation settlement.
+Measured signal and observation boundary: queued message count and summed message characters before enqueue.
+Direct evidence or proxy: direct mailbox occupancy.
+Legitimate work that can produce the same signal: a burst of valid steering while tools remain active.
+Configuration sources and precedence: SubagentRunControl constructor injection over hardcoded defaults.
+Effective default and clamping: 4 messages and 4,000 characters; unchanged, with no persisted setting.
+Action and why the signal justifies it: reject only the new message before admission and report capacity.
+Partial-work settlement: admitted guidance remains ordered and the active segment is untouched by rejection.
+Retry, fallback, and provider-continuity semantics: unchanged; the caller may retry after continuation drains the mailbox.
+Observability fields: mailbox_full, target, effective limits, and current occupancy; no guidance text.
+Persisted-setting migration, if any: none.
+Rollback boundary: one independently revertible commit.
+Ledger row: subagent steering mailbox.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm test source/services/subagents/subagent-async-registry.test.ts \
+  -t "rejects a fifth steering message before overflow"
+FAIL: expected mailbox_full; received { ok: true, delivery: "queued" }
+```
+
+Detection gap: the prior unit tests asserted the truncation marker and therefore
+encoded information loss as intended behavior. No public-registry test paired
+successful queue acknowledgements with the exact guidance later delivered. The
+new tests cover both effective bounds, preservation and ordering of admitted
+messages, no active-segment interruption on rejection, typed tool output, and
+the public acknowledgement shape.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm test source/services/subagents/subagent-run-control.test.ts \
+  source/services/subagents/subagent-async-registry.test.ts \
+  source/tools/agent/run-subagent-async.test.ts
+PASS 3 files, 109 tests
+
+pnpm typecheck
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 166 tests; 1 skipped
+
+NODE_ENV=test pnpm test
+PASS 480 files; 1 skipped. 6153 tests; 2 skipped.
+Note: emitted the existing TimeoutNaNWarning; no test failed.
+```
+
+### Tool ownership lifecycle repair
+
+Disposition: **repaired in `184db508` and merged in `faa737c5`.**
+`ToolOwnershipRegistry` no longer count-evicts live claims. Claims remain until
+an approval decision, abort, adopted-child cancellation or settlement, queue
+closure, or session-handle cleanup releases them. Decision settlement releases
+in a `finally` block, so callback failures cannot strand ownership.
+
+```text
+Harm prevented: a still-pending nested approval silently losing its subagent owner.
+Scope and execution paths: foreground nested approvals, adopted background-subagent approvals, and session cleanup.
+Guard class: retention bound with lifecycle-owned release.
+Enforcement owner: ToolOwnershipRegistry claim retention.
+Recovery owner: approval decision, approval abort, foreground lease, background approval queue, and session handle lifecycle owners.
+Measured signal and observation boundary: explicit pending-call claim and terminal lifecycle events.
+Direct evidence or proxy: direct claim identity and settlement events; no count proxy remains.
+Legitimate work that can produce the old signal: more than 500 simultaneously or historically claimed approvals.
+Configuration sources and precedence: legacy constructor limit injection is retained for source compatibility but no longer evicts live claims.
+Effective default and clamping: no live-claim count limit; lifecycle release and session clear bound retention.
+Action and why the signal justifies it: delete only the exact claim proven settled or all claims during session-handle disposal.
+Partial-work settlement: approval continuation and child lease settlement remain unchanged; only attribution retention changes.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: unchanged; ownership remains queryable while live.
+Persisted-setting migration, if any: none.
+Rollback boundary: one independently revertible commit.
+Ledger row: tool ownership claim eviction.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts \
+  -t "does not evict an unreleased pending ownership claim"
+FAIL: expected worker owner; received parent fallback
+```
+
+Detection gap: registry tests encoded oldest-first count eviction as intended,
+while no public approval lifecycle test asserted that ownership survived until
+settlement or was released afterward. The repair adds pressure retention plus
+approve, reject, callback failure, abort, abort resolution, adopted-background
+resolution, queue close, lease cancellation, and lease settlement coverage.
+
+Focused verification:
+
+```text
+NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts \
+  source/services/approval/approval-decision-executor.test.ts \
+  source/services/approval/approval-flow-coordinator.test.ts \
+  source/services/approval/background-subagent-approval-controller.test.ts \
+  source/services/subagents/foreground-subagent-lease.test.ts \
+  source/services/subagents/nested-runner.test.ts \
+  source/services/session/session-composition.test.ts
+PASS 7 files, 111 tests
+
+pnpm typecheck
+PASS
+
+NODE_ENV=test pnpm test
+PASS 480 files; 1 skipped. 6159 tests; 2 skipped.
+Note: emitted the existing TimeoutNaNWarning; no test failed.
+
+pnpm test:provider-black-box
+UNVERIFIED: two attempts each failed a different 15-second PTY wait
+(interactive public-hook startup, then Runtime OpenAI stateless startup). The
+focused and full suites passed; neither timeout exercised tool ownership.
+```
+
+### GenerationGuard reasoning-length false positive
+
+Incident 2026-08-27: term2 + deepseek-v4-flash at high reasoning effort died
+with `Model output was stopped because reasoning exceeded its limit.` after
+~17 minutes. Both failing runs streamed ~100,100 characters of reasoning
+after the last completed tool call, then threw at
+`generation-guard.ts` `#assertReasoningLength`. Prior tools were reads only,
+so the git diff was empty. pi completed the same model, effort, and tasks
+with no equivalent guard. The cap is cumulative per request, not per-chunk.
+`GenerationGuardError` extends `AmbiguousModelOutcomeError`, so retry
+classifies the throw as unrecoverable — replaying would hit the same cap.
+
+The 100,000-character number is retained. The defect was the action: aborting
+the request treated productive verbose reasoning as proof the work was
+invalid. Reasoning no longer consumes the aggregate output budget, or a full
+thought would starve later text and tool calls.
+
+```text
+Harm prevented: a verbose high-effort reasoner aborting a productive turn
+  once thinking crosses 100k characters, discarding later text and tool calls.
+Scope and execution paths: ApplicationRunLoop model-stream consume, including
+  non-interactive stderr reasoning_delta.
+Guard class: containment budget (reasoning volume) with a retention bound.
+Enforcement owner: GenerationGuard.observeReasoning / observeCompletion.
+Recovery owner: none; overflow truncates in place and the request continues.
+Measured signal and observation boundary: cumulative reasoning characters on
+  one provider request, counted from reasoning_delta and completion reasoning.
+Direct evidence or proxy: direct character count of the reasoning channel.
+Legitimate work that can produce the same signal: high-effort coding models
+  that think at length before the first write (observed: 100,100 chars after
+  the last tool, then abort).
+Configuration sources and precedence: agent.maxStreamOutputChars via
+  modelSettings, then GenerationGuardOptions, then 100_000 default.
+Effective default and clamping: 100,000 characters retained; excess dropped;
+  integer-positive setting unchanged.
+Action and why the signal justifies it: stop forwarding reasoning past the
+  cap so assembled output stays bounded; do not abort, because volume of
+  thinking is not evidence of a loop. Text and tool-argument caps remain
+  fail-closed.
+Partial-work settlement: already-forwarded reasoning is kept; later text,
+  tool calls, and completion still settle; dropped reasoning is not spoolable
+  (display-only scratch, not user work product).
+Retry, fallback, and provider-continuity semantics: unchanged. Native
+  encrypted / reasoning_content metadata is still taken from provider
+  metadata, not from the truncated display prefix.
+Observability fields: existing GenerationGuardError codes for text, tools,
+  repetition, and deadline; reasoning length no longer throws.
+Persisted-setting migration, if any: none.
+Rollback boundary: one independently revertible commit.
+Ledger row: GenerationGuard reasoning-length false positive.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts \
+  -t "truncates streamed reasoning|accepts reasoning at the character cap"
+FAIL: GenerationGuardError { code: "reasoning_characters", unsafeToReplay: true }
+```
+
+Detection gap: existing tests encoded abort-on-reasoning-length as intended
+and never sent later text after the cap. The incident is a class of
+verbose-but-finite reasoning, not a loop.
+
+Focused verification (2026-08-27):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts
+PASS 2 files, 76 tests
+
+NODE_ENV=test pnpm exec tsc --noEmit
+PASS
+
+NODE_ENV=test pnpm test:related \
+  ./source/services/agent-runtime/generation-guard.ts \
+  ./source/services/agent-runtime/application-run-loop.ts \
+  ./source/hooks/settings-completion-config.ts
+PASS 127 files, 2066 tests; 2 expected fail; 1 skipped
+
+NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts \
+  -t "stops runaway streamed output"
+PASS 4 tests (openai/codex × http/websocket)
+
+pnpm test:provider-black-box
+FLAKE: two full-suite attempts each failed a different 15s PTY wait
+(openai websocket incomplete-stream, then public-hooks interactive startup).
+CLI sat at idle with 0 captured requests. Same class as the ledger's earlier
+unverified PTY timeouts; not exercised by the reasoning-length change.
+```
+
+### Luna streamed tool-argument runaway: 60-second signature containment
+
+Disposition: **bounded diagnostics captured nine recurrences. A Luna-specific
+60-second unfinished-tool-call guard is implemented on the application run-loop
+boundary.**
+
+Two Codex Responses Lite requests on 2026-09-01 (`73e65e60` and
+`64fff2f8`) remained active for 454,628ms and 785,758ms while producing
+25,165 and 43,503 raw tool-category frames. Their maximum inter-frame gaps
+were only 1,749ms and 2,111ms, so the provider-neutral inactivity watchdog
+correctly treated them as active. Both requests ended only after client
+cancellation. Because neither response reached a terminal event, the traffic
+artifacts contain no assembled tool arguments.
+
+The existing `GenerationGuard` should abort once one tool argument, cumulative
+tool-argument growth, or aggregate visible output exceeds 100,000 characters.
+However, the pre-incident abort diagnostics retained only a broad tool-frame
+count. That count includes function-call lifecycle frames and does not prove
+argument growth. Sampling completed Luna `apply_patch` requests from the same
+day found about 3.2-4.4 assembled argument characters per total raw frame. This
+makes an accounting bypass plausible for the 43,503-frame request, but it is not
+direct evidence: a pathological incomplete response can have a different frame
+mix from completed responses.
+
+```text
+Harm investigated: an indefinitely active model response streaming malformed or
+  runaway tool arguments without reaching a tool call or the existing 100k cap.
+Scope and execution paths: Codex Responses WebSocket requests recorded by
+  AbortedStreamRecorder; the existing GenerationGuard remains shared by root,
+  subagent, and non-interactive ApplicationRunLoop requests.
+Guard class: existing direct character containment budget plus an inactivity
+  watchdog; this change is observability only.
+Enforcement owner: unchanged — GenerationGuard in ApplicationRunLoop.
+Recovery owner: unchanged — typed ambiguous-outcome settlement; client
+  cancellation remains cancellation.
+Measured signal and observation boundary: exact raw string lengths on the three
+  supported Responses tool-argument delta frame types, before adapter flattening;
+  raw function-call item-start count is retained separately.
+Direct evidence or proxy: delta-character sum is direct wire-growth evidence;
+  frame count and duration alone are proxies and do not authorize termination.
+Legitimate work that can produce the same signal: a slow or large but finite
+  patch; no new action is attached to any signal.
+Configuration sources and precedence: unchanged.
+Effective default and clamping: existing 100,000-character caps and 600,000ms
+  inactivity window remain; total request deadline remains off by default.
+Action and why the signal justifies it: retain three fixed-cardinality numeric
+  counters only; do not abort, warn, or change retry classification.
+Partial-work settlement: unchanged.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: toolArgumentDeltaFrames,
+  toolArgumentDeltaCharacters, and toolCallStartFrames; no argument content,
+  tool name, call id, output index, or provider-authored free text.
+Persisted-setting migration, if any: none.
+Rollback boundary: AbortedStreamRecorder diagnostics fields and their type/test
+  contract.
+Ledger row: this section.
+```
+
+At the two-incident checkpoint, an honest deterministic ApplicationRunLoop red
+test could not be built because the retained artifacts lacked direct argument
+growth. The added diagnostics closed that gap: seven subsequent captures supplied
+exact frame and character totals and established the narrow cluster used below.
+A provider-wide total deadline remains rejected because active long-running model
+work is legitimate; the implemented detector instead requires the Luna-specific
+unfinished-tool-call signature.
+
+**Local corpus 2026-09-01 → 2026-09-02: nine Luna WS drips, still under cap.**
+Full table: [`docs/research/subagent-explorer-luna-tool-arg-runaway.md`](../../research/subagent-explorer-luna-tool-arg-runaway.md).
+The original pair (`73e65e60`, `64fff2f8`) was not the last. After the argument
+counters shipped, the same `gpt-5.6-luna` `OpenAIResponsesWSModel` shape
+recurred five more times on 2026-09-01 (sessions `72a7c0c2`, `a6632777`, and
+three in `8cea3578`) ending in WS 1006, then again on 2026-09-02 as background
+explorer `cardinal-tor-206` (parent `8713abd8`, envelope
+`09-07-38.560Z_03ccb.json`) ending in parent cancel. Recorded argument growth
+ranges 8,034–83,447 characters; none crossed 100,000, so the existing character
+cap could not contain them. Max gaps stayed 1.4–5.5s (not idle).
+What is new on 2026-09-02 is packaging: `get_subagent_status` showed
+`waiting (provider), quiet` with `lastTool: read_file` and no `streamingTool`,
+because `ExecutionSubagentRunner` drops `tool_call_streaming_delta` events that
+omit `toolName`. The liveness hole is a separate, smaller repair from the later
+signature-containment change.
+
+The ninth recurrence (`efcc4250` / `59f67077`) supplied the same direct shape:
+26,498 argument-delta frames and 28,376 characters over 500 seconds, one call
+start, zero text, maximum gap 5,095ms, and no terminal response. Across all nine
+captures the shared runtime signature is one chained Luna Responses-Lite call,
+zero text, one unfinished function call, 48.8–55.5 argument deltas/second,
+1.04–2.59 characters/delta, and maximum gaps of 1.4–5.5 seconds. Request-side
+controls falsified mode, effort, parent model, previous tool, tool-result size,
+and chaining by itself as sufficient triggers. Successful sampled Luna
+`apply_patch` calls completed within 54.7 seconds; on 2026-09-02 the user chose
+60 seconds as the cost-containment boundary and accepted that unusually long
+valid calls may be cancelled.
+
+```text
+Harm prevented: a Luna Responses-Lite request consuming minutes of provider
+  time while continuously emitting tiny argument fragments for a tool call that
+  never completes.
+Scope and execution paths: ApplicationRunLoop requests whose effective outbound
+  identity is codex/gpt-5.6-luna, with previousResponseId and exactly one
+  tool_result input; root, subagent, and non-interactive callers share the owner.
+Guard class: runaway detector with a 60-second containment deadline.
+Enforcement owner: ToolArgumentRunawayGuard in ApplicationRunLoop.
+Recovery owner: existing typed GenerationGuardError settlement; no automatic
+  in-loop replay of the chained delta.
+Measured signal and observation boundary: cumulative application-level
+  tool_call_streaming_delta counts and monotonic growth from the first delta;
+  text and terminal tool-call events disarm the detector.
+Direct evidence or proxy: elapsed time and argument growth are direct; rate,
+  average delta size, and absence of completion are signature proxies.
+Legitimate work that can produce the same signal: an unusually long valid Luna
+  tool call; the accepted 60-second policy may cancel it.
+Configuration sources and precedence: fixed Luna policy, with a test-only
+  GenerationGuardOptions override; no persisted setting.
+Effective default and clamping: 60,000ms, at least 45 deltas/second, at most 2.8
+  characters/delta, and at most 10,000ms between deltas.
+Action and why the signal justifies it: abort only the active request after the
+  complete observed incident signature persists for 60 seconds; other models,
+  providers, unchained requests, full-history requests, text-producing requests,
+  completed calls, and multi-call count resets are excluded.
+Partial-work settlement: no tool call is dispatched before its terminal event;
+  already-forwarded reasoning remains visible as partial stream output and no
+  incomplete tool call enters history.
+Retry, fallback, and provider-continuity semantics: typed unsafe-to-replay
+  generation failure; chained-delta session recovery remains the only path that
+  can rebuild self-contained history.
+Observability fields: typed tool_argument_runaway code plus bounded duration,
+  frame rate, average characters per frame, frame count, and maximum gap; no
+  argument content.
+Persisted-setting migration, if any: none.
+Rollback boundary: ToolArgumentRunawayGuard and its ApplicationRunLoop wiring.
+Ledger row: this section.
+```
+
+Capture follow-up: when an application abort interrupts a Codex WebSocket after
+at least one frame has arrived (including a guard-triggered abort),
+`CodexResponsesWSModel` records the existing `aborted` artifact with the
+`AbortedStreamRecorder` partial transcript instead of reducing the event to the
+bounded transport-failure counters. A pre-first-frame abort remains on the
+bounded failure path. This preserves the raw frame evidence needed to inspect a
+future Luna drip while keeping that transcript out of the application log.
+Focused verification:
+
+```text
+pnpm test source/providers/codex-responses-model.test.ts \
+  source/providers/aborted-stream-recorder.test.ts
+```
+
+Typecheck and the provider black-box suite also passed for the capture change.
+
+Red proof before production edits:
+
+```text
+pnpm test source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts
+FAIL 4 tests: ToolArgumentRunawayGuard did not exist and the chained Luna
+request remained active until the test timeout.
+```
+
+Containment verification (2026-09-02):
+
+```text
+pnpm test source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts
+PASS 2 files, 110 tests
+
+pnpm typecheck
+PASS
+
+CI=1 pnpm test:provider-black-box
+PASS 19 files, 176 tests; 1 skipped
+
+pnpm test:changed
+BASELINE: 115 files and 2,162 tests passed; seven unrelated tests failed.
+The same seven failures reproduce on unchanged main: six workspace-boundary
+approval assertions and one auto-approval advisory assertion.
+
+pnpm test
+BASELINE: 578 files and 7,510 tests passed; the same seven unrelated tests
+failed, with 3 expected failures and 2 skipped.
+```
+
+Red proof for the observability gap:
+
+```text
+pnpm test source/providers/aborted-stream-recorder.test.ts
+FAIL 2 tests: bounded diagnostics omitted exact tool-argument delta growth and
+the fixed-key-set contract did not include the three new numeric counters.
+PASS the 10 pre-existing tests.
+```
+
+Verification (2026-09-01):
+
+```text
+pnpm test source/providers/aborted-stream-recorder.test.ts \
+  source/services/logging/provider-traffic.test.ts \
+  source/providers/codex-responses-model.test.ts
+PASS 3 files, 143 tests
+
+pnpm typecheck
+PASS
+
+pnpm test:related ./source/providers/aborted-stream-recorder.ts \
+  ./source/services/service-interfaces.ts
+KNOWN BASELINE FAILURE: 155 files and 2,556 tests passed; six unrelated
+file-boundary safety assertions failed in apply-patch.test.ts,
+create-file.test.ts, and search-replace.test.ts. This exact failure class is
+already recorded in the Codex WebSocket connect-time timeout entry below.
+
+pnpm test:changed
+KNOWN BASELINE FAILURE: the same six assertions; 156 files and 2,596 tests
+passed, with 2 expected failures and 2 skipped.
+
+pnpm test:provider-black-box
+FLAKE: two unconstrained attempts failed different known PTY/contention waits;
+each named scenario passed alone. The CI-bounded gate passed:
+
+CI=1 pnpm test:provider-black-box
+PASS 19 files, 175 tests; 1 skipped
+```
+
+### Oversized tool-argument cap: bounded split-the-work recovery
+
+Disposition: **implemented 2026-09-26 (branch `tool-arg-cap-recovery`).** A
+`gpt-6-luna` worker editing 14 files produced one tool call whose streamed
+arguments reached 100,001 characters. `GenerationGuard` stopped it correctly,
+but the trip aborted the whole run segment, so an unattended worker stalled
+with half-finished edits even though no tool had run.
+
+```text
+Harm prevented: one legitimate but oversized tool call (typically a whole-file
+  edit) ending the entire run and stranding unattended work.
+Scope and execution paths: every ApplicationRunLoop request (root, subagent,
+  non-interactive); only the tool_argument_characters and
+  cumulative_tool_argument_characters codes.
+Guard class: containment budget (unchanged cap) with a new bounded recovery.
+Enforcement owner: unchanged — GenerationGuard in ApplicationRunLoop.
+Recovery owner: ApplicationRunLoop request retry loop.
+Measured signal and observation boundary: unchanged — streamed and terminal
+  tool-argument character counts.
+Direct evidence or proxy: direct; a call is dispatched only after its
+  arguments complete, so a trip proves the call never executed.
+Legitimate work that can produce the same signal: a large but finite edit —
+  exactly the case now recovered instead of terminated.
+Configuration sources and precedence: unchanged (maxStreamOutputChars /
+  generationGuard options); recovery limit is a fixed constant of 2 per run.
+Effective default and clamping: 100,000-character caps unchanged.
+Action and why the signal justifies it: abort only that provider request via a
+  per-request signal linked to the segment signal, roll back its provisional
+  output, admit a [Mode Notice] telling the model the call was not executed
+  and to split the work, then retry. After 2 recoveries, or if the user
+  cancelled, the trip settles exactly as before (segment abort, typed error).
+Partial-work settlement: provisional text/reasoning rolled back as for other
+  in-loop retries; no incomplete tool call enters history.
+Retry, fallback, and provider-continuity semantics: the chain anchor is the
+  last completed response, so the retry keeps chaining; the notice enters
+  history and input like a steer.
+Observability fields: diagnostic "Recovering oversized tool argument in run
+  loop" with code, recovery count, max recoveries; no argument content.
+Persisted-setting migration, if any: none.
+Rollback boundary: isOversizedToolArgumentTrip branch, per-request signal, and
+  RunState.oversizedToolArgumentRecoveries in application-run-loop.ts.
+Ledger row: this section.
+```
+
+Red proof: `pnpm test source/services/agent-runtime/application-run-loop.test.ts
+-t "oversized"` failed 2 tests (run rejected instead of recovering; 1 request
+instead of 3). Other guard codes (text, reasoning, output, runaway, deadline,
+idle) keep their terminal behavior.
+
+### GenerationStreamDeadlines total-deadline false positive (provider-neutral inactivity watchdog)
+
+Incidents: 2026-08-27 OpenRouter `z-ai/glm-5.3-flash` and 2026-08-21 Neuralwatt
+`kimi-k3-flex` both aborted with `request_deadline` at the 300s
+`agent.maxModelRequestDurationMs` default. Log review showed neither was a
+runaway: Kimi was actively streaming text+reasoning ~25s before the cut, and
+GLM buffered its whole answer and delivered it ~2 min *after* the deadline. The
+300s limit was a **total** wall-clock that cannot tell slow-but-active work from
+a stall. Codex already had a transport inactivity watchdog
+(`websocket-receive-watchdog.ts`, 90s first-frame / 600s inter-frame) that
+re-arms on any frame — but it covers only the Codex WebSocket transport. Every
+other provider fell back to the crude total deadline.
+
+Repair: the generation guard now owns a **provider-neutral** inactivity window
+(`GenerationStreamDeadlines`) that re-arms on every streamed event in
+`ApplicationRunLoop.consume`. The total wall-clock becomes an opt-in backstop,
+default off. A single 600s idle window (matching Codex's proven inter-frame)
+lets Kimi survive (streams → re-arms) and GLM survive (its single late frame
+arrives inside the window), while a genuinely silent request is still cut at
+600s.
+
+```text
+Harm prevented: a stalled/hung provider request burning unbounded time with no
+  output AND a slow-but-active model being aborted mid-work by a total deadline.
+Scope and execution paths: every model.stream request in
+  ApplicationRunLoop.consume (root, subagent, non-interactive, shell — one loop).
+Guard class: inactivity watchdog (primary) + opt-in containment budget (total
+  ceiling, default off).
+Enforcement owner: GenerationStreamDeadlines in generation-guard.ts, driven by
+  ApplicationRunLoop.consume via deadline.recordActivity() on each event.
+Recovery owner: retry classifier; GenerationGuardError extends
+  AmbiguousModelOutcomeError → unsafeToReplay, no blind re-dispatch.
+Measured signal and observation boundary: wall-clock gap since the last streamed
+  event, observed in the consume() loop; total elapsed for the opt-in ceiling.
+Direct evidence or proxy: proxy (silence). Justified for an inactivity watchdog
+  because absence of ANY streamed frame for the window is the transport-neutral
+  signature of a stall; active reasoning emits deltas that re-arm it.
+Legitimate work that can produce the same signal: long high-effort reasoning
+  (emits reasoning deltas → re-arms) and buffered providers that send the whole
+  answer in one late frame within the window.
+Configuration sources and precedence: options.generationGuard (per-request) >
+  modelSettings.maxModelStreamIdleMs / maxModelRequestDurationMs (settings) >
+  DEFAULT_GENERATION_GUARD_OPTIONS.
+Effective default and clamping: maxModelStreamIdleMs default 600_000;
+  maxModelRequestDurationMs default 0 = off. Both nonnegative; <=0 disables that
+  timer.
+Action and why the signal justifies it: abort the active request and throw
+  GenerationGuardError (code 'stream_inactivity' or 'request_deadline').
+Partial-work settlement: cost record marked failed/cancelled; streamed progress
+  counts carried in the error message (survives the subagent tool-output string).
+Retry, fallback, and provider-continuity semantics: AmbiguousModelOutcomeError,
+  not auto-replayed; continuity unchanged.
+Observability fields: error code, configured window, streamed progress counts.
+Persisted-setting migration, if any: settings-schema drops the 0→300_000
+  coercion so 0 now means "off"; default 300_000 → 0. The existing
+  migrateFormerRequestDeadlineDefault (persisted 300_000 → 0) becomes effective.
+  Configs holding an explicit positive value keep it as the total ceiling.
+Rollback boundary: revert generation-guard.ts + run-loop wiring + settings +
+  agent-factory/agent-configuration + completion-config, one branch.
+Ledger row: GenerationStreamDeadlines total-deadline false positive.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-runtime/application-run-loop.test.ts \
+  -t "stream_inactivity"
+FAIL: Test timed out — no idle guard aborted the stalled stream.
+
+NODE_ENV=test pnpm exec vitest run \
+  source/services/settings/settings-schema.test.ts -t "stream-idle"
+FAIL: expected undefined to be 600000 (maxModelStreamIdleMs did not exist).
+```
+
+Detection gap: the total deadline was only tested for the runaway (abort) case
+and for "no default deadline" — no test asserted that a slow-but-active or
+buffered provider survives, so a total wall-clock reading as a stall went
+uncaught. The new reset-on-delta test closes that class.
+
+Focused verification (2026-08-28):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts \
+  source/services/settings/settings-schema.test.ts
+PASS 3 files, 109 tests
+
+NODE_ENV=test pnpm typecheck
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 171 tests; 1 skipped
+```
+
+### Test contracts by class
+
+A repair for a candidate must satisfy its class contract.
+
+- **Inactivity:** silence reaches the typed error; each meaningful raw event
+  resets the right timer; an event with no normalized text switches first-frame
+  to inter-frame; retry/fallback preserves provider continuity.
+- **Admission:** rejection happens before the work starts; admitted work stays
+  active; capacity releases exactly once on success, failure, and cancellation;
+  the rejection carries the effective limit and current count.
+- **Context and retention:** the consumer is told what was omitted; omitted
+  material is retrievable, or the terminal status explicitly says it is not;
+  UTF-8 and structured payload boundaries stay valid; eviction never aborts
+  active work; replay retains retrieval references.
+- **Runaway and advisory:** the genuine pattern goes red through the intended
+  path; valid periodic output above the threshold does not false-positive, or the
+  trade-off is explicitly accepted and explained; boundaries are deterministic;
+  advisory guards never fabricate that a tool was not executed.
+
+### Shell repair constraints
+
+If shell containment is ever repaired, these hold regardless of the fix chosen:
+
+- stdout alone never grants unlimited runtime — do not convert the total timeout
+  into an activity timeout;
+- sandbox network-approval time stays excluded from the command budget;
+- process-group cleanup and hard settlement remain bounded;
+- partial output and terminal status stay truthful;
+- foreground/background transfer and monitoring reuse existing owners.
+
+Current behavior: foreground default 120s, background 30m, per-call `timeout_ms`
+wins, SIGTERM then SIGKILL; foreground retained-buffer overflow (1MiB) kills
+while background truncates and keeps running. Defaults are unchanged; known long
+work is handled by per-invocation explicit `timeout_ms` (shell tool
+description, background-shell addendum, and AGENTS.md test policy teach this —
+no command-name classifier, no renewal API, no detachment). The executor now
+reports a typed termination reason (`deadline` / `cancelled` /
+`output-overflow`) plus paused time, so launch/settlement logs join a deadline
+to its source (invocation vs foreground/background setting) and distinguish a
+caller cancellation from a genuine timeout without inferring it from SIGTERM;
+a cancelled command is presented as `cancelled`, not `timeout`. Timeout
+results carry a bounded explanation (effective budget, partial effects, no
+automatic replay). See
+[docs/plans/approvals-and-sandbox/evidence-backed-shell-timeouts.md](evidence-backed-shell-timeouts.md)
+for the September 6, 2026 receipts.
+
+### Background shell live observation before retention eviction
+
+Harm prevented: an active output watch silently missing a complete matching line
+because later lines in the same process chunk evicted it before watch evaluation.
+Scope: `BackgroundShellWatches.push` for local background shells. Class: retention
+bound; enforcement owner remains `BackgroundShellOutputStore`. Live observation
+uses the store's newly completed-line return, while registration and EOF replay
+continue to use `readLines`. The signal is direct line/character occupancy, not
+evidence that the process should stop. Large legitimate chunks remain observable
+without increasing retained history or cancelling work.
+
+Configuration is unchanged: constructor options override defaults of 256 KiB
+(UTF-16 code units, excluding terminators), 2,000 complete lines, and 20 settled
+jobs; values must be non-negative integers. The shared session factory uses
+defaults. No settings, migration, retry, fallback, or provider-continuity change.
+Head eviction and partial-line trimming still account for loss through
+`droppedBytes`/`droppedLines`. A firing carries the existing drop count, match
+count, sequence, and bounded matched text; dropped historical output remains
+unavailable for later registration. Live matching retains the existing stream,
+complete-line, debounce, notification-limit, and flush-before-completion rules.
+Rollback is the additive `push` return and the watch consumption of that return.
+
+Disposition: confirmed defect with regression coverage. Red proof:
+`pnpm test source/services/shell/background-shell-watches.test.ts` failed the
+line-cap, byte-cap, and replay/live cases before production edits (eight failures;
+two additional zero-retention EOF probes also failed and were deferred).
+The EOF sibling can still lose final partial lines with `maxLines: 0` or
+`maxRetainedJobs: 0`; preserving the existing `close(): boolean` contract keeps
+that separate from this live-push repair. Detection gap: earlier tests used one
+line per eviction push and matching bursts across separate pushes, so none
+challenged transport chunk size against retention. The new boundary matrix and
+store return contract make live observation independent of retained snapshots.
+
+Verification on 2026-10-03: the focused store/watch pair passed 49 tests
+(0.246s). `pnpm test:related ./source/services/shell/background-shell-output-store.ts
+./source/services/shell/background-shell-watches.ts` and `pnpm test:changed`
+each passed 24 files / 540 tests (26.34s and 25.70s Vitest durations).
+`pnpm typecheck`, changed-source ESLint, changed-file Prettier, and
+`git diff --check` passed. No full-suite trigger or provider boundary changed;
+no full-suite or live-provider run was needed for this scoped repair.
+
+### Foreground nested shell approval false positive
+
+Disposition: **repaired locally on 2026-08-14; not yet committed or merged.**
+Foreground nested workers now honor `shell.autoApproveMode=always` at the same
+subagent tool-policy boundary as ordinary and background workers. Hard execution
+constraints remain in `execute`: subagents still reject an explicit
+`sandbox: "unsandboxed"`, out-of-workspace write targets, and lock conflicts.
+
+```text
+Harm prevented: a legitimate foreground nested worker test or shell command terminalizing the worker at an approval pause while YOLO mode is active.
+Scope and execution paths: foreground nested worker shell calls built with nestedApprovals=true.
+Guard class: advisory approval gate; this is a false-positive removal, not an authority expansion.
+Enforcement owner: SubagentToolPolicy.wrapNestedShellTool.
+Recovery owner: NestedSubagentRunner only for genuine non-YOLO approval pauses; unchanged.
+Measured signal and observation boundary: the effective shell.autoApproveMode setting at each shell approval check.
+Direct evidence or proxy: direct effective setting value.
+Legitimate work that can produce the old signal: validation commands while YOLO has disabled the sandbox.
+Configuration sources and precedence: ISettingsService effective shell.autoApproveMode resolution.
+Effective default and clamping: unchanged; only the exact always value bypasses the underlying approval decision.
+Action and why the signal justifies it: return needsApproval=false in always mode, matching ordinary worker and root shell policy.
+Partial-work settlement: unchanged; the command executes and settles normally instead of returning an interrupted partial result.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: unchanged.
+Persisted-setting migration, if any: none.
+Rollback boundary: SubagentToolPolicy nested-shell wrapper plus its focused contract tests.
+Ledger row: foreground nested shell approval false positive.
+```
+
+Red proof before the production change:
+
+```text
+NODE_ENV=test pnpm exec vitest run source/services/subagents/tool-policy.test.ts \
+  --testNamePattern='foreground nested worker shell auto-approval'
+FAIL: expected false, received true
+```
+
+Detection gap: always-mode coverage exercised `wrapShellTool`, while foreground
+nested execution selects the separate `wrapNestedShellTool`; no test compared
+the effective approval policy across those sibling execution paths.
+
+The observed approval pause exposed a second settlement gap: interrupted
+foreground runs deliberately emitted no `subagent_completed` event, but had no
+truthful alternative terminal event. Their transcript card therefore remained
+`running`, kept all later messages outside Ink's static region, and eventually
+triggered `Static blocked: subagent/running`. The repair adds a distinct
+`subagent_interrupted` event through runner, bridge, logging/replay, handler,
+and rendering. The matching parent-tool `command_message` provides an
+idempotent call-ID-scoped fallback if that lifecycle event is missed; unrelated
+later messages and background cards cannot settle the row. The repair does not
+mislabel the run completed or make it resumable.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm exec vitest run source/services/subagents/tool-policy.test.ts \
+  source/services/subagents/subagent-manager.security.test.ts \
+  source/services/subagents/nested-runner.test.ts
+PASS 3 files, 71 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+NODE_ENV=test pnpm test
+PASS unrestricted: 483 files passed; 1 skipped. 6202 tests passed; 2 skipped.
+Restricted run: 68 environment failures from listen EPERM, PTY/subprocess IPC,
+and missing child-process output; the same suite passed with those facilities enabled.
+
+pnpm test:provider-black-box
+PASS 19 files, 166 tests; 1 skipped
+```
+
+### Global YOLO approval bypass with ask_user exception
+
+Disposition: **repaired locally on 2026-08-16; pending commit and merge.**
+shell.autoApproveMode=always is now a shared no-permission policy for root
+turns, continuations, nested workers, native and application editor tools,
+direct shell definitions, and application-owned post-execute permission gates.
+The ask_user tool is deliberately excluded because it collects user input; it
+is not an authority decision and must still suspend for an answer.
+
+```text
+Harm prevented: a YOLO turn stopping on an editor, nested-worker, direct-shell, or post-execute permission prompt after shell approval had already been disabled.
+Scope and execution paths: root buildAgentTools, native apply_patch, conversation result building, continuation batches, SubagentToolFactory and nested editor policy, direct file/shell definitions, and the root post-execute pause capability.
+Guard class: advisory approval gate; this removes false-positive permission prompts without removing tool execution/interceptor failures.
+Enforcement owner: shouldBypassToolApproval plus the shared needsApproval wrapper, result builder, batch coordinator, and root tool factory.
+Recovery owner: unchanged for genuine ask_user interactions, non-YOLO approvals, tool rejection results, sandbox/command failures, and lifecycle cancellation.
+Measured signal and observation boundary: the effective shell.autoApproveMode value at each approval boundary and the exact tool name.
+Direct evidence or proxy: centralized helper result and focused seam tests; no UI state is used as proof.
+Legitimate work that can produce the old signal: any mutating editor, unsandboxed shell request, nested worker tool, or application post-execute gate while always mode is effective.
+Configuration sources and precedence: ISettingsService effective shell.autoApproveMode; settings normalization still couples always mode to sandbox.enabled=false.
+Effective default and clamping: unchanged; only exact always bypasses, and ask_user is always excluded.
+Action and why the signal justifies it: return no approval requirement or policy approval in always mode, while preserving execution and interceptor paths.
+Partial-work settlement: unchanged; tools execute or return their own structured failure, and ask_user remains resumable.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: YOLO bypasses emit approval.auto_approved debug/security evidence at the existing approval boundary; no new user-visible prompt is synthesized.
+Persisted-setting migration, if any: none.
+Rollback boundary: the shared helper and its callers, plus focused approval/editor/shell tests.
+Ledger row: global YOLO approval bypass with ask_user exception.
+```
+
+Red proof before the shared production repair:
+
+```text
+NODE_ENV=test pnpm exec vitest run <focused approval/editor tests>
+FAIL: native apply_patch, generic needsApproval wrapping, non-shell continuation policy,
+      continuation batch, and conversation-result editor cases still prompted in always mode.
+```
+
+Detection gap: YOLO had been implemented as a shell/bash evaluator shortcut and
+read-tool bypass. Mutating editor definitions, the native apply_patch override,
+continuation policy, and nested worker wrappers each had independent approval
+owners, so shell-focused coverage did not prove a global contract. The new tests
+cover the shared wrapper, root and nested seams, the direct tool definitions,
+both initial and continuation paths, the post-execute capability, and the
+ask_user exception.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm exec vitest run <11 focused files>
+PASS 11 files, 378 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+git diff --check
+PASS
+
+NODE_ENV=test pnpm test
+PASS 496 files passed, 1 skipped; 6418 tests passed, 6 expected failures, 2 skipped
+```
+
+### PTY readiness-wait false timeout in the provider black-box harness
+
+Disposition: **repaired locally on 2026-08-30; pending commit and merge.**
+
+Incidents: 2026-08-27 SB-05 gate (one transient interactive public-hooks PTY
+timeout, file passed 3/3 on rerun) and 2026-08-27 reasoning-length verification
+(two full-suite attempts each failed a *different* 15s PTY wait while the child
+sat healthy). Same class recurred on 2026-08-30: the full suite failed a
+different 15s wait per attempt while the named scenario passed in isolation.
+
+Root cause: the shared-runner policy from commit `886e1531` (one generous
+ceiling, `--bail=1` bounds genuine hangs) was implemented in the harness's
+`waitForState`/`waitForExit` but not everywhere waits are taken. The PTY
+driver's `waitForIdleInput` forwarded `timeoutMs: undefined` into
+`waitForHarnessIdleGeneration`, whose lib default is 15s — silently under the
+harness's shared 40s ceiling. `public-hooks.blackbox.ts` pinned 15s literals on
+all three interactive waits, and two sibling owners carried their own
+duplicates: the responses fixture server's `waitForRequests` default 15s and
+the resilience file's local `DEFAULT_TIMEOUT_MS = 7_500`. A control run with
+the repair stashed reproduced the same `chaining` failure on the parent commit,
+proving the gate failures were pre-existing contention, not the repair.
+
+```text
+Harm prevented: a healthy CLI startup under shared-runner contention failing a
+  readiness wait that expires before the child can render.
+Scope and execution paths: provider black-box PTY driver readiness waits (all
+  blackbox scenarios) and scenario-file fixture waits; named incident is the
+  public-hooks interactive startup.
+Guard class: containment budget on a test readiness proxy; this is a
+  false-positive repair (ceiling raised to the shared policy), not a
+  protection weakening.
+Enforcement owner: createPtyChild's waitForIdleInput (single point where the
+  driver's shared timeout policy meets the idle channel) plus the exported
+  DEFAULT_TIMEOUT_MS the scenario files now import for their fixture waits.
+Recovery owner: the scenario (vitest failure with self-diagnosing error).
+Measured signal and observation boundary: harness idle-generation file;
+  child exit as terminal evidence.
+Direct evidence or proxy: proxy (file generation). Justified: the file is the
+  published composer-idle signal; first-run/menu ownership never publishes.
+Legitimate work that can produce the same signal: slow PTY spawn, node boot,
+  jiti hook load, Ink render under CPU contention (recorded in 886e1531).
+Configuration sources and precedence: explicit timeoutMs argument > shared
+  DEFAULT_TIMEOUT_MS (40s). CI bounds contention at the config level
+  (maxWorkers 2) rather than by extending deadlines.
+Effective default and clamping: none beyond the precedence above.
+Action and why the signal justifies it: reject with an error naming the
+  effective ceiling and the child's visible-output tail; fail fast when the
+  child exits without publishing idle (a dead child can never satisfy the
+  wait, so racing exit against idle shortens genuine-failure diagnosis).
+Partial-work settlement: n/a (test-side guard); the child is settled by the
+  existing afterEach/lease cleanup.
+Retry, fallback, and provider-continuity semantics: n/a.
+Observability fields: effective ceiling, elapsed wait, idle generation read,
+  exit code/signal, visible-output tail — all in the thrown error.
+Persisted-setting migration, if any: none.
+Rollback boundary: provider-test-harness.ts + harness-input-idle.ts + the
+  three scenario call-site files, one branch.
+Ledger row: this section.
+```
+
+Red proof before the production change:
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/lib/harness-input-idle.test.ts \
+  scripts/provider-black-box/provider-test-harness.test.ts
+FAIL 3 new tests: the lib timeout error named no effective ceiling; a bare
+waitForIdleInput() rejected before the fake clock reached 40s (inherited 15s);
+an exited child burned the full ceiling instead of failing fast.
+PASS the 22 pre-existing tests (no behavior change claimed).
+```
+
+Detection gap: the shared-ceiling policy was recorded in a comment on one
+constant and in a commit message, but nothing tied the idle lib's independent
+15s default to it, and scenario files kept pinning per-call literals. The new
+tests pin the driver default, the error content, and the exit-fast path.
+
+Verification (2026-08-30):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/lib/harness-input-idle.test.ts \
+  scripts/provider-black-box/provider-test-harness.test.ts
+PASS 2 files, 25 tests (22 baseline + 3 new)
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+CI=1 pnpm test:provider-black-box
+PASS 19 files, 174 tests; 1 skipped (78s). Unconstrained local runs (8
+workers on a shared 8-core container) still starve CLI children — the config
+comment and the control run both identify that as contention, not a wait
+failure — so the gate is validated under CI's worker bound.
+
+NODE_ENV=test pnpm test
+PASS 558 files; 1 skipped. 7135 tests; 3 expected fail, 2 skipped. Emitted the
+existing TimeoutNaNWarning; no test failed.
+```
+
+### Retry/recovery containment budget and never-replay-after-committed-output precondition
+
+**Historical contract below:** the per-logical-turn lifetime was replaced by
+recovery episodes in the September 6 repair described in Resume here. The
+shared object still spans the turn; accepted terminal model completion resets
+its counters and lazy clock. Recovery handlers log pre-claim admission evidence
+and the actual claim result. Rollback is the budget completion operation plus
+its single ApplicationRunLoop call, independent of diagnostic logging.
+Verification: deterministic delayed-worker red/green, typecheck, provider
+black-box 177 passed / 1 skipped; isolated full suite 8,053 passed / 5 known
+failures (nested approval and file-tool workspace boundaries), not green.
+
+Disposition: **repaired in seven commits and merged to main in `43f3d978`
+from `retry-recovery-contract`.**
+
+This entry covers a shared retry/recovery containment budget introduced on
+this branch (an application-owned turn/tool-execution harness feature, not a
+scan-discovered pre-existing guard) plus the safety precondition that gates
+its one destructive action (replaying a full turn). Both were audited,
+found to have four confirmed defects across two acceptance rounds, and
+repaired with source-backed tests. Recorded here per this skill because the
+guard shares the containment-budget class and the never-replay precondition
+is exactly the "weak proxy interpreted as proof" failure mode this ledger
+exists to catch.
+
+Origin: the retry/recovery contract required (paraphrased from the task that
+produced this branch) one shared 90-second / 3-physical-transport-attempt /
+1-automatic-replay recovery envelope per logical turn, a rule that an
+automatic replay must never happen once output has already been committed
+to the user or a tool call has been dispatched, and truthful tool-execution
+settlement on every termination path. The partial implementation audited at
+the start of this branch got the budget's arithmetic right but scoped its
+wiring to only the first model request of a turn, conflated an unrelated
+pre-existing retry policy with the new budget, used a bare event-count/
+array-length proxy for "committed output" that fired on internal bookkeeping
+events, and skipped settlement on one termination path. All four are fixed
+below.
+
+```text
+Harm prevented: an automatic transport-level retry/recovery loop (physical
+  redispatch and full-history replay) running unbounded -- burning unlimited
+  wall time or dispatch attempts on a wedged/misbehaving provider -- and,
+  independently, an automatic replay duplicating already-delivered model
+  output or re-triggering an already-dispatched tool call because the
+  "was anything committed yet" check used a proxy broad enough to include
+  bookkeeping-only signals.
+Scope and execution paths: every provider request behind RetryingModel
+  (source/providers/retrying-model.ts), for both the initial model request of
+  a turn (InitialTurnRecoveryHandler) and every tool-call continuation request
+  within the same logical turn (ContinuationRecoveryHandler). One recovery
+  envelope per logical turn, shared across root turns and subagents -- both
+  drive through the same TurnWorkflow/TurnAttempt/AgentClient path; there is
+  no separate subagent owner.
+Guard class: containment budget (wall time / physical-attempt count / replay
+  count), gated by an admission-style evidence check (never-replay-after-
+  committed-output) that must pass before the budget's one destructive action
+  (automatic full-history replay) is allowed to fire.
+Enforcement owner: RetryRecoveryBudget (source/services/retry/
+  retry-recovery-budget.ts) is the sole budget instance/owner for a logical
+  turn. InitialTurnRecoveryHandler and ContinuationRecoveryHandler claim one
+  physical attempt (claimPhysicalAttempt()) when they execute a retry_fresh
+  recovery plan. RetryingModel.stream() claims additional physical attempts
+  only for its own post-failure backoff-retry loop; the first dispatch and
+  successful tool-call continuations are ordinary work and do not consume the
+  recovery allowance. Both recovery handlers also claim the single automatic
+  replay (claimAutomaticReplay()) before executing a retry_fresh recovery plan,
+  except `chain_recovery` with either cause after every live-turn tool is
+  `completed` and present in reconciled history (`skipsAutomaticReplayClaim`
+  in `committed-tool-continuation.ts`). That path severs a dead or rejected
+  chain and continues from durable pairs; it is not a replay of committed work,
+  so it must not spend the one-replay slot and fail a later recovery in the same
+  turn. It still claims a physical attempt and stays inside the 90s / 3-attempt
+  envelope. Handlers start the 90s clock lazily
+  (noteRetryableFailure(), on first retryable failure, not at turn start) for
+  transient/chain_recovery classifications only. One RetryRecoveryBudget instance is shared for the whole logical
+  turn: created per TurnAttempt (turn-attempt.ts), threaded to
+  AgentClientRunOptions.recoveryBudget for the initial request, and threaded
+  to ContinuationState.recoveryBudget for every continuation attempt driven
+  within the same turn via TurnWorkflow.#activeRecoveryBudget (set wherever
+  executeInitialAttempt resolves a TurnAttempt).
+Recovery owner: DefaultRecoveryExecutor.apply() (source/services/retry/
+  recovery-executor.ts) performs actual settlement on termination
+  (toolTracker.settleOpenCallsOnStreamFailure -- dispatched calls settle as
+  unknown, not failed; markOpenCallsAborted; providerContinuity.clear() so
+  the next turn cannot send a text-only continuation against a response
+  still awaiting tool output). Both recovery handlers call this before
+  returning terminated, including on budget refusal (fixed this branch,
+  `28a18aab` -- see confirmed defect 4 below).
+Measured signal and observation boundary: physical attempts -- dispatch
+  count to the provider's stream(), observed inside RetryingModel.stream()'s
+  retry loop. Wall time -- elapsed since the first retryable failure,
+  performance.now() (injectable). Automatic replays -- count of retry_fresh
+  plans actually executed, claimed before recoveryExecutor.apply() runs the
+  plan. Committed-output precondition -- two projections of the same
+  underlying signal: TurnAttempt.modelEventSeen (session ConversationEvents
+  emitted by TurnWorkflow.#consumeInitialStream, filtered through
+  isCommittedOutputEvent) for the initial-request path, and
+  streamHasCommittedOutput(stream) (raw ApplicationRunEvent[] in
+  stream.output/stream.newItems) checked by retry-classifier.ts for both
+  paths.
+Direct evidence or proxy: proxy for all three budget dimensions -- none
+  measures "will one more attempt help," only accumulated cost. Justified
+  because the alternative (no bound) risks unbounded burn on a wedged
+  provider. The committed-output precondition is also a proxy (event-type
+  membership in a bookkeeping-only set standing in for "was anything
+  actually delivered or dispatched") -- the exact class this ledger audits,
+  and the subject of confirmed defects 3 and 4 below.
+Legitimate work that can produce the same signal: a slow provider needing
+  several genuine transient retries within 90s (budget arithmetic covered by
+  retry-recovery-budget.test.ts, not separately re-verified this round).
+  model_retry (hallucination/parsing/behavior detection) is a distinct,
+  pre-existing, independently-capped retry mechanism (maxModelRetries) that
+  legitimately needs multiple replay attempts within one turn -- confirmed
+  regression, defect 2. A cost_update ConversationEvent fires even for a
+  request that produced nothing (outcome: 'failed') -- confirmed regression,
+  defect 3. run_budget evidence, the three context_compaction_* lifecycle
+  events, and codex_rate_limits are pushed unconditionally into
+  stream.output/stream.newItems by outputPush() in
+  application-run-loop.ts, independent of whether the request produced
+  anything -- confirmed regression, defect 4 (this acceptance round).
+Genuine harmful case that must still trip the guard: real streamed
+  text/reasoning with no completed tools, a committed provider item that is
+  not a settled tool pair, or a dispatched-but-unresolved / `unknown` tool
+  call still force unrecoverable / refuse the replay -- proven by the paired
+  true-positive cases in retry-classifier.test.ts. A recoverable connection
+  interruption or provider state rejection after every live-turn tool is
+  completed and present in reconciled history is admitted as `chain_recovery`
+  instead (not a replay).
+Configuration sources and precedence: no user-facing setting.
+  RETRY_RECOVERY_LIMITS (retry-recovery-budget.ts) declares fixed constants
+  (maxRecoveryTimeMs 90_000, maxPhysicalAttempts 3, maxAutomaticReplays 1).
+  RetryRecoveryBudgetOptions accepts constructor overrides but no production
+  call site supplies them -- every real construction (TurnAttempt's default,
+  ContinuationState's default) uses the class defaults; overrides exist only
+  for tests. maxPhysicalAttempts(3) is a second, independent cap layered on
+  top of the pre-existing agent.retryAttempts setting consumed by
+  RetryingModel's own retry-count option: even a user-configured
+  retryAttempts higher than 3 cannot push total physical dispatches for one
+  logical turn past 3, because every dispatch through RetryingModel.stream()
+  -- across the session layer's retry_fresh/replay_turn redispatches and
+  RetryingModel's own internal backoff loop alike -- claims against the same
+  shared instance.
+Effective default and clamping: 90,000ms wall time (clock starts lazily on
+  first retryable failure), 3 physical transport attempts, 1 automatic
+  full-history replay -- fixed, not configurable, no min/max clamping beyond
+  the literal constants.
+Action and why the signal justifies it: claimPhysicalAttempt() returning
+  false -> RetryingModel throws the typed RetryRecoveryBudgetExhaustedError
+  (carries the triggering failure as `cause`) instead of dispatching another
+  physical attempt. claimAutomaticReplay() returning false -> the recovery
+  handler refuses the retry_fresh plan, settles the turn through
+  recoveryExecutor.apply({kind:'terminate'}), and emits a typed
+  retry_exhausted ConversationEvent. Both are "reject before start"
+  (admission-limit-shaped); an in-flight physical dispatch or an in-flight
+  tool call is never aborted by this guard.
+Partial-work settlement: recoveryExecutor.apply({kind:'terminate'}) settles
+  open tool calls truthfully and clears provider continuity (see Recovery
+  owner). Confirmed defect 4a below: this was skipped entirely on the
+  budget-refusal path before this branch.
+Retry, fallback, and provider-continuity semantics:
+  RetryRecoveryBudgetExhaustedError is recognized by retry-classifier.ts as
+  terminal (isRetryRecoveryBudgetExhaustedError check) so a still-armed
+  session-level classifier does not re-enter RetryingModel against the same
+  exhausted budget and bounce between layers. model_retry-classified
+  failures are excluded from both noteRetryableFailure() and
+  claimAutomaticReplay() so they retry independently up to their own
+  maxModelRetries -- but each model_retry-driven replay_turn redispatch
+  does not consume a physical-attempt claim: model_retry is excluded from the
+  transport-recovery envelope and remains bounded by its own maxModelRetries.
+Observability fields: retry_exhausted ConversationEvent carries provider,
+  errorKind, attempts, maxAttempts, message, canRetry.
+  provider.response.failed structured evidence (via classifyProviderFailure)
+  carries errorKind, code, status, retryAfterMs, retryable, and a sanitized
+  message (no raw stack, no secrets) -- logged through
+  ProviderTraffic.recordRequestFailed and AgentClient's stream-failure
+  logger.
+Persisted-setting migration, if any: none -- no setting exists for this
+  guard.
+Rollback boundary: branch `retry-recovery-contract` is the outer rollback
+  unit. Within it, each of the seven commits below targets one named defect
+  with its own tests and is independently revertible.
+Ledger row: this section.
+```
+
+Four confirmed defects, in commit order:
+
+**1. `a00a899f` -- typed budget-exhaustion error dropped, classifier could
+bounce between layers.** RetryingModel raised a bare `new Error(...)` on
+`claimPhysicalAttempt()` refusal instead of the dedicated
+`RetryRecoveryBudgetExhaustedError`, discarding the triggering failure's
+`cause` chain and classifying as non-retryable "unknown" through
+`classifyProviderFailure` -- which meant the `exhausted` flag driving the
+`retry_exhausted` UI event evaluated false for exactly the case it exists to
+catch, and nothing stopped the session-level classifier from issuing another
+retry that re-enters RetryingModel, reclaims against the same exhausted
+budget, and throws the same error again.
+
+**2. `66abfcec` -- model_retry silently capped at 1 by the transport
+budget.** Both recovery handlers charged every `retry_fresh` *and* every
+`replay_turn` plan against the shared 1-automatic-replay allowance.
+`replay_turn` is produced exclusively by `model_retry`
+(hallucination/parsing/behavior detection), a distinct pre-existing retry
+policy independently capped at `maxModelRetries` (tested elsewhere at 2).
+Folding it into the transport budget's single replay slot silently cut an
+established, separately-tested retry count in half. Bisected to a real
+regression: `conversation-service.test.ts`'s "stops retrying after max
+hallucination retries" test (expects 3 attempts: initial + 2 retries)
+returned 2 attempts when run against this branch's foundation commit
+(`c66e0ac4`) in an isolated worktree; the test predates this branch, so its
+own assertion (3 attempts) is itself the record of pre-regression behavior.
+
+**3. `839d2781` -- `cost_update` masquerading as committed output.**
+`TurnAttempt.markModelEventSeen()` fired for every `ConversationEvent` the
+initial stream emitted, with no filter. `cost_update` fires even for a
+request that produced nothing at all (its own `outcome` field can be
+`'failed'`), so a request that failed before streaming a single token still
+set `hasCommittedOutput = true`, forcing `retry-classifier.ts` to return
+`'unrecoverable'` regardless of the real classification -- silently
+disabling chain_recovery/transient/model_retry recovery for the ordinary
+case of "the first physical attempt failed immediately." Bisected to a real
+regression: `subagent-manager.retry.test.ts` (8/8 passing at the true
+pre-branch base `22ca9764`) dropped to 4/8 at this branch's foundation
+commit `c66e0ac4` in an isolated worktree; traced live with temporary
+instrumentation to the exact event
+`{"type":"cost_update","record":{...,"outcome":"failed"}}` with
+`stream.output`/`stream.newItems` both confirmed empty at the point the
+guard fired. Fixed with `isCommittedOutputEvent()`
+(conversation-events.ts), excluding known bookkeeping/telemetry
+ConversationEvent kinds.
+
+**4. `28a18aab` -- truthful settlement skipped on budget-refusal
+termination.** When the automatic-replay budget refused a `retry_fresh`
+plan, both handlers returned `{kind:'terminated'}` directly without ever
+calling `recoveryExecutor.apply()` -- skipping `settleOpenCallsOnStreamFailure`/
+`markOpenCallsAborted` (open tool calls never settled truthfully) and
+`providerContinuity.clear()` (the next turn could send a text-only
+continuation against a response still awaiting tool output). Every other
+termination path in both handlers already went through this call; this one
+early-returned around it. The pattern predates this branch's fixes -- it was
+already present in the foundation commit's original
+`plan.kind === 'retry_fresh' || plan.kind === 'replay_turn'` gate -- and
+commits `a00a899f`/`3d9dab32`/`66abfcec` all narrowed that gate's condition
+without closing this settlement gap.
+
+**Follow-up closed this acceptance round -- `a7e44292`, requirement-5
+raw-array false positive.** Defect 3 above closed the gap only on the
+session-layer `ConversationEvent` stream consumed by
+`InitialTurnRecoveryHandler`. `retry-classifier.ts`'s guard *also* checks
+`stream.output`/`stream.newItems` directly -- a raw `ApplicationRunEvent[]`
+array, the only signal `ContinuationRecoveryHandler` has (it never passes
+`hasCommittedOutput`) -- via a bare `.length > 0` check left as a known,
+unresolved risk in the prior acceptance receipt.
+
+Traced every `outputPush()` call site in `application-run-loop.ts` (16
+total, exhaustively) to enumerate every `ApplicationRunEvent` type that can
+reach `stream.output`/`stream.newItems`: `text_delta`, `reasoning_delta`,
+`tool_call_streaming_delta`, `item` (assistant text, tool calls, reasoning,
+provider-opaque items), `tool_call_dispatched`, `codex_rate_limits`, the
+three `context_compaction_*` lifecycle events, and `run_budget`. Of these,
+`run_budget` and `context_compaction_*` are pushed unconditionally as soon
+as they occur (independent of request outcome), and `codex_rate_limits` is
+quota metadata -- none carry committed model output or an externally
+effectful action. Confirmed `usage_update`, `cost_update`,
+`subagent_run_budget`, and `background_check_in_due` can never appear in
+these arrays: `usage_update` goes straight to the event queue via
+`queue.push` (never `outputPush`), and the other three are synthesized only
+at the session layer above this raw array.
+
+Fix: `streamHasCommittedOutput()` (source/services/agent-stream.ts), the
+raw-array counterpart to `isCommittedOutputEvent`, replaces the bare length
+check in `retry-classifier.ts`.
+
+Red proof before the production change (temporarily reverted
+`agent-stream.ts` and `retry-classifier.ts` to their pre-fix state, kept the
+new tests, confirmed failure, then restored -- diff was empty after
+restoring, confirming an exact revert):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-stream.test.ts \
+  source/services/retry/retry-classifier.test.ts \
+  source/services/session/continuation-recovery-handler.test.ts
+FAIL 7 tests:
+  agent-stream.test.ts: 5 failed with "streamHasCommittedOutput is not a
+    function" (function did not exist pre-fix).
+  retry-classifier.test.ts > "classify still recovers a transient failure
+    when the stream carries only bookkeeping evidence": expected
+    'transient', received 'unrecoverable'.
+  continuation-recovery-handler.test.ts > "recovers a mid-continuation
+    transient failure through the real classifier when the stream carries
+    only bookkeeping evidence": expected 'resume', received 'terminated'.
+PASS the 50 other tests in those 3 files unaffected (baseline unchanged).
+```
+
+Detection gap: defect 3's fix and tests covered only the ConversationEvent
+projection; nothing asserted the raw-array path used by the continuation
+handler, so the identical false-positive shape survived one full audit round
+undetected in the code the audit itself had just written.
+
+Focused verification (this acceptance round):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-stream.test.ts \
+  source/services/retry/retry-classifier.test.ts \
+  source/services/session/continuation-recovery-handler.test.ts \
+  source/services/session/initial-turn-recovery-handler.test.ts \
+  source/providers/retrying-model.test.ts \
+  source/services/subagents/subagent-manager.retry.test.ts \
+  source/services/conversation/conversation-service.test.ts \
+  source/services/conversation/conversation-events.test.ts
+PASS 8 files, 136 tests
+
+pnpm typecheck
+PASS
+
+NODE_ENV=test pnpm exec vitest run source/
+PASS 554 files (1 skipped), 7121 tests, 3 expected fail, 2 skipped
+
+pnpm test:provider-black-box
+PASS 19 files, 174 tests, 1 skipped
+```
+
+Final commit IDs (branch `retry-recovery-contract`, base `22ca9764`, merged
+main `30bf34f9` -> `14fc8198`):
+
+```text
+c66e0ac4  feat(retry): land retry/recovery contract foundation
+a00a899f  fix(retry): raise typed budget-exhaustion error and stop the classifier bounce
+3d9dab32  fix(retry): share the recovery budget with continuation attempts
+839d2781  fix(retry): stop cost_update from masquerading as committed model output
+66abfcec  fix(retry): stop model_retry from drawing on the transport recovery budget
+e353680f  fix(retry): wire retry_exhausted to a real retry, not literal button text
+28a18aab  fix(retry): settle the turn truthfully when refusing a plan for exhausted replay budget
+30bf34f9  Merge main into retry-recovery-contract
+a7e44292  fix(retry): close the requirement-5 raw-array false-positive risk
+```
+
+### Settled-tool provider-state rejection recovery
+
+The provider-state branch must use the same settled-tool admission rule as
+connection-interruption recovery. A chained request can receive a pre-output
+400 such as `Invalid previous_response_id` after all tool calls from the live
+turn have completed and their pairs are durable. In that case, automatic
+full-history recovery with chaining disabled severs the invalid provider anchor
+without replaying a tool. Open or unknown tool calls, missing history pairs,
+and committed output without settled-tool evidence remain unrecoverable.
+
+The enforcement owner is `DefaultRetryClassifier`; the shared
+`isSettledCommittedToolContinuation()` predicate is the evidence gate, and
+`skipsAutomaticReplayClaim()` applies to both `chain_recovery` causes because
+neither path replays committed work. The recovery owner remains
+`InitialTurnRecoveryHandler` / `ContinuationRecoveryHandler`, which execute
+`retry_fresh` with `inputMode: 'full_history'` and
+`disableChainingForAttempt: true`. Regression coverage belongs in the
+classifier, shared settled-tool budget predicate, and initial recovery handler.
+Implementation commit: `a9c19cf2`.
+
+### Codex WebSocket connect-time timeout recovery
+
+Disposition: **repaired in `4f4ba2a0`; documented in `ad2e247f`; merged in `640a1e37`.**
+
+Live request `d066fb9e` exposed a gap in the Codex WebSocket recovery
+boundary: the initial subagent request failed during socket connection with
+`ETIMEDOUT`, no raw frames arrived, and the send path had positively recorded
+the request as `unsent`. The adapter nevertheless wrapped the error as
+`AmbiguousModelOutcomeError`, so retry classification terminated the session
+instead of taking the one safe full-history recovery. This repair preserves the
+fail-closed behavior for `flushed` and `unknown` dispatch evidence.
+
+```text
+Harm prevented: a request proven never to have reached the provider being
+  terminated instead of receiving its single bounded full-history recovery.
+Scope and execution paths: Codex Responses WebSocket initial model requests,
+  including sessions whose fresh-start retries are disabled (subagents).
+Guard class: inactivity watchdog / transport recovery, gated by dispatch
+  evidence.
+Enforcement owner: CodexResponsesWSModel and websocket-request-dispatch state.
+Recovery owner: DefaultRetryClassifier and InitialTurnRecoveryHandler.
+Measured signal and observation boundary: no raw WebSocket frame was observed,
+  the connect-time failure carries a structured ETIMEDOUT code, and the exact
+  request object is positively recorded as unsent by the send path.
+Direct evidence or proxy: dispatch state and frame count are direct evidence;
+  ETIMEDOUT identifies the connect-time transport failure.
+Legitimate work that can produce the same signal: a frame flushed to an open
+  socket, or a send path that cannot observe its state; both remain ambiguous.
+Configuration sources and precedence: existing websocket first/inter-frame
+  watchdog settings; no default or precedence change.
+Effective default and clamping: shared recovery envelope remains 90s / 3
+  physical attempts / 1 automatic replay.
+Action and why the signal justifies it: convert only the positively unsent,
+  frame-free connect timeout to UnsentWebSocketRequestError, classify it as
+  chain_recovery, and rebuild full history once. This path does not replay the
+  possibly accepted request or re-run a tool call.
+Partial-work settlement: unchanged; recovery termination still settles open
+  tool calls truthfully and clears provider continuity.
+Retry, fallback, and provider-continuity semantics: flushed or unknown dispatch
+  remains AmbiguousModelOutcomeError and terminates; no recovery occurs after a
+  committed frame/output. Existing shared recovery limits remain authoritative.
+Observability fields: existing Codex failed-request traffic record and bounded
+  watchdog timing; no payload or credential changes.
+Persisted-setting migration, if any: none.
+Rollback boundary: the repair commit listed below.
+Ledger row: Codex WebSocket watchdog.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm exec vitest run source/services/session/initial-turn-recovery-handler.test.ts -t "connect-time ETIMEDOUT"
+FAIL: positive `unsent` evidence was wrapped as AmbiguousModelOutcomeError;
+      the subagent-style session terminated instead of scheduling full-history
+      recovery. The `flushed` and `unknown` counterparts remained terminated.
+```
+
+Detection gap: the existing watchdog tests covered watchdog-generated timeout
+errors and dispatch states, but not a connect-time error emitted before the
+watchdog itself expired. The adapter's error wrapping therefore erased the
+positive dispatch evidence at exactly the boundary where the subagent policy
+needed to distinguish safe full-history recovery from a fresh-start replay.
+The regression now spans the real Codex adapter, the typed dispatch evidence,
+the classifier, and the fresh-start-disabled initial recovery owner, with
+flushed/unknown fail-closed counterparts.
+
+Verification (this branch):
+
+```text
+NODE_ENV=test pnpm exec vitest run source/services/session/initial-turn-recovery-handler.test.ts \
+  source/services/retry/retry-classifier.test.ts \
+  source/providers/codex-responses-model.test.ts \
+  source/providers/websocket-request-dispatch.test.ts
+PASS 4 files, 146 tests
+
+pnpm test:related ./source/providers/codex-responses-model.ts \
+  ./source/services/retry/retry-classifier.ts
+KNOWN BASELINE FAILURE: 156 files passed; 6 unrelated file-boundary safety
+  assertions failed in apply-patch.test.ts, create-file.test.ts, and
+  search-replace.test.ts.
+
+pnpm typecheck
+PASS
+
+git diff --check && pnpm exec prettier --check \
+  source/providers/codex-responses-model.ts \
+  source/services/retry/retry-classifier.ts \
+  source/services/retry/retry-classifier.test.ts \
+  source/services/session/initial-turn-recovery-handler.test.ts \
+  docs/plans/approvals-and-sandbox/guard-ledger.md
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 174 tests; 1 skipped
+```
+
+Final implementation commit: `4f4ba2a0`.
+
+### Session rollover milestone advisory
+
+The rollover reminder is an advisory guard, not an execution or retention
+limit. Its signal and action were changed with the rollover follow-up package:
+
+```text
+Harm prevented: a long-running session passing useful handoff boundaries without
+  the agent reconsidering whether a fresh session would be clearer.
+Scope and execution paths: root ApplicationRunLoop request boundaries only.
+Guard class: advisory guard.
+Enforcement owner: ContextMilestoneReminder.
+Recovery owner: the agent; rollover remains agent-triggered and optional.
+Measured signal and observation boundary: provider-reported input tokens from
+  the latest completed request, observed at the following request boundary.
+Direct evidence or proxy: direct provider usage for context size; it is only a
+  proxy for whether the current task is safe to interrupt.
+Legitimate work that can produce the same signal: an indivisible implementation,
+  migration, or validation step; reminder copy explicitly permits continuing.
+Configuration sources and precedence: agent.sessionRollover.enabled,
+  agent.sessionRollover.milestones, and agent.sessionRollover.autoBrief through
+  the ordinary settings service.
+Effective default and clamping: enabled at 200k / 300k / 400k; invalid
+  non-positive milestones are ignored; reconsideration occurs after each
+  additional 50k provider-reported input tokens following deferral.
+Action and why the signal justifies it: inject advice to choose a safe natural
+  boundary; never rotate, reject, truncate, abort, or make a later reminder
+  mandatory.
+Partial-work settlement: unchanged; the agent may continue to a safe boundary.
+Retry, fallback, and provider-continuity semantics: no estimator fallback and no
+  automatic retry; an accepted session_rollover starts fresh provider state.
+Observability fields: crossed threshold and provider-reported input value in the
+  reminder; rollover lifecycle events carry correlation ID, IDs, reason, brief
+  size, provider input usage, and settlement latency without the brief text.
+Persisted-setting migration, if any: none.
+Rollback boundary: implementation `09ba6067`, merged in `37d156ac`.
+Ledger row: Session rollover advisory.
+```
+
+Focused verification passed 11 files / 327 tests and `pnpm typecheck`. The full
+suite run passed 578 files and 7,478 tests. It exposed two CLI resume-list
+expectations introduced by the short-ref presentation; after retaining the full
+ID beside the short ref, the complete CLI integration and resume-list files
+passed (13 tests). The other six full-suite failures were the catalogued
+worktree-boundary approval assertions in `apply-patch.test.ts`,
+`create-file.test.ts`, and `search-replace.test.ts`. Three provider black-box
+attempts each progressed through provider contracts and most lifecycle cases,
+then hit a different pre-request PTY startup timeout; no rollover/provider
+assertion failed.
+
+### Injected memory-index silent truncation
+
+Incident 2026-09-03: the main-agent session-start index injected by
+`FileMemoryStore.contextSync` silently dropped 16 of 19 project memories. The
+greedy skip-continue loop selected by entry length, so an older short summary
+was injected while newer longer ones were dropped, and the only signal was a
+generic note with no counts. The user judged both the 3,000-character default
+and the silent drop unacceptable; mentor review converged on a two-tier
+contiguous-prefix design. This is a context/loss bound; `boundToolResultText`
+remains the reference design (bound, make the omitted material retrievable,
+say exactly what happened).
+
+```text
+Harm prevented: the agent treating memories absent from the injected index as
+  nonexistent because their omission was invisible.
+Scope and execution paths: main-agent session-start prompt injection via
+  MemoryCapabilityBuilder.build → FileMemoryStore.contextSync/context.
+Guard class: context/loss bound over the injected prompt index.
+Enforcement owner: renderMemoryIndex in memory-store.ts (shared by both
+  context paths) plus the scope floor-and-reallocate split in
+  memory-capabilities.ts.
+Recovery owner: memory_list / memory_get / memory_search tool boundary.
+Measured signal and observation boundary: rendered character count of the
+  per-scope index text at session start.
+Direct evidence or proxy: direct rendered length; no proxy.
+Legitimate work that can produce the same signal: a memory store legitimately
+  larger than any prompt budget.
+Configuration sources and precedence: memory.contextBudgetChars through the
+  ordinary settings service; persisted values win over the schema default.
+Effective default and clamping: 8,000 characters total (was 3,000), split as
+  fair halves minus the scope label, with a scope that rendered everything
+  under its share donating the unused remainder to the other scope.
+Action and why the signal justifies it: render two contiguous recency
+  prefixes (titles for every fitting memory, full summaries for the newest,
+  break at first overflow — length ends a prefix, never selects members);
+  count every degradation in a status line and point unlisted memories at
+  memory_list/memory_search. No mid-entry cuts; storage and tools unchanged.
+Partial-work settlement: whole entries only; omitted memories remain fully
+  retrievable by id and title through the tools.
+Retry, fallback, and provider-continuity semantics: none; this is startup
+  prompt assembly and does not touch provider continuity.
+Observability fields: "N memories · K summarized · T title-only · U not
+  listed." status line in the injected text itself; no omissions counter is
+  hidden from the consumer.
+Persisted-setting migration, if any: none; default change only.
+Rollback boundary: one commit on branch memory-index-redesign.
+Ledger row: memory.contextBudgetChars injected-index bound.
+```
+
+Red proof before production changes (12 failures across the four suites):
+
+```text
+NODE_ENV=test pnpm test source/services/memory/memory-store.test.ts \
+  source/services/memory/memory-capabilities.test.ts \
+  source/tools/memory/memory-tools.test.ts \
+  source/services/settings/settings-schema.test.ts
+FAIL 12 tests: golden two-tier format, contiguous-prefix regression
+  (never summarize an older entry after excluding a newer one), scope
+  donation, memory_list accounting agreement, and the 8,000 default.
+```
+
+Detection gap: the previous tests asserted the old format's note text and
+budget shape, so they encoded silent truncation as intended behavior. No test
+asserted the rendered length against the budget, prefix contiguity, or that
+injected totals agree with the tool boundary's accounting. The new suite pins
+the golden format, covers the three regimes (everything fits / tier split /
+status-only floor), caps rendered titles without mutating storage, and pins
+memory_list zero-omission agreement with the injected total.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm test source/services/memory/memory-store.test.ts \
+  source/services/memory/memory-capabilities.test.ts \
+  source/tools/memory/memory-tools.test.ts \
+  source/services/settings/settings-schema.test.ts \
+  source/prompts/prompt-constructor.test.ts
+PASS 5 files, 116 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 176 tests; 1 skipped
+
+NODE_ENV=test pnpm test:related <changed production files>
+KNOWN BASELINE FAILURE: 194 files passed; the 6 failures were the catalogued
+worktree-boundary approval assertions in apply-patch/create-file/search-replace,
+reproduced identically on the untouched primary checkout.
+```
+
+The guidance surfaces (`MAIN_GUIDANCE`, the `memory.md` fragment,
+`SUBAGENT_GUIDANCE`) were updated in the same change: title-only entries mean
+"summary omitted for budget — read before dismissing", and subagent guidance
+no longer claims an injected index that subagents never receive. Residual
+honest limits, recorded and deliberately deferred: recency is not relevance
+(a future `pinned` flag could protect old high-value memories), titles become
+load-bearing retrieval triggers, and past roughly 100 entries per scope the
+counted tail is the contract — enforced store pruning remains a separate
+store-policy decision.
+
+### Root-turn automatic memory selection precision
+
+**2026-09-27:** This is a historical incident and retired guard, not current
+root-turn behavior. Per-turn auto-recall was removed after the blind-labeled
+100-turn/638-pair experiment (artifacts under
+`~/.local/state/coordinator/tasks/fa67e1fbbc964722be65d74df34a2371/artifacts/`).
+The root agent now pins global summaries at construction; project memories
+require on-demand retrieval. Old recall blocks remain readable in sessions.
+
+User-visible incident (2026-09-25): short turns such as "What were we doing?",
+"It is a little noisy in the UI, can you fix that?", and "Refine that feature"
+injected unrelated project summaries (up to seven in a recorded turn). The
+root-turn `MemoryCapabilityBuilder.selectForTurn()` searched on generic words
+and accepted any substring hit in the ID, title, tags, or summary. This is a
+context admission filter, not a store-retention or model-run termination guard.
+
+Harm prevented: unnecessary prompt tokens and irrelevant or misleading
+project claims on conversational follow-ups. Scope and enforcement owner:
+automatic main-agent per-turn summary selection in
+`MemoryCapabilityBuilder.selectForTurn`; `memory_search`, `memory_retrieve`,
+and `memory_get` keep their original query semantics. Recovery owner: those
+on-demand memory tools plus session retrieval for referential follow-ups.
+Signal: exact whole-word topic matches in indexed metadata after removing
+common conversational and broad memory-domain words. A single concrete topic
+can qualify; full-content and substring-only hits cannot. This is a lexical
+proxy for relevance: a legitimate memory can be omitted if the user paraphrases
+its title/summary or the topic appears only in its full content. Those cases
+remain retrievable by tool; the root guidance says the injected set is not a
+complete index. No budget, settings precedence, persisted store, provider
+continuity, retry, or fallback behavior changes. The structured
+`memory_injected` receipt still names exactly which summaries were selected;
+empty selection emits no receipt. Rollback: selector terms and metadata
+eligibility in `memory-capabilities.ts` only.
+
+Red proof: two tests in `memory-capabilities.test.ts` failed for the generic
+follow-up and one-term substring noise; the older Codex decision test remained
+green. Final focused test: 30 passed. Related and changed gates each passed 52
+files / 1,055 tests (1 expected fail); full unit passed 653 files / 8,960 tests
+(3 expected fail, 3 skipped); integration passed 12 files / 94 tests (1 file
+skipped); `pnpm typecheck` and `git diff --check` passed. The filter is a
+precision-biased heuristic, not a measured gain in teammate-memory efficacy.
+
+### Session rollover live-work retention
+
+The previously attempted live-work transfer was reverted: it disposed the
+predecessor before successor construction and transplanted closure-bound
+clients/controllers, leaving no rollback boundary. The safe implementation
+retains one runtime/client/ownership graph and performs an explicit root reset
+in place. History, provider continuity, compaction/turn state, and transient
+authorization caches are cleared; live background shells, watches, child runs,
+notifications, and check-in policy remain owned by the same graph. The mutable
+session identity changes only after the reset succeeds. Pending approvals,
+questions, post-execute gates, and queued user input remain blocked by the
+mutation owner.
+
+```text
+Guard class: admission/in-place-context-reset guard with context-loss consequence.
+Enforcement owner: ConversationService.rolloverWithNewId and SessionRuntime.rollover.
+Recovery owner: retained runtime/client graph and existing background owners.
+Signal: settled turn plus authoritative pending-interaction and queue checks.
+Action: reset root context in place; never dispose, transfer, cancel, or relaunch
+  admitted background work.
+Partial-work settlement: background completion/watch/check-in notifications remain
+  in the retained channel and are delivered once.
+Rollback boundary: identity swaps after reset; writer cutover follows reset.
+Ordinary resetWithNewId/clear/shutdown disposal semantics are unchanged.
+Status: implementation in progress; focused/typecheck gates currently pass.
+```
+
+Turn-end handoff detail: `ConversationService.consumeSessionRolloverRequest()`
+must classify queue ownership with the same `isQueueOwningSubmissions()`
+signal as the final rollover admission check. Queue ownership can become
+visible before `queuedSubmissionCount()` is nonzero; without the matching
+preflight, the app callback can reach the throwing mutation guard. The UI
+turn-end caller also observes callback rejection and presents the preserved
+brief instead of allowing an unhandled promise rejection to terminate the TUI.
+This is a fail-closed block: queued work remains under the queue owner, and the
+brief is offered for manual retry, not automatically resubmitted.
+
+### ACP v2 per-session prompt admission
+
+The experimental ACP v2 adapter permits one admitted foreground prompt per
+session. Admission is reserved synchronously, before asynchronous prompt
+preparation, so a concurrent prompt cannot cross a check/await/set window and
+so cancellation and close can always find work that the adapter has accepted.
+Different sessions remain independent.
+
+```text
+Harm prevented: duplicate foreground execution and prompt work missed by
+  cancellation or close while preparation is pending.
+Scope: createAcpV2Agent session/prompt, session/cancel, and session/close.
+Guard class: per-session admission limit with lifecycle settlement.
+Enforcement owner: reservePrompt in source/acp-v2/agent.ts.
+Recovery owner: the cancel and close handlers plus runPrompt.
+Signal: exact session-id membership in the in-memory active-prompt map; direct,
+  deterministic, and local to the adapter connection.
+Legitimate work affected: a second prompt for the same session is rejected
+  before backend preparation; prompts for other sessions are unaffected.
+Configuration: none; the invariant is one foreground prompt per session.
+Action: reject duplicate admission with JSON-RPC code -32000. Cancellation and
+  close abort the admitted controller, request backend cancellation, and await
+  the prompt's settlement. Close still closes the backend session if backend
+  cancellation fails, then reports that failure.
+Partial-work settlement: every admitted prompt reaches an idle terminal update;
+  cancellation reports cancelled, while an execution failure reports the
+  adapter-private _term2_error reason and is logged without prompt content.
+Retry, fallback, and replay semantics: none; the adapter does not replay a
+  prompt or invent a resume cursor.
+Observability fields: acp.prompt.failed, sessionId, and errorMessage.
+Rollback boundary: the ACP v2 adapter and its focused contract tests.
+Implementation commit: 6800d5c1.
+```
+
+Red proof before the production repair:
+
+```text
+NODE_ENV=test pnpm test source/acp-v2/agent.test.ts
+FAIL 2 tests: a duplicate prompt was admitted while preparation was pending;
+  close skipped prompt settlement and backend close when cancellation failed.
+```
+
+The detection gap was the absence of a deliberately suspended preparation
+boundary: earlier tests began cancellation only after execution had started.
+The regression test now holds preparation pending while issuing a second prompt
+and cancellation. A second test makes backend cancellation fail and verifies
+that prompt settlement and backend close still occur.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm test source/acp-v2/agent.test.ts
+PASS 1 file, 12 tests
+
+pnpm test:related ./source/acp-v2/agent.ts
+PASS 1 file, 12 tests
+
+pnpm test:changed
+PASS 1 file, 12 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check source/acp-v2/agent.ts \
+  source/acp-v2/agent.test.ts docs/plans/approvals-and-sandbox/guard-ledger.md
+PASS
+```
+
+## Subagent cancellation identity classification
+
+Status: merged on 2026-10-03 in `5e9cc606343475ed18447335712b05637c5c9a86`
+from builder `eecc61592d3e872b3d6f6e1286a9843a0553c325`; combined validation
+passed at `1bb99a1ed67967e56eabdc00f73a5809a11da5d5`.
+
+`services/subagents/utils.ts:isAbortLike` determines cancellation for subagent
+settlement and for `lib/tool-invoke.ts` error propagation. Diagnostic text is
+not a reliable cancellation signal: provider messages, role configuration
+errors, and paths can contain `abort` or `cancel`. Misclassifying those errors
+suppresses normal failure handling and emits a cancelled terminal event.
+
+The classifier now accepts structured `AbortError`, `ERR_ABORTED`, `ABORT_ERR`,
+and `kind: aborted` identities. Existing caller checks of their actual abort
+signals remain in place. The unfinished, already-aborted registry lookup and
+the run control's pending-answer cancellation/default settlement now use the
+existing `createAbortError` producer. Explicit settlement reasons retain their
+identity. Invalid adoption diagnostics remain ordinary failures. The separate
+general error helper is outside this repair.
+
+This is a classification contract, with no timeout, retry, or concurrency limit.
+Tests exercise actual manager results and terminal events, tool error handling,
+structured identities, and cancellation of pending waits. Before the source
+repair, the focused command failed 15 tests; afterward all 192 tests in five
+files passed (4.74s command elapsed, exit 0, 120s timeout). The regression matrix
+includes diagnostic words in both messages and paths so checkout naming cannot
+quietly change failure status again.
+
+Narrow handoff gates passed: source-related and changed tests each passed 142
+files / 2,814 tests with two expected failures (104.52s and 102.64s command
+elapsed, exit 0, 300s timeout). Typecheck passed (6.63s, exit 0, 180s timeout).
+Scoped ESLint passed with one existing generator warning; formatting and
+`git diff --check` passed. Related/changed emitted `TimeoutNaNWarning` without a
+test failure.
+
+Final combined coordinator validation at the merged revision passed: unit
+699 files / 10,754 tests, three expected failures and two skipped tests
+(167.91s, exit 0, 600s timeout); integration 12 passed files and one skipped
+file / 106 passed tests and one skipped test (41.87s, exit 0, 300s timeout);
+provider-black-box 20 files / 178 passed tests and one skipped test (84.04s,
+exit 0, 600s timeout). Direct Vitest with `NODE_ENV=test` and
+`--changed=6750a988a989b2d0f4b5bb75cf92515df77df7f2` passed 142 files / 2,819
+tests plus two expected failures (69.27s, exit 0, 300s timeout); final typecheck
+passed (5.00s, exit 0, 180s timeout). Two preceding changed-test invocations
+failed before running tests; the corrected explicit-baseline invocation is the
+final changed gate. Merged public classifier and reset probes also passed.
+
+### Active-goal stop check (2026-10-08)
+
+The durable goal was prompt context only; a root turn could end while the goal
+was plainly unfinished. The stop check makes the working model report before a
+normal stop. Design and authority rules live in
+[durable goal](../agent-runtime/durable-goal.md#active-goal-stop-check).
+
+```text
+Harm prevented: a root turn ending silently while the active durable goal is
+  unachieved, and the opposite runaway: harness-forced continuation that never
+  returns control (an endless reminder/continuation exchange).
+Scope and execution paths: root AgentClient runs (interactive and
+  non-interactive, including approval resumes through continueRunStream) whose
+  agent has the goal_check tool and whose session goal is active.
+  Transient/subagent clients, mentor/nested runners, gateway sessions without a
+  goal source, and sessions without an active goal are untouched.
+Guard class: runaway detector over the stop/continue exchange (secondary:
+  advisory continuation; never abort/kill).
+Enforcement owner: decideGoalStop / createGoalStopPolicy in
+  services/conversation/durable-goal-stop-check.ts, consulted by
+  ApplicationRunLoop only at its normal-stop seam (completed response, no tool
+  call, no pending approval, signal not aborted, no critical wrap-up latched).
+Recovery owner: the model, through the run loop's existing request boundary
+  (reminder admitted like any harness notice); then the user, when control
+  returns.
+Measured signal and observation boundary: the current turn's history (items
+  after the latest genuine user message; harness [Mode Notice] items excluded):
+  whether the latest tool activity is a goal_check with valid arguments whose
+  paired result starts with the tool's own success text ("Self-check
+  recorded:"); how many stop-check reminders were issued since the last
+  non-goal_check tool activity; and how many were issued in the window in total.
+Direct evidence or proxy: direct evidence that the model did not report (or
+  reported not_achieved and then stopped anyway); the report's truth is a
+  self-judgment proxy, never proof.
+Legitimate work that can produce the same signal: a model that forgot the
+  check once, or retried a malformed check; a model sent back to work that does
+  more work and tries to stop early again; an unrelated question or user pause
+  (answered with status deferred, which stops immediately).
+Configuration sources and precedence: none; constants
+  MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK = 2 and
+  MAX_GOAL_STOP_REMINDERS_PER_TURN = 6. Not derived from the run budget or
+  maxTurns: escalation 'warn' and 'disabled' never pause, and the root run
+  budget's turn backstop supersedes maxTurns, so neither bounds this guard.
+Effective default and clamping: two consecutive reminders without intervening
+  work (third idle stop returns control); six reminders per user instruction
+  regardless of work (seventh attempted stop returns control). Tool work resets
+  only the first count; only a new user instruction resets the second.
+Action and why the signal justifies it: request a check / continue the same run
+  (advisory ladder step "request confirmation"); at either limit, stop with typed
+  terminalCause goal_check_unresolved and a visible notice. See calibration.
+Partial-work settlement: unchanged; history, tool results and costs are kept.
+Retry, fallback, and provider-continuity semantics: no replay; the reminder is
+  an ordinary admitted user-role notice, so chaining/compaction are unchanged.
+Observability fields: debug diagnostic run_loop.normal_stop_policy with action,
+  guard, guardClass, reason, limit, turnLimit, remindersWithoutWork,
+  remindersThisTurn, limitReached (without_work | per_turn), lastProblem,
+  turnCount; no prompt or evidence text.
+Persisted-setting migration, if any: none. (T8 updates this: a recorded achieved
+  check that ends the turn now writes `goal_changed` with `source: 'goal_check'`
+  through the session surface. See the T8 note below.)
+Rollback boundary: the onNormalStop wiring in AgentClient (one helper, used by
+  startStream and continueRunStream) or the seam in ApplicationRunLoop; the
+  goal_check tool is inert without them.
+Ledger row: Active-goal stop check.
+```
+
+Calibration. Idle limit (2): one reminder for a forgotten check plus one retry
+of a malformed or premature check; a third consecutive idle stop shows the
+exchange itself loops. Per-turn limit (6): the first release let any tool call
+reset the only count and named the run budget as the owner of total work. That
+was wrong on two counts. Guard-design forbids "progress disables the limit"
+("productive turns do not silently waive an explicit budget"), and the run
+budget cannot own these continuations: under escalation 'warn' or 'disabled' it
+never pauses, and the root's backstop supersedes maxTurns. Adversarial review
+reproduced it: a model alternating read_file with a text-only stop ran 150
+requests (75 reminders) to a budget pause under 'contain' and was still running
+at 401 requests under 'warn' and 'disabled'. The guard now bounds its own
+forced continuations. Six is three resumed work segments with the idle allowance
+of two each: sent back, more work, early stop, one malformed retry, three times
+over. Past that, another reminder no longer corrects a forgotten check; it
+overrides the model's repeated judgment that the turn is over, which is the
+user's call. The false-positive cost of the cap is small and visible: the turn
+returns with the goal still active and the user can say "continue", which starts
+a fresh allowance. Evasive true positive just below the threshold: a model that
+stops five times with work in between costs at most five extra continuations
+per user instruction, each of which is ordinary model-chosen work. The action at
+both limits is unchanged (return control with a typed cause), so no step up the
+ladder was taken.
+
+Recorded result. A goal_check counts only when its result is the tool's own
+success text. Arguments alone are not enough: a check that was denied, rejected
+with a custom message, or threw during execution leaves no success text and is
+treated as an incomplete check (reminder, counted toward both limits).
+
+Goal binding (2026-10-08). The check judges the goal rendered into the request
+whose response made it: the run loop snapshots the goal at request build and the
+call keeps that snapshot through approval pauses. `goal_check` refuses to record
+when the session goal's id differs from the snapshot's at execution, and the
+recorded result names the snapshot's goal id; the check counts only when that id
+is the session goal at the stop seam. A goal replaced mid-turn — while the
+response streams, while the call waits for approval, or after it executed — turns
+the old check into an incomplete check (reminder, counted toward both limits).
+This narrows what counts as a valid check. It adds no new guard, limit, or
+termination path.
+
+Seam exclusions. The policy is not consulted when the signal is already aborted
+(including a response that completes after Ctrl+C) or when a critical run-budget
+wrap-up has latched during the request, so neither cancellation nor budget
+containment is ever converted into another goal reminder.
+
+Red proof (first release): with the run-loop seam reverted, `NODE_ENV=test pnpm
+exec vitest run source/services/agent-runtime/application-run-loop.goal-stop.test.ts`
+failed 10 of 17 (every continuation, limit, steer, approval and budget case);
+the 7 stop-permitted cases passed on both.
+
+Red proof (review follow-up), each a temporary mutation against the named test:
+
+- per-turn cap disabled (`: false && remindersThisTurn >= MAX_GOAL_STOP_REMINDERS_PER_TURN`):
+  "loop guard: work between stops cannot extend the turn forever with run budget
+  escalation disabled" and "... warn", plus the unit "caps total reminders per
+  user instruction even when work separates every stop", failed.
+- recorded-result check disabled (`validation.ok && false && !goalCheckWasRecorded(...)`):
+  "recorded result: a denied goal_check does not authorize the stop", "recorded
+  result: a goal_check whose execution failed does not authorize the stop", and
+  the four unit "does not count a valid-looking check that was ..." cases failed.
+- `!options.signal?.aborted` removed from the seam: "cancellation: a response that
+  completes after Ctrl+C reaches the stop seam without consulting the guard" failed.
+- `!state.criticalWrapUpPending` removed from the seam: "budget controls: a
+  pending critical wrap-up ends the run without consulting the guard" failed.
+- `onNormalStop` removed from `AgentClient.continueRunStream`: "the root client
+  keeps the stop guard across an approval resume" (agent-client.goal-stop.test.ts)
+  failed.
+
+Test matrix: completion, continuation (missing and not_achieved), incomplete
+achievement claim, denied and failed checks, idle limit at threshold-1 /
+threshold / threshold+1 and reset by work, per-turn limit at threshold-1 /
+threshold and reset by a new user instruction, alternating work/stop under run
+budget escalation 'disabled' and 'warn' (exactly 14 requests), blocker,
+cancellation before and after completion and provider error (policy never
+consulted), explicit pause and unrelated question (deferred), steer after a
+check, approval pause and AgentClient approval resume, critical wrap-up, legacy
+maxTurns and staged run budget, no goal / terminal goal / no tool, transient
+client. End-to-end: the positional `--goal` launch in
+`source/cli.integration.test.ts` drives a text-only mock through the built CLI
+(three requests, reminder text, stderr notice, single `goal_changed` still
+`active`).
+
+Disposition: **implemented in `71020cd1`, merged in `49168da1`; review
+follow-up (per-turn cap, recorded-result check, seam and resume tests) in
+`1d9f5c94`.** Verification on Node 24.21.0: `pnpm typecheck`; `pnpm test` (711
+files, 11028 passed); `pnpm test:integration` (14 files, 112 passed);
+`pnpm test:provider-black-box` (22 files, 193 passed); `pnpm test:e2e` (4 files,
+30 passed).
+
+Follow-up (call-id binding): a check's result is the first same-id result after
+the call's own position inside the window, not the earliest one. Chat providers
+that omit ids number calls `call_${index}`, so `call_0` repeats every response;
+earliest-match paired a check with an earlier `read_file` result (valid checks
+never ended the turn) or with an earlier recorded check (a rejected claim
+authorized the stop). Red proof: reverting to earliest-in-window fails the
+"repeated call ids" run-loop and unit tests; searching the full history also
+fails "ignores a recorded call_0 result from before the latest user message".
+
+Known limitations (deferred): the `[Mode Notice] ` prefix match that separates
+harness notices from user instructions; harness-injected user-role messages
+without that prefix restart the window (and both allowances); hosted
+(provider-executed) tool activity is invisible to the history scan; ACP maps
+`goal_check_unresolved` to an ordinary `end_turn`; non-interactive mode exits 0
+on an unresolved check.
+
+Update (2026-10-08, T8 — not a new guard): a recorded, valid `achieved` check
+that ends a root turn now closes the durable goal. The write lives in
+`createGoalStopPolicy` at the normal-stop seam (same owner as this guard): only
+there is the check known to be the turn's last tool activity with its own
+recorded result, so denied / failed / unrecorded / incomplete / superseded
+checks and every status other than achieved write nothing. The session surface
+(TUI or non-interactive) installs the handler and appends `goal_changed` with
+`source: 'goal_check'` through the same path as `/goal achieved`. Transient /
+subagent clients never receive the policy; `run_code` cannot call `goal_check`.
+The write is idempotent: after it flips the goal out of `active`, later seam
+evaluations (another turn, an approval resume) see no active goal. Prompt and
+tool text tell the model to verify against the criteria before claiming
+achieved. This is an authority/correctness change to the existing guard, not a
+new guard row.
+
+## Reference: catalogued guards
+
+Recorded so the next reader does not re-derive them. **No row here owes a test.**
+Read the relevant row before changing its owner; promote one to a candidate only
+when an incident or a source-level contradiction justifies it.
+
+Owned by other plans — do not repair independently:
+
+| Guard | Value | Owner |
+| --- | --- | --- |
+| Interactive / runtime / role `maxTurns` | `agent.maxTurns=100`; AgentRuntime fallback `20`; roles 200 or 1 | run-budget-stall-escalation |
+| `ExecutionBudget.maxTokens` | opt-in; aborts the shared tree | run-budget-stall-escalation |
+| Identical tool failure evidence | third identical `(tool,args,error)` gets advisory text; cumulative, not consecutive; does not block execution | run-budget-stall-escalation |
+| Context compaction thresholds | ratio 0.8; optional raw-token threshold; uncatalogued-model fallback window = the raw threshold itself (the former `min(…, 64_000)` cap forced hard-fit refusal on any large threshold) | provider-neutral-compaction |
+| Provider stream contract throws | `ai-sdk-streamed-model.ts`, `openai-responses-model.ts`, `codex-turn-converter.ts`, etc. | tool-output-and-effect-safety, chain-settlement |
+
+Catalogued, no hypothesized failure mode:
+
+| Guard | Effective value | Configurable |
+| --- | --- | --- |
+| Provider `maxOutputTokens` | 32,000, clamped to catalog | yes |
+| Retry attempts | `agent.retryAttempts=2` | yes |
+| Async subagent retention | 30m completed TTL (`subagent.asyncSessionTtlMs`); 50 retained user turns | TTL only |
+| `AgentDefinition.limits.timeoutMs` | undefined; `AbortSignal.timeout` via `executor.ts:36,39` — the only inline deadline in `source/` | opt-in |
+| `ExecutionBudget.maxChildren/maxDepth/maxConcurrency` | opt-in | opt-in |
+| Agent workflow timeout / run / concurrency / code / output / console | 120s / 8 / 3 / 16KiB / 64KiB / 16KiB | no |
+| Shell context output | 1000 lines / 40k chars | no |
+| Shell foreground output-budget clamp (E1, ba428dd7) | foreground `max_output_length` clamped reduction-only to effective `shell.maxOutputChars` (default 40k chars, UTF-16 code units; equality untrimmed per exceeding-only contract; per-stream threshold, not a total-result bound); background path already clamped; outer root/nested `trimToolOutput` retained | shell.ts:916-923 (executor) → shell.ts:1212-1220 (settlement selection) → shell-output.ts:89-110 (trim+spool) |
+
+### E1 foreground clamp receipt (ba428dd7, merged 5c118dcb)
+
+- Signal/action/recovery: signal = model-requested `max_output_length` above configured max; action = `Math.min(requested, configured)` before execution; recovery = excess trimmed AND spooled to `Full output saved to` artifact (spool seam the generic outer trim lacks).
+- Class/status/owner: context-retention bound; landed; owner `source/tools/system/shell.ts`.
+- Red proof: `shell.test.ts` 'clamps a foreground max_output_length above the configured maximum' FAILS without the fix (verified via stash), passes with it; plus exact-cap equality, omitted-setting fallback, and public wrapped-path (outer-trim + spool) tests.
+- Verification: focused `source/tools/system/shell.test.ts` 79/79; `pnpm typecheck` clean; provider-black-box explicitly not required (tools/system only, no provider/bridge/run-loop path — reviewer-concurred).
+- Observability: `Shell command execution started` debug carries effective `maxOutputLength`; post-E1 the frozen-window query must read 0 over-cap. Evidence aggregate: `docs/research/evidence/e1-clamp-measurement.json` (preregistered query, frozen 08-27→09-03 window, 638/9427 fg over-cap requests + 571/8850 executions).
+- Rollback: revert ba428dd7 (7-line production change, independently revertible); foreground returns to raw-request thresholds with outer trim still bounding model-visible text.
+| `boundToolResultText` | 40k UTF-8 bytes, spools artifact + path (`verified safe`) | no |
+| Hook callback timeout | 5s | no |
+| Patch/edit healing timeout and file-size cap | helper defaults | no |
+| Web fetch character cap | 10k default, 200k max, with continuation | yes |
+| Subagent continuation segments | 3 | injectable |
+| Subagent question length | 1200 chars; throws | no |
+| Async steering guidance length | 2000 chars; rejected | no |
+| Async run turn history | 5 turns / 200 chars (progress snapshot only) | no |
+| App log retention | 7 days | no |
+| OpenCode transport discovery cache | 24h successful endpoint-table snapshot; a 2s failed or invalid lookup falls back to local Chat routing | no |
+| Active-turn cancel wait | 10,000 ms | injectable |
+| Shell auto-approval evidence caps | latest genuine user 3000; recent 8 / 3000 / 500; manual 10; reasoning 1000; other 20 | no |
+| OpenRouter Decisions approval shadow | 4 concurrent requests / 10,000ms each; skips optional comparison on saturation | no |
+| Tool argument repair caps | 200,000 / 8 / 2048 / 160 / 16 | no |
+| Code-context search bounds | 512KiB / 10,000 files / 20 results | `max_results` |
+| Background shell watch match text | 4096 chars / 1500 ms idle | watch options |
+| Turns-left advisory | threshold 5 | no |
+| Session rollover advisory | provider-reported input milestones 200k / 300k / 400k, then 50k reconsideration cadence; advises a safe-boundary choice and never rotates automatically | milestones and enable flag |
+| Terminal result exhaustion | typed `TerminalResultCollectorExhaustionError extends AmbiguousModelOutcomeError`; preserves `unsafeToReplay` and local-vs-provider provenance | no |
+| Codex WebSocket watchdog | 90s to first raw event, 600s between; a first-frame expiry recovers as `retry_fresh`/`full_history` only when the send path recorded the frame as provably `unsent`, otherwise it stays ambiguous and terminates; reports measured latencies and its budgets to the traffic log | `agent.codex.websocketFirstFrameTimeoutMs` / `…InterFrameTimeoutMs` |
+| Queue/background registry capacity | owner-specific | varies |
+
+"Injectable" means a constructor or deps field exists but no settings key feeds
+it. Apart from the `maxParallelToolCalls` defect, **none** of the guards found by
+discovery is user-configurable — they are hardcoded constants with at most a
+test-injection seam.
+
+## Reference: excluded leads
+
+Why these cannot affect agent execution, model context, persistence, or recovery.
+
+### Logging and diagnostic rendering
+
+| Location | Constant | Evidence |
+| --- | --- | --- |
+| `utils/output/log-truncation.ts` | `MAX_IMAGE_DATA_LEN`, `MAX_SYSTEM_PROMPT_LEN`, `MAX_TOOL_DESC_LEN`, `MAX_TOOL_CALL_LEN`, `MAX_TOOL_OUTPUT_LEN`, `MAX_LOG_TEXT_LEN` | Applied when formatting app-log records; never read back into model context or replay. |
+| `services/logging/provider-traffic.ts` | `TRAFFIC_TEXT_LIMIT=100`, `PREVIEW_LIMIT=160` | Bounds a preview stored beside the frame; the untruncated frame is still written. |
+| `utils/ai/provider-traffic-extractor.ts` | `TRUNCATE_LEN=120` | Diagnostic summary string; no caller feeds it to a provider. |
+| `providers/codex-responses-model.ts` | `SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT=20` | Warn-only; logs and does not reject, truncate, or abort. |
+
+### UI presentation, debounce, and input timing
+
+| Location | Constant | Evidence |
+| --- | --- | --- |
+| `hooks/use-debounced-value.ts` | debounce timer | Delays a rendered value; no execution path observes it. |
+| `hooks/use-terminal-width.ts` | resize debounce | Recomputes layout width. |
+| `hooks/use-escape-key.ts` | double-Escape window | Distinguishes single from double Escape; cancellation is owned elsewhere. |
+| `hooks/use-app-keyboard-shortcuts.ts` | interrupt timer | How long the interrupt hint stays visible. |
+| `services/conversation/conversation-orchestrator.ts` | `REASONING_RESPONSE_THROTTLE_MS=200` | Throttles re-render; the stream is unmodified. |
+| `utils/clipboard.ts` | `OSC52_MAX_BYTES` | Bounds a terminal clipboard escape sequence. |
+| `utils/output/tty-osc.ts` | `CHUNK_SIZE=768` | Splits an escape sequence for transport; lossless. |
+| `utils/value-suggestions.ts`, `hooks/use-path-completion.ts` | `MAX_RESULTS=10` | Bounds a completion menu; surfaced to the user, consumed by no tool. |
+| `services/subagents/utils.ts`, `tools/agent/run-subagent.ts` | `MAX_PREVIEW_LENGTH=300` | Panel display preview; full task text retained on the run. |
+
+### Non-guard numeric constants
+
+| Location | Constant | Evidence |
+| --- | --- | --- |
+| `providers/model-catalog/catalog.ts` | `TIER_*` weights | Model-name match scoring; orders candidates, rejects nothing. |
+| `providers/codex.provider.ts` | `ONE_DAY_MS` | Token-expiry display arithmetic. |
+| `utils/shell/test-fixtures/orphan-holder.mjs` | `HOLD_MS=60_000` | Test fixture process, never loaded by the app. |
+
+### Tool-local validation and persistence failures
+
+`services/memory/memory-store.ts` throws `InvalidMemoryError` (argument
+validation before any write) and `MemoryStorageError` (filesystem and
+index-corruption). The only consumer is `tools/memory/memory-tools.ts`, so both
+settle as a tool failure and cannot terminate a run.
+
+### Typed admission rejections
+
+`services/subagents/subagent-async-registry.ts` throws `SubagentRegistryError`
+with a closed `code` union — `not_continuable`, `invalid_name`, `name_in_use`,
+`not_found`, `evicted`, `role_mismatch`, `already_active`, `worker_blocked`.
+Every site fires during admission, before a session is created or resumed, and
+none touches a running run. Two notes retained: `evicted` is deliberately
+distinct from `not_found` and should stay that way if TTL eviction changes; and
+capacity release on failure and cancellation is untested.
+
+### Throw-site classification
+
+All 260 non-test `throw new` sites in `source/services`, `source/providers`,
+`source/utils/shell`, and `source/lib` were traced. **None terminates admitted
+work outside the guards above.**
+
+| Category | Representative sites | Why excluded |
+| --- | --- | --- |
+| Constructor and option validation | `background-shell-registry.ts:166,169`, `background-shell-output-store.ts:105-220`, `background-shell-watches.ts:190-196`, `hook-registry.ts:84`, `context-compaction/index.ts:24,32` | Thrown during construction, before work is admitted. |
+| Settings load and mutation | `settings-service.ts:164-689` | Rejects an invalid or restart-only change; no run in flight at the owner. |
+| Provider configuration and discovery | `openai-compatible.provider.ts:305-360`, `openai-compatible-lazy.ts:19-44`, `codex.provider.ts:133-605`, `registry.ts:80`, `model-service.ts:40` | Fails a setup or catalog request, not an executing turn. |
+| Lifecycle and state-machine invariants | `turn-status-machine.ts:56,125`, `turn-coordinator.ts:53-143`, `foreground-subagent-lease.ts:106-166`, `post-execute-pending-registry.ts:106,108`, `hook-registry.ts:115-181`, `subagent-run-control.ts:96,149-152` | Programming-error guards for impossible transitions. |
+| Capability and mode restrictions | `subagent-bridge.ts:278-436`, `execution-context.ts:57-80`, `editor-impl.ts:32`, `docker-host-control.ts:164-175`, `role-loader.ts:91` | Authority boundaries; reject a request rather than terminate work. |
+| Programmer-error helpers | `upstream-retry-policy.ts:177`, `agent-stream.ts:78`, `hook-module-loader.ts:72` | Unreachable without a caller bug. |
+
+Two cosmetic issues, not inventoried: `memory-store.ts:427` throws a bare
+`new Error()` used as locally-caught control flow, and
+`background-shell-registry.ts:209,283,286` throw untyped `Error` for lease
+invariants while the same file uses typed errors elsewhere.
+
+### Discovery caveats
+
+Recorded so nobody claims completeness the sweeps did not deliver:
+
+1. Discovery covered `source/`. Two eval scripts under `scripts/` appeared and
+   were not traced; they are not shipped in the agent runtime.
+2. The searches find named constants, throws, and a keyword set. **A guard
+   written as an inline comparison against a literal inside a larger expression
+   would not be caught by any of them.**
+3. `verified safe` was assigned to exactly one row, and it arrived with that
+   status. Nothing was promoted without tests.
+
+The sweeps, for the record:
+
+```bash
+rg -n 'throw new|\.abort\(|\.kill\(|SIGKILL|SIGTERM' source
+rg -n 'timeout|deadline|maxTurns|max[A-Z].*(Tokens|Chars|Bytes|Duration|Retries|Runs|Children|Depth|Concurrency)' source
+rg -n 'capacity|retention|TTL|expires|evict|overflow|truncate' source
+rg -n 'unsafeToReplay|retryable|transient|transportFallback|cancelled|timed_out' source/services source/providers
+rg -n 'Guard|Watchdog|action: .(block|reject)|\b(block|reject|drop|discard)\b' source
+```
+
+## Verification
+
+Focused owner tests plus `pnpm typecheck` for each repair. Additionally:
+
+```bash
+pnpm exec prettier --check <changed-files>
+NODE_ENV=test pnpm test
+pnpm test:provider-black-box   # any provider, bridge, run-loop, registry, or non-interactive change
+```
+
+Report focused success separately from baseline, environment, or sandbox-only
+failures. Never call a guard safe solely because its termination test passes.
+
+## Done when
+
+1. The `maxParallelToolCalls` repair is approved and merged, or explicitly
+   declined and recorded here.
+2. Each of the five candidates is either repaired with a red-proof test and an
+   independently revertible commit, or downgraded with evidence.
+3. Every destructive repair preserves truthful partial-work settlement.
+4. Provider and run-loop changes pass the black-box gate.
+5. This document records the final dispositions and commit IDs, then moves to the
+   completed list in `AGENTS.md`.
+
+The reference tables above do not gate completion.
+
+## September 5 tool-performance follow-up
+
+Evidence and implementation status: [tool-performance-followup.md](../tools/tool-performance-followup.md).
+The observed incidents were repeated deterministic native-compaction rejection
+and run_code display clipping without a retrieval path.
+
+| Guard | Signal and scope | Action and recovery | Preservation evidence |
+| --- | --- | --- | --- |
+| Codex automatic native compaction admission (`AgentClient`) | At request boundary, compare the effective threshold with `max(lastCompletedInputTokens ?? 0, local rendered-input estimate)`; native compact rejection is scoped to the resolved model instance | Attempt native compaction when measured context reaches threshold; suppress unchanged automatic attempts after incompatible native rejection; manual retry bypasses suppression, success clears it; `auto` may use the existing safe local compactor, `native` retains history | Boundary tests cover provider-reported context on a small chained-turn delta and preserve tool results/cold history; unrelated 400, 429 and 503 remain retryable; model switch and cancellation do not poison a new attempt |
+| run_code final display bound | Rendered result exceeds the existing 30,000-character budget | Save full rendered text through the existing output artifact owner, include its path within the budget; reserve host action evidence before clipping script text, falling back to aggregate plus omitted-receipt count when the ledger cannot fit; on storage failure disclose unavailable details | Real host execution returns readable tail evidence without repeating the tool effect; action aggregate and authority survive large result/console/error output and ledger overflow even when storage fails; short and observation-only output retain existing behavior |
+| read_file scripted envelope budgeting (`read-file.ts`) | Scripted tool call whose full JSON envelope exceeds `maxResultBytes` (default 100,000 chars) | Truthfully set `truncated: true`, save full untruncated content to output artifact, set `fullOutputPath`, and binary-search slice `content` so the full serialized JSON envelope fits within budget without splitting surrogate pairs | Script receives valid, structured JSON object with truthful truncation and exact artifact path; context defaults for direct calls remain untouched; binary detection still rejects |
+| run_code nested transport overflow guard (`run-code.ts`) | Nested tool execution result whose serialized JSON exceeds `maxResultChars` (100,000 chars) and cannot be fitted by string property truncation | Save full output JSON to output artifact, reject with catchable error detailing exceeded limit, artifact path, and completed effect warning; never slice JSON into invalid strings | Nested calls preserve structured object contract; scripts catch generic overflow via standard try/catch without invalid JSON SyntaxErrors; completed tool effects are explicitly acknowledged |
+
+Action-receipt repair contract and red proof: [run-code-action-receipts.md](../tools/run-code/run-code-action-receipts.md),
+Bounded review repair. Enforcement remains `clip`/`renderResult` in `run-code.ts`;
+recovery remains the temporary output artifact owner. Signal is rendered text
+length (a direct context-size measurement, not evidence of action failure). Large
+legitimate output retains the same bound, with protected host evidence. No action
+is replayed or cancelled, and no provider continuity or settings migration changes.
+Rollback is confined to receipt-aware clipping, adapter validation, and their tests.
+Final validation is recorded in the linked repair section.
+
+No new size or time limits, concurrency restrictions, or protected-history cuts.
+Local `no_complete_cold_turn` advice is admitted once per run as synthetic context;
+it does not manufacture a genuine user turn or authorize discarding active work.
+The host byte caps still apply before final rendering. Artifact lifetime remains
+that of the existing temporary tool-output store, not permanent archival.
+
+## Native provider-history switch refusal (T1-M4 interim)
+
+Harm prevented: sending a different provider a silently truncated history after
+native compaction removed portable source turns. Scope is the shared
+`SessionInputPlanner` full-history/chained-input plan and every session path that
+uses `InitialInputPreparer`; this is an admission refusal, not a context-size or
+time guard. A foreign opaque compaction marker is direct evidence that the selected adapter will
+not replay the item; lack of verified source coverage means reconstruction is
+not safe to guess. `InitialInputPreparer` rejects before `startStream`, removes
+the just-added user turn, restores its text through the existing error event,
+and advises switching back to the source provider or starting a fresh
+conversation. Same-provider opaque continuity, non-compaction foreign opaque
+items, and provider changes without foreign compaction are preserved. No request retry, fallback, provider
+history rewrite, semantic reconstruction, or persisted-setting change is added.
+
+Red proof: the supplied base-wire assertion established the foreign provider
+request contained no pre-compaction assistant content despite dispatch; the new
+black-box scenario asserts the refusal is visible and the fake provider receives
+no second request. Focused unit tests cover refusal, same-provider preservation,
+and user-input restoration. Rollback is confined to the planner refusal,
+preparer presentation, and these tests. The unresolved source-event coverage,
+legacy undo/snapshot equivalence, and portable reconstruction remain M2/M4 work;
+this interim refusal does not close those semantic gaps.
+
+## Terminal background subagent approval arbitration release (October 3)
+
+Disposition: repaired in `6cb05911` and merged to main in `6750a988`
+from `codex/reliability-approval-release`.
+A cancelled adopted lease correctly refused stale application and released its
+tool attribution, but its session approval entry remained at the FIFO head.
+Repeated UI answers returned `apply_rejected` and prevented sibling approvals
+from becoming visible. This is an arbitration retention defect, not an
+attribution leak or an authority-policy change.
+
+```text
+Harm prevented: terminal child approvals blocking live sibling approvals.
+Scope and execution paths: adopted background subagents, including completed, failed, cancelled, and terminal containment outcomes.
+Guard class: lifecycle retention cleanup.
+Enforcement owner: BackgroundSubagentApprovalQueue.removeRun.
+Recovery owner: session-composition recordBackgroundEvent via BackgroundSubagentApprovalController.
+Measured signal and observation boundary: async subagent_completed event and result.agentId at the session-owned background sink.
+Direct evidence or proxy: direct terminal lifecycle evidence, no timeout or count proxy.
+Legitimate work that can produce the same signal: none under the terminal-event contract; foreground completions do not release background entries.
+Configuration sources and precedence: none.
+Effective default and clamping: none; no new limit.
+Action and why the signal justifies it: release every queued pause for the settled run, publish a new revision, preserve sibling FIFO order.
+Partial-work settlement: retained child result and notification delivery are unchanged; no approval answer is manufactured.
+Retry, fallback, and provider-continuity semantics: unchanged; nothing is restarted or replayed.
+Observability fields: existing approval revision/current/pendingCount and terminal notification.
+Persisted-setting migration, if any: none.
+Rollback boundary: queue run removal, controller forwarding, session terminal hook, and regression tests.
+Ledger row: terminal background approval arbitration retention.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test timeout 120s pnpm exec vitest run \
+  source/services/approval/background-subagent-approval-queue.test.ts \
+  source/services/session/session-composition.test.ts \
+  source/services/session/session-composition.subagent-notifications.test.ts --reporter=minimal
+FAIL: 6 new tests; 51 existing tests passed. Duration 3.59s, terminal exit 1.
+Terminal composition cases retained run-a at head with pendingCount=3
+instead of promoting run-b with pendingCount=1.
+```
+
+Detection gap: queue tests covered exact-entry removal and session closure;
+composition tests covered terminal notification delivery and deduplication.
+Neither connected terminal settlement to approval retention. The repair adds
+a terminal-status matrix, stale-action fencing, hidden-entry removal, release
+callback failures, duplicate completions, real adopted-lease cancellation, and
+reentrant terminalization during resolution. Run cleanup advances arbitration
+before terminal observers run; successful resolution consumes its original
+entry only if it still owns the head.
+
+Sibling audit: `SubagentAsyncRegistry.#settle` and adopted `NestedSubagentRunner`
+success/failure paths all use the async `subagent_completed` lane. Foreground
+completions use the foreground lane, and session disposal already closes the
+queue. The lease's pending-release callback already handles tool attribution.
+No provider, run-loop, registry, or non-interactive implementation is changed.
+
+Verification (all terminal exit 0, finite timeouts):
+
+- Final focused queue and composition tests: 59 passed; Vitest 3.53s,
+  command elapsed 5.35s, timeout 120s.
+- `pnpm test:related ./source/services/approval/background-subagent-approval-queue.ts ./source/services/approval/background-subagent-approval-controller.ts ./source/services/session/session-composition.ts`:
+  75 files passed; 1191 tests passed, one expected failure; Vitest 77.21s,
+  command elapsed 98.28s, timeout 300s.
+- `pnpm test:changed`: same 75 files and 1191 passing tests, one expected
+  failure; Vitest 70.67s, command elapsed 91.33s, timeout 300s.
+- `pnpm typecheck`: passed, command elapsed 13.56s, timeout 180s.
+- Scoped ESLint: passed, command elapsed 16.64s, timeout 120s.
+- Scoped Prettier check: passed, command elapsed 4.72s, timeout 120s.
+
+These are narrow handoff gates. No full-suite or provider-black-box run was
+required or claimed for this session approval arbitration fix.
+
+### Gateway background event observer ownership addendum
+
+Review found that `Gateway` registers `ConversationService.setBackgroundSubagentEventSink`,
+which forwarded directly to the client and replaced the session lifecycle sink.
+The original queue/composition tests did not exercise this public facade path.
+The retained FIFO defect therefore remained reachable after gateway registration.
+
+The session's `sinks.subagentEvents` now wraps background registration as one
+secondary observer while keeping its lifecycle sink attached. Foreground and
+other host methods retain bound forwarding. The service stores the observer
+alongside its task/notification observers and reattaches it on session reset.
+Null registration removes only the observer; disposal clears it with the
+lifecycle sink after adopted terminal settlement. Without an async disposer,
+both detach synchronously.
+
+The observer receives every subagent lifecycle event, including starts, questions
+and duplicate completions, before notification enqueue deduplication can return.
+The shared owner excludes root shell events from this observer channel. Observer
+exceptions are logged and isolated from notification delivery. Terminal approval
+release remains before logging and external callbacks. No gateway, provider,
+registry or client-bridge change, additional bus, mirrored state, or new limit is
+introduced. The existing public setter signature is unchanged.
+
+Red proof before the addendum production changes:
+
+```text
+NODE_ENV=test timeout 120s pnpm exec vitest run \
+  source/services/conversation/conversation-service.facade.test.ts \
+  source/services/session/session-composition.test.ts \
+  source/services/session/session-composition.subagent-notifications.test.ts --reporter=minimal
+FAIL: 5 tests; 75 existing tests passed. Duration 1.97s, terminal exit 1.
+Public registration replaced recordBackgroundEvent; throwing observers escaped;
+reset lost the background observer; runtime registration replaced its owner;
+task/notification projection stopped receiving subagent events.
+```
+
+The prevention artifact now tests the real production service facade and runtime
+composition together, rather than only invoking the composition sink directly.
+The obsolete composition test promising raw sink replacement was changed to
+assert observer registration preserves the session lifecycle owner.
+
+Reset follow-up: the caller-owned compatibility factory intentionally reuses the
+same client. With no async disposer, the old runtime deferred sink detachment by
+one microtask and erased the replacement session's newly attached subagent and
+shell callbacks. The no-disposer cleanup branches now detach synchronously;
+real async disposal still retains lifecycle sinks until its promise settles.
+No incarnation tokens or additional ownership maps are needed. Factory-owned
+and caller-owned reset tests assert both channels survive and old observers are
+replaced. The existing adopted-lease shutdown test retains its delayed sink
+detachment assertion.
+
+Additional red evidence before changing disposal:
+`NODE_ENV=test timeout 120s pnpm exec vitest run source/services/conversation/conversation-service.facade.test.ts --testNamePattern='background event observer.*session reset' --reporter=minimal`
+failed only the caller-owned reset row (observer calls 0); factory-owned row
+passed. Vitest 1.61s, terminal exit 1. The old no-disposer microtask cleared the
+shared client callback.
+
+Addendum verification (finite timeouts, terminal exit 0):
+
+- Focused queue/facade/composition/notification tests: 96 passed; Vitest 2.00s,
+  command elapsed 3.14s, timeout 120s.
+- `pnpm test:related ./source/services/approval/background-subagent-approval-queue.ts ./source/services/approval/background-subagent-approval-controller.ts ./source/services/session/session-composition.ts ./source/services/conversation/conversation-service.ts`:
+  75 files passed; 1196 tests passed, one expected failure; Vitest 56.38s,
+  command elapsed 66.06s, timeout 300s.
+- `pnpm test:changed`: 71 files passed; 1167 tests passed, one expected failure;
+  Vitest 53.20s, command elapsed 64.00s, timeout 300s. This gate compares
+  against the initial fix commit; related and focused gates also cover queue
+  contracts from that commit.
+- `pnpm typecheck`: passed, command elapsed 6.66s, timeout 180s.
+- Scoped ESLint: exit 0, command elapsed 10.10s, timeout 120s; existing
+  `require-yield` and `no-this-alias` warnings remain outside changed lines.
+- Scoped Prettier: passed, command elapsed 2.70s, timeout 120s.
+- Independent production facade probes: gateway registration observed one
+  completion with pendingCount=0; no-disposer compatibility reset retained a
+  function callback and observed one subsequent completion. Both exit 0.
+
+Scope limitation: factory-owned replacement and no-disposer compatibility reset
+are covered. Reusing the same client while an old real async disposer is still
+pending can require a wider client-incarnation contract; that pre-existing case
+is not claimed fixed here. Async shutdown itself still retains sinks until
+adopted settlement, as asserted by the existing lifecycle test.
+
+### Shutdown persistence observer correction
+
+Further review found that the first observer addendum cleared its secondary
+event observer immediately on disposal while retaining the raw lifecycle sink
+through async settlement. Gateway uses this observer to persist events and
+awaits session shutdown before closing persistence. Terminal approvals were
+released but their shutdown completion events were missing from persistence.
+
+The event observer now clears inside `detachSubagentSinks`, after the real async
+disposer settles (synchronously when no disposer exists). UI task and notification
+observers still clear immediately. No additional state or machinery is required.
+The public facade regression gates a real disposal promise, publishes a terminal
+event during shutdown, verifies both approval release and observer delivery,
+and verifies post-settlement events cannot reach the detached observer.
+
+Red: the targeted new facade test failed with observer calls 0; 36 existing
+tests skipped. Vitest 1.58s, command 2.70s, timeout 120s, terminal exit 1.
+Focused green: queue/facade/composition/notification tests, 97 passed; Vitest
+1.96s, command 3.09s, timeout 120s, terminal exit 0.
+
+Retro: this was an introduced lifecycle regression in the observer wrapper;
+the previous async shutdown test asserted raw sink retention but did not register
+the public persistence observer. The new facade test covers that consumer
+boundary, including different UI and persistence teardown timing.
+
+Follow-up handoff gates (finite timeouts, terminal exit 0): related composition
+and changed each passed 71 files, 1168 tests plus one expected failure. Related
+Vitest 35.81s / command 48.24s; changed Vitest 35.03s / command 42.53s; each
+timeout 300s. Typecheck 8.51s, timeout 180s; scoped ESLint 11.41s (one existing
+facade `require-yield` warning), timeout 120s; Prettier 1.71s, timeout 120s.
+Production shutdown probe now observes one terminal completion with zero
+pending approvals, both before and after awaited settlement; timeout 30s.
+
+### Async reset background callback ownership transfer
+
+Status: merged on 2026-10-03 in `1bb99a1ed67967e56eabdc00f73a5809a11da5d5`
+from builder `05a599e7cc7b7ffd81ce1434ae2851b461c9784d`; combined validation
+passed at that revision.
+
+The pending-disposer compatibility-reset limitation recorded above is addressed
+at `ConversationService.resetWithNewId`. After replacement factory creation
+succeeds, identical client identity transfers ownership of its background
+callbacks before the replacement composition installs them. The old runtime's
+`relinquishBackgroundSinkOwnership` releases one composition-local ownership
+flag; both real disposal promises still settle, clear the old event observer,
+and close the old approval queue. Their finalizers may no longer null the
+replacement's subagent event, approval pause, or shell event callback.
+
+Contract: prevent stale cleanup from disabling replacement background delivery.
+Scope: synchronous facade reset with a reusable caller-owned client or custom
+factory returning the same client. Class: lifecycle ownership cleanup.
+Enforcement and recovery owner: session composition, with the facade providing
+direct successful-factory and same-client identity evidence. No elapsed-time,
+count, or output proxy, configuration precedence, default, clamping, persisted
+migration, additional logging, retry, fallback, or provider-continuity change is
+introduced. Legitimate old shutdown still performs local cleanup; distinct
+clients retain their terminal persistence callbacks until actual settlement.
+Partial results and notifications retain their existing channels. Observability
+uses existing approval snapshots, task/notification projections, and event
+observers. Rollback is confined to the reset transfer and composition ownership
+flag. Ledger disposition: the same-client pending-disposer callback-loss defect
+is repaired through this explicit transfer seam.
+
+Red proof: `NODE_ENV=test timeout 120s pnpm exec vitest run
+source/services/conversation/conversation-service.facade.test.ts
+--testNamePattern='replacement background delivery|distinct previous client persistence'
+--reporter=minimal` failed four reusable-client cases before production changes
+(Vitest 1.63s, terminal exit 1). Both constructor and custom-factory reuse lost
+public approval or shell task delivery, independently of disposal order. The
+distinct-client terminal persistence control passed.
+
+Detection gap: existing reset clients omitted async disposers; existing async
+shutdown coverage never replaced their runtime. The regression matrix now
+combines real pending disposal promises with public reset and checks approval,
+observer, task, and notification delivery after each independent settlement.
+It also checks old approval closure and event observer release. One explicit
+ownership operation covers all three proven callback slots without per-channel
+tokens or shared maps. The two foreground adapter `finally` paths remain a
+separate unproven ownership lead; this change does not modify them. Stock
+AgentClient's permanently disposed background registries are not resurrected,
+and attribution of late old events through a reused singleton host is unchanged.
+
+Focused verification: facade and composition notification tests passed 61 tests
+in two files (Vitest 1.83s, command 3.63s, timeout 120s, terminal exit 0).
+`pnpm typecheck` passed (command 6.63s, timeout 180s, terminal exit 0).
+`pnpm test:related ./source/services/session/session-composition.ts
+./source/services/conversation/conversation-service.ts` passed 71 files, 1173
+tests and one expected failure (Vitest 47.44s, command 57.76s, timeout 300s,
+terminal exit 0). `pnpm test:changed` passed the same selection (Vitest 35.42s,
+command 45.48s, timeout 300s, terminal exit 0). Scoped ESLint passed with two
+existing warnings (7.49s, timeout 120s, exit 0); changed-file Prettier and
+`git diff --check` passed. No full-suite or provider run is claimed by this
+scoped repair.
+
+The final combined coordinator gate subsequently passed at the merge revision:
+unit 699 files / 10,754 passed tests, three expected failures and two skipped
+tests (167.91s, exit 0, 600s timeout); integration 12 passed files and one
+skipped file / 106 passed tests and one skipped test (41.87s, exit 0, 300s
+timeout); provider-black-box 20 files / 178 passed tests and one skipped test
+(84.04s, exit 0, 600s timeout). Explicit-baseline changed tests passed 142 files
+/ 2,819 tests plus two expected failures (69.27s, exit 0, 300s timeout), and
+typecheck passed (5.00s, exit 0, 180s timeout). The merged public reset probe
+also passed. These combined results supplement the scoped historical evidence
+above; the cancellation section records the corrected changed-gate invocation.
+
+
+### Ordinary context admission and critical per-run containment (2026-10-07)
+
+Owner: [ordinary safe runs](../agent-runtime/ordinary-safe-runs.md), alongside provider-neutral
+compaction and run-budget-stall-escalation. User approved the outcome/default
+change; previous opt-in/default warn dispositions do not govern this new policy.
+
+Missing keys now select enabled auto compaction, `contain` escalation and no extra
+input ceiling. (Amended 2026-10-08: a missing escalation selects `warn` again;
+`contain` is opt-in. See "Run-budget default reverted to warn" below.) Known model capacity independently bounds prepared input after
+actual selected output and 10% estimation reserve. One shared resolver bounds
+soft compaction below hard admission; explicit smaller ceilings retain precedence.
+Default output allocation adapts to small windows; explicit output selections are
+preserved subject to provider maxima. Unknown capacity is not invented from raw
+triggers. Structured provider overflow pauses without repeating the failed request.
+Supervised 80k/60k overrides, compaction opt-outs and budget choices remain intact.
+These are admission heuristics, not optimal thresholds or prepaid billing.
+
+Local reductions retain genuine user requests, paired recent rounds and host
+receipts, rearm only after measured growth, and refuse non-reducing or oversized
+summary candidates. Native ciphertext stays native; Codex keeps its native
+one/run policy. Source history is retained when safe reduction is unavailable.
+Summary input includes fixed instructions/prior summary; helper guards and abort
+inherit; per-chunk costs reach the owning root before continuing. Dispatched
+failed helpers retain unpriced evidence. Telemetry is queue-only bookkeeping.
+
+Headless logs commit the user request before dispatch; context/budget refusal
+exposes typed exit 2/session locator and can be resumed explicitly. Warning/stall
+remain advisory in `contain`; auto-approval cannot grant a new contained budget
+(since 2026-10-08, nor any run-budget extension under any escalation).
+Collector tests protect error/check-in identity; actual CLI tests protect saved
+history and resumed wire. Per-run grant state does not survive restart; resumed
+work gets a new bounded run. Missing whole-turn checkpoint provenance falls back
+to original journal replay with paired tool evidence. No automatic effect replay.
+
+The revision replaces the earlier universal 96k/72k proposal. Public primary
+sources motivate separating capacity from operating policy; no trace-derived
+dataset is published. Synthetic small/large/unknown model fixtures, scripted
+20-artifact repeated compaction and built-CLI pause/resume supply offline evidence.
+Live semantic quality and aggregate sibling monetary containment remain limits.
+
+Regression evidence: initial 5 ordinary compaction tests and new terminal/rearm
+cases failed before repair. Focused source tests, related/changed, types, full
+unit/integration and provider gates are required; status lives in the PR/plan.
+Rollback: revert default selection independently from safe-cut/accounting/terminal
+metadata repairs. No persisted values are guessed or rewritten. Independent final revision review found no remaining material finding; exact
+stable-tree evidence is recorded in the owner plan; local baseline failures and CI coverage limits
+remain documented in the plan/PR. No merge, release or deployment is performed.
+
+### Run-budget default reverted to warn; --auto-approve never grants budget (2026-10-08)
+
+Decision (Duc, before 0.32.0): `agent.runBudget.escalation` defaults to advisory
+`warn` again — schema, `DEFAULT_SETTINGS`, and the `readRunBudgetPolicy`
+fallback. `contain` (pause only at budget exhaustion) stays available as an
+explicit opt-in, as do `pause` and `disabled`. Explicit persisted values keep
+precedence. `TERM2_SUPERVISED=1` sets no escalation, so supervised runs use the
+default too. Context admission and default auto compaction are unchanged.
+
+Harm prevented (S1): with explicit `pause` plus `--auto-approve`,
+`NonInteractiveApprovalPolicy` answered the `max_turns_exceeded` check-in `y`,
+and `state.approve` charged a parent-class extension — up to
+`maxParentExtensions` unattended grants. Enforcement: `runWithSession` parks
+every `run_budget` check-in (exit 2, `run_budget_paused`, `--resume` locator)
+whatever escalation raised it, and the policy refuses any check-in as defense in
+depth. Scope: non-interactive mode only; the interactive prompt and the
+continuation applier are unchanged. Red proof: the `pause` case of
+`runNonInteractive --auto-approve never grants a run-budget extension` failed on
+the unchanged code (exit 0 after two auto-granted extensions).
+
+
+### Shell calls inside run_code
+
+User-authorized scope expansion: shell now joins the script catalogue while
+retaining direct calls. The existing shell sandbox and pre-execution approval
+policy remain authoritative. Post-execute denied-read recovery uses
+`NestedApprovalOwner` for script calls, including authority/policy revalidation
+and fail-closed missing-owner/cancellation settlement. It applies the same
+one-retry descriptor used by direct calls; unrelated earlier effects are not
+replayed. No new security grant, setting, default, clamping or migration.
+
+Guard classes: existing script containment clocks and shell process deadlines.
+Enforcement remains `SandboxedCodeHostImpl` and the shell execution owner;
+recovery remains the invoking script/session. Approval waiting is direct state
+evidence and pauses only the existing work clock. Dispatch signals resumed
+before approved execution, so approval-required foreground shell commands still
+consume the script budget. Host cancellation propagates to foreground children;
+explicitly backgrounded/adopted jobs retain session ownership and cancellation.
+Long-stop, call/concurrency/output/retention budgets are unchanged. Observability
+uses existing nested call records and shell registry events; rollback is the
+shell script exposure and scripted post-execute routing together.
+
+Evidence: `shell.integration.test.ts` exercises real child processes on caller
+abort and script timeout, refusal without spawning, and background survival.
+`provider-session-responses.blackbox.ts` exercises approval and rejection through
+the built CLI. No OS sandbox confinement claim derives from the deterministic
+sandbox-runner fixture.
+
+### Configurable headless background drain
+
+`runWithSession` retains the existing wall-clock containment deadline and cancellation
+owner. `agent.backgroundWaitTimeoutMs` now supplies its default (one hour instead of
+five minutes); explicit caller overrides remain supported. Schema validation admits
+1 ms through 24 hours, matching the existing runtime ceiling. Time measures the whole
+background drain, including notification turns, and is not evidence of failed progress.
+Expiry retains the existing nonzero exit and cancellation behavior; outstanding task
+names now appear in text as well as structured diagnostics. No interactive deadline,
+shell deadline, run-budget policy, or recovery grant changes. Roll back the default
+independently from the setting and diagnostics if operational evidence warrants it.
+
+
+### Bare profile completion policy (2026-10-21)
+
+The Bare profile now joins the existing active-goal stop/completion boundary.
+Enforcement remains in `AgentClient.#goalStopCheck`, `createGoalStopPolicy`, and
+`createVerifiedGoalStopPolicy`; recovery and goal persistence remain session-owned.
+The signal is a recorded, current-goal-bound achieved check and a verification
+verdict for the current workspace revision, not elapsed-time evidence. Bare with
+an active goal gets the same bounded reminders, repair budgets, cancellation,
+and explicit `agent.completionVerification` override as Standard. No settings,
+clamps, deadlines, migration, tool replay, or provider-continuity change is added.
+
+A blocked/deferred self-check still returns control. Unavailable/inconclusive
+required verification in a headless Bare run uses the existing blocking completion
+outcome (`completion_verification_blocked`, exit 2), retains work and the active
+goal, and reports the cause. Other headless profiles retain their existing
+unavailable-verifier notice behavior. Verified FAIL still repairs or blocks;
+PASS still requires authoritative goal persistence. No-goal and transient runs
+remain outside goal verification. The root-only `goal_check` tool is available
+so goals added later in a session can use the same boundary.
+
+Red evidence: the filesystem/provider-backed root Bare scenario ended with an
+active goal instead of verified completion before removing the exemption.
+Afterwards, the same scenario and PASS/FAIL/INCONCLUSIVE variants exercise fresh
+verifier transports and real repository reads. Built-CLI cases cover the
+unsupported-workspace block, Standard's retained unavailable notice, and edit
+approval denial. Commands: `pnpm test:integration` and
+`pnpm test:provider-black-box`; final results are recorded in the experiment task
+ledger. Existing diagnostic fields and notices identify the action and cause.
+Rollback is Bare goal-tool/context wiring and stop-policy selection together.

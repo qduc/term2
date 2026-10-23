@@ -255,7 +255,7 @@ New tools → must be registered in `agent.ts`.
 - Provider black-box suite (streaming/tool-call/history/reasoning/error-path regressions
   for provider, bridge, run-loop, registry, non-interactive changes):
   `pnpm test:provider-black-box` — builds `dist/`, runs isolated child-process CLI tests.
-  See `scripts/provider-black-box/` and `docs/plans/integration-test-improvement.md`.
+  See `scripts/provider-black-box/` and `docs/plans/engineering/integration-test-improvement.md`.
 
 ## For deeper dives
 

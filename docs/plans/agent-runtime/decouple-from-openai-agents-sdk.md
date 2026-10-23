@@ -1,0 +1,1473 @@
+# Decoupling from `@openai/agents`
+
+**Status:** Complete. The `@openai/agents*` packages, compatibility runners/adapters, legacy model contract, and legacy ingress adapter are retired. Providers, the application run loop, and session/UI code use application-owned typed protocols.
+**Last updated:** 2026-08-02
+
+Final integration branch head follows this plan-record update. Codex and OpenAI-compatible transports now use typed streamed turns; native branded `AgentStream` is the sole runtime ingress; legacy terminology and source boundaries were swept.
+
+### Final verification — 2026-08-01
+
+- `tsc --noEmit`: passed.
+- Full Vitest suite: 384 files passed, 1 skipped; 4,813 tests passed, 1 skipped.
+- Codex model/fake-server WebSocket tests: 62 passed.
+- Provider/application focused tests: 247 passed.
+- `@openai/agents*` scan across `source/`, `package.json`, and `pnpm-lock.yaml`: zero matches.
+- `git diff --check`: passed.
+
+---
+
+## Resume here
+
+### Current state
+
+Semantic compatibility retirement completed in the isolated integration worktree. This historical plan remains as the design and verification record; no implementation slice remains active.
+
+At the start of the final execution, the active work was:
+
+- the registry has one execution factory, `createStreamedModel`;
+- providers execute through `ApplicationRunLoop` and `StreamedModelTurn`;
+- OpenAI Responses HTTP and WebSocket transports already use the typed turn contract directly;
+- Codex still adapts a typed turn to `ModelRequest`/`modelSettings`, consumes legacy stream
+  envelopes, and is the only production `LegacyModelProvider`;
+- OpenAI-compatible Chat already has a typed `stream()` path, but still exposes dead legacy
+  `getResponse()` / `getStreamedResponse()` behavior selected by `request.modelSettings`;
+- `RetryingModel` and two apparently unreferenced OpenAI-compatible message builders keep
+  `contracts/model.ts` alive;
+- `AgentStream` still routes unmarked `ApplicationRunLoop` streams through
+  `legacy-agent-stream-adapter.ts`. Native stream marking is therefore a prerequisite to deleting
+  that adapter, not optional cleanup.
+
+Historical test totals and baseline failures below are not current acceptance evidence. Each slice
+must record only commands actually run from its own final commit.
+
+### Fastest safe dependency graph
+
+```text
+baseline inventory / red-test ownership
+            |
+            +----------------------------+
+            |                            |
+            v                            v
+  S1 Chat legacy cleanup       S2 Codex direct transport
+       (small, local)            (large, transport-local)
+            |                            |
+            +------------+---------------+
+                         v
+              S3 delete legacy model
+                 contract and dead builders
+                         |
+                         v
+              S4 mark native streams +
+                 delete ingress adapter
+                         |
+                         v
+              S5 terminology/source sweep
+                         |
+                         v
+              S6 independent final review
+                 and full verification
+```
+
+S1 and S2 are the only implementation slices that should run concurrently. While they run,
+read-only agents may prepare S3 symbol inventory and S4 fixture inventory, but must not edit shared
+files. S3, S4, S5, and final integration are sequential.
+
+### Coordination rules
+
+1. Re-check `git status` before creating or merging worktrees. The primary checkout currently has
+   unrelated edits; never stash, discard, or absorb them.
+2. Record the baseline commit and create a clean integration worktree at `.worktrees/int`. Create
+   short slice worktrees under `.worktrees/`—`chat`, `cdx`, `model`, `stream`, `close`—to avoid the
+   known Unix-socket path-length failure. Run `pnpm install` in each worktree. Merge reviewed slices
+   into `int`, never into the dirty primary checkout.
+3. Use one writer per slice. S2 exclusively owns `retrying-model.ts` while S1 runs. Neither S1 nor
+   S2 may edit `contracts/model.ts`, the registry, common message builders, or shared black-box
+   fixtures.
+4. Every behavior change starts with a red-proof test applied to the pre-change parent. Record the
+   failing command and failure reason in the commit/hand-off; do not rely on a test that was only
+   observed green after implementation.
+5. Provider changes must run `pnpm test:provider-black-box` during development. Missing terminal,
+   incomplete response, failed response, transport close, and ambiguous retry paths must remain
+   failures—never empty success.
+6. After each writer finishes, use a fresh-context read-only reviewer. Send findings to review
+   triage before fixing them. Merge only the reviewed final commit with `git merge --no-ff`.
+7. Do not mix telemetry or broader continuation-policy work into these slices. Existing live-only
+   policy deferrals in `../providers/post-refactor-provider-boundary-audit.md` remain deferrals.
+
+### S0 — Baseline and ownership lock (coordinator, no production edits)
+
+**Outcome:** a reproducible starting point and non-overlapping worker briefs.
+
+1. Record the current commit, dirty paths, and these production references:
+
+   ```bash
+   rg -n --glob 'source/**' --glob '!**/*.test.*' \
+     'LegacyModelProvider|LegacyModel|ModelRequest|ModelResponse|StreamEvent|response_done|raw_model_stream_event|run_item_stream_event|legacy-agent-stream-adapter'
+   ```
+
+2. Assign S1 and S2 from the same commit. Reserve `retrying-model.ts` for S2; reserve
+   `contracts/model.ts` and shared message builders for S3.
+3. Start two read-only scouts in parallel:
+   - S3 scout: enumerate every import and test fixture using `contracts/model.ts`,
+     `RetryingModel`, `buildMessagesFromRequest`, and `extractFunctionToolsFromRequest`;
+   - S4 scout: enumerate every legacy stream envelope fixture and distinguish runtime input from
+     persisted-history decoding.
+4. Create `.worktrees/int` from this recorded baseline; create S1 and S2 branches from the same
+   commit. Do not run the full suite at baseline unless a focused red proof needs a known
+   comparison; the final gates are expensive and belong after implementation.
+
+### S1 — Remove OpenAI-compatible Chat legacy behavior
+
+**Worktree:** `.worktrees/chat`
+**Ownership:** `openai-chat-completions-model.ts` and its direct tests only. Do not edit shared
+contracts, retry code, registry code, or black-box fixtures unless the coordinator first removes
+that ownership restriction.
+
+**Red proof**
+
+- Add a source/contract assertion that fails while the class accepts `request.modelSettings`, emits
+  `response_done`, or exposes the legacy unary/stream compatibility path.
+- Port any behavior assertions that only exercise `getResponse()` / `getStreamedResponse()` to the
+  typed `stream()` API before deleting them.
+
+**Implementation**
+
+- Keep one `StreamedModelTurn.stream(request)` implementation.
+- Delete legacy request-shape dispatch, `#legacyResponse`, `#legacyStream`, `#legacyBody`,
+  `legacyMessages`, and `legacyOutput`.
+- Keep `getStreamedModel()` only if a live provider factory still needs the self-returning helper.
+  Remove `getModel()` if the source audit proves it is test-only.
+- Preserve indexed/id-less tool-fragment assembly, native reasoning placement, provider options,
+  structured output, usage, signal propagation, and missing-finish rejection.
+
+**Focused gates**
+
+```bash
+pnpm vitest run --reporter=minimal \
+  source/providers/openai-chat-completions-model.test.ts \
+  source/providers/openai-compatible.provider.test.ts \
+  source/providers/custom-provider-adapter.test.ts
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm build && pnpm test
+```
+
+**Done when:** no production Chat code branches on legacy request shape or emits a legacy event;
+typed runtime routing and failure-path tests pass; independent review is triaged.
+
+### S2 — Convert Codex HTTP and WebSocket transports directly
+
+**Worktree:** `.worktrees/cdx`
+**Ownership:** `codex.provider.ts`, `codex-responses-model.ts`, `codex-turn-converter.ts`,
+`retrying-model.ts`, `scripts/fake-codex-server.e2e.test.ts`, and their direct tests. Do not edit
+`contracts/model.ts`, registry code, common message builders, or shared black-box fixtures in this
+slice.
+
+**Red proof**
+
+Add direct typed-turn characterization for both HTTP and WebSocket before changing the lower
+transport boundary. The proof must cover:
+
+- exact request projection: instructions/input/tools, prompt cache key, include, provider headers,
+  `store=false`, previous response ID, and encrypted reasoning;
+- text, reasoning, tool calls, usage, rate limits, and exactly one authoritative completion;
+- incomplete/failed terminal frames, missing terminal frame, early close, and cancellation;
+- WebSocket lifetime/reconnect behavior after acknowledged tool output;
+- HTTP/WS parity only where the transports are intended to match.
+
+**Implementation order inside the worktree**
+
+1. Introduce a provider-local native Codex request/event boundary. Do not expose SDK-shaped
+   `modelSettings`, `{ event }`, or `response_done` outside the transport.
+2. Make Codex HTTP and WebSocket consume `StreamedModelTurnRequest` and emit
+   `StreamedModelTurnEvent` directly. Move conversion currently performed by `codexStream()` to the
+   transport boundary with one authoritative terminal check.
+3. Remove `LegacyModelProvider`, `LegacyModel`, `getModel()`, `normalizeCodexStreamEvent()`, and the
+   typed-turn-to-legacy reverse conversion from `codex.provider.ts`.
+4. Migrate `RetryingModel` to a `StreamedModelTurn` decorator in this slice so Codex can retain
+   retry callback rebinding, close propagation, retry-before-first-event behavior, and no retry
+   after any yielded event without preserving the legacy contract. Update the fake-Codex E2E
+   fixture that imports the decorator.
+5. Preserve session-scoped model caching, OAuth/plan-limit behavior, Responses-Lite state,
+   remembered response IDs, consumed tool-result tracking, and close/disposal.
+6. Replace `_buildResponsesCreateRequest` / `_fetchResponse` subclass reach-ins with owned
+   transport helpers. Keep test injection public and provider-local; do not replace private
+   inheritance with a different hidden monkey patch.
+
+**Focused gates**
+
+```bash
+pnpm vitest run --reporter=minimal \
+  source/providers/codex.provider.test.ts \
+  source/providers/codex-responses-model.test.ts \
+  source/providers/codex-turn-converter.test.ts \
+  source/providers/retrying-model.test.ts
+pnpm test:codex-network
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm build && pnpm test
+```
+
+**Done when:** Codex production code consumes/emits the typed turn protocol directly; no private
+OpenAI Responses builder/fetch override or legacy event envelope remains; all authoritative
+terminal and reconnect cases pass; independent review is triaged.
+
+### S3 — Delete the legacy model contract and dead builders
+
+**Depends on:** reviewed S1 and S2 merged into `.worktrees/int`.
+**Worktree:** `.worktrees/model`
+**Ownership:** shared model contract, orphan message builders, reverse test fixtures, and their
+tests. The typed retry decorator is already migrated in S2; change it here only if deletion exposes
+a contract reference missed by the S0 inventory.
+
+**Red proof**
+
+- Add a production-source guard for `ModelRequest`, `ModelResponse`, `StreamEvent`, `LegacyModel`,
+  and `LegacyModelProvider`. For generic `Model`, forbid only imports/exports/references to the
+  contract from `contracts/model.ts`; do not ban the common word or unrelated symbols.
+- Confirm S2's typed retry tests prove: same immutable turn request is retried before the first
+  event; no retry occurs after any event is yielded; retry exhaustion logs accurately; callback
+  rebinding and close propagation survive; explicitly ambiguous outcomes are never retried.
+
+**Implementation**
+
+1. Verify the S2 retry decorator has no legacy import or unary behavior; rename remaining stale
+   identifiers only if the typed ownership is otherwise unclear.
+2. Delete unreferenced `buildMessagesFromRequest()` and `extractFunctionToolsFromRequest()` while
+   retaining the live cache-control helper in `openai-compatible-messages.ts`.
+3. Replace any test-only reverse bridge or `getModel()` fixture with a typed streamed-turn fake.
+4. Delete `contracts/model.ts` and all retired imports/identifiers.
+5. Update retry comments such as `rate-limit-middleware.ts` only where the renamed owner makes the
+   old terminology false.
+
+**Focused gates**
+
+```bash
+pnpm vitest run --reporter=minimal \
+  source/providers/retrying-model.test.ts \
+  source/providers/common/openai-compatible-messages.test.ts \
+  source/lib/agent-factory.test.ts \
+  source/providers/codex.provider.test.ts
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm build && pnpm test
+```
+
+**Done when:** `contracts/model.ts` is deleted, the source guard passes, retries operate on
+`StreamedModelTurn`, and no reverse compatibility fixture remains.
+
+### S4 — Mark native application streams and retire legacy ingress
+
+**Depends on:** S3 merged into `.worktrees/int` and a source scan showing no legacy producer.
+**Worktree:** `.worktrees/stream`
+**Ownership:** `agent-stream.ts`, `application-run-loop.ts`, `stream-event-processor.ts`,
+`legacy-agent-stream-adapter.ts`, and every runtime fixture identified by the S0 envelope inventory,
+including affected conversation-service, conversation-session, background-subagent routing, and
+usage tests.
+
+**Red proof**
+
+- First prove an `ApplicationRunLoop` stream reaches `processStreamEvents()` without legacy
+  normalization while preserving text, reasoning, tool lifecycle/progress, usage, terminal output,
+  snapshots, cancellation, and continuation state.
+- Add a static production-source guard for `raw_model_stream_event`, `run_item_stream_event`,
+  nested SDK `model/data/event` envelopes, and `legacy-agent-stream-adapter`.
+- Characterize saved-conversation replay before changing any decoder. A persisted-data exception is
+  allowed only if the decoder owns it explicitly and has a fixture proving an existing save loads.
+
+**Implementation**
+
+1. Export a native `AgentStream` construction/branding mechanism from `agent-stream.ts`; do not
+   duplicate its private symbol in the run loop.
+2. Have `ApplicationRunLoop` construct a branded native stream.
+3. Narrow or remove `adaptAgentStream()` once every caller already receives `AgentStream`.
+4. Migrate runtime test fixtures to `ApplicationRunEvent`; do not retain SDK envelopes merely to
+   keep tests unchanged.
+5. Delete `legacy-agent-stream-adapter.ts` and its adapter-only tests. Strengthen the static guard to
+   cover all production source, with any persisted decoder exception named explicitly.
+
+**Focused gates**
+
+```bash
+pnpm vitest run --reporter=minimal \
+  source/services/application-stream-boundary.test.ts \
+  source/services/stream-event-processor.test.ts \
+  source/services/session/session-stream-processor.test.ts \
+  source/services/session/conversation-session.isolation.test.ts \
+  source/services/session/conversation-session.lifecycle.test.ts \
+  source/services/session/conversation-session.stream.test.ts \
+  source/services/session/conversation-session.tool-started.test.ts \
+  source/services/session/conversation-session.usage.test.ts \
+  source/services/session/background-subagent-ui-routing.integration.test.ts \
+  source/services/conversation/conversation-service.test.ts \
+  source/services/conversation/conversation-replay.test.ts \
+  source/services/conversation/conversation-persistence.test.ts \
+  source/utils/ai/token-usage.test.ts
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm build && pnpm test
+```
+
+**Done when:** all runtime streams are native, the adapter is deleted, production envelope names
+are absent except a tested/documented persisted decoder if one is truly required, and saved
+conversations still replay.
+
+### S5 — Terminology and source-boundary sweep
+
+**Depends on:** S4 merged into `.worktrees/int`.
+**Worktree:** `.worktrees/close`
+
+Use a semantic allowlist, not `rg legacy` followed by bulk deletion. Update only comments/names made
+false by this migration, especially in terminal usage collection, conversation storage,
+request-prefix binding, provider traffic, Codex transport, and tracing. Do not remove persisted
+history migrations, unrelated compatibility settings, or domain uses of “legacy.”
+
+Run and classify every remaining hit:
+
+```bash
+rg -n --glob 'source/**' --glob '!**/*.test.*' \
+  '@openai/agents|LegacyRunner|LegacyModel|ModelRequest|ModelResponse|RunnerManager|response_done|raw_model_stream_event|run_item_stream_event|legacy-agent-stream-adapter|_buildResponsesCreateRequest|_fetchResponse'
+```
+
+The expected result is zero unless a persisted-data decoder exception is documented beside its
+source guard and replay test.
+
+### S6 — Final review, verification, and closeout
+
+Merge reviewed S5 into the clean `.worktrees/int` integration branch. Use a fresh-context reviewer
+who did not implement S1–S5. Give it the complete integrated diff from the recorded baseline, this
+active plan, `AGENTS.md`, and the provider-testing instructions. Triage every finding before fixing
+it; an empty actionable set is valid.
+
+Run from the final integrated commit in `.worktrees/int`, never from the dirty primary checkout:
+
+```bash
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm test:codex-network
+pnpm build
+pnpm test
+pnpm lint
+git diff --check <baseline>...HEAD
+```
+
+Hand the reviewed integration commit to the primary-checkout owner only after checking that its
+changed paths do not overlap the primary checkout's uncommitted files. If repository-wide lint
+reports a pre-existing failure outside the diff, record the exact path and
+also run ESLint/Prettier on every changed file; do not claim the full lint gate passed.
+
+### Final completion criteria
+
+- one provider factory: `createStreamedModel`;
+- one provider turn interface: `StreamedModelTurn`;
+- one application stream interface: `ApplicationRunEvent` through native `AgentStream`;
+- no production or test `LegacyModel`, `ModelRequest`, `ModelResponse`, `StreamEvent`, legacy retry
+  wrapper, reverse model bridge, private OpenAI Responses transport reach-in, or legacy ingress
+  adapter;
+- no runtime SDK envelope names; any persisted-data exception is explicit and replay-tested;
+- Codex HTTP/WS terminal, reconnect, prompt-cache, encrypted-reasoning, tool-result, usage, and
+  plan-limit behavior remains covered;
+- OpenAI-compatible fragmented tool calls, reasoning, options, usage, and terminal failure behavior
+  remains covered;
+- saved conversations replay successfully;
+- focused tests, provider black-box, fake Codex, typecheck, build, full tests, changed-file format,
+  source audit, and independent review all pass or have precisely recorded external blockers.
+
+Read this section first, then *Corrections* and *The risk register* only when historical rationale is
+needed. Do not re-derive work already marked landed below.
+
+### Landed on `main`
+
+| Work | Result |
+|---|---|
+| A1 | Dead `removeInterceptor` plumbing deleted (was always `noop`) |
+| A2 | `_pendingAgentToolRuns` retired behind `services/approval/tool-ownership-registry.ts` |
+| A3 | `_mergeApprovals` retired via `services/approval/approval-replay.ts` |
+| R1 | Resume-after-approval preserves `details.toolCall.callId`; pinned by `source/lib/sdk-approval-resume.test.ts` |
+| A4 groundwork | Session factory owns/disposes the closure-bound client; reset and both CLI modes replace the handle |
+| A4 tool ownership | `ToolOwnershipRegistry` is created by each session handle and explicitly propagated through root clients, session runtime composition, approval flow, subagent bridge/manager/runtime, and nested runners; no process singleton/default remains |
+| A4 lifecycle follow-up | Each owned handle now creates/disposes its root read/Docker access capability; project Docker grants remain settings-backed, and transient execution subclients dispose after state transfer |
+| A4 nested/test compatibility retirement | Root tools and approval/result/lifecycle paths no longer fall back to session-id or command-keyed stores; nested tools receive a fresh explicit `NestedToolCompatibilityState` and never receive root post-execute state |
+| A4 retry proof | A real SDK `Runner` proves a denied-read-like output from call A can cause the model to emit the same shell arguments as a new call B; B is not correlated to A by call id |
+| Step B representation slice | `contracts/conversation-items.ts` owns canonical `Item`, `Turn`, `ToolCall`, and related serializable shapes; `Approval` aliases `ApprovalDescriptor`; legacy persisted names alias those contracts; `run-item-normalizer.ts` contains raw SDK/provider item normalization while replay remains provider-facing |
+| Step B journal slice | `AssistantTurnJournal` deduplicates normalized canonical item groups; it no longer inspects `rawItem`, and wrapped/direct tool items share one identity |
+| Step B stream-finalization slice | Resume replay deduplication and tool-result detection use canonical tool identities while preserving original provider items in conversation history |
+| Step B stream-event slice | Run-item tool lifecycle interpretation uses canonical calls/results while journal and recovery hooks retain the original provider items |
+| Step B replay slice | Replay detects existing reasoning, tool calls, and tool results through canonical normalization while retaining the original provider history objects |
+| Step B tool-ledger slice | `ToolExecutionLedger` derives tool call/result classification, identity, name, arguments, output, reasoning detection, and reconciliation from `run-item-normalizer.ts`; equivalent wrapped, direct-provider, and canonical forms share one identity while stored history remains provider-facing |
+| Step B journal-to-ledger slice | Durable journal recovery detects missing reasoning and existing tool results through `run-item-normalizer.ts`; wrapped, direct-provider, and canonical items deduplicate equivalently while reconstructed history preserves original provider items, ordering, and ledger persistence behavior |
+| Step B provider-history projection slice | `conversation-turn-items.ts` owns canonical persisted tool call/result/reasoning projection back to provider history; completed-turn replay and interrupted-journal ledger recovery share it, retaining provider-native fields while reconciling aliases, serializing object arguments, and emitting reasoning once |
+| Step B history-repair slice | Conversation-history repair normalizes tool calls/results for signatures, pair detection, and repair decisions; equivalent wrapped, direct-provider, and canonical forms repair alike while retained history keeps its original representation |
+| Step B conversation-store tool-policy slice | `ConversationStore` normalizes only tool-output retry anchors and mutating-tool rewind previews; wrapped SDK, direct-provider, and canonical items share classification/call ID/name/arguments/output while splice indices and original provider-facing history remain intact |
+| Step B conversation-message projection slice | `conversation-message-projection.ts` read-only projects direct or one-level wrapped user, assistant, and system messages for conversation-store turn handling and stream finalization message detection; provider history remains original |
+| Step B approval-history projection slice | Shell auto-approval compact context uses `conversation-message-projection.ts`; direct and one-level wrapped user/assistant messages render equivalently while system, tool, and reasoning items remain excluded and history remains original |
+| Step B input-surge guard slice | `InputSurgeGuard` derives duplicate tool signatures and call/result pair counts from canonical `ToolCall`/`ToolResult` projections; wrapped SDK, direct-provider, and canonical tool inputs share policy behavior while serialized input bytes and message counts remain original |
+| Step B chained-input-filter slice | Chained request delta selection and recognized tool call/result classification use `run-item-normalizer.ts`; direct, one-level wrapped, and canonical tool forms retain original input object identity/order/slicing, while explicit call-ID precedence, generic `*_call` compatibility, and user-message detection remain local policy |
+| Step D inert streamed-turn contract + Agents bridge | `contracts/streamed-model-turn.ts` owns a closed text/image, reasoning, function-call/result, and structured tool-result protocol for one turn; `agents-model-bridge.ts` temporarily adapts it to public Agents Model events without routing or provider changes |
+| Step D unrouted AI SDK streamed turn | `providers/ai-sdk-streamed-model.ts` translates the closed turn protocol directly to a normalized LanguageModelV3 stream and returns deltas plus one authoritative completion; no production provider is routed through it |
+| Step D OpenRouter routing slice | `AiSdkOpenRouterProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; its OpenRouter-specific forwarding retains legacy reasoning, provider options, extra request fields, configuration/fetch, stream signal/error, and completion behavior |
+| Step D Google routing slice | `AiSdkGoogleProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared narrow call-settings wrapper retains Google’s explicit provider-data convention while OpenRouter’s reasoning special case remains local |
+| Step D Anthropic routing slice | `AiSdkAnthropicProvider` routes its cache/max-token-wrapped LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared explicit-provider settings rule preserves Anthropic’s top-level provider data and nested precedence while caching/max-token policy stays local |
+| Step D adapter retirement | The unused AI SDK Agents adapter, its characterization test, and direct `@openai/agents-extensions` dependency/lockfile entries are deleted; routed-provider and application-owned boundary tests retain the behavior |
+| Step E chaining disposition | Full provider-facing history is authoritative; OpenAI/Codex continuation becomes an opaque provider-private, exact-prefix-anchored checkpoint with candidate → accepted → retired lifecycle and provider-classified replay |
+| Step E Stage 0 characterization/instrumentation | Immutable provider-history snapshots, exact prefix-bound checkpoint lifecycle/reset lineage, terminal-commit-only promotion, and optional exact OpenAI/Codex request-projection capture are pinned without changing wire selection or provider behavior |
+| Step E Stage 1 OpenAI parity/handoff slice | Immutable snapshots flow through initial and workflow-owned continuation run options to an OpenAI-private exact-prefix compatibility projection; parity observation returns the established global chained-input result and leaves Codex unchanged |
+| Step E fresh-session OpenAI provider projection switch | Newly created OpenAI session clients freeze a compatibility mode and select the parity-proven provider projection only for exact-prefix, structural-parity outcomes; legacy, Codex, mismatched, unequal, and failed cases retain the established baseline |
+| Step E production candidate observation | OpenAI-private HTTP/WebSocket terminal observations create an account-free, exact-prefix and request-lineage candidate only for the root session observer; committed-history finalization alone promotes it. |
+| Step E terminal-publication corroboration | `ProviderContinuity.publishTerminalResponse()` preserves legacy response-ID publication and promotes only a matching candidate after authoritative terminal history commit; partial, mismatch, no-op, and stale paths retain their established behavior. |
+| Step E accepted-checkpoint successor proof | A matching accepted checkpoint retains a frozen post-commit provider-history proof. Eligibility for a later snapshot requires exact provider identity and lineage, stable session-history origin, a strictly later revision, and deep exact-prefix extension; malformed, missing, same/short, rewritten, reset, and mismatched inputs fail closed. It observes no wire behavior. |
+| Step E snapshot-prefix binding slice | AgentRunOrchestrator hands exact OpenAI compatibility projection evidence into a provider-private one-shot scope; HTTP/WebSocket lifecycle attempts bind immutable snapshot identity/revision only when one preparation is consumed before another, fail closed on overlapping, missing, or faulty instrumentation, and retain an already-bound value request-locally through terminal/failure/abandonment |
+| Step E OpenAI public-boundary builder retirement | Both OpenAI transports consume the prefix binding at their public model boundary; diagnostic outcomes distinguish absent preparation, repeated consumption, and input mismatch, while Codex remains unchanged |
+| Step F stream façade slice | `services/agent-stream.ts` owns the session-facing async stream handle; its consumers no longer import `StreamedRunResult` from the Agents SDK |
+| Step F continuation-handle slice | `contracts/continuation-handle.ts` owns opaque resume capabilities; result building, approval, retry, and turn workflow no longer type raw `RunState`, and `AgentClient` unwraps only inside its SDK adapter |
+| Step F model-decorator slice | `contracts/model.ts` owns the narrow model protocol consumed by `RetryingModel`; the retry decorator no longer imports `@openai/agents-core` |
+| Step G application loop slice | `agent-runtime/application-run-loop.ts` owns a provider-neutral streaming/tool/approval loop over `StreamedModelTurn`; OpenRouter, Google, and Anthropic expose direct application-owned model factories while the legacy bridge remains for compatibility |
+| Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
+| Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
+| Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
+| Step C post-execute handoff | Selected root tools can pause after execution through a session-owned registry; the UI settles revisioned entries and resumes the same live stream consumer, with fail-closed abort/reset/disposal |
+| Step C denied-read migration | Root shell denied reads pause before the SDK sees a result; typed choices re-execute the held call with call-ID-isolated overrides, while rejection returns the original denial |
+| Bug fix | Chained-continuation orphan checks include current-turn call IDs from the session ledger, not only terminal history |
+| Bug fix | Codex WebSocket lifetime expiry abandons only the rejected request attempt while retaining the last acknowledged response chain, so an already-executed tool output remains paired with its function call after reconnect |
+| Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
+| Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
+
+Each landed as a `--no-ff` merge from its own worktree branch; branch history is preserved.
+
+### Current boundary
+
+The post-execute seam is now deliberately limited to tool construction. `ToolDefinition.postExecute`
+runs after its original `execute` resolves and before the SDK receives a result. It receives
+normalized parameters, the original result, SDK details (including the call ID), and a non-recursive
+`executeAgain()` that retains those details. A policy may wait for an external decision; the SDK
+then cannot issue request B until it returns exactly one final result.
+
+The session/UI/TurnWorkflow handoff is session-owned: the owned client factory creates a fresh
+registry and explicit epoch token, gives its root `AgentClient` a lazy active-live-run capability,
+and preserves that closure through agent rebuilds. Selected root definitions opt in at tool
+construction; nested tools deliberately do not inherit this capability in this slice. The adapter
+settles the displayed revision/entry before re-observing the same LiveRun, without building an SDK
+approval decision. Registry snapshots remain selective and revisioned; a later entry produces a
+new boundary after the selected one settles. Abort, reset, and disposal fail-close gates and stop
+late event projection. Do not substitute a `callModelInputFilter` sentinel.
+
+Root denied-read metadata and one-shot execution overrides now use this seam. The held call
+retains its call ID, so no model retry, command matching, or token protocol is needed. Concurrent
+identical root commands retain separate metadata and decisions; nested tools remain unchanged.
+
+### Step E chaining disposition — decided
+
+The application’s complete provider-facing history is the authoritative semantic record. Remove the
+global `delta | full_history` policy incrementally; it is an application-wide ownership leak, not a
+durable conversation model. At the OpenAI/Codex provider boundary, the application supplies an
+**immutable full-history snapshot**. A provider compatibility seam may privately project its suffix
+and attach an opaque continuation checkpoint. Stage 1 must preserve the exact current provider
+projections before changing ownership; do not move in-flight approvals or sessions between the old
+and new ownership modes.
+
+A checkpoint is **not** a floating response ID. It binds a response ID and any transport state to:
+
+- provider, endpoint, and model identity;
+- reset lineage/epoch; and
+- the exact transcript-prefix revision and identity it represents.
+
+Its lifecycle is explicit: a response may create a **candidate** checkpoint when observed; it is
+**accepted** only when that response’s terminal output is committed to authoritative history; it is
+**retired** when reset, identity/prefix mismatch, invalid-continuation rejection, or reconciliation
+supersedes it. Checkpoint promotion and terminal-history commit are one logical operation. A stale
+completion, including one arriving after reset, cannot promote a candidate.
+
+Full replay is a provider-classified recovery path, not a generic retry. It is permitted only after
+an explicit pre-generation invalid-continuation rejection or reliable provider reconciliation. It is
+not permitted after an ambiguous timeout or disconnect, where the provider may have generated a
+response; retain the candidate and surface/recover through the provider’s ambiguity policy instead.
+
+OpenAI migrates first: it is lower risk than Codex, but the completed trace does **not** prove that
+chaining is a pure optimization, so do not claim that. Codex begins with full replay unsupported
+until tests prove semantic sufficiency: `store = false`, server chaining, and WebSocket transport
+state are load-bearing. This is deliberately a compatibility seam, not a new shared continuation
+framework.
+
+**Evidence map / current owners.** `SessionInputPlanner` currently selects `delta` versus
+`full_history`; `ProviderContinuity` owns the mutable previous-response state; `TurnWorkflow`
+passes `previousResponseId`; `AgentRunOrchestrator` passes it to the SDK and applies
+`chained-input-filter`; and `SessionStreamProcessor.finalize` currently updates continuity beside
+terminal history handling. Existing evidence is concentrated in the input-planner and
+`provider-continuity` tests, `turn-workflow.call-ids.test.ts`, `agent-run-orchestrator` /
+`chained-input-filter` tests, `session-stream-processor.test.ts` (including stale finalization),
+and session lifecycle/reset plus recovery-executor/continuation-recovery tests. Stage 0 extends
+these seams rather than inventing parallel ownership.
+
+**Stage 0 observation boundary.** Candidate creation is deliberately an inert, opt-in
+instrumentation hook in Stage 0: production does not call `observeCandidate`, because no existing
+owner can truthfully supply provider/endpoint/model identity and the exact request
+prefix binding at response observation. `SessionStreamProcessor` characterizes the terminal
+commit/promotion side only. Stage 1 must connect response-observed to terminal commit at the
+provider-private seam after it can provide that exact binding; Stage 0 does not migrate production
+checkpoint ownership or alter continuation/retry policy.
+
+### A4 tool-ownership lifecycle
+
+`createOwnedSessionClientFactory()` creates one fresh `ToolOwnershipRegistry` per session handle
+and gives that exact instance to the root `AgentClient`. The handle exposes it to
+`createConversationRuntime()`, which passes it to `ApprovalFlowCoordinator`; `AgentClient` passes
+the same instance through its `SubagentBridge`, `SubagentManager`, subagent runtime, execution
+runner, and nested runner. Thus a nested call can be claimed and later resolved by the approval
+flow without a process-global registry. Caller-owned client seams explicitly receive a registry.
+On reset, `ConversationService` disposes the old handle and creates a new one, so its registry is
+not reused; disposal clears the registry along with the old session epoch.
+
+The same handle now owns `SessionAccessState`. Root `read_file`, root `shell`, approval
+classification/result building/batch handling, and `ApprovalFlowCoordinator` receive the exact
+capability through the composition path; they do not resolve a current session or a fallback
+store. Reset/import clear its transient read folders, Docker one-shot/session grants, and
+indirect-Docker denials; disposal does the same. Docker project grants remain settings-backed.
+
+**A4 compatibility decision:** the old command-keyed denied-read protocol remains only as
+`NestedToolCompatibilityState`, created explicitly for a nested-tool runtime (or injected by a
+test). It owns its denied-read/override, read-access, and Docker compatibility stores; root
+tools do not import or select those stores. It is intentionally not a `SessionAccessState`, does
+not carry the root post-execute capability, and cannot inherit held root calls or their
+call-ID-isolated overrides. The remaining module-level store exports are test reset seams only.
+
+Test fixtures now explicitly create fresh registries, sharing one only when a fixture exercises
+the parent/nested ownership relationship. This keeps test identity/lifecycle aligned with the
+production session contract.
+
+### Validation at post-execute seam
+
+- Step B's focused normalizer, turn-item compatibility, turn accumulator, stream, replay,
+  state projector, tool-ledger, and chained-filter set passes: 6 files / 108 tests.
+- `source/lib/sdk-approval-resume.test.ts` passes its real-Runner approval-resume and
+  denied-read model-retry regressions. The latter observes call A at execute, then a distinct
+  call B at `needsApproval`, where B interrupts before execute.
+- The post-execute seam has focused unit coverage for rejection and non-recursive reexecution,
+  plus a real streaming SDK `Runner` regression through `buildAgentTools`. It proves the original
+  execution completes, the policy holds request B pending, approval re-executes with the same call
+  ID, and exactly one final result reaches request B. Ordinary factory-built tools remain without
+  a policy and retain their existing behavior.
+- Post-execute session handoff focused set passes: registry, policy (including missing SDK call
+  ID), LiveRun, TurnWorkflow repeated-boundary, root tool factory, adapter, session-client
+  factory, turn coordinator, conversation service, and session composition tests: 10 files / 128
+  tests. `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Root denied-read migration focused sets pass: shell, post-execute policy/registry, TurnWorkflow,
+  adapter, and agent factory (6 files / 99 tests), plus approval flow and session composition,
+  client factory, conversation service, and turn coordinator (5 files / 106 tests). The migration
+  covers same-call re-execution, typed denied-read choices, concurrent identical-call isolation,
+  missing-call-ID failure, and compatibility behavior outside the root capability.
+- Worktree-local `pnpm` validation runs with the existing `node_modules` symlink; no dependency
+  installation was performed. Root-level `pnpm lint` is not a meaningful baseline with sibling
+  worktrees present: ESLint traverses them and reports their files as outside the root TypeScript
+  project.
+- Full `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Continuation-call-id resolver slice: resolver, ledger, tracker, TurnWorkflow parity, and
+  approval-batch tests pass (5 files / 50 tests). `tsc --noEmit` again reaches only the known
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Chained orphan-guard regression: TurnWorkflow now proves a continuation receives both committed
+  history call IDs and uncommitted current-turn call IDs from `SessionToolTracker`.
+- Replay-diagnostics slice: conversation stream and stream-processor tests pass (2 files / 27
+  tests); diagnostics retain public history/new-item duplicate detection and drop private-state
+  metadata.
+- Transport-recovery slice: a real streaming SDK `Runner` executes two tool cycles and rejects
+  the following model request; public stream events plus `history`, `newItems`, and `output`
+  retain both completed outputs. The regression separately awaits the iterator and `completed`
+  rejections. Session stream processing and recovery-executor regressions prove completed outputs
+  enter the live ledger before fresh recovery projects them, with the journal only an older
+  snapshot. Focused set: 4 files / 35 tests.
+- Focused tool-ownership clusters pass: 23 files / 364 tests, plus the 4-test conversation
+  integration fixture. Formatting and lint pass except the pre-existing `prefer-const` warning
+  in `services/subagents/runtime.ts`.
+- Historical result: after building `dist/`, full Vitest reached 4,615 passing / 1 skipped / 1
+  failing. The sandbox terminal E2E failure in `source/cli.e2e.test.ts` was reproduced on that
+  baseline checkout; it is not a current failure. See the 2026-08-13
+  [validation baseline (historical)](https://github.com/qduc/term2/blob/1cc5a0a91e164215edbcbb4291ffb0c0c1726cc2/docs/plans/validation-baseline-2026-08-13.md).
+- No dependency installation was run; this worktree uses its existing `node_modules` symlink.
+- A4 lifecycle follow-up focused set passes: session access/handle, execution runner,
+  root read/shell, and approval flow (6 files / 103 tests). Typecheck reaches only the
+  known `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline.
+- Provider-history projection slice: turn-item synthesis and conversation replay focused tests
+  pass (2 files / 53 tests). They cover native field retention, `call_id` / `tool_call_id`,
+  `args` / `result`, object argument serialization, reasoning de-duplication, completed replay,
+  interrupted journal recovery, and ledger history ordering.
+- Chained-input tool projection slice: chained filtering and run-item normalization focused tests
+  pass (2 files / 65 tests), plus all 49 Codex response-model regressions. They cover direct,
+  one-level wrapped, and canonical forms; supported call/result spellings; wrapper-first call-ID
+  precedence; provider item IDs kept distinct from tool-call correlation; original result identity;
+  and unchanged missing/orphan validation.
+- Historical result: full Vitest after the chained-input slice reached 4,723 passing / 1 skipped /
+  1 failing, with the same sandbox terminal E2E failure in `source/cli.e2e.test.ts`. It is not a
+  current failure; see the 2026-08-13 [validation baseline (historical)](https://github.com/qduc/term2/blob/1cc5a0a91e164215edbcbb4291ffb0c0c1726cc2/docs/plans/validation-baseline-2026-08-13.md).
+- Step D adapter characterization: `ai-sdk-agents-adapter.test.ts` now pins public `Model`
+  behavior with fake LanguageModelV3 implementations: request translation (instructions,
+  messages, tools, named tool choice), assistant-message merging, exact streamed string tool
+  arguments, raw/derived event ordering, authoritative `response_done`, missing/zero/cached
+  usage semantics, AbortSignal forwarding/cancellation, provider-error propagation, and the
+  existing reasoning/provider-option forwarding. Focused adapter and message-normalizer tests:
+  2 files / 25 tests pass.
+- Step D inert contract + bridge: focused contract/bridge, adapter/message-normalizer, and real
+  Runner approval-resume tests pass (5 files / 37 tests). A real streaming Runner also consumes the
+  temporary bridge through terminal output. The set covers live delta delivery before completion,
+  image input, structured text/image/file tool results, exact tool arguments, explicit model
+  settings/provider options, reasoning and tool-call model events, authoritative completion,
+  required response IDs/provider metadata, signal identity, errors, missing-versus-zero usage, and
+  terminal-event enforcement. No provider routing, registry, Codex, chaining, or AI SDK
+  implementation changed.
+- Step D unrouted AI SDK streamed turn: focused implementation, contract/bridge, and adapter
+  characterization tests pass (5 files / 39 tests). The implementation preserves system text-only
+  validation while converting user/assistant media, structured text/image/file results, assistant
+  normalization, exact tool-call arguments, live text/reasoning/tool events (including
+  reasoning-end metadata), completion metadata/usage with missing-versus-zero totals, abort-signal
+  identity, provider-error propagation, response-ID/finish enforcement, and terminal completion.
+  Full `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step D OpenRouter routing slice: focused OpenRouter provider, direct implementation, temporary
+  bridge, and legacy adapter-characterization tests pass (4 files / 31 tests). A fake
+  LanguageModelV3 proves configuration/custom fetch preservation; public Agents stream request
+  settings, OpenRouter reasoning/provider options and extra request fields; live reasoning/text/tool
+  events; completion metadata/usage; signal identity; and provider-error propagation through the
+  routed direct turn and bridge. Formatting/lint pass for the changed files. Full `tsc --noEmit`
+  reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step D Google routing slice: focused Google/OpenRouter providers, direct implementation,
+  temporary bridge, legacy adapter characterization, and custom-provider adapter tests pass
+  (6 files / 40 tests).
+  A fake Google LanguageModelV3 proves configuration/custom fetch and selected/default model
+  preservation; public Agents stream request/tool settings; explicit `google` provider options
+  with nested-option precedence, top-level extra fields, and the legacy fallback response ID;
+  direct reasoning without OpenRouter nesting;
+  live reasoning/text/tool events; authoritative completion metadata/usage; signal identity; and
+  provider-error propagation. The only shared extraction is the cohesive doStream call-settings
+  wrapper; OpenRouter’s extra top-level forwarding and reasoning handling remain explicit. Full
+  `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step D Anthropic routing slice: characterization covers selected/default model and configuration,
+  forced per-model output limits, injected cache markers, explicit `anthropic` provider-data
+  forwarding, reasoning signature/end ordering, streamed text/tool calls, authoritative response
+  metadata/usage, signal identity, and provider errors. Focused Anthropic/Google/OpenRouter,
+  direct-turn, bridge, legacy-characterization, and custom-provider coverage passes: 7 files / 50
+  tests. Full `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step D adapter retirement: deleted the now-unreferenced `ai-sdk-agents-adapter.ts` and its
+  characterization test, removed the direct `@openai/agents-extensions` manifest and lockfile
+  entries without installing dependencies, and retained the routed OpenRouter/Google/Anthropic,
+  direct-turn, bridge, custom-provider, and shared message-normalizer coverage. Focused retained
+  tests pass; source/dependency scans find no remaining adapter or extensions import/reference.
+  Formatting of retained changed files passes; this deletion-only source change leaves no retained
+  lintable source file. Full `tsc --noEmit` reaches only the known
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step F stream façade slice: the stream, turn-attempt, stream-processor, and result-builder
+  focused tests pass. `AgentStream` now owns the narrow application-facing stream shape.
+- Step F continuation-handle slice: approval, retry, and turn-workflow contracts carry the
+  app-owned opaque `ContinuationHandle`; the adapter wraps/unwraps provider state and the result
+  builder wraps the approval ingress. Focused session/result-builder coverage passes (4 files /
+  74 tests), and `pnpm exec tsc --noEmit` is clean.
+- Step F model-decorator slice: `RetryingModel` uses the app-owned model protocol. Retrying-model
+  plus the session/result-builder continuation coverage passes (5 files / 80 tests), and
+  `pnpm exec tsc --noEmit` remains clean.
+- Step G application loop slice: the SDK-free loop has focused coverage for text turns, tool
+  execution, and opaque approval continuation (3 tests); the AgentClient can select the direct
+  application model path for providers that expose it. OpenRouter, Google, Anthropic, and the
+  Anthropic-format custom provider now expose direct streamed-model factories. The legacy SDK path
+  remains for providers without a direct model factory and is not yet retired.
+- Current verification: the full suite is 4,834 passed / 1 skipped with 7 baseline failures
+  (OpenCode Qwen message projection, read-access descendant approval, three continuity-lineage
+  expectation fixtures, and Docker host-control runtime). The continuation regression found in
+  public `AgentClient` tests was fixed by keeping raw-state compatibility only inside the adapter;
+  the focused public-methods/replay/projection set passes (3 files / 98 tests).
+- Step E Stage 0 characterization/instrumentation: focused store, continuity, input-planner,
+  stream-processor/reset/composition, chained-wire, OpenAI, and Codex coverage passes (9 files /
+  186 tests). It pins immutable snapshot identity, exact checkpoint binding and lifecycle, reset
+  retirement/stale non-promotion, terminal-commit-only promotion, and structured exact request
+  capture after OpenAI builder/prompt-cache forwarding and Codex normalization/private-fetch seam.
+  Formatting passes. Full `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532`; the attempted full
+  Vitest run was sandbox-blocked on Docker host control before tests began.
+- Step E request/response correlation and candidate observation: OpenAI-private HTTP/WebSocket
+  public-call observations pair opaque attempt tokens with the post-builder request projection and
+  the normalized unary `responseId` or streamed `response_done.response.id`; concurrent request
+  objects remain isolated, terminal/failure/consumer-abandon paths clean state, and observer
+  failures are swallowed. The root-session capture is injected through `AgentClient`,
+  `RunnerManager`, and provider dependencies into both model lifecycles. Terminal observations with
+  exact immutable bindings become continuity candidates; promotion remains adjacent to the
+  authoritative terminal-history commit.
+- Step E snapshot-prefix binding slice: a per-run provider-private one-shot scope prepares immutable
+  snapshot identity, revision, and request-time lineage. Chained OpenAI calls prepare only after the
+  established delta compatibility path matches. First and stateless full-history calls prepare only
+  when immutable snapshot history exactly equals the final unprojected `modelData.input`; they do
+  not run the chained filter or alter returned model data. A mismatch, missing evidence, competing
+  preparation, or builder-input difference produces no binding. The final HTTP/WebSocket builder
+  stores a binding in the request-object WeakMap attempt before terminal and never replaces one on
+  repeated builds. No payload or wire settings are changed; mismatches fail closed.
+- Step E bounded fresh-session OpenAI projection ownership switch: newly created OpenAI handles
+  freeze and pass an explicit compatibility mode into their client/orchestrator, selecting the
+  parity-proven provider projection only for exact prefix and structural-parity outcomes. Legacy,
+  Codex, mismatched, unequal, and failed compatibility cases retain the established baseline;
+  checkpoint candidates, approvals, replay, and private reach-ins are unchanged.
+
+### `ApprovalRecord` semantics, established by reading the SDK source
+
+Recorded because the plan previously only guessed at this, and getting it wrong over-grants
+approvals across the parent/subagent boundary **silently**. From
+`node_modules/@openai/agents-core/dist/runContext.js` (`approveTool`, `rejectTool`,
+`isToolApproved`, `#setApprovalRecord`, `#getApprovalStorageKey`):
+
+- **Keys are tool names, not call ids.** (`computer` / `computer_use_preview` share one key.)
+  The repo's old `nested-runner.test.ts` used a call-id key and encoded the wrong model.
+- **`approved: true`** = blanket; `isToolApproved` returns `true` for *any* call id.
+- **`approved: string[]`** = exactly those call ids; anything else returns `undefined`
+  (still prompt).
+- **`approved: false`** carries no decision — it is residue from
+  `rejectTool(…, { alwaysReject: true })`.
+- **Precedence:** blanket approval outranks blanket rejection.
+
+Consequence for `approval-replay.ts`: **rejections are replayed before approvals**, because
+`approveTool(…, { alwaysApprove: true })` resets `rejected` and vice versa, so ordering decides
+which survives a record holding both.
+
+**Known fidelity limit:** a record that is blanket-rejected *and* carries per-call rejection
+messages keeps only `stickyRejectMessage`; the public API cannot express both. Message text
+only — every such call is rejected either way. Moot here: this repo never calls
+`getRejectionMessage`, `alwaysApprove`, or `alwaysReject`, and only does per-call
+`state.approve` / `state.reject` at `approval-flow-coordinator.ts:270,288`.
+
+### Next, in order
+
+1. **DONE — Stage 0 characterization/instrumentation; no wire change.** Immutable snapshot identity
+   and exact prefix anchoring, candidate → accepted → retired lifecycle behavior, stale completion
+   after reset, and terminal-history-commit/checkpoint-promotion ordering are pinned at the current
+   owners. Candidate creation remains an inert opt-in hook until production observation can supply
+    exact snapshot-prefix binding into the provider token; checkpoint
+   ownership has not migrated. Optional structured capture records exact existing OpenAI/Codex
+   request projections for later parity comparison. This neither changes request payloads,
+   continuation ownership, approval/session migration, nor fallback behavior, and retires no
+   reach-in.
+2. **DONE — Stage 1 OpenAI parity/handoff and bounded fresh-session ownership switch.** Full-history
+   snapshots now reach the OpenAI boundary and an OpenAI-private compatibility projection records
+   exact prefix evidence and parity against the established global chained-input filter. New OpenAI
+   session handles use that projection only when its exact-prefix result remains structurally
+   identical to the baseline; legacy and Codex paths remain baseline. Checkpoint ownership has not
+   migrated, no reach-in is retired, and in-flight sessions/approvals are unchanged.
+3. **DONE — request/response correlation prerequisite and snapshot-prefix binding; observation only.** OpenAI-private
+   HTTP/WebSocket public-call observations pair opaque attempt tokens, post-builder request
+   projections, and normalized terminal response IDs. Terminal observations without a response ID
+   remain terminal-but-not-candidate evidence; no ID is fabricated. This does not call
+    `observeCandidate`, attach snapshot metadata to wire settings, classify replay, bind live
+   checkpoints, or retire a reach-in. Exact immutable snapshot identity/revision is bound only by
+   a non-overlapping one-shot preparation; overlapping, missing, or faulty evidence produces no
+   binding. This is neither proof of wire delivery nor production candidate readiness.
+4. **DONE — bounded production OpenAI candidate observation.** The root-owned observer receives
+   terminal lifecycle evidence synchronously before `response_done`, requires a response ID and
+   exact prefix binding carrying request-time lineage, and fails closed. Existing committed-history
+   finalization alone promotes the matching candidate. Caller-owned, nested, and transient clients
+   have no observer. Do not broaden this to Codex, alter replay classification, or claim ownership
+   migration or reach-in retirement.
+5. **DONE — acceptance-backed terminal publication corroboration; no wire selection change.**
+   `ProviderContinuity.publishTerminalResponse()` preserves the established response-ID publication
+   while promoting only a matching candidate after authoritative history commit. Partial, mismatch,
+   no-op, and stale/reset behavior remain on their established paths. This records a narrow
+   consumption seam but does not select outgoing `previous_response_id`, migrate ownership, or
+   retire a reach-in.
+6. **DONE — accepted-checkpoint successor proof; no wire selection change.** A matching terminal
+   commit freezes the post-commit provider-history proof alongside its accepted checkpoint.
+   `isEligibleForSuccessor()` requires a well-formed same-origin, strictly extending next snapshot
+   with matching provider identity and lineage, and fails closed for all absent, reset, rewritten,
+   or mismatched evidence. This proves the transcript relationship but does not select outgoing
+   `previous_response_id`, migrate ownership, or retire a reach-in.
+7. **DONE — characterize OpenAI-only selector parity and make the bounded fresh-session switch.**
+   A root-owned, eligible checkpoint observes whether its response ID equals the established legacy
+   `previousResponseId` at normal fresh-turn boundaries. A newly created OpenAI session selects the
+   checkpoint only for that exact equality-proven case; missing, ineligible, mismatched, or faulty
+   evidence retains legacy selection. Approval continuations, replay/retry/resume recovery, Codex,
+   and all in-flight/caller-owned clients remain on legacy selection. This retires neither remaining
+   provider reach-in.
+8. **DONE — OpenAI public prompt-cache settings slice.** OpenAI session clones now supply
+   `prompt_cache_key` through the public `modelSettings.providerData.extraBody` transport setting,
+   which the Responses SDK carries to both HTTP and WebSocket requests. The OpenAI private builder
+   is now retired; Codex retains its existing setting path. This narrows the eventual replacement
+   but does not retire the remaining Codex provider category.
+9. **DONE — retire the OpenAI `_buildResponsesCreateRequest` override on both transports.** The
+   prefix binding is consumed at the public `getResponse` / `getStreamedResponse` boundary against
+   SDK-shaped `request.input`; both overrides and `normalizeComparableInput` are gone. Binding
+   diagnostics distinguish missing preparation, repeated consumption, and input mismatch. The
+   existing focused OpenAI lifecycle and candidate-observer coverage passes; Codex is unchanged.
+10. **IN PROGRESS — collect and review bounded fresh-session OpenAI parity telemetry before
+   proposing any broader ownership migration.** Proposed threshold: three independent owned-root
+   OpenAI sessions, each with two normal fresh turns; every parity observation must be
+   `eligible=true, matches=true`, and no normal turn may produce `not_prepared`, `input_mismatch`,
+   or `already_consumed`. Provider transport errors are recorded separately and do not count as
+   passing evidence. Do not modify Codex transport/replay or the remaining Codex request-builder/
+   fetch seams without dedicated characterization and review.
+
+**Telemetry review — first bounded sample (2026-07-31).** An authorized cmux session using
+`gpt-5-mini` produced `candidate:observed` then `publication:promoted` on turn 1. Turn 2 produced
+`openai_root_selector_parity { eligible: true, matches: true }` but its candidate observation was
+`not_prepared`; the fail-closed outcome means the threshold is not met. A separate `gpt-4o`
+probe failed before a response because the configured medium reasoning effort is unsupported by
+that model, so it is excluded from parity evidence. The next bounded work is to characterize why
+the normal chained fresh turn does not retain a prefix binding before collecting more sessions.
+
+### OpenAI lifecycle-observer decision — RESOLVED 2026-07-31: retire both overrides at the public boundary
+
+**Correction to the previous framing.** This section previously claimed an exploratory unmerged
+branch (`codex/openai-http-observer`) proved a public custom-`fetch` HTTP observer. That branch is
+an **ancestor of `main`** (`git rev-list --count main..codex/openai-http-observer` → 0, empty
+diff); its tip is `5d34a5ea`. No such implementation exists. The two options recorded here (a
+public-fetch HTTP suite vs. deferring) were both framed as *test ownership* questions on the
+premise that the private builder was load-bearing for observation. It is not.
+
+**Why the private builder is not load-bearing.** `OpenAICandidateObserver`
+(`source/services/openai-candidate-observer.ts:14`) is the only implementation of
+`ProviderRequestCapture` in the codebase. Its `record()` is an explicit no-op, and its `observe()`
+never reads `observation.requestData`. So both `captureProviderRequest(...)` calls in
+`openai.provider.ts` (lines 90, 140) feed nothing in production. The entire remaining reason to
+override `_buildResponsesCreateRequest` there is one line: `consumeOpenAIRequestPrefixBinding(requestData)`,
+which compares `requestData.input` against the input prepared by `AgentRunOrchestrator`.
+
+**Why that comparison does not need the builder.** `_buildResponsesCreateRequest` touches input in
+exactly one place — `const input = getInputItems(request.input)`
+(`node_modules/@openai/agents-openai/dist/openaiResponsesModel.js:2130`). `getInputItems` spans
+lines 1322–1719 and contains zero references to `request.`, `this.`, `_model`, `_client`,
+`modelSettings`, `previousResponse`, `Date.now`, or any randomness source. It is pure, total, and
+deterministic in its one argument. Therefore
+`expected === request.input ⟹ getInputItems(expected) === wire input`. The implication runs in the
+direction soundness needs; the converse failure is a false reject → no binding → no candidate →
+legacy `previousResponseId` selection, which is the module's stated fail-closed contract.
+
+**The status quo is the less sound design.** `prepareOpenAIRequestPrefixBinding` is called with
+SDK-shaped `AgentInputItem`s (`agent-run-orchestrator.ts:279,304`) and compared against
+provider-shaped `requestData.input`. `normalizeComparableInput` bridges that gap, but it models
+only *one* branch of `getInputItems` (stripping `type: 'message'`); `getInputItems` also rewrites
+`tool_search_call`, `tool_search_output`, and further item types with snake-casing and reserved-key
+filtering. So today's "exact-prefix" comparison silently false-rejects any turn containing an item
+type the normalizer does not model, and is structurally capable of false-accepting. Comparing
+pre-transform makes it a genuine deep-equal on one representation and deletes the approximation.
+
+**Decision: Option 3.** Delete the `_buildResponsesCreateRequest` override from **both** OpenAI
+classes and consume the prefix binding in the `getResponse` / `getStreamedResponse` overrides that
+already exist for `beginAttempt` / `finishAttempt`.
+
+Rejected alternatives and why:
+
+- *Public-fetch HTTP observer (old option 1).* Forks the observation mechanism inside the shared
+  `OpenAIRequestLifecycleModel` base — ALS+fetch for HTTP, WeakMap+builder for WS — because there
+  is no WS equivalent of custom `fetch` (`OpenAIResponsesWebSocketOptions` is keep-alive only:
+  `pingIntervalMs` / `pingTimeoutMs`; `ResponsesWebSocketConnection.connect` takes no injectable
+  transport). It also requires inventing a retry-dedupe rule, since `maxRetries: 2` retries occur
+  below the fetch seam, and replumbs endpoint/model identity across the client boundary. It crosses
+  off no risk-register row.
+- *Defer until a transport-neutral Responses model exists (old option 2).* Pays no cost but retires
+  nothing, on a premise now shown to be false.
+
+Option 3 keeps one mechanism for both transports, retains the existing WeakMap-by-request-object
+correlation unchanged, and removes `openai.provider.ts` from the `_buildResponsesCreateRequest`
+register row, leaving only `codex-responses-model.ts`.
+
+**This is a behaviour change, not a pure refactor.** Fixing the under-normalization means bindings
+that are silently rejected today will start succeeding — more candidates, more checkpoint
+promotions. That is the intended outcome but it changes production continuity behaviour and needs
+its own characterization; a green existing suite is not sufficient evidence.
+
+Slice sequence:
+
+1. **DONE — record binding-consumption diagnostics.** Public-boundary consumption now distinguishes
+   absent preparation, repeated consumption, and input mismatch; all outcomes fail closed for
+   continuity while retaining request-local lifecycle cleanup.
+2. **DONE — characterize and retire the OpenAI overrides.** The public-boundary tests cover binding
+   consumption and lifecycle isolation; both OpenAI transports no longer override the private
+   builder. The remaining builder reach-in is Codex-only.
+3. **Next — review bounded telemetry before broader ownership migration.** Establish whether
+   `input_mismatch`, `not_prepared`, or `already_consumed` occurs in production, then define the
+   parity/fallback evidence threshold before proposing any further continuity change.
+
+Separable, do **not** bundle: `captureProviderRequest` / `ProviderRequestProjection` appear to be
+dead production code (the only consumer's `record()` is a no-op, for Codex as well as OpenAI).
+Deleting them would also remove one of Codex's two builder touchpoints, but that is its own slice.
+
+Residual unverified: whether any existing test depends on post-normalization `requestData` in a way
+that cannot be re-expressed at the public boundary.
+
+### R1 gate — PASSED
+
+`source/lib/sdk-approval-resume.test.ts` uses a real SDK `Runner` and a serialized/restored
+`RunState`: it interrupts for a function-tool approval, approves the restored interruption,
+resumes the run, and asserts that the tool receives the original call id through
+`details.toolCall.callId`. The carrier assumed by A4 is therefore available on the risky
+resume path; mocks do not supply the execution details in this test.
+
+This applies only to **approval resume**: the SDK pauses before execute and resumes that same
+tool call, so its call id remains stable. A distinct real-Runner regression in the same file
+also proves the different **model retry** path: execute receives call A and returns an ordinary
+denied-read-like function output; after seeing that output the model emits identical shell
+arguments under call B. `needsApproval` receives A then B, and B interrupts before execute.
+Call B has an unrelated call id, so callId alone cannot bridge denied-read discovery to that
+future retry under the stock SDK.
+
+### Composition-root decision — client and runtime share one session handle
+
+`session-composition.ts` remains the session composition root. The interactive and
+non-interactive entry points will provide long-lived application dependencies to one session
+factory; they will no longer independently construct the closure-bound `AgentClient`.
+
+The factory creates one session handle containing the runtime, approval coordinator,
+session-bound root client and nested clients, read-access state, transient docker state, and a
+session-owned tool-call ledger. `ConversationService.resetWithNewId()` must dispose that whole
+handle and ask the factory for a replacement. It must not clear and reuse state captured by the
+old client: late callbacks from the disposed session must be unable to mutate the replacement.
+Persistent project-level docker grants remain settings-backed and outside the handle.
+
+The call ledger is not a generic `SessionSandboxState` service locator. Its landed narrow
+capability owns tool ownership keyed by `callId`. Denied-read metadata and execution overrides
+are intentionally not added yet: their discovery is post-execute, while a model retry is a new
+call id. The SDK-specific extraction stays at the tool boundary; approval services receive a
+domain call id. R1 proves that identity only for serialized approval resume.
+
+**Implemented groundwork:** `session-client-factory.ts` now creates an owned client handle;
+`ConversationService` owns that handle beside the runtime and replaces both on
+`resetWithNewId()`. Interactive and non-interactive CLI paths use the same factory, while the
+prebuilt-client seam remains caller-owned for compatibility tests. `AgentClient`, its settings
+subscription, and its subagent bridge have idempotent disposal. This establishes the common
+lifetime into which the call ledger can now be injected.
+
+Required invariants:
+
+- duplicate active call ids in one session fail closed rather than overwrite;
+- approval resume and execution correlate by call id; a post-execute model retry requires a
+  Step C run-loop seam rather than call-id correlation or command matching;
+- parent and nested agents share the ledger but retain distinct tool owners;
+- records are removed on success, denial, failure, cancellation, and session disposal;
+- reset replaces the session epoch, so reused call ids and late callbacks cannot cross sessions;
+- session read access and transient docker grants die with the handle; project grants survive;
+- no module-global current-session accessor, `AsyncLocalStorage` workaround, or fallback store.
+
+Migration order:
+
+1. **DONE.** Add disposal support for the closure-bound client (including settings
+   subscriptions), then introduce a session client factory/handle while retaining compatibility
+   seams for tests.
+2. **DONE.** Route both CLI modes and `resetWithNewId()` through that factory; prove replacement
+   and disposal before moving policy state.
+3. **DONE.** Introduce the session-owned call ledger and migrate tool ownership.
+4. **DONE:** root denied-read metadata and execution overrides use the landed
+   post-execute seam. The held live call has stable identity; reject command-key fallback and a
+   temporary token protocol. Keep nested compatibility behavior outside this root capability.
+5. **DONE.** Move root session read access and transient Docker state into the handle,
+   keeping project grants persistent; bind transient execution clients to disposal.
+6. Delete singleton fallbacks and compatibility wiring after all production roots inject the
+   session-owned capabilities.
+
+### `legacy-compat.ts` retired (2026-08-02, `docs/plans/engineering/retire-legacy-compat.md`)
+
+The shim is gone: `source/services/agent-runtime/legacy-compat.ts` was deleted in seven
+worktree slices. Its exports were replaced by application-owned pieces — `Agent` by
+`ApplicationAgent` object literals, `Runner`/`run`/`adaptLegacyModel` by a settled
+`runToCompletion` on the compatibility runner, `RunContext` by `ApprovalLedger` (same
+SDK-record semantics, plus `snapshot()` for typed parent→child replay), and `tool()`/`Tool`
+by `ToolDefinition` (with `wrapToolInvoke` now wrapping `execute`). `ApplicationRunLoop`
+carries a per-run user context (`ToolInvocationContext`) and a run-owned approval ledger, so
+subagent tool bookkeeping, parent-approval replay, and nested-subagent results are live
+again. The retiring also fixed two broken paths found while scoping (see F6 in that plan and
+the wrapNeedsApproval argument-order fix) and one found while landing slice 5 (typed
+ledgers need a top-level `callId` on replayed approval items). The full suite passes 4,830
+tests with the restricted-host sandbox test skipped.
+
+### Deliberately left open
+
+Concurrent identical root `shell` calls are now covered by a call-isolation regression. The
+post-execute seam holds and re-executes each live call by its own call ID. The old command-keyed
+stores remain only on the nested compatibility path; do not extend that fallback back to roots.
+
+### Resumed `RunState` replays generated items — contained, not fixed (2026-07-28)
+
+**Whoever owns the Step C run loop should fix this properly; do not re-diagnose it from scratch.**
+
+A resumed run re-offers the tool call/result pairs from every earlier segment. Across successive
+`continueRunStream` finalizations the same pairs arrive again and again, so appending them
+unfiltered grew provider history quadratically until the input surge guard blocked the turn.
+Observed in session `136e6e11` on 2026-07-28: duplicate copies per pair went 4 → 4 → 11 → 13 over
+about three minutes, ending at 73 items / 108 KB and a hard `input_surge_guard` block mid-turn.
+It surfaced through the background subagent notification path, so an orchestrator run can die on a
+leak the user did not cause.
+
+Confirmed from `conversation.stream_history.replayed_tools` warnings in the app log:
+
+- Every occurrence had `source: continueRunStream`. Never `startStream`. This is the resume path.
+- `history`, `newItems`, and (in the then-current build) `state.generatedItems` all showed the
+  *same* duplicate counts, so the accumulation is in the run state carried across resumes —
+  `continuation-state.ts` reuses `pendingApprovalContext.state` — not in our store logic.
+- The provider never saw the duplicates. All 59 provider-traffic files that day had max repetition
+  2 per `call_id` (the normal call + output), because `#filterAndGuardChainedModelInput` strips
+  them while chaining is active. The damage only became visible when a turn fell back to
+  `full_history`, which is the request that got blocked.
+
+**What is already done (`76ea0e0f`).** `SessionStreamProcessor.finalize` filters tool call/result
+items already present in the store before appending, keyed on `type:callId`. That is a containment
+at the commit seam, chosen because it is decouple-neutral: it touches no SDK type and survives
+whatever replaces `RunState`. Non-tool items are never filtered and `replaceHistory` stays
+authoritative. Regression: *"does not re-append tool call/result pairs already in history across
+resumes"* in `session-stream-processor.test.ts`.
+
+**What remains for the run-loop owner.** The resumed state still accumulates. When the run loop
+stops carrying accumulated generated items across resume segments, this stops at the source and the
+`finalize` filter becomes belt-and-braces — keep the regression test either way, since it pins a
+property (no duplicate pairs in committed history) that should hold under any run loop.
+
+**How to tell it is still happening.** `finalize` logs
+`conversation.stream_history.replay_dropped` with the dropped `type:callId` signatures whenever it
+filters something. That warning going quiet is the signal the underlying duplication is gone.
+
+**One unverified assumption in the containment.** It dedupes on `type:callId` without comparing
+content, so if a resumed call ever produced a *different* output under the same call ID, the newer
+one is dropped. Nothing in the traffic logs suggests this happens and the accumulated items are
+item-identical, but it was not proven. The `replay_dropped` signatures are the trail if it ever
+does.
+
+---
+
+## Goal
+
+Reach **zero `@openai/agents*` imports**, including the Codex WS transport, replacing the
+SDK with our own run loop and domain types.
+
+**The driver is fragility, not capability or LOC reduction.** We reach into SDK *private*
+API in 9 places across 8 non-test files. `@openai/agents` is a `0.x` package with no semver
+protection, and `tool-owner.ts` already carries three `logger.warn` branches for when those
+private shapes don't match — the code anticipates drift. That is the risk being retired.
+
+This supersedes the original framing (mediation-tax LOC reduction, plus "serializable
+mid-turn state" as a new capability). Both survived contact with the code only partially;
+see *Corrections* below.
+
+## The risk register
+
+The actual thing being eliminated. Every entry is a private-API reach-in.
+
+| Reach-in | Files | Layer | Retired in |
+|---|---|---|---|
+| ~~`_pendingAgentToolRuns`~~ | ~~`services/approval/tool-owner.ts`~~ | approval | **DONE** (A2) |
+| ~~`_mergeApprovals`~~ | ~~`services/subagents/nested-runner.ts`~~ | approval | **DONE** (A3) |
+| ~~`_generatedItems`~~ | ~~`services/stream-snapshot.ts`~~, ~~`services/session/session-tool-tracker.ts`~~, ~~`services/session/continuation-call-id-resolver.ts`~~ | run loop | **DONE** (Step C public stream/ledger recovery) |
+| `_buildResponsesCreateRequest` | `providers/codex-responses-model.ts`, ~~`providers/openai.provider.ts`~~ (retired, slice 9) | provider | Step D/E |
+| `_fetchResponse` | `providers/codex-responses-model.ts` | provider | Step E |
+
+Progress on this table is the measure of the project. LOC deleted is not.
+
+---
+
+## Corrections to the original investigation
+
+These are load-bearing. The original doc argued from them.
+
+### 1. "Serializable mid-turn state is a feature we cannot build today" — **false**
+
+The doc claimed `RunState` is memory-only, so a pending approval cannot survive a restart.
+`RunState` exposes `toString()` and `static fromString()` / `fromStringWithContext()`
+(`runState.d.ts:2875,2884`) — the SDK's documented human-in-the-loop persistence API.
+`toJSON` even documents *"rehydrate in a separate process that lacks the original
+environment variables."* **We call none of them** (zero hits in `source/`).
+
+The real blocker is ours, not the SDK's: the approve→execute handoff bypasses run state
+entirely. `ExecutionOverrideStore` (`utils/shell/sandbox/denied-read-stores.ts:74-93`) is an
+in-memory `Map` keyed by *normalized command string*, documented as *"Set at
+approval-decision time; consumed and cleared by `execute` when the SDK resumes the approved
+tool call."* Alongside it: `DeniedReadStore` (:26), `allowReadFolderForSession`
+(`approval-flow-coordinator.ts:160`), and session-scoped docker grants (:217).
+
+A turn serialized and resumed in a fresh process finds these maps empty, and either
+re-prompts or executes with different sandbox permissions than the user approved.
+
+**Consequence:** durable approvals are achievable today and the decoupling neither enables
+nor requires them. They are a separate piece of work, unblocked by fixing the side-channels.
+
+### 2. The mediation-tax table overstates deletions
+
+Spot-audited one row. `input-surge-guard.ts` is not just an SDK watchdog — it is a
+user-facing preflight feature. `bypassInputSurgeGuard` threads through
+`hooks/use-conversation.ts:216`, `conversation-orchestrator.ts:373`,
+`conversation-adapter.ts`; `queue-controller.ts:7` declares
+`PreflightKind = 'input_surge' | 'large_uncached_input'`; `use-pending-turn-guards.ts:87-126`
+gates every turn and shows an approve/decline prompt.
+
+What dies is the duplicate-pair *heuristic* (~100 LOC). What survives is the preflight
+*gate* across ~7 files, sitting beside `large_uncached_input`, a cost-control feature with
+no SDK involvement.
+
+The remaining 11 rows were **not** audited — the LOC figure stopped being decision-relevant
+once fragility became the driver. Treat ~2–3k LOC as unverified.
+
+### 3. Both approval reach-ins are escapable without decoupling
+
+- `_mergeApprovals`: `ApprovalRecord.approved` is `boolean | string[]`
+  (`runContext.d.ts:4-9`), mapping directly onto public
+  `approveTool(item, { alwaysApprove })` / `rejectTool(item, { alwaysReject, message })`.
+  Parent approvals can be replayed into the nested context via public API.
+- `_pendingAgentToolRuns`: `nested-runner.ts` creates the nested run and already knows
+  `agentId` and `role`. Tracking `callId → owner` ourselves deletes all 80 lines of
+  `tool-owner.ts` archaeology and its three drift warnings.
+
+Step A therefore delivers real risk reduction on its own, days not weeks, and is abandonable
+with the codebase strictly better.
+
+### 4. Chaining is a minority path taxing everything
+
+Only **2 providers** declare `supportsConversationChaining: true` — `openai.provider.ts:155`
+and `codex.provider.ts:623`. `openai-compatible`, `openrouter`, `openai-compatible-lazy` and
+all ai-sdk providers declare `false`.
+
+That minority imposes on all paths: a `delta | full_history` input mode across 13 non-test
+files, 99 `previousResponseId` references in 24 files, `chained-input-filter.ts` (222) +
+`chained-wire-state.ts` (228), and the transport-downgrade recovery machinery.
+
+Critically, **chaining is the root cause of the `_generatedItems` reach-ins.**
+`session-tool-tracker.ts:159-173`: *"In chaining/delta mode the conversation store never
+receives `function_call_output` items… They live transiently in the SDK RunState's
+`_generatedItems`."*
+
+Asymmetry: OpenAI is lower risk, but the completed trace does not prove chaining is a pure
+optimization there. Codex chaining is load-bearing — `agent-factory.ts:254-256` sets
+`store = false`, while `codex-responses-model.ts` threads `previousResponseId` through its
+remembered-response-id cache and consumed-tool-result tracking. The WS transport holds server
+state outside the normal `store` flag. Therefore the application must retain full provider-facing
+history as its semantic record and treat both providers’ continuation details as private,
+prefix-anchored compatibility state; Codex cannot claim full-replay support until tests prove it.
+
+### 5. Two smaller findings, actionable now
+
+- **`removeInterceptor` is already dead.** Both producers assign `noop`
+  (`approval-flow-coordinator.ts:125,302`). It is threaded through 5 files for nothing.
+  Deletable today, independent of this project.
+- **`GenerationToken` is `number`** (`generation-guard.ts:1`), a process-local counter.
+  Persisting it is worse than useless — after restart the guard resets to 0 and a stale
+  token can spuriously satisfy `isCurrent`. Durable turns need an epoch/session identity.
+
+---
+
+## Decisions taken
+
+| Question | Decision |
+|---|---|
+| Driver | Fragility — private-API dependence. Not LOC, not capability. |
+| Durable mid-turn approvals | Design for it (plain-data, serializable turns); ship later. |
+| Approval type scope | Step B defines the types. Step C's landed post-execute seam now owns the root denied-read migration: carry metadata and selected one-shot overrides by the held live call ID; reject command fallback and token protocols. Nested tools retain compatibility behavior until explicitly migrated. |
+| Chaining semantic record | **Full provider-facing history is authoritative.** Remove the global `delta | full_history` policy incrementally; provider suffixing is a private compatibility projection. |
+| Continuation checkpoint | **Opaque, identity- and prefix-anchored state, not a floating response ID.** It binds response/transport state to provider, endpoint, model, reset lineage/epoch, and exact transcript-prefix revision/identity. Candidate → accepted promotion is atomic with terminal history commit; reset/stale completion cannot promote. |
+| Continuation recovery | **Provider-classified.** Full replay is allowed only after explicit pre-generation invalid-continuation rejection or reliable reconciliation, never after ambiguous timeout/disconnect. |
+| Migration order | **OpenAI first; Codex later.** OpenAI is lower risk but not proven “pure optimization.” Codex full replay is unsupported until tests prove it despite `store = false`, chaining, and WS state. |
+| Endpoint | Zero SDK imports, **codex included**. |
+
+### Resolved interlock — Step E implementation gate
+
+The disposition removes the contradiction without pretending Codex can replay today: application
+history remains complete, and provider continuation becomes a compatibility projection anchored to
+that history. Stage 0 must first characterize snapshot identity, exact prefix anchoring, and
+candidate/accepted/retired transitions with no wire change. Stage 1 moves existing suffix
+projection behind the provider seam and compares exact projected inputs. Only then may OpenAI
+change ownership. Codex remains in its current compatible chaining mode until its server-state,
+`store = false`, and WebSocket assumptions have direct proof. Never migrate an in-flight approval
+or session across modes; rollback retains the established mode and its checkpoint until a fresh
+session/reset boundary.
+
+---
+
+## Sequencing (fragility-first)
+
+Re-ordered from the original types-first plan. Each step retires named reach-ins.
+
+### Execution model — sequential seams, parallel implementations
+
+Use a hybrid execution strategy. Shared contracts and architectural seams proceed sequentially;
+independent provider implementations may proceed in parallel only after those seams are stable.
+
+1. **Sequential — establish the application-owned provider contract for Step D.** Settle request,
+   streamed-event, tool-call/result, usage/completion, and provider-native continuation boundaries
+   before assigning provider migrations. One owner integrates this contract.
+2. **Parallel — migrate independent AI SDK providers.** Once the contract is stable, Google,
+   Anthropic, and OpenRouter may move in separate worktrees. Integrate sequentially, then retire
+   the legacy adapter and run the cross-provider suite.
+3. **Sequential — Stage 0 characterization/instrumentation.** Pin immutable snapshot identity,
+   prefix anchoring, and candidate → accepted → retired lifecycle at the existing session seams,
+   with no wire change. Gate on exact current suffix-projection captures and stale-after-reset
+   coverage; rollback is deletion of instrumentation/characterization only.
+4. **Sequential — Stage 1 compatibility seam.** Supply full-history snapshots at the provider
+   boundary, move the current suffix projection behind OpenAI/Codex-private seams, and compare
+   exact projected inputs. Do not migrate in-flight approvals/sessions. Gate on parity; rollback
+   keeps the old global path for newly started sessions.
+5. **OpenAI first — narrow ownership migration.** Promote only accepted terminal checkpoints with
+   the history commit; classify invalid-continuation recovery. Gate on no payload regression and
+   explicit/reconciled-only replay; rollback disables the OpenAI seam for new sessions.
+6. **Codex last — validate before enabling replay.** Keep chaining, `store = false`, and WS state
+   compatible while retiring reach-ins. Full replay remains unsupported until provider tests prove
+   semantic sufficiency; ambiguous timeout/disconnect never triggers replay. Roll back to the
+   compatible checkpoint path at a fresh session/reset boundary.
+
+Read-only audits, test-gap analysis, and review may run in parallel at any stage. Changes that share
+contracts, schemas, state flow, or transport semantics remain sequential.
+
+### Step A — Approval layer (days)
+
+- **A1 — DONE.** `removeInterceptor` dead plumbing deleted (was always `noop`).
+- **A2 — DONE.** `_pendingAgentToolRuns` retired via a `ToolOwnershipRegistry` that claims
+  `callId → owner` at nested-run creation. **1 of 9 reach-ins retired.**
+  *Correction:* `tool-owner.ts` was **not** deleted — it went 81 → 14 lines. `ToolOwner` and
+  `PARENT_TOOL_OWNER` are consumed by `approval-state.ts` and approval event shaping; only
+  the 67 lines of SDK archaeology and its three drift warnings died.
+- **A3 — DONE.** Replaced our `_mergeApprovals` call at initial nested-run creation with
+  public `approveTool`/`rejectTool` replay in `approval-replay.ts`.
+  *Note:* the SDK also calls `_mergeApprovals` itself at `agent.js:259` on the **resume**
+  path, gated by `resumeContextStrategy === 'merge'` (set at `nested-runner.ts:268`). That
+  is the library's own internal use reached through a *public* option, not our reach-in.
+  A3 retires ours; the SDK's goes away with the SDK.
+- **A4 — PARTIAL; Step C migration landed.** Session-owned tool ownership is landed. R1 remains
+  valid only for a same-call approval resume; the model-retry regression still proves that a
+  completed denial would get a new ID. The landed Step C seam instead holds the completed root
+  call before the SDK sees it, so denied-read metadata and one-shot overrides can now migrate by
+  that stable live call ID. Reject command fallback and temporary token protocols.
+
+**Live bugs found during this work** (the root command-keyed issue is now being replaced through
+the Step C seam; compatibility paths remain explicit):
+
+- **FIXED** — denied-read approval never fired for `cd`-prefixed commands. `shell.ts` recorded
+  under `optimizedCommand` (post-`stripRedundantCd`) while both lookups used the raw
+  model-emitted command. Six of seven store call sites already used raw; `record` was the sole
+  outlier. The Docker branch ten lines above already had the correct reasoning in a comment.
+- **FIXED for roots in Step C** — concurrent identical commands previously cross-contaminated grants.
+  `maxParallelToolCalls` defaults to 3 (`agent-run-orchestrator.ts:61-68`) and
+  `ExecutionOverrideStore` is command-keyed with a consuming read, so one call can execute
+  with permissions the user granted to a different call. CallId-only A4 cannot fix this because
+   a denied-read model retry receives a new id; Step C needs a post-execute pause/resume seam.
+- **FIXED** — `#deniedCommands` was process-global with no sessionId and never cleared
+  per-session, so one session's blocked docker command forced an approval prompt in every
+  other session, permanently. Now `#deniedBySession`, mirroring `#onceBySession`.
+  Fail-closed: a run with no session identity drops the record rather than storing it
+  globally, so the command stays sandboxed instead of gaining unearned host access.
+  `ApprovalPrompt.tsx` has no session identity and cannot consult the store, so the
+  producer now resolves it onto `ApprovalDescriptor.dockerHostControl` — which converges
+  with A4's proposed `{ variant: 'docker_host_control' }` prompt variant.
+
+**Known follow-up:** `AbortResolutionPlan` is now a single-field passthrough no production
+caller reads — `ContinuationPlanApplier` calls `prepareAbortResolution` purely for its
+`state.reject` side effect. Deletable.
+
+**Undocumented SDK behavior worth recording:** `customOutputExtractor` runs unconditionally,
+interruptions included (`agent.js:307-322`, before `saveAgentToolRunResult` at `:342`).
+A2's claim-at-source design depends on this ordering.
+
+### Step B — Canonical types + normalize at the boundary
+`source/contracts/`: `Item`, `Turn`, `ToolCall`, `Approval`. One adapter, SDK items → ours.
+`rawItem` remains in downstream consumers while the application is still on the SDK, but
+`source/contracts/` itself no longer imports `@openai/agents*`; `ReasoningEffortSetting` is an
+application-owned string union. Continue moving interpretation behind the canonical boundary
+without discarding provider-native items needed for replay or formatting.
+**Retires 0 reach-ins directly; contains them and collapses blast radius.**
+
+**Landed follow-up.** Root denied-read recovery uses the Step C post-execute seam without command
+matching or a temporary token protocol. Nested tools retain the compatibility path.
+
+**Landed representation slice.** `source/contracts/conversation-items.ts` now owns the canonical
+serializable item and turn shapes; compatibility aliases in `conversation-persistence-types.ts`
+preserve existing persisted imports. `Approval` reuses `ApprovalDescriptor`, and
+`ReasoningEffortSetting` is the app-supported string union instead of an SDK import.
+`run-item-normalizer.ts` owns the raw-item-to-`Item[]` adapter, while
+`conversation-turn-items.ts` delegates its legacy builders and retains provider-facing replay.
+This contains normalization only: it does not remove SDK reach-ins, migrate all raw items, or
+alter requests, RunState, chaining, approval/resume, denied-read, execution overrides, or run-loop behavior.
+
+**Step B command-message slice.** Command-message streaming and extraction now normalize direct
+or wrapped provider inputs once into canonical tool calls/results before caching arguments and
+formatting. Cached arguments live on an enriched local result rather than mutating canonical
+items; `providerItem` remains available for provider-specific formatting (including native
+`apply_patch` details). Call-ID fallbacks, stable command-message IDs, annotations, output
+coercion, and existing formatting behavior remain intact.
+
+**Step B assistant-journal slice.** `AssistantTurnJournal` now normalizes before deduplication and
+derives identity only from canonical tool call/result IDs or provider item IDs. It no longer
+inspects `rawItem`. Provider wrappers and equivalent direct canonical tool items deduplicate as
+one item group, and multi-item normalizations remain all-or-nothing on replay.
+
+**Step B stream-finalization slice.** Resume replay deduplication and full-history tool-result
+detection in `SessionStreamProcessor` now normalize through the canonical item boundary instead of
+inspecting `rawItem`, provider result type spellings, or call-ID field variants. Equivalent wrapped,
+direct-provider, and canonical tool representations share one identity. Items that survive the
+filter retain their original provider representation in conversation history.
+
+**Step B stream-event slice.** `run_item_stream_event` tool lifecycle interpretation now uses
+canonical tool calls and results for `tool_started`, argument diagnostics, and recovery-hook
+dispatch. Wrapped SDK items, direct provider items, and canonical items behave identically, while
+generic journal and function call/result hooks continue receiving the original item object for
+provider-facing persistence and replay.
+
+**Step B replay slice.** Replay ledger merging now normalizes existing history through the canonical
+run-item boundary before detecting reasoning, tool calls, or tool results. Wrapped provider,
+direct-provider, and canonical representations are equivalent for deduplication, but the original
+history objects remain in the ledger and provider replay history.
+
+**Step B tool-ledger slice.** `ToolExecutionLedger` now obtains tool call/result classification,
+call identity, tool name, arguments, output, reasoning detection, and reconciliation matching from
+the application-owned run-item normalizer. Wrapped SDK, direct-provider, and canonical `ToolCall` /
+`ToolResult` inputs therefore have one ledger identity, including the established `callId`,
+`call_id`, `tool_call_id`, `toolCallId`, and `id` fallback compatibility. Ledger recovery continues
+to store and reconstruct the original provider-facing item rather than a canonical replacement;
+ordering and reasoning-prefix insertion remain unchanged. Unknown items remain untouched.
+
+**Step B journal-to-ledger slice.** Durable assistant-turn and journal-event recovery now uses
+`run-item-normalizer.ts` to detect an existing reasoning item and a completed tool result for a
+call. Wrapped SDK, direct-provider, and canonical reasoning/tool-call/tool-result history forms
+therefore make the same prefixing and deduplication decisions. Reconstruction still preserves the
+original provider-facing history object, ordering, and persisted ledger output.
+
+**Step B history-repair slice.** `conversation-history-repair.ts` now obtains tool call/result
+signatures, duplicate-pair counts, and duplicate-removal decisions from `run-item-normalizer.ts`.
+Wrapped SDK, direct-provider, and canonical tool histories therefore repair equivalently; retained
+entries remain the original provider-facing objects. Message/user and provider-ID signatures remain
+local because canonical `Item` does not model those history shapes.
+
+**Step B conversation-store tool-policy slice.** `ConversationStore` now obtains only its
+last-tool-output retry anchor and mutating-file rewind preview fields from `run-item-normalizer.ts`.
+Wrapped SDK, direct-provider, and canonical tool calls/results therefore make equivalent anchor,
+truncation, call-ID/name/output, and malformed-argument decisions; `removeAfterLastToolOutput()`
+keeps its original anchor index/splice behavior and history retains its original provider-facing
+objects. The normalizer now explicitly covers every legacy result spelling the store supported.
+User/assistant message unwrapping, synthetic-message handling, turn counting/removal, and
+message text/image extraction intentionally remain local for a later slice.
+
+**Step B conversation-message projection slice.** `conversation-message-projection.ts` now owns
+a read-only projection of direct provider messages and one-level SDK `{ rawItem }` wrappers. It
+recognizes current user, assistant, and system message roles; string and input/output-text array
+content; input images; empty/malformed content; and shell-context/legacy-mode synthetic user
+notices, while returning null for tool and reasoning items. `ConversationStore` uses it for user
+turn anchoring/removal, text/image return values, synthetic filtering, and assistant rewind reply
+counts; `SessionStreamProcessor` uses it only for full-history message presence selection. Both
+retain original provider objects and existing clone/index/splice behavior. Canonical `Item` and
+`run-item-normalizer.ts` remain assistant-run/tool-only; no generic/user message variants were
+added there.
+
+**Step B approval-history projection slice.** Shell auto-approval compact history now uses that
+read-only message projection instead of separately unwrapping `rawItem` and parsing message
+content. Direct provider messages and one-level SDK wrappers render the same user/assistant
+context; existing whitespace normalization, per-message/context truncation, eight-item source
+limit, empty-message `(message)` fallback, and no-context fallback remain unchanged. System,
+tool, reasoning, and malformed non-message items remain excluded, while the evaluator retains the
+original history objects and does not change approval decisions or prompt semantics beyond
+representation equivalence.
+
+**Step B input-surge guard slice.** `InputSurgeGuard` now uses `run-item-normalizer.ts` to inspect
+duplicate tool signatures and duplicated call/result pairs. Wrapped SDK, direct-provider, and
+canonical `ToolCall` / `ToolResult` inputs share the same call/result classification and supported
+call-ID/result-spelling compatibility; signatures retain the canonical call-versus-result distinction.
+Unknown and non-tool items remain ignored. The guard still serializes the original input for byte
+counts and uses the original input array for message counts, so thresholds and reason strings are
+unchanged.
+
+**Step B chained-input-filter slice.** `chained-input-filter.ts` now derives recognized tool
+call/result classification through `run-item-normalizer.ts`, including direct and one-level wrapped
+provider items, canonical `ToolCall` / `ToolResult`, and result spellings. Explicit call-ID precedence
+and the prior generic `_call` extension compatibility remain narrow filter policy: provider item IDs
+are not treated as tool-call correlation, and hosted calls do not leak into ledger classification.
+User-message detection remains local. The filter continues to return the original input objects in
+their original order, selecting or slicing only the input array; missing/orphan validation and
+known-call behavior are unchanged.
+
+**Step B bounded representation migration complete.** The remaining representation-only consumers
+have been audited and now normalize through the canonical boundary where they need assistant-run or
+tool identity. Provider history/replay projection, logging, RunState, orchestration, request
+construction, and transports deliberately retain their own boundaries. Proceed with Step D
+provider-contract design rather than broadening Step B.
+
+### Step C — Own the run loop
+Contained, because downstream already speaks our language.
+**Resolver + replay-diagnostics + transport-recovery slices DONE:**
+`continuation-call-id-resolver.ts` uses public interruption IDs and current-turn completed IDs
+from the session ledger; `stream-snapshot.ts` uses only public stream history/new items for
+duplicate-tool diagnostics; and public completed tool results are recorded in the live ledger
+before recovery projects them. No production `_generatedItems` read remains.
+
+**Post-execute pause seam — LANDED:** the session/turn channel holds the live stream and resumes
+the same consumer with fail-closed lifecycle gates. Root denied-read metadata and per-call
+overrides now pass through it; do not grant this root capability to nested tools.
+
+### Step D — Non-codex providers off the SDK
+**DONE:** AI SDK providers implement our interface directly; the 112-line legacy
+`ai-sdk-agents-adapter.ts`, its characterization test, and direct
+`@openai/agents-extensions` dependency/lockfile entries are retired. `ai` and `@ai-sdk/*` remain
+dependencies. The OpenAI builder reach-in is retired; the remaining
+`_buildResponsesCreateRequest` and `_fetchResponse` coupling is Codex-only.
+
+**Characterization decision — LANDED before contract work:** own one streamed model turn first.
+The removed adapter characterization informed the application-owned contract; its preserved
+behavior is now pinned by the routed OpenRouter/Google/Anthropic, direct-turn, bridge,
+custom-provider, and shared message-normalizer tests. That coverage retains request translation,
+assistant-message normalization, stream event ordering/final output, usage, cancellation, errors,
+and reasoning/provider-option forwarding without retaining the adapter. It intentionally does not
+broaden into Codex, chaining, Runner orchestration, speculative non-stream generation,
+continuation, a raw event/history bag, a broad error taxonomy, or registry migration. A narrow
+shared AI SDK call-settings wrapper captures only common doStream forwarding and
+explicit-provider-data semantics; Anthropic retains cache/max-token policy and OpenRouter retains
+its local extra-field/reasoning policy rather than adding either to generic turn orchestration.
+
+### Step E — Chaining disposition, then the Codex WS transport
+The irreducible risk. **Disposition decided; begin only with bounded Stage 0.** Driven by the
+existing `codex-responses-model.test.ts` and `openai.provider.test.ts` — that is hard-won
+production knowledge and effectively the spec. Preserve and extend those assertions; do not
+discard them. Stage 0 characterizes immutable full-history snapshot identity, exact prefix
+anchoring, and candidate → accepted lifecycle without changing wire behavior. Stage 1 places the
+current suffix projection behind provider compatibility seams and compares exact projected inputs.
+OpenAI migrates first; Codex full replay is unsupported until its tests prove semantic sufficiency.
+Related groundwork: `luna-responses-lite-wire-protocol.ts` (112),
+`websocket-receive-watchdog.ts` (95).
+**Retires the remaining reach-ins.**
+
+---
+
+## Scale of coupling (refreshed 2026-07-29)
+
+- **53 non-test source files** import `@openai/agents*`; 87 including tests.
+- A current line-based scan finds **124 non-test `rawItem` lines**.
+- A current line-based scan finds **101 non-test `previousResponseId` lines**.
+- Out of **814 TS/TSX files under `source/`** (440 non-test). Installed: `@openai/agents-core` **0.11.4**.
+
+These are navigation metrics, not progress measures. Record the counting method when refreshing
+them; the risk register remains authoritative. The 2026-07-29 scan uses `fd` for TS/TSX files under
+`source/`, then `rg` for line/import counts; every non-test count excludes paths matching
+`*.test.*` and `*.e2e.test.*`.
+
+Three clusters: `source/providers/` (~7k LOC incl. tests); the run + approval loop
+(`lib/agent-*`, `services/session/`, `services/approval/`, `services/retry/`); and type-only
+`AgentInputItem` usage (19 files) across conversation/persistence/logging.
+
+**Not used at all:** handoffs (the `handoff` hits in `source/hooks/` are our own unrelated UI
+feature), guardrails, MCP, sessions/memory, voice, realtime.
+
+**Minor dependencies:** `applyDiff` / `applyPatchTool` (native patch for gpt-5.1), the
+`tool()` factory, `ModelBehaviorError`, tracing (`withTrace` — mostly we *disable* it),
+`ModelSettingsReasoningEffort` (a string union).
+
+## Open questions
+
+- Nested denied-read disposition — retain its compatibility path until an explicit ownership
+  model exists; do not implicitly extend the root post-execute capability.
+- Whether to keep a `Model`-shaped interface at all, or expose something closer to what `ai`
+  already gives us (Step D).
+- Codex full-replay semantic sufficiency — explicitly unsupported until its provider/transport
+  tests prove it; this no longer blocks bounded Stage 0 characterization.
+- Audit the remaining 11 mediation-tax rows — only if LOC becomes decision-relevant again.
+
+## Key file references
+
+- `source/lib/agent-run-orchestrator.ts` (336) — run/stream lifecycle
+- `source/lib/agent-factory.ts` (382) — agent + tool construction
+- `source/lib/agent-client.ts` (357)
+- `source/lib/tool-invoke.ts` (502)
+- `source/lib/chained-input-filter.ts` (208)
+- `source/services/approval/approval-state.ts` (88) — `RunState` held in memory
+- `source/services/approval/approval-flow-coordinator.ts` — approve/reject
+- `source/services/approval/tool-owner.ts` (14) — application-owned owner types remain after A2
+- `source/services/provider-continuity.ts` (36) — chaining state
+- `source/services/session/session-input-planner.ts` (273) — chaining decision point
+- `source/services/session/session-stream-processor.ts` (350)
+- `source/services/session/turn-workflow.ts` — passes `previousResponseId` into run options
+- `source/services/stream-event-processor.ts` (490)
+- `source/services/subagents/nested-runner.ts` (445)
+- `source/providers/codex-responses-model.ts` (1210) — SDK subclassing
+- `source/providers/openai.provider.ts` — OpenAI public-boundary lifecycle and continuity handoff
+- `source/services/conversation/conversation-replay.ts` (1149)

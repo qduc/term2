@@ -1,7 +1,7 @@
 # M1-connection: MCP config loading and connection manager
 
 Task: **M1-connection** (run `mcp-cm-20260917`, worker W-glm), branch `mcp-m1-connection`.
-Delivers the first runnable slice of [MCP servers as run_code functions](../plans/mcp-code-mode.md): config loading, a real-transport connection manager, and the `McpToolSource` implementation that the contract commit (360f7a36) fixed in place.
+Delivers the first runnable slice of [MCP servers as run_code functions](../plans/tools/run-code/mcp-code-mode.md): config loading, a real-transport connection manager, and the `McpToolSource` implementation that the contract commit (360f7a36) fixed in place.
 
 ## Status
 

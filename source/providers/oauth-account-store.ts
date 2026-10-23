@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
  * owns its own refresh token, and refreshes are written back to that account
  * only — accounts never share a rotation chain, which is the same hazard that
  * made us stop sharing files with the `grok` and `codex` CLIs in the first
- * place (docs/plans/provider-oauth-independence.md).
+ * place (docs/plans/providers/provider-oauth-independence.md).
  */
 const OAUTH_ACCOUNT_STORE_VERSION = 2;
 

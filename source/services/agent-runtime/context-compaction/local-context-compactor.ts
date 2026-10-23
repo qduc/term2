@@ -6,6 +6,7 @@ import {
   buildContextCompactionInput,
   wrapContextSummary,
   CONTEXT_COMPACTION_INSTRUCTIONS,
+  CONTEXT_COMPACTION_REQUEST,
 } from '../../../prompts/context-compaction.js';
 import { projectConversationMessage } from '../../conversation/conversation-message-projection.js';
 import { createHash } from 'node:crypto';
@@ -25,12 +26,16 @@ export interface SummaryGenerationResult {
 }
 
 export interface ContextSummaryGenerator {
+  /** A frozen live request envelope. Its presence enables prefix-preserving one-shot generation. */
+  requestContext?: { instructions?: string; tools?: unknown };
   generate(input: {
     priorSummary: string | null;
     transcriptChunk: string;
     renderedInput: string;
     maxOutputTokens: number;
     signal?: AbortSignal;
+    /** Unmodified live history; renderedInput is appended as the final user message. */
+    history?: readonly ProviderInputItem[];
   }): Promise<SummaryGenerationResult>;
 }
 
@@ -304,6 +309,11 @@ export class LocalContextCompactor {
   }
 
   async compactAtBoundary(input: LocalCompactionInput): Promise<LocalCompactionOutcome> {
+    input = {
+      ...input,
+      instructions: input.instructions ?? this.#generator.requestContext?.instructions,
+      tools: input.tools ?? this.#generator.requestContext?.tools,
+    };
     const policy = resolveModelContextPolicy({
       contextWindow: input.contextWindow,
       maxOutputTokens: input.maxOutputTokens,
@@ -405,7 +415,6 @@ export class LocalContextCompactor {
     }
     const droppedOpaqueItems = plan.coldPrefix.filter(isProviderOpaqueItem).length;
     const maxChunkCharacters = Math.max(256, Math.floor(usableInputTokens * 0.4 * 4));
-    const chunks = chunkColdPrefix(coldItems, maxChunkCharacters);
     const summaryOutputCap = Math.max(
       256,
       Math.min(32_000, input.maxOutputTokens ?? 32_000, Math.floor(usableInputTokens * 0.1)),
@@ -413,21 +422,44 @@ export class LocalContextCompactor {
     let summary: string | null = priorCheckpoint ? checkpointSummaryText(priorCheckpoint) : null;
     const usage = { inputTokens: 0, outputTokens: 0 };
     const costRecords: ModelRequestCost[] = [];
+    const summaryInputLimit = Math.min(
+      input.maxRequestInputTokens ?? Infinity,
+      input.contextWindow === undefined ? Infinity : usableWindow - summaryOutputCap - Math.ceil(usableWindow * 0.1),
+    );
+    // Preserve the full live prefix, including the hot tail, prior checkpoints
+    // and provider signatures. None of these may be reconstructed or serialized
+    // if the provider is to recognize its cached prefix. The checkpoint still
+    // replaces only the cold prefix; the hot tail remains newer and verbatim.
+    const oneShotEstimate = estimateContext({
+      ...input,
+      history: [...input.history, { type: 'message', role: 'user', content: CONTEXT_COMPACTION_REQUEST }],
+    });
+    const useLivePrefix =
+      this.#generator.requestContext !== undefined &&
+      Number.isFinite(summaryInputLimit) &&
+      oneShotEstimate.renderedInputTokens <= summaryInputLimit;
+    const chunks = useLivePrefix ? [] : chunkColdPrefix(coldItems, maxChunkCharacters);
+    if (useLivePrefix) {
+      input.signal?.throwIfAborted();
+      const result = await this.#generator.generate({
+        priorSummary: null,
+        transcriptChunk: '',
+        renderedInput: CONTEXT_COMPACTION_REQUEST,
+        history: input.history,
+        maxOutputTokens: summaryOutputCap,
+        signal: input.signal,
+      });
+      summary = result.text;
+      addUsage(usage, result.usage);
+      if (result.costRecords) costRecords.push(...result.costRecords);
+    }
     for (const transcriptChunk of chunks) {
       const renderedInput = buildContextCompactionInput(summary, transcriptChunk);
       const summaryEstimate = estimateContext({
         history: [{ type: 'message', role: 'user', content: renderedInput }],
         instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
       });
-      if (
-        summaryEstimate.renderedInputTokens >
-        Math.min(
-          input.maxRequestInputTokens ?? Infinity,
-          input.contextWindow === undefined
-            ? Infinity
-            : usableWindow - summaryOutputCap - Math.ceil(usableWindow * 0.1),
-        )
-      )
+      if (summaryEstimate.renderedInputTokens > summaryInputLimit)
         return {
           kind: 'blocked',
           reason: 'summary_input_too_large',
@@ -448,6 +480,9 @@ export class LocalContextCompactor {
       addUsage(usage, result.usage);
       if (result.costRecords) costRecords.push(...result.costRecords);
     }
+    input.signal?.throwIfAborted();
+    if (!summary?.trim())
+      throw new Error('Context summarization returned an empty summary; original history retained.');
 
     const uniqueReceipts = [...new Map(receipts.map((receipt) => [receipt.callId, receipt])).values()];
     const content = wrapContextSummary(

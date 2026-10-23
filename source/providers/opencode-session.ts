@@ -56,6 +56,7 @@ export function generateOpencodeSessionId(effectiveSessionId?: string): string {
  */
 function nestedScopeKey(context: SessionTrafficContext | null | undefined): string | undefined {
   if (!context) return undefined;
+  if (context.rootContextCompaction) return undefined;
   if (context.providerHistoryKey) return context.providerHistoryKey;
   if (context.evaluator) return `${context.sessionId}:evaluator`;
   return undefined;

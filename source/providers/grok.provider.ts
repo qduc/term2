@@ -160,7 +160,7 @@ function grokHeadersMiddleware(sessionContextService?: ISessionContextService): 
     const context = sessionContextService?.getContext();
     const sessionId = context?.sessionId;
     const cacheAffinity =
-      context?.providerHistoryKey ??
+      (context?.rootContextCompaction ? undefined : context?.providerHistoryKey) ??
       (context?.evaluator ? String(sessionId) + ':evaluator' : context?.promptCacheKey ?? sessionId);
     const headers = injectHeaders(ctx.init?.headers, {
       'x-grok-client-version': clientVersion,

@@ -1,5 +1,38 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Prefix-preserving local compaction (2026-10-23)
+
+Class: existing context/admission bound. `LocalContextCompactor.compactAtBoundary`
+prefers the live-prefix summary only when its estimate, including the appended
+host request and original instructions/tools, fits the existing explicit input
+ceiling and model-window/output/safety reservations. A known finite limit is
+required for this path; otherwise the existing bounded serialized reducer is
+used. No threshold, default, per-run cap, hysteresis or persisted setting changes.
+Large legitimate histories take the fallback, not a new failure or truncation
+of the live request.
+
+The compactor still owns fit checks and checkpoint construction; the session
+record owns revision-checked commit and recovery. Summary provider history is
+fresh on every request while root prompt-cache affinity is preserved. Codex's
+root-only `rootContextCompaction` marker retains physical socket affinity too;
+transient, evaluator and explicitly scoped provider histories keep socket
+isolation. Grok/OpenCode sticky routing also ignores the disposable helper key
+for marked root requests. Each helper key is released after success or failure
+without resetting root history or closing its transport. A live
+implemented-path probe caught zero cache reuse before that correction, then
+reported 115,840/115,920 cached/input tokens with stable input counts. Tool schemas remain
+visible but executable bodies and approval callbacks cannot reach root tools.
+Cancellation, a provider failure or an empty summary retains source history.
+Persisted source logs, receipt metadata and hot-tail pair checks are unchanged.
+Paid requests retain normal helper cost records, including provider-reported
+cache reads; no history bodies or private signatures are added to diagnostics.
+
+`context-compaction.integration.test.ts` exercises real loopback requests for
+prefix/tool/key equality, raw untruncated tool results, input-ceiling fallback,
+summary usage, unexpected tool calls, provider rejection, empty output and
+cancellation. Rollback is the live-generator wiring and one-shot preference
+together; the bounded serializer remains the fallback.
+
 ## Authorized reference retrieval in headless approval (2026-10-22)
 
 Incident: the paused Bare/Full pilot's Bare reference task could not fetch its

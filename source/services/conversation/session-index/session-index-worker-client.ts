@@ -35,13 +35,15 @@ function resolveWorkerFile(): string {
 
 function createDefaultWorker(workerFile: string): Worker {
   const bootstrap = `
-const { parentPort, workerData } = require('node:worker_threads');
-const { createRequire } = require('node:module');
-// Resolve the loader from the installed app, not the user's project cwd.
-const { createJiti } = createRequire(workerData.workerFile)('jiti');
-const jiti = createJiti(workerData.workerFile);
-const mod = jiti(workerData.workerFile);
-mod.runSessionIndexWorker();
+import('node:module').then(({ createRequire }) => {
+  const req = createRequire(import.meta.url);
+  const { workerData } = req('node:worker_threads');
+  // Resolve the loader from the installed app, not the user's project cwd.
+  const { createJiti } = createRequire(workerData.workerFile)('jiti');
+  const jiti = createJiti(workerData.workerFile);
+  const mod = jiti(workerData.workerFile);
+  mod.runSessionIndexWorker();
+});
 `;
   return new Worker(bootstrap, {
     eval: true,

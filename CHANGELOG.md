@@ -1,3 +1,15 @@
+## [0.36.0] - 2026-10-23
+
+### Features
+- The Bare profile now includes the skills catalog and `activate_skill` capability, plus the environment context source.
+
+### Bug Fixes
+- Logging no longer crashes the process on disk failures (ENOSPC/EACCES): a failed file sink is disabled after one visible warning, provider-traffic capture fails open, and critical conversation journal writes still fail fast with a warning.
+- Removed Winston sinks no longer emit per-record stderr warnings or buffer unread records after the final transport fails.
+- Startup now prunes rotated application logs and dated provider-traffic folders older than 7 days or beyond 512 MiB per directory, keeping current-day logs; application log retention follows local dates to match rotated file names.
+- Sandbox blocked-read approval answers (deny, allow once, Escape, auto mode) are routed to the correct post-execute decision instead of an uninstalled wait.
+- Session rollover is deferred while a queued submission owns the queue, and a rollover that fails reports the error and preserves the handoff brief for manual retry.
+
 ## [0.35.0] - 2026-10-22
 
 ### Features

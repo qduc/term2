@@ -127,11 +127,16 @@ const addUsage = (
 const checkpointSummaryText = (item: ProviderInputItem): string | null => {
   if (!isLocalContextSummary(item) || typeof item.content !== 'string') return null;
   const match = /<summary>\n?([\s\S]*?)\n?<\/summary>/.exec(item.content);
-  // Checkpoints written before receipts moved outside <summary> embed them in
-  // the summary text. They are rebuilt from metadata, so feeding them to the
-  // summarizer again would only grow the prior summary.
+  // Checkpoints written before receipts moved outside <summary> end the summary
+  // text with them. They are rebuilt from metadata, so feeding them to the
+  // summarizer again would only grow the prior summary. The match is anchored to
+  // that legacy header and the end, so a summary that merely mentions the tag
+  // keeps its text.
   return (match?.[1] ?? item.content)
-    .replace(/\s*<recorded-tool-receipts>[\s\S]*?<\/recorded-tool-receipts>/g, '')
+    .replace(
+      /\s*<recorded-tool-receipts>\nHost-observed tool responses, not proof[\s\S]*<\/recorded-tool-receipts>\s*$/,
+      '',
+    )
     .trim();
 };
 
@@ -174,9 +179,9 @@ const renderToolReceipts = (receipts: readonly ToolReceipt[]): string => {
   const omitted = receipts.length - shown.length;
   const lines = shown.map((receipt) => {
     const output = receipt.outputPreview.split('\n').find((line) => line.trim() && !line.startsWith('[truncated'));
-    return `- ${receipt.name}: ${clip(receiptArguments(receipt.argumentsPreview), 100)} → ${clip(
+    return `- ${receipt.name}: ${clip(receipt.display ?? receiptArguments(receipt.argumentsPreview), 100)} → ${clip(
       output ?? '(no output)',
-      60,
+      80,
     )}`;
   });
   return [...(omitted > 0 ? [`(${omitted} earlier calls omitted)`] : []), ...lines].join('\n');
@@ -393,6 +398,8 @@ export class LocalContextCompactor {
         name: String(call.name ?? 'unknown'),
         argumentsSha256: createHash('sha256').update(args).digest('hex'),
         argumentsPreview: args.slice(0, 256),
+        // Taken from the full arguments: the preview often cuts off the path.
+        display: clip(receiptArguments(args), 100),
         outputPreview: output.slice(0, 128),
       });
     }

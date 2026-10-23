@@ -14,7 +14,7 @@ on:
 
 # Temporary hosted experiment; the PR and main branch remain unchanged.
 env:
-  TERM2_BUNDLE_VARIANT: baseline
+  TERM2_BUNDLE_VARIANT: runtime
 
 permissions:
   contents: read

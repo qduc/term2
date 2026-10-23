@@ -7,6 +7,25 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 0.36.0 - October 23, 2026
+
+- The Bare profile now includes the skills catalog (`activate_skill`) and environment context.
+- Logging survives disk failures: a full or unwritable log disk produces one warning instead of crashing, and startup prunes application and provider-traffic logs older than 7 days or beyond 512 MiB per directory.
+- Sandbox blocked-read approval prompts (deny, allow once, Escape) resolve correctly instead of erroring.
+- Session rollover no longer runs while a queued submission owns the queue; a failed rollover preserves its handoff brief.
+
+See the [0.36.0 changelog](https://github.com/qduc/term2/blob/v0.36.0/CHANGELOG.md) for details.
+
+## 0.35.0 - October 22, 2026
+
+- Opt-in Bare profile (`--profile bare`, `/profile bare`) with a minimal system prompt that keeps codebase tools and completion verification.
+- `--profile <name>` selects an operating profile at startup.
+- `agent.backgroundWaitTimeoutMs` bounds how long headless runs wait for background tasks (default 1 hour).
+- `verifier.model` designates an independent completion-verification model.
+- Headless runs with durable goals stop cleanly once completion verification passes.
+
+See the [0.35.0 changelog](https://github.com/qduc/term2/blob/v0.35.0/CHANGELOG.md) for details.
+
 ## 0.34.0 - October 19, 2026
 
 - Adaptive independent verification for durable goals: `goal_check` proposals can be gated by an independent verifier before goals are closed (`agent.completionVerification`).

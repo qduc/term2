@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "description": "Historical test observations, not a failure allowlist. null means unknown or not retained. Dates are recording dates unless run_at is present. Keep observations immutable; append corrections and superseding runs.",
+  "runs": [
+    {
+      "id": "2026-10-24-integration-b093ad0d",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "b093ad0d52c322d2005899f52e989e4de1d96a21",
+      "revision_kind": "committed_feature",
+      "base_commit": "258a4d0a53874526a593ca47eb769e80cf2c91d2",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": false,
+      "environment": {
+        "os": "linux",
+        "node_version": null,
+        "pnpm_version": null,
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Developer machine; Node/pnpm versions not retained. Temp-root coupling was established by the later repair investigation."
+      },
+      "result": {
+        "passed": 217,
+        "failed": 6,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+          "expected": "command is RED (dangerous) and cannot be executed automatically",
+          "actual": "YELLOW refusal with no auto-approve model configured"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+          "expected": "command is RED (dangerous) and cannot be executed automatically",
+          "actual": "YELLOW refusal with no auto-approve model configured"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+          "expected": "command is RED (dangerous) and cannot be executed automatically",
+          "actual": "YELLOW refusal with no auto-approve model configured"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids",
+          "expected": "command is RED (dangerous) and cannot be executed automatically",
+          "actual": "YELLOW refusal with no auto-approve model configured"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "a call that reuses a refused call id runs and is saved as run, not as refused",
+          "expected": "automatic-refusal text",
+          "actual": "YELLOW refusal with no auto-approve model configured"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+          "expected": "outside-workspace file is not created",
+          "actual": "expected true to be false; outside file was created"
+        }
+      ],
+      "comparison": {
+        "classification": "pre_existing_fixture_defect",
+        "baseline_commit": "258a4d0a53874526a593ca47eb769e80cf2c91d2",
+        "resolves_run_ids": [],
+        "notes": "All six failures reproduced on unchanged base; baseline full-suite totals were not retained. Not a compaction regression. Later diagnosis: fixture targets were inside the child scratch permission root. Changing only runner TMPDIR=/tmp made the six pass on unchanged code."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/home/qduc/term2/.term2/compact-cache-verification-20261023.md"
+        }
+      ],
+      "notes": [
+        "Transcribed from retained lane evidence, not a fresh run by the recorder.",
+        "Full integration tier was retained; additional invocation flags were not. Feature merged as 5b5395aa61104b6ae69b997b1c267528d5a88ea8.",
+        "A unique fixture directory did not establish a separate permission root."
+      ]
+    },
+    {
+      "id": "2026-10-24-integration-26f0b0f5",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "26f0b0f596d056bffd7726c434382ed9607b38fb",
+      "revision_kind": "pre_commit_snapshot",
+      "base_commit": "5b5395aa61104b6ae69b997b1c267528d5a88ea8",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": null,
+        "pnpm_version": null,
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Linux, worktree-local dependencies. Child-only TMPDIR/TEMP/TMP use a canonical per-test scratch root separate from ordinary targets. Native macOS/Windows not tested."
+      },
+      "result": {
+        "passed": 224,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 24,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "resolved",
+        "baseline_commit": "5b5395aa61104b6ae69b997b1c267528d5a88ea8",
+        "resolves_run_ids": ["2026-10-24-integration-b093ad0d"],
+        "notes": "Baseline CLI selection reproduced 48 passes and the six failures with pnpm test:integration source/cli.integration.test.ts --reporter=verbose. Original denial assertions retained; added explicit scratch-write success coverage. Production approval/classification/file-access policy unchanged."
+      },
+      "evidence": [
+        {
+          "kind": "git_commit",
+          "commit": "26f0b0f596d056bffd7726c434382ed9607b38fb"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/integration-approval-lane-20261024-result.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/integration-approval-verifier-20261024.md"
+        }
+      ],
+      "independent_verification": {
+        "verdict": "accept",
+        "notes": "Reproduced six baseline failures; seven repaired cases passed under ordinary, app-suffix and symlinked temp roots. Scratch-symlink escape and sibling-prefix denial probes passed. Verifier did not rerun the full suite or static checks."
+      },
+      "snapshot_checksums": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "sha256": "93111c47182796990348e90901779f1ba10b3fe174744f5f46c319abded4299b"
+        },
+        {
+          "file": "docs/agent-context.md",
+          "sha256": "dc3e1101edcd9e5adbbbc9a9ec64f25277eb481b362a72c60b1b3d2019f6da6b"
+        }
+      ],
+      "other_checks": {
+        "typecheck": "passed",
+        "lint": "passed",
+        "lint_warnings": 31,
+        "format": "passed",
+        "static_guards_passed": 28,
+        "no_unit_tests": "passed",
+        "full_e2e": "not_run",
+        "provider_black_box": "not_run"
+      },
+      "notes": [
+        "Transcribed from retained lane evidence, not a fresh run by the recorder.",
+        "Full suite ran twice before commit; final run included fixture canonicalization. Lane verified post-commit hashes match the reviewed test and documentation; this is not a claim of a post-commit full-suite run.",
+        "Branch codex/integration-approval-failures was not merged when this observation was recorded. No integrated-main green result is implied; append one after integration.",
+        "Additional passing environment control: TMPDIR=/tmp pnpm test:integration source/cli.integration.test.ts -t 'does not approve a later call|reuses a refused call id|bare retains|bare permits' (7 passed, 48 skipped)."
+      ]
+    }
+  ]
+}

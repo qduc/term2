@@ -39,11 +39,19 @@ under `source/skins/<name>/`; component colour literals bypass this boundary.
 
 ## Evidence and institutional knowledge
 
-Check [recorded test results](docs/test-results.md) when a verification run fails.
+Check [recorded test results](docs/test-results.json) when a verification run fails.
 After a task's verification, append the tested commit/tree, command, environment,
-counts, exact failures and evidence there. Historical matches identify candidate
+counts, exact failures and evidence to its `runs` array, following existing fields
+and using `null` for unknowns. Keep historical entries; append corrections or
+resolving runs. Label pre-commit/dirty snapshots explicitly; never present them as
+clean-commit runs. Record source commit hashes in a later documentation commit.
+Historical matches identify candidate
 pre-existing failures; compare the failure signature and environment before
 classifying them, and reproduce on the base when the evidence is insufficient.
+Check ancestry and intervening fixes; ancestry alone does not establish persistence.
+Retain concise diagnostic signatures even when linking machine-local logs that
+may expire. Do not record secrets or infer unrun tiers from focused checks.
+Query a revision with `jq --arg sha <full-hash> '.runs[] | select(.commit == $sha)' docs/test-results.json`.
 
 Repository docs provide orientation and rationale; the relevant implementation
 establishes current behavior. Area-specific plans and service contracts are indexed

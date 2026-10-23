@@ -197,8 +197,9 @@ export function planLocalCompaction(input: {
   if (!cut) {
     // Nothing fits the budget, typically because the newest round alone is
     // large. Keep the smallest admissible tail, not the largest: the latest cut
-    // still retains the newest complete round. A later cut never has a larger
-    // tail, so if it does not fit the request, no earlier one does either.
+    // still retains the newest complete round. A later cut almost never has a
+    // larger estimated tail (unpaired opaque reasoning is the known exception,
+    // which can only produce a refusal), so earlier cuts are not tried.
     const latest = Math.max(preferred, rounds.at(-1) ?? 0);
     if (latest > 0 && tailTokensAt(latest) <= input.usableInputTokens) cut = latest;
   }

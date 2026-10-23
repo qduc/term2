@@ -69,7 +69,15 @@ function spawnCli(
   env: NodeJS.ProcessEnv,
   cwd?: string,
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  const child = spawn('node', args, { env, cwd, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
+  // Fixture workspaces may themselves live under an inherited sandbox TMPDIR.
+  // Give the child a separate scratch root: otherwise ordinary fixture files
+  // gain scratch permissions (rm becomes YELLOW; explicit file writes need no approval).
+  const child = spawn('node', args, {
+    env: { ...env, TMPDIR: cliTempDir, TEMP: cliTempDir, TMP: cliTempDir },
+    cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 60_000,
+  });
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
@@ -85,6 +93,7 @@ function spawnCli(
 }
 
 let testDir = '';
+let cliTempDir = '';
 
 /**
  * Minimal OpenAI-compatible provider double: `/models` serves a fixed list,
@@ -223,7 +232,11 @@ it('CLI generic model listing ignores vendor capabilities and replaces broadly f
 });
 
 beforeEach(() => {
-  testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-'));
+  testDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-')));
+  // The app suffix makes this the child's SANDBOX_TEMP_DIR on every platform,
+  // independent of HOME and the runner's own temporary directory.
+  cliTempDir = path.join(testDir, 'scratch', 'term2-nodejs');
+  fs.mkdirSync(cliTempDir, { recursive: true });
 });
 
 it('finishes a provider turn when file logging hits ENOSPC', async () => {
@@ -1507,20 +1520,11 @@ async function runShellCallsScenario(calls: ScriptedShellCall[], seed: Record<st
     }),
   );
   try {
-    const child = spawn('node', [cliPath(), '--auto-approve', 'tidy the workspace'], {
-      cwd: workspace,
+    const { status, stdout, stderr } = await spawnCli(
+      [cliPath(), '--auto-approve', 'tidy the workspace'],
       env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 60_000,
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => (stdout += chunk));
-    child.stderr.on('data', (chunk) => (stderr += chunk));
-    const status = await new Promise<number | null>((resolve, reject) => {
-      child.on('error', reject);
-      child.on('close', resolve);
-    });
+      workspace,
+    );
     // The session log the CLI saved for this conversation (what resume replays), read back from disk.
     const conversationsDir = path.join(root, 'conversations');
     const savedEvents = fs
@@ -1935,10 +1939,15 @@ it.each(['full', 'bare', 'lite', 'pair', 'plan', 'mentor', 'orchestrator'])(
   },
 );
 
-it('bare retains the outside-workspace edit approval boundary without asking headlessly', async () => {
+it.each<[string, boolean]>([
+  ['bare retains the outside-workspace edit approval boundary without asking headlessly', false],
+  ['bare permits explicit sandbox scratch writes without approval', true],
+])('%s', async (_title, scratch) => {
   const workspace = path.join(testDir, 'workspace');
   fs.mkdirSync(workspace);
-  const outside = path.join(testDir, 'outside.txt');
+  const target = path.join(scratch ? cliTempDir : testDir, 'outside.txt');
+  const content = 'fixture edit';
+  const reply = scratch ? 'Scratch edit completed.' : 'Outside edit denied; kept existing permissions.';
   const mock = await startModelMock(['mock-alpha'], (n) =>
     n === 1
       ? [
@@ -1954,7 +1963,7 @@ it('bare retains the outside-workspace edit approval boundary without asking hea
                       type: 'function',
                       function: {
                         name: 'create_file',
-                        arguments: JSON.stringify({ path: outside, content: 'must not be written' }),
+                        arguments: JSON.stringify({ path: target, content }),
                       },
                     },
                   ],
@@ -1967,7 +1976,7 @@ it('bare retains the outside-workspace edit approval boundary without asking hea
       : [
           {
             id: 'done',
-            choices: [{ delta: { role: 'assistant', content: 'Outside edit denied; kept existing permissions.' } }],
+            choices: [{ delta: { role: 'assistant', content: reply } }],
           },
           { id: 'done', choices: [{ delta: {}, finish_reason: 'stop' }] },
         ],
@@ -1983,9 +1992,17 @@ it('bare retains the outside-workspace edit approval boundary without asking hea
       workspace,
     );
     expect(result.status, result.stderr).toBe(0);
-    expect(fs.existsSync(outside)).toBe(false);
-    expect(result.stdout).toContain('Outside edit denied');
-    expect(JSON.stringify(mock.capturedRequests()[1])).toContain('use --auto-approve');
+    expect(fs.existsSync(target), result.stderr).toBe(scratch);
+    expect(result.stdout).toContain(reply);
+    const toolExchange = lastWireToolExchange(mock.capturedRequests());
+    expect(toolExchange.results).toHaveLength(1);
+    if (scratch) {
+      expect(fs.readFileSync(target, 'utf8')).toBe(content);
+      expect(toolExchange.results[0]?.content).toContain(`Created ${target}`);
+      expect(result.stderr).not.toContain('[approval required]');
+    } else {
+      expect(toolExchange.results[0]?.content).toContain('use --auto-approve');
+    }
   } finally {
     await mock.close();
   }

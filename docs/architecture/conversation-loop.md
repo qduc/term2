@@ -162,9 +162,8 @@ foreground turn. A steer does not retroactively authorize changed tool arguments
 
 ## Rationale and verification limits
 
-The [v2 actor experiment](../../experiments/conversation-actor/v2/DESIGN.md)
-made phase/token ownership explicit but required a reader to reconstruct the
-model–tool cycle from handlers. The async-loop choice keeps that cycle visible.
+The [v2 actor experiment (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/conversation-actor/v2/DESIGN.md)
+retains the ownership and cancellation model without making the fake actor the
 Retaining a mirrored generic continuation would create a second execution owner;
 retaining independently writable history, ledger and journal collaborators would
 create competing acceptance owners. Merely wrapping either arrangement would not

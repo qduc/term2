@@ -1,3 +1,0 @@
-awilix: cache, rewrite order, denial, cancelled lifecycles, shared storage/separate memory, actual redacted files, startup rejection: PASS
-fastify: cache, rewrite order, denial, cancelled lifecycles, shared storage/separate memory, actual redacted files, startup rejection: PASS
-Dependency-order contrast: observed Awilix success / Fastify startup rejection

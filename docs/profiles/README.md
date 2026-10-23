@@ -97,15 +97,15 @@ Sandbox authority, approval policy, cancellation, output bounds, request deadlin
 and compaction remain authoritative. `agent.completionVerification=false` remains
 an explicit operator override of the runtime completion gate.
 
-Bare's profile version is `1.3.0`. Its original minimal definition is retained as
-an experiment fixture; the comparison protocol and measurement limitations are in
-[the Bare experiment notes](../../experiments/bare-profile/README.md). Skills were
+Bare's profile version is `1.3.0`. Its original minimal definition and comparison
+protocol are recorded in
+[the Bare experiment notes (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/bare-profile/README.md). Skills were
 restored after the cheap-additions experiment: on one skill-discovery task, three
 fresh paired runs used 34–66% fewer tokens with skills. That task is narrow, and
 one skills run overwrote a file without reading it first, so no general token
 saving or quality equivalence is claimed. Environment context was restored next: in two
 completed paired runs it used 45% and 50% fewer tokens
-([report](../../experiments/bare-profile/cheap-additions-next-candidate.md)).
+([retry notes (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/bare-profile/cheap-additions-retry.md)).
 
 Every CLI session prints its profile on stderr. Headless NDJSON begins with a
 `session_start` carrying `activeProfileId`, and persisted conversation headers

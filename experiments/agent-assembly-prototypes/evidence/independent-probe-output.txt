@@ -1,1 +1,0 @@
-PASS: CLI artifacts, alternate binding, malformed order, dependency rejection, extension, memory reuse, and storage read/write failures for both adapters

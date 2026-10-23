@@ -12,4 +12,4 @@ artifacts in agent-runtime and update the lockfile integrity when replacing one.
 
 After the package is visible on npm, migrate consumers to registry dependencies.
 For the CLI, remove the embedded wire copy and build step at the same time as
-adding its runtime dependency; see `docs/release-agent-wire.md`.
+adding its runtime dependency; see `docs/reference/release-agent-wire.md`.

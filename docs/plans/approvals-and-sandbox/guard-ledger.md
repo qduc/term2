@@ -74,7 +74,7 @@ verify uniqueness and total, empty terminal pages, an explicit larger limit,
 and null continuation at completion. Typecheck, lint, three focused integrations,
 28 static guards and 215 provider black-box checks pass (one skipped). Independent
 fresh-agent real-use recheck accepted; durable trace and limitations are recorded
-in the agent-model-discovery design doc.
+in [`docs/reference/agent-model-discovery.md`](../../reference/agent-model-discovery.md).
 
 ## Gemini rate-limit retry hints (2026-10-17)
 
@@ -125,7 +125,7 @@ made the mismatch observable once inspected; no additional broad mechanism is
 needed for this bounded repair.
 
 Opt-in workflow evolution decision admission is documented in
-[workflow-evolution.md](../../workflow-evolution.md), with enforcement in
+[workflow-evolution.md](../../reference/workflow-evolution.md), with enforcement in
 `applyEvent` in `services/workflow-evolution/experiment.ts`. It retains the
 incumbent and all evidence when frozen comparison coverage is insufficient or
 uncertain, and rejects observed regressions. Its sample floors do not claim
@@ -360,7 +360,7 @@ episodes. ApplicationRunLoop ends an episode only after accepting a terminal
 model completion; partial output, failed streams, and tool activity do not reset
 it. Limits remain 90,000ms / 3 recovery dispatches / 1 automatic replay. Separate
 total-run containment is unchanged. See
-[the incident contract and red proof](../../bugs/invalid-chain-worker-recovery.md).
+[the incident contract and red proof](../../research/invalid-chain-worker-recovery.md).
 The old lifetime allowed 15 minutes of successful work after a recovered failure
 to expire the next unrelated recovery before its first replacement request.
 
@@ -3103,7 +3103,7 @@ Catalogued, no hypothesized failure mode:
 - Class/status/owner: context-retention bound; landed; owner `source/tools/system/shell.ts`.
 - Red proof: `shell.test.ts` 'clamps a foreground max_output_length above the configured maximum' FAILS without the fix (verified via stash), passes with it; plus exact-cap equality, omitted-setting fallback, and public wrapped-path (outer-trim + spool) tests.
 - Verification: focused `source/tools/system/shell.test.ts` 79/79; `pnpm typecheck` clean; provider-black-box explicitly not required (tools/system only, no provider/bridge/run-loop path — reviewer-concurred).
-- Observability: `Shell command execution started` debug carries effective `maxOutputLength`; post-E1 the frozen-window query must read 0 over-cap. Evidence aggregate: `docs/research/evidence/e1-clamp-measurement.json` (preregistered query, frozen 08-27→09-03 window, 638/9427 fg over-cap requests + 571/8850 executions).
+- Observability: `Shell command execution started` debug carries effective `maxOutputLength`; post-E1 the frozen-window query must read 0 over-cap. Evidence aggregate: `docs/research/evidence/e1-clamp-measurement.json` at `3eb16591` (preregistered query, frozen 08-27→09-03 window, 638/9427 fg over-cap requests + 571/8850 executions).
 - Rollback: revert ba428dd7 (7-line production change, independently revertible); foreground returns to raw-request thresholds with outer trim still bounding model-visible text.
 | `boundToolResultText` | 40k UTF-8 bytes, spools artifact + path (`verified safe`) | no |
 | Hook callback timeout | 5s | no |

@@ -3,9 +3,9 @@
 ## Resume here
 
 **Stage 3A verdict (2026-09-09): BLOCKED / NOT ACCEPTED; do not advance the
-present Stage 3A candidate.** See the [final gate report](../../reports/tool-interface-stage3a-v3-gate.md).
+present Stage 3A candidate.** See the [final gate report (historical)](https://github.com/qduc/term2/blob/3eb1659181eeda00bb32f971ef15096911380172/docs/reports/tool-interface-stage3a-v3-gate.md).
 Stage 3B remains separate and unevaluated. The halted Stage 2 experiment closed
-with a negative measurement stop; see [its decision](../../reports/tool-interface-stage2-measurement-stop.md).
+with a negative measurement stop; see [its decision (historical)](https://github.com/qduc/term2/blob/3eb1659181eeda00bb32f971ef15096911380172/docs/reports/tool-interface-stage2-measurement-stop.md).
 The text below is the pre-verdict specification, kept for design rationale.
 
 This is a specification draft for discussion, not implementation authorization

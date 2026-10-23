@@ -229,7 +229,7 @@ pre-close "awaiting owner decisions" wording as historical.
   `HookService` as the narrow local `HookLifecyclePort` for lifecycle owners;
   its discovery, loading, registry, timeout, and diagnostic policy remain
   encapsulated. The versioned V1 external hook protocol is already an earned
-  formal public contract in `docs/public-hooks.md` and the completed
+  formal public contract in `docs/reference/public-hooks.md` and the completed
   `../agent-runtime/public-hooks-system.md`, with package-boundary acceptance coverage. The
   coordinator independently ran the focused hooks suite: 8 files / 33 green
   tests. No new contract record, worktree, public red, or production repair is
@@ -437,7 +437,7 @@ this is not evidence that no governing contract exists elsewhere.
 | `approval/` | 18 | Partial formal coverage: `ToolApprovalBatchCoordinator` (`tool-approval-batch-coordinator.ts:56`) participates in Contracts 01/05; destructive approval authority remains the provisional Contract 11 owner decision, not an SB-00 closure claim. |
 | `subagents/` | 17 | Formal Contract 03 coverage: `SubagentManager` (`subagent-manager.ts:34`) and strategy runners/authority lifecycle (Contract 03:4-6,22-28). |
 | `settings/` | 11 | Formal Contract 04 coverage: `SettingsService` (`settings-service.ts:92`); persistence/migration/sensitive bytes remain provisional Contract 10 owner decisions. |
-| `hooks/` | 10 | V1 public-hooks protocol is an existing formal contract (`docs/public-hooks.md`; `../agent-runtime/public-hooks-system.md` completion); `HookService` (`hook-service.ts:46`) remains the sufficient narrow local lifecycle port. Residual owner decisions: non-interactive handle fallback and shutdown draining. |
+| `hooks/` | 10 | V1 public-hooks protocol is an existing formal contract (`docs/reference/public-hooks.md`; `../agent-runtime/public-hooks-system.md` completion); `HookService` (`hook-service.ts:46`) remains the sufficient narrow local lifecycle port. Residual owner decisions: non-interactive handle fallback and shutdown draining. |
 | `retry/` | 9 | Existing formal coverage: `DefaultRecoveryExecutor` (`recovery-executor.ts:23`) is named by Contract 05:35; retry continuity also meets Contract 02. |
 | `queue/` | 1 | Formal Contract 01 coverage: `QueueController` (`queue-controller.ts:286`; Contract 01:17-24); persistence/recovery extension is reviewed Contract 12, awaiting owner integration. |
 | `test-helpers/` | 1 | Explicitly out of scope: `mock-stream.ts` is a test fixture, not production service behavior. |

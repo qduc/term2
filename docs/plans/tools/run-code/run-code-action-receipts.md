@@ -173,7 +173,7 @@ and without artifact storage. Verification completed:
 - The first related run failed the documented nested-TMPDIR approval fixture
   (`seen=[]`). The same gate passed with `TMPDIR=/tmp`; all subsequent test
   gates used that environment. No test or production workaround was added.
-- [Live continuation probe](../../../reports/run-code-action-receipts-live-2026-09-08.md):
+- [Live continuation probe (historical)](https://github.com/qduc/term2/blob/3eb1659181eeda00bb32f971ef15096911380172/docs/reports/run-code-action-receipts-live-2026-09-08.md):
   all three baseline cells falsely reported success; all three repaired cells
   correctly reported non-application. No action replay occurred in either arm.
   This is one supplied-evidence continuation pair per model, not a native

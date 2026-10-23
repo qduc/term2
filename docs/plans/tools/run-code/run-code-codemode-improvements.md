@@ -34,7 +34,7 @@ text can cross as data instead. `run_code` supplies `{}` when the parameter is
 omitted; other `SandboxedCodeHost` callers retain no `inputs` global. Executable
 source and serialized inputs share the existing 65,536-byte admission budget.
 The evidence and follow-up measurement decision are recorded in
-[`run-code` failure and recovery audit](../../../reports/run-code-failure-recovery-audit-2026-09-13.md).
+[`run-code` failure and recovery audit (historical)](https://github.com/qduc/term2/blob/3eb1659181eeda00bb32f971ef15096911380172/docs/reports/run-code-failure-recovery-audit-2026-09-13.md).
 
 Before touching this area, also read:
 
@@ -445,7 +445,7 @@ check-in, rollover, agent runtime):
 is why its surface is smaller than the non-patch `deepseek-v4.1-flash`. The
 27-tool surface matches the separate production invocation observed on
 2026-09-06; its exact list is preserved in
-`docs/reports/script-failure-canonical-evidence-2026-09-07.md`.
+`docs/reports/script-failure-canonical-evidence-2026-09-07.md` (at `3eb16591`).
 
 The reduced fixture therefore understates the real bound surface: an
 application-faithful invocation exposes 27–30 scriptable tools and roughly
@@ -460,7 +460,7 @@ Usage evidence remains low:
 - `docs/plans/tools/run-code/run-code-authoring-friction.md` measured `tools.describe` in 8
   of 260 scripts (3.08%).
 - The canonical 2026-09-06 07:43:49 through 2026-09-07 07:43:49 UTC+7 window in
-  `docs/reports/run-code-error-attribution-2026-09-07.md` contained 813
+  `docs/reports/run-code-error-attribution-2026-09-07.md` (at `3eb16591`) contained 813
   completed `run_code` records. The recovered failure ledger contains three
   unknown/wrong-tool-name records (0.37% of completions): one unavailable
   `apply_patch` lookup and two `search_replace` calls.

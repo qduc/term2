@@ -330,7 +330,7 @@ const copilotAllowlist = [
 // Both Linux and macOS paths are listed; the runtime drops non-existent paths
 // per platform. This list is hardcoded on purpose: it is the floor of what
 // "do not destroy the user's system" means, and giving users a setting to
-// weaken it would defeat the point. See docs/sandbox-filesystem-read-hardening.md.
+// weaken it would defeat the point. See docs/plans/approvals-and-sandbox/sandbox-filesystem-read-hardening.md.
 const EXACT_PROTECTED_WRITE_PATHS = [
   '$HOME', // resolved via os.homedir() at use time
   '/root',
@@ -479,7 +479,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     'SSH_AUTH_SOCK',
     'SSH_AGENT_PID',
   ];
-  // Env protection layering (see docs/sandbox-filesystem-read-hardening.md §5):
+  // Env protection layering (see docs/plans/approvals-and-sandbox/sandbox-filesystem-read-hardening.md §5):
   // Layer 1 (authoritative): createSandboxEnvironment() in sandbox-env.ts drops every env
   //   key not on a tiny allowlist of known-safe values (PATH, SHELL, TMPDIR, locale, …).
   //   Secrets never reach the child because they are not allowlisted, not because we named them.

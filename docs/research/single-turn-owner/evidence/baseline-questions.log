@@ -1,9 +1,0 @@
-
- RUN  v4.1.9 /home/qduc/term2/.worktrees/single-turn-owner
-
- ✓ scripts/provider-black-box/turn-decisions.blackbox.ts > resumes an answered question once and settles a cancelled question before accepting the next turn 4559ms
-
- Test Files  1 passed (1)
-      Tests  1 passed (1)
-   Start at  21:58:55
-   Duration  4.76s (transform 56ms, setup 0ms, import 90ms, tests 4.56s, environment 0ms)

@@ -40,7 +40,7 @@ Read the existing retrieval studies for motivation:
 [seek/tail experiment](../../research/session-retrieval-seek-cell.md).
 The current tool schema and browser implement `from: "end"`, but it anchors at the
 final projected record, not a multi-record tail. Incorporate the
-[tail-read report](../../bugs/session-browser-tail-read.md) through the contract repair
+[tail-read report](../../research/session-browser-tail-read.md) through the contract repair
 below. Its live observations are reported evidence; they were not rerun for this plan.
 
 ## Problem and outcome

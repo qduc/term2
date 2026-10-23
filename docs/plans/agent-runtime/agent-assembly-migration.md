@@ -65,7 +65,7 @@ physical cancellation, recovery, result acceptance and persistence stay outside
 optional feature contributions. No new execution interception is part of this work.
 
 Keep public hooks observational through the existing `HookService`, `HookRegistry`
-and execution lifecycle adapters; see [public hooks](../../public-hooks.md). Do not
+and execution lifecycle adapters; see [public hooks](../../reference/public-hooks.md). Do not
 add a second emitter or change event placement, privacy or failure isolation.
 
 Root web availability continues to follow effective profile capabilities and root
@@ -78,8 +78,8 @@ at each affected caller rather than assuming root and child selection are equal.
 Preserve prompts, CLI defaults, interactive/non-interactive behavior, provider
 requests, concurrency metadata, approval barriers and shutdown behavior wherever
 the slice reaches them. No persisted-format change or new default product policy
-is in scope. Consult [conversation core](../../design/conversation-core.md) and
-[conversation loop](../../design/conversation-loop.md) when tracing affected owners.
+is in scope. Consult [conversation core](../../architecture/conversation-core.md) and
+[conversation loop](../../architecture/conversation-loop.md) when tracing affected owners.
 
 ## Deferred capabilities and reasons to revisit
 

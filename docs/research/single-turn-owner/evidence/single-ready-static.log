@@ -1,9 +1,0 @@
-$ cross-env NODE_ENV=test node scripts/run-test.mjs
-
- RUN  v4.1.9 /home/qduc/term2/.worktrees/single-turn-owner
-
-
- Test Files  7 passed (7)
-      Tests  28 passed (28)
-   Start at  22:13:02
-   Duration  3.99s (transform 2.83s, setup 290ms, import 277ms, tests 5.60s, environment 1ms)

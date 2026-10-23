@@ -39,6 +39,12 @@ under `source/skins/<name>/`; component colour literals bypass this boundary.
 
 ## Evidence and institutional knowledge
 
+Check [recorded test results](docs/test-results.md) when a verification run fails.
+After a task's verification, append the tested commit/tree, command, environment,
+counts, exact failures and evidence there. Historical matches identify candidate
+pre-existing failures; compare the failure signature and environment before
+classifying them, and reproduce on the base when the evidence is insufficient.
+
 Repository docs provide orientation and rationale; the relevant implementation
 establishes current behavior. Area-specific plans and service contracts are indexed
 in [agent context](docs/agent-context.md#plans-and-area-specific-context).

@@ -24,6 +24,8 @@ export interface ContextSummaryMarker {
     argumentsSha256: string;
     argumentsPreview: string;
     outputPreview: string;
+    /** Executed command or path, rendered to the model in place of the preview. */
+    display?: string;
   }[];
 }
 

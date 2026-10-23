@@ -33,4 +33,4 @@ or a recommendation to ship the packaging migration. Those gates remain open.
 
 ## Observation marker
 
-Run 4/6: baseline. Sequence fixed before measurements.
+Run 5/6: baseline. Sequence fixed before measurements.

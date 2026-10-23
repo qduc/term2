@@ -7,9 +7,14 @@ on:
   push:
     branches:
       - main
+      - experiment/multi-entry-ci-20261023
   pull_request:
     branches:
       - main
+
+# Temporary hosted experiment; the PR and main branch remain unchanged.
+env:
+  TERM2_BUNDLE_VARIANT: baseline
 
 permissions:
   contents: read

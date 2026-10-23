@@ -35,7 +35,13 @@ const exitCode = await buildWithRollback({
     run(process.execPath, ['scripts/write-build-info.mjs']),
     run('pnpm', ['run', 'post-build']),
     run(process.execPath, ['scripts/embed-agent-wire.mjs']),
-    run(process.execPath, ['scripts/bundle-cli.mjs', 'dist', '--replace-entry']),
+    run(process.execPath, [
+      process.env.TERM2_BUNDLE_VARIANT === 'runtime'
+        ? 'scripts/bundle-runtime-experiment.mjs'
+        : 'scripts/bundle-cli.mjs',
+      'dist',
+      '--replace-entry',
+    ]),
   ],
   log: (message) => console.log(message),
 });

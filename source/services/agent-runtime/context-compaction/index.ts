@@ -157,7 +157,7 @@ export function planLocalCompaction(input: {
 }): LocalCompactionPlan {
   const history = projectModelRequestHistory(input.history);
   const turns = turnRanges(history);
-  const hotTailBudgetTokens = Math.min(32_000, Math.max(1_000, Math.floor(input.usableInputTokens * 0.25)));
+  const hotTailBudgetTokens = Math.min(16_000, Math.max(1_000, Math.floor(input.usableInputTokens * 0.25)));
   const pending = new Set<string>();
   const seen = new Set<string>();
   const userBoundaries = new Set<number>();
@@ -183,23 +183,25 @@ export function planLocalCompaction(input: {
     });
   const tailAt = (cut: number) => [...protectedUsersBefore(cut), ...history.slice(cut)];
   const tailTokensAt = (cut: number) => Math.ceil(serializedBytes(filterHistoryForEstimate(tailAt(cut))) / 4);
-  // Prefer whole user turns. A long current task can instead reduce settled
-  // tool rounds, retaining all requests and at least the newest complete round.
-  const preferred = turns.length >= 3 ? turns[turns.length - 2]!.start : 0;
+  // Prefer the latest two whole user turns while they fit the hot-tail budget.
+  // Past it, cut at a settled tool round instead: every user request stays
+  // verbatim regardless, and the older tool output belongs in the summary.
+  const preferred =
+    turns.length >= 3 && userBoundaries.has(turns[turns.length - 2]!.start) ? turns[turns.length - 2]!.start : 0;
+  const rounds = roundBoundaries.slice(0, -1);
+  const budget = Math.min(hotTailBudgetTokens, input.usableInputTokens);
   let cut =
-    preferred > 0 && userBoundaries.has(preferred) && tailTokensAt(preferred) <= input.usableInputTokens
+    preferred > 0 && tailTokensAt(preferred) <= budget
       ? preferred
-      : 0;
+      : rounds.find((boundary) => tailTokensAt(boundary) <= budget) ?? 0;
   if (!cut) {
-    for (const budget of [Math.min(hotTailBudgetTokens, input.usableInputTokens), input.usableInputTokens]) {
-      for (const boundary of roundBoundaries.slice(0, -1)) {
-        if (tailTokensAt(boundary) <= budget) {
-          cut = boundary;
-          break;
-        }
-      }
-      if (cut) break;
-    }
+    // Nothing fits the budget, typically because the newest round alone is
+    // large. Keep the smallest admissible tail, not the largest: the latest cut
+    // still retains the newest complete round. A later cut almost never has a
+    // larger estimated tail (unpaired opaque reasoning is the known exception,
+    // which can only produce a refusal), so earlier cuts are not tried.
+    const latest = Math.max(preferred, rounds.at(-1) ?? 0);
+    if (latest > 0 && tailTokensAt(latest) <= input.usableInputTokens) cut = latest;
   }
   if (cut <= 0)
     return {

@@ -395,9 +395,13 @@ milestone without evidence that the existing estimate is unsafe.
   it through the item preceding the next genuine user message.
 - Never cut between a tool call and its result, reasoning and its associated
   call, or a pending steer and its first delivery.
-- Protect at least the latest two complete user turns.
-- Target a hot-tail budget of 25% of the usable context, clamped to 8k–32k
-  estimated tokens.
+- Keep every genuine user message verbatim. Keep the latest two complete user
+  turns whole only while they fit the hot-tail budget; otherwise cut at the
+  earliest settled tool round whose tail fits it.
+- Target a hot-tail budget of 25% of the usable context, clamped to 1k–16k
+  estimated tokens. When nothing fits the budget (the newest round alone is
+  large), keep the smallest admissible tail: the latest cut, which still holds
+  the newest complete round.
 - If one protected turn alone exceeds the usable request budget, truncate only
   eligible old tool payloads. If it still does not fit, return `blocked`; do not
   summarize a partially executed current turn or silently drop content.

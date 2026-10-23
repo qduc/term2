@@ -3735,3 +3735,29 @@ lines naming their file. A second compaction received exactly the original summa
 as its prior summary. A legacy checkpoint's prior
 summary dropped from 47,315 to 9,115 characters with all seven headings intact.
 Rollback is the renderer and wrapper change together.
+
+### Compaction hot-tail budget (2026-10-23)
+
+`planLocalCompaction` capped the verbatim hot tail at 32,000 estimated tokens
+(25% of usable input, floor 1,000), but its latest-two-whole-turns preference
+was checked only against the entire usable window. One heavy previous turn
+therefore stayed verbatim (61,659 tokens in a synthetic case), and the real
+gemini-4-argon history kept a 31,891-token tail. The cap is now 16,000. Two whole
+turns are kept only within that budget; otherwise the cut is the earliest settled
+tool round whose tail fits. When nothing fits, the latest cut is used if it fits
+the usable window, else the existing refusal. Every genuine user message stays
+verbatim and pair checks are unchanged.
+
+Class: context/retention bound. Omitted tool output moves into the summary and
+remains in the persisted session log. Red evidence (temporary tests through
+`planLocalCompaction`): argon tail 31,891 and heavy-turn tail 61,659 against a 16k
+target. After: 14,582 and 11,236; post-compaction estimate on argon (stub summary,
+no prompt/tools) 34,226 → 17,683. Independent verification rejected the first
+version: a newest round of 16k–32k fell through to the earliest boundary fitting
+the window (166,274 of 171,315 tokens). The latest-cut fallback fixed it (20,068;
+main 30,151). A 2,999-case fuzz against main found no larger real tail, no
+blocked-reason or outcome difference, and no pair/order violation. Known gap: an
+opaque reasoning item without its `reasoning` twin makes the estimate
+non-monotonic, so a mixed-provider history can be refused where main planned a
+cut. That is a refusal only. Rollback is the `planLocalCompaction` cut selection
+and the constant together.

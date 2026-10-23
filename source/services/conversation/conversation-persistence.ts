@@ -9,6 +9,7 @@ import {
   LOG_ENVELOPE_VERSION,
   deltaSidecarPathFor,
   isTruncatedLogEvent,
+  type SessionInitEvent,
 } from '../logging/conversation-log-events.js';
 import { decodeLogEnvelope, resolveEnvelopeIdentities, type PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
@@ -661,9 +662,112 @@ export interface ConversationListEntry {
   messageCount?: number;
 }
 
-export function listConversations(expectedProjectPath?: string, expectedSshHost?: string): ConversationListEntry[] {
+export function listConversations(
+  expectedProjectPath?: string,
+  expectedSshHost?: string,
+  limit?: number,
+): ConversationListEntry[] {
   ensureConversationsDir();
-  return listConversationsInDirectory(getConversationsDir(), expectedProjectPath, expectedSshHost);
+  return listConversationsInDirectory(getConversationsDir(), expectedProjectPath, expectedSshHost, limit);
+}
+
+const INIT_READ_CHUNK_BYTES = 4096;
+const RELEVANT_LIST_EVENT_TYPE_HINT = /"type"\s*:\s*"(?:session_init|user_message|assistant_turn|undo)"/;
+const UUID_FILENAME_SUFFIX = '.jsonl';
+
+function findSessionInitInLines(lines: readonly string[]): SessionInitEvent | null {
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.includes('"session_init"')) continue;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      const envelope = decodeLogEnvelope(parsed);
+      if (!envelope || isTruncatedLogEvent(envelope.event)) continue;
+      if (envelope.event.type === 'session_init') {
+        return envelope.event;
+      }
+    } catch {
+      // skip corrupt line
+    }
+  }
+  return null;
+}
+
+function readFirstSessionInit(filePath: string, fileSize: number): SessionInitEvent | null {
+  if (fileSize <= 0) return null;
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const chunkLength = Math.min(INIT_READ_CHUNK_BYTES, fileSize);
+    const buffer = Buffer.allocUnsafe(chunkLength);
+    const bytesRead = fs.readSync(fd, buffer, 0, chunkLength, 0);
+    if (bytesRead <= 0) return null;
+    const head = buffer.subarray(0, bytesRead).toString('utf-8');
+    const usableEnd = bytesRead < fileSize ? head.lastIndexOf('\n') : head.length;
+    if (usableEnd > 0) {
+      const init = findSessionInitInLines(head.slice(0, usableEnd).split('\n'));
+      if (init) return init;
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  const content = fs.readFileSync(filePath, 'utf-8');
+  return findSessionInitInLines(content.split('\n'));
+}
+
+function parseConversationListEntry(filePath: string, updatedAt: string): ConversationListEntry | null {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split('\n');
+
+  let initEnvelope: PersistedLogEnvelope | null = null;
+  let firstUserMessage: string | undefined;
+  let messageCount = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || !RELEVANT_LIST_EVENT_TYPE_HINT.test(trimmed)) continue;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      const envelope = decodeLogEnvelope(parsed);
+      if (!envelope) continue;
+      // Truncated events carry no lifecycle fields; skip them entirely.
+      if (isTruncatedLogEvent(envelope.event)) continue;
+
+      if (!initEnvelope && envelope.event.type === 'session_init') {
+        initEnvelope = envelope;
+      }
+      if (envelope.event.type === 'user_message') {
+        messageCount++;
+        if (!firstUserMessage && envelope.event.message?.text) {
+          firstUserMessage = envelope.event.message.text;
+        }
+      } else if (envelope.event.type === 'assistant_turn') {
+        messageCount++;
+      } else if (envelope.event.type === 'undo') {
+        const undone = envelope.event.removedUserTurns || 0;
+        messageCount = Math.max(0, messageCount - undone * 2);
+      }
+    } catch {
+      // skip corrupt line
+    }
+  }
+
+  if (!initEnvelope || isTruncatedLogEvent(initEnvelope.event) || initEnvelope.event.type !== 'session_init') {
+    return null;
+  }
+
+  const init = initEnvelope.event;
+  return {
+    id: init.id,
+    updatedAt,
+    ...(init.projectPath ? { projectPath: init.projectPath } : {}),
+    ...(init.sshHost ? { sshHost: init.sshHost } : {}),
+    firstUserMessage,
+    activeProfileId: init.activeProfileId,
+    appMode: init.appMode,
+    model: init.model,
+    provider: init.provider,
+    messageCount,
+  };
 }
 
 /**
@@ -675,11 +779,17 @@ export function listConversations(expectedProjectPath?: string, expectedSshHost?
  * worker (a separate module instance that does not inherit the in-process
  * test override) list the same directory the caller listed without relying on
  * `process.env`.
+ *
+ * When a finite `limit` is provided, files are ordered by `mtime` descending
+ * first so only the top `limit` matching sessions undergo full-transcript
+ * parsing, while remaining files are only probed when needed to disambiguate
+ * `shortRef` prefixes.
  */
 export function listConversationsInDirectory(
   dir: string,
   expectedProjectPath?: string,
   expectedSshHost?: string,
+  limit?: number,
 ): ConversationListEntry[] {
   // The worker receives an explicit directory rather than the caller's
   // in-process override. Preserve the default-path legacy migration there.
@@ -688,80 +798,103 @@ export function listConversationsInDirectory(
     if (!fs.existsSync(dir)) {
       return [];
     }
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
-    const entries: ConversationListEntry[] = [];
-    for (const f of files) {
-      const fp = path.join(dir, f);
+    const maxEntries =
+      limit !== undefined && Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : Number.POSITIVE_INFINITY;
+    if (maxEntries === 0) {
+      return [];
+    }
+
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith(UUID_FILENAME_SUFFIX));
+    const candidates: Array<{ file: string; filePath: string; updatedAt: string; size: number }> = [];
+    for (const file of files) {
+      const filePath = path.join(dir, file);
       try {
-        const stat = fs.statSync(fp);
-        const content = fs.readFileSync(fp, 'utf-8');
-        const lines = content.split('\n');
-
-        let initEnvelope: PersistedLogEnvelope | null = null;
-        let firstUserMessage: string | undefined;
-        let messageCount = 0;
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const parsed = JSON.parse(trimmed) as unknown;
-            const envelope = decodeLogEnvelope(parsed);
-            if (!envelope) continue;
-            // Truncated events carry no lifecycle fields; skip them entirely.
-            if (isTruncatedLogEvent(envelope.event)) continue;
-
-            if (!initEnvelope && envelope.event.type === 'session_init') {
-              initEnvelope = envelope;
-            }
-            if (envelope.event.type === 'user_message') {
-              messageCount++;
-              if (!firstUserMessage && envelope.event.message?.text) {
-                firstUserMessage = envelope.event.message.text;
-              }
-            } else if (envelope.event.type === 'assistant_turn') {
-              messageCount++;
-            } else if (envelope.event.type === 'undo') {
-              const undone = envelope.event.removedUserTurns || 0;
-              messageCount = Math.max(0, messageCount - undone * 2);
-            }
-          } catch {
-            // skip corrupt line
-          }
-        }
-
-        if (!initEnvelope || isTruncatedLogEvent(initEnvelope.event) || initEnvelope.event.type !== 'session_init') {
-          continue;
-        }
-
-        const init = initEnvelope.event;
-        const entry: ConversationListEntry = {
-          id: init.id,
+        const stat = fs.statSync(filePath);
+        candidates.push({
+          file,
+          filePath,
           updatedAt: stat.mtime.toISOString(),
-          ...(init.projectPath ? { projectPath: init.projectPath } : {}),
-          ...(init.sshHost ? { sshHost: init.sshHost } : {}),
-          firstUserMessage,
-          activeProfileId: init.activeProfileId,
-          appMode: init.appMode,
-          model: init.model,
-          provider: init.provider,
-          messageCount,
-        };
-
-        if (expectedProjectPath !== undefined || expectedSshHost !== undefined) {
-          if (!matchesEntryContext(entry, expectedProjectPath, expectedSshHost)) {
-            continue;
-          }
-        }
-
-        entries.push(entry);
+          size: stat.size,
+        });
       } catch {
-        // skip
+        // skip unreadable stat
       }
     }
-    const sorted = entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    const shortRefs = uniqueConversationShortRefs(sorted);
-    return sorted.map((entry) => ({ ...entry, shortRef: shortRefs.get(entry.id) ?? entry.id }));
+    candidates.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+    const entries: ConversationListEntry[] = [];
+    const topPrefixes8 = new Set<string>();
+    const remainingCandidates: typeof candidates = [];
+    const hasScopeFilter = expectedProjectPath !== undefined || expectedSshHost !== undefined;
+
+    for (const candidate of candidates) {
+      if (entries.length < maxEntries) {
+        try {
+          if (hasScopeFilter) {
+            const init = readFirstSessionInit(candidate.filePath, candidate.size);
+            if (!init) continue;
+            if (
+              !matchesEntryContext(
+                { id: init.id, updatedAt: candidate.updatedAt, projectPath: init.projectPath, sshHost: init.sshHost },
+                expectedProjectPath,
+                expectedSshHost,
+              )
+            ) {
+              continue;
+            }
+          }
+
+          const entry = parseConversationListEntry(candidate.filePath, candidate.updatedAt);
+          if (!entry) continue;
+
+          if (hasScopeFilter && !matchesEntryContext(entry, expectedProjectPath, expectedSshHost)) {
+            continue;
+          }
+
+          entries.push(entry);
+          if (UUID.test(entry.id)) {
+            topPrefixes8.add(entry.id.slice(0, 8).toLowerCase());
+          }
+        } catch {
+          // skip
+        }
+      } else {
+        remainingCandidates.push(candidate);
+      }
+    }
+
+    // Disambiguate shortRefs against any older conversations in the same scope
+    // that share an 8-character UUID prefix with the selected entries.
+    const shortRefCandidates: Array<{ id: string }> = entries.map((entry) => ({ id: entry.id }));
+    if (topPrefixes8.size > 0 && remainingCandidates.length > 0) {
+      for (const candidate of remainingCandidates) {
+        const stem = candidate.file.slice(0, -UUID_FILENAME_SUFFIX.length);
+        if (UUID.test(stem) && !topPrefixes8.has(stem.slice(0, 8).toLowerCase())) {
+          continue;
+        }
+        try {
+          const init = readFirstSessionInit(candidate.filePath, candidate.size);
+          if (!init || !UUID.test(init.id)) continue;
+          if (!topPrefixes8.has(init.id.slice(0, 8).toLowerCase())) continue;
+          if (
+            hasScopeFilter &&
+            !matchesEntryContext(
+              { id: init.id, updatedAt: candidate.updatedAt, projectPath: init.projectPath, sshHost: init.sshHost },
+              expectedProjectPath,
+              expectedSshHost,
+            )
+          ) {
+            continue;
+          }
+          shortRefCandidates.push({ id: init.id });
+        } catch {
+          // skip
+        }
+      }
+    }
+
+    const shortRefs = uniqueConversationShortRefs(shortRefCandidates);
+    return entries.map((entry) => ({ ...entry, shortRef: shortRefs.get(entry.id) ?? entry.id }));
   } catch {
     return [];
   }

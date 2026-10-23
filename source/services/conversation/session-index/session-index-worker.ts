@@ -113,6 +113,7 @@ export function runSessionIndexWorker(): void {
             msg.conversationsDir,
             msg.projectPath,
             msg.sshHost,
+            msg.limit,
           );
           parentPort!.postMessage({
             id: msg.id,

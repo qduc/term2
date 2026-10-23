@@ -67,7 +67,7 @@ async function listConversationsOffMainThread(
     // runtime forbids worker threads). Parsing in-process keeps the listing
     // correct at the cost of briefly blocking, which is preferable to returning
     // a misleadingly empty list.
-    return listConversations(projectPath, sshHost);
+    return listConversations(projectPath, sshHost, limit);
   } finally {
     await client?.close({ force: failed }).catch(() => {});
   }

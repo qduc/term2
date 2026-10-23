@@ -111,7 +111,7 @@ slightly worse observed complete CI time, not a faster-test result. The prior
 local measurements found about 29% smaller archives and 7% smaller fresh
 production installations. Those are separate benefits, not evidence of faster CI.
 
-No one-minute full-feedback target was achieved. No PR or main change, merge,
+No one-minute full-feedback target was achieved. No PR implementation or main change, merge,
 release, paid-provider call, additional runner class/count, cache deletion, or
 expanded access was needed. The temporary branch trigger and variant environment
 are removed after the measurement sequence; the remote experiment branch and
@@ -126,3 +126,12 @@ Raw observations, phase timestamps, resource readings, cache misses, inventory,
 terminal-observation limits and duplicate overhead are retained in the adjacent
 results JSON. Full logs remain accessible from each linked GitHub run and in the
 local multi-entry-bundle worktree under .bundle-experiment/hosted.
+
+## Earlier local experiment
+
+The [local packaging report](multi-entry-bundle-experiment-2026-10-23.md) and
+[raw local evidence](multi-entry-bundle-experiment-2026-10-23.evidence.json) retain
+the rejected all-module candidate, package/install-size measurements, alternating
+startup samples, fresh production dependency inventories, relocated worker/UI
+checks, and corrected or failed exploratory evidence. Those measurements are
+not substitutions for the hosted complete-CI observations above.

@@ -161,8 +161,12 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny, TName extends 
     readonly type: 'custom';
     readonly format: StreamedModelCustomToolFormat;
   };
-  /** Converts a provider's raw freeform tool input into the executor's params. */
-  parseModelArguments?: (input: string) => unknown;
+  /**
+   * Converts a provider's raw freeform tool input into the executor's params.
+   * The return value must satisfy this tool's schema. The planner treats a
+   * mismatch as a harness defect and does not ask the model to retry JSON.
+   */
+  parseModelArguments?: (input: string) => z.infer<TSchema>;
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval: (params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean;
   execute: (params: z.infer<TSchema>, context?: unknown, details?: unknown) => Promise<unknown> | unknown;
@@ -279,6 +283,11 @@ export interface AnyToolDefinition {
     readonly type: 'custom';
     readonly format: StreamedModelCustomToolFormat;
   };
+  /**
+   * Converts a provider's raw freeform tool input into the executor's params.
+   * The return value must satisfy `canonicalParameters` or `parameters`. The
+   * planner treats a mismatch as a harness defect.
+   */
   parseModelArguments?: (input: string) => unknown;
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval(params: unknown, context?: unknown): Promise<boolean> | boolean;

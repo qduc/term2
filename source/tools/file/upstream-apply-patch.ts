@@ -1,10 +1,10 @@
 /**
- * The model-facing apply_patch contract used by upstream Codex.
+ * Parser for the upstream Codex freeform apply_patch grammar.
  *
- * The executor still consumes the application's operation shape. Keeping this
- * adapter separate means providers that only support JSON function tools can
- * continue using the legacy schema while Responses custom tools receive the
- * exact freeform payload they were trained to emit.
+ * The executor's argument is the raw patch string (`{ patch }`). This module
+ * turns that string into operations for approval and execution. It is not a
+ * tool-argument adapter: handing its `{ operations }` result to `apply_patch`
+ * fails the `{ patch: string }` schema.
  */
 
 export type UpstreamApplyPatchOperation =
@@ -41,7 +41,17 @@ const DELETE_FILE = '*** Delete File: ';
 const UPDATE_FILE = '*** Update File: ';
 const MOVE_TO = '*** Move to: ';
 
-/** Parse the complete freeform payload into the application's executable shape. */
+/**
+ * Tool arguments for a freeform apply_patch call. The grammar is checked
+ * here, and the raw script is what execute and approval parse. The operations
+ * object is not the tool argument.
+ */
+export function freeformApplyPatchArguments(input: string): { patch: string } {
+  parseUpstreamApplyPatch(input);
+  return { patch: input };
+}
+
+/** Parse the complete freeform payload into operations for approval and execution. */
 export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams {
   const lines = normalizePatchLines(input);
   if (lines[0] !== BEGIN_PATCH) {

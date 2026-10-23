@@ -1,6 +1,5 @@
 import { resolveModelContextPolicy, resolveOutputAllocation } from '../services/agent-runtime/model-context-policy.js';
 import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../tools/system/run-code/run-code.js';
-import path from 'path';
 import { z } from 'zod';
 import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -40,9 +39,7 @@ import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 import type { SessionBrowser } from '../services/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../contracts/session-rollover.js';
-import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
-import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
-import { UPSTREAM_APPLY_PATCH_GRAMMAR, parseUpstreamApplyPatch } from '../tools/file/upstream-apply-patch.js';
+import { UPSTREAM_APPLY_PATCH_GRAMMAR, freeformApplyPatchArguments } from '../tools/file/upstream-apply-patch.js';
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 import type { DurableGoal } from '../services/logging/conversation-log-events.js';
 import { ModelSelectionSchema, type ModelSelection } from '../services/settings/model-selection.js';
@@ -331,51 +328,22 @@ export function buildAgentTools({
             definition: UPSTREAM_APPLY_PATCH_GRAMMAR,
           },
         },
-        parseModelArguments: parseUpstreamApplyPatch,
+        parseModelArguments: freeformApplyPatchArguments,
       };
       tools = tools.map((tool, index) => (index === applyPatchIndex ? nativeApplyPatch : tool));
+      // The wrapped needsApproval returns true whenever a policy registry is
+      // present, leaving the real decision in the registry for run_code. The
+      // direct run loop calls the tool, so native calls must consult that
+      // same registration instead of a second operations-shaped policy.
       nativeApplyPatch.needsApproval = async (params, context) => {
-        if (shouldBypassToolApproval(applyPatch.name, deps.settings.get('shell.autoApproveMode'))) return false;
-        const rawOperations =
-          params && typeof params === 'object' && Array.isArray((params as { operations?: unknown }).operations)
-            ? (params as { operations: unknown[] }).operations
-            : [params ?? context];
-        const workspaceRoot = path.resolve(deps.executionContext?.getCwd() || process.cwd());
-        for (const rawOperation of rawOperations) {
-          if (!rawOperation || typeof rawOperation !== 'object') return true;
-          const operation = rawOperation as { path?: unknown; type?: unknown; moveTo?: unknown };
-          let resolved: string;
-          try {
-            resolved = resolveWorkspacePath(String(operation.path ?? ''), workspaceRoot);
-          } catch {
-            return true;
-          }
-          const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
-          const insideWorkspace =
-            (resolved !== workspaceRoot && resolved.startsWith(prefix)) ||
-            resolved === SANDBOX_TEMP_DIR ||
-            resolved.startsWith(SANDBOX_TEMP_DIR + path.sep);
-          if (!insideWorkspace || isProtectedHookPath(resolved, workspaceRoot)) {
-            if (!deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)) return true;
-          }
-          if (operation.type === 'delete_file' || operation.moveTo) return true;
-          if (deps.executionContext?.isRemote() && deps.executionContext.getSSHService()) return true;
-          const physicallyInside =
-            (await isWorkspacePathPhysicallyInside(resolved, workspaceRoot)) ||
-            (await isWorkspacePathPhysicallyInside(resolved, SANDBOX_TEMP_DIR));
-          if (!physicallyInside && !deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)) return true;
-        }
-        return false;
+        if (shouldBypassToolApproval(nativeApplyPatch.name, deps.settings.get('shell.autoApproveMode'))) return false;
+        const decision = await deps.approvalPolicyRegistry.evaluate({
+          toolName: nativeApplyPatch.name,
+          args: params,
+          context,
+        });
+        return decision.kind !== 'auto_approve' && decision.kind !== 'interceptor_denied';
       };
-      // The native declaration replaces the wrapped custom definition after
-      // the initial registration above. Re-register the final policy so the
-      // batch coordinator and run_code consult the definition that is bound.
-      deps.approvalPolicyRegistry.register({
-        toolName: nativeApplyPatch.name,
-        parameters: nativeApplyPatch.parameters,
-        needsApproval: nativeApplyPatch.needsApproval,
-        checkInterceptors: (params) => deps.checkToolInterceptors(nativeApplyPatch.name, params),
-      });
     }
     deps.logger.debug('Using native applyPatchTool from SDK', {
       model: resolvedModel,

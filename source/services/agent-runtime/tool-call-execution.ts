@@ -10,6 +10,7 @@ import type {
 import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { describeError } from '../../utils/error-helpers.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
+import { isZodToolParameterSchema } from '../../tools/types.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
 
 export type ToolPlanEntry = {
@@ -119,6 +120,18 @@ export class ToolCallExecution {
       } catch (error) {
         entry.output = `Error: Invalid patch: ${describeError(error)}`;
         continue;
+      }
+      if (definition.parseModelArguments) {
+        const mismatch = parsedArgumentsSchemaMismatch(definition, entry.params);
+        if (mismatch) {
+          entry.output = mismatch;
+          this.#log(
+            'parsed tool arguments rejected by schema',
+            { toolName: event.name, callId: event.id },
+            'tool.arguments.schema_rejected',
+          );
+          continue;
+        }
       }
       context.onToolStall({ name: event.name, argumentsText: event.arguments, effect: definition.effect });
       // Only blanket decisions apply to a newly planned call. A per-call
@@ -341,6 +354,14 @@ export class ToolCallExecution {
 
 const DEFAULT_MAX_PARALLEL_TOOL_CALLS = 3;
 let nextToolBatchSeq = 0;
+
+function parsedArgumentsSchemaMismatch(definition: AnyToolDefinition, params: unknown): string | undefined {
+  const schema =
+    definition.canonicalParameters ??
+    (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined);
+  if (!schema || !isZodToolParameterSchema(schema) || schema.safeParse(params).success) return undefined;
+  return `Error: ${definition.name} argument parser returned a value its schema rejects. This is a harness defect.`;
+}
 
 function parseArguments(value: string): unknown {
   try {

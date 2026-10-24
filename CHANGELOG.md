@@ -1,3 +1,20 @@
+## [0.38.0] - 2026-10-24
+
+### Features
+- Continue saved conversations non-interactively with `term2 --resume <session-id> "Follow-up prompt"` or `--resume last`, including JSON output and forked continuations. Restored history, session identity, reasoning settings, and provenance are preserved; missing sessions fail explicitly.
+
+### Improvements
+- Lite is now a compatibility alias for Bare across CLI flags, slash commands, saved settings, and session restoration. Bare reads project instructions on demand and exposes selected web, memory, session, MCP, and background-task capabilities through `run_code` while keeping shell directly available.
+- Explicit `session_read` requests resolve only the matching session-reference bucket instead of refreshing the full project search index, with canonical replay performed off the main thread.
+
+### Bug Fixes
+- Removing the last retained queued item, or restoring an empty paused queue, releases the pause so later submissions can run.
+- Defer terminal renderer loading until interactive startup, avoiding unnecessary renderer initialization for headless CLI commands.
+
+### Internal/Chores
+- Added bounded generated verification for history, queue, tool-ledger, and additional runtime boundaries, with replayable seeds and retained verification evidence.
+- Repaired macOS and temporary-directory assumptions in integration and end-to-end fixtures.
+
 ## [0.37.0] - 2026-10-24
 
 ### Features

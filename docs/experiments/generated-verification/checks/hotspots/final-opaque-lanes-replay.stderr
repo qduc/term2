@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property opaque.lane-isolation --seed=424242 --path 0:1:0:2:2:2 --runs 1000

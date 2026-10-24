@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "revision": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 7.388520000000028,
+  "results": [
+    {
+      "property": "opaque.lane-isolation",
+      "failed": true,
+      "seed": 777,
+      "path": "17:2:2:3:3:2",
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 7.367198999999971,
+      "counterexample": [
+        [
+          {
+            "lane": "openai",
+            "origin": "grok",
+            "text": ""
+          }
+        ],
+        "openai"
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for openai\n\n1 !== 0\n\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/opaque.mjs:97:18\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async AsyncProperty.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1217:19)\n    at async asyncPropertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2564:14)\n    at async asyncRunIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2557:15)\n    at async file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:63:22",
+      "replay": "pnpm verify:generated --property opaque.lane-isolation --seed=777 --path '17:2:2:3:3:2' --runs 1000"
+    }
+  ]
+}

@@ -6727,6 +6727,1101 @@
           "path": "docs/experiments/generated-verification/checks/ledger/merged-isolated-lint.log"
         }
       ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-0",
+      "suite": "seed-1",
+      "command": "pnpm verify:generated --seed=1 --runs 10000",
+      "exit_code": 0,
+      "result": {
+        "passed": 100000,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 42.327145592309535; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/seed-1.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-1",
+      "suite": "seed-424242",
+      "command": "pnpm verify:generated --seed=424242 --runs 10000",
+      "exit_code": 0,
+      "result": {
+        "passed": 100000,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 35.675528748426586; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/seed-424242.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-2",
+      "suite": "seed-20261024",
+      "command": "pnpm verify:generated --seed=20261024 --runs 10000",
+      "exit_code": 0,
+      "result": {
+        "passed": 100000,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 30.14160608081147; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/seed-20261024.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-3",
+      "suite": "seed--2147483648",
+      "command": "pnpm verify:generated --seed=-2147483648 --runs 10000",
+      "exit_code": 0,
+      "result": {
+        "passed": 100000,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 32.30761849414557; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/seed--2147483648.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-4",
+      "suite": "syntax",
+      "command": "node --check scripts/generated-verification/run.mjs",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 0.04987933626398444; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-5",
+      "suite": "syntax",
+      "command": "node --check scripts/generated-verification/compaction.mjs",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 0.025710643734782934; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-6",
+      "suite": "syntax",
+      "command": "node --check scripts/generated-verification/continuity.mjs",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 0.02930698310956359; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-7",
+      "suite": "syntax",
+      "command": "node --check scripts/generated-verification/journal.mjs",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 0.023486715275794268; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-8",
+      "suite": "syntax",
+      "command": "node --check scripts/generated-verification/opaque.mjs",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 0.02685584593564272; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-9",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 4.176807614974678; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/typecheck.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-10",
+      "suite": "static",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 4.659488756675273; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/static.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-parent-11",
+      "suite": "build",
+      "command": "pnpm build",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Wall seconds 5.523229906801134; exact checker committed, evidence dirty. Five syntax invocations have separate rows, their shared log contains final successful invocation.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/build.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "deliberately_mutated_source",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "Expected deliberate fault: compaction-users; AssertionError [ERR_ASSERTION]: partition lost or reordered content"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-compaction-users-red",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property compaction.plan-cut --seed=424242 --runs 1000",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0
+      },
+      "notes": "Expected RED; wall seconds 2.5179580389522016. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "deliberately_mutated_source",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "Expected deliberate fault: compaction-users; AssertionError [ERR_ASSERTION]: partition lost or reordered content"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-compaction-users-redReplay",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property compaction.plan-cut --seed=424242 --path 0:1:0:1:1:1:1:1:1:1:1:1:1:1:1 --runs 1000",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0
+      },
+      "notes": "Expected RED; wall seconds 1.818165523931384. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "restored_exact_checker",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-compaction-users-restoredReplay",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property compaction.plan-cut --seed=424242 --path 0:1:0:1:1:1:1:1:1:1:1:1:1:1:1 --runs 1000",
+      "exit_code": 0,
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "notes": "Expected GREEN; wall seconds 2.163259224034846. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "deliberately_mutated_source",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "Expected deliberate fault: continuity-debt; AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-continuity-debt-red",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property continuity.debt-filter --seed=424242 --runs 1000",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0
+      },
+      "notes": "Expected RED; wall seconds 2.1261933809146285. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "deliberately_mutated_source",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "Expected deliberate fault: continuity-debt; AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-continuity-debt-redReplay",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property continuity.debt-filter --seed=424242 --path 0:1:1:1:1:1:1:1:1:0:0:0 --runs 1000",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0
+      },
+      "notes": "Expected RED; wall seconds 1.8185755289159715. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "restored_exact_checker",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-continuity-debt-restoredReplay",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property continuity.debt-filter --seed=424242 --path 0:1:1:1:1:1:1:1:1:0:0:0 --runs 1000",
+      "exit_code": 0,
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "notes": "Expected GREEN; wall seconds 1.9579299688339233. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "deliberately_mutated_source",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "Expected deliberate fault: journal-identity; AssertionError [ERR_ASSERTION]: lost or merged event identity"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-journal-identity-red",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --runs 1000",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0
+      },
+      "notes": "Expected RED; wall seconds 1.8557871673256159. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "deliberately_mutated_source",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "Expected deliberate fault: journal-identity; AssertionError [ERR_ASSERTION]: lost or merged event identity"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-journal-identity-redReplay",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path 0:1:1:1:1:1:3:3:3:3:3 --runs 1000",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0
+      },
+      "notes": "Expected RED; wall seconds 1.9424343924038112. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "restored_exact_checker",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-journal-identity-restoredReplay",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path 0:1:1:1:1:1:3:3:3:3:3 --runs 1000",
+      "exit_code": 0,
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "notes": "Expected GREEN; wall seconds 2.065766140818596. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "deliberately_mutated_source",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "Expected deliberate fault: opaque-lanes; AssertionError [ERR_ASSERTION]: opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for openai"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-opaque-lanes-red",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property opaque.lane-isolation --seed=424242 --runs 1000",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0
+      },
+      "notes": "Expected RED; wall seconds 2.1352435490116477. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "deliberately_mutated_source",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "Expected deliberate fault: opaque-lanes; AssertionError [ERR_ASSERTION]: opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for openai"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-opaque-lanes-redReplay",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property opaque.lane-isolation --seed=424242 --path 0:1:0:2:2:2 --runs 1000",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0
+      },
+      "notes": "Expected RED; wall seconds 2.515363479964435. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "restored_exact_checker",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-opaque-lanes-restoredReplay",
+      "suite": "mutation-sensitivity",
+      "command": "pnpm verify:generated --property opaque.lane-isolation --seed=424242 --path 0:1:0:2:2:2 --runs 1000",
+      "exit_code": 0,
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "notes": "Expected GREEN; wall seconds 2.4738317551091313. Mutation isolated from reviewer, byte-exact finally restoration. Full source diff/hashes and shrunk replay in mutation-checks.json.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-network-classified",
+      "suite": "network-denied-generated",
+      "command": "pnpm verify:generated --seed 770011 --runs 1000 (NODE_OPTIONS denial loader retained)",
+      "exit_code": 0,
+      "result": {
+        "passed": 10000,
+        "failed": 0,
+        "skipped": 0
+      },
+      "notes": "All sockets denied. 0 external network attempts; 2 blocked tsx loader Unix IPC calls separately classified. Earlier blanket probes exit1 preserved; diagnostic tsx stacks establish IPC, not provider calls.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/network-classified.json"
+        },
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/network-direct.stderr"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_untracked_evidence",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-cli",
+      "suite": "installed-cli",
+      "command": "Help; four new target selections; invalid target/property; output new/existing refusal",
+      "exit_code": 0,
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      },
+      "notes": "All9expected outcomes completed; aggregate harness later failed on unrelated network-probe classification. Logs retained; did not repeat completed output-write effects. Two invalid requests and existing-file refusal exit2, preserving output bytes.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/cli-completed.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "clean_exact_implementation_commit",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-isolated-lint",
+      "suite": "full-isolated-lint",
+      "command": "pnpm lint",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Clean detached65de0f5d worktree with own frozen install; 50.212s observed shell wall time. Primary local artifacts not involved.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/isolated-lint.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-final-0",
+      "suite": "final-seed",
+      "command": "pnpm verify:generated --seed 424242 --runs 10000",
+      "exit_code": 0,
+      "result": {
+        "passed": 100000,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Final amended checker; checker plus evidence/docs; wall seconds 27.026458670385182",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/final-seed.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-final-1",
+      "suite": "final-syntax",
+      "command": "node --check scripts/generated-verification/journal.mjs",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Final amended checker; checker plus evidence/docs; wall seconds 0.024199659004807472",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/final-syntax.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-final-2",
+      "suite": "final-types",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Final amended checker; checker plus evidence/docs; wall seconds 4.1825776170007885",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/final-types.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-final-3",
+      "suite": "final-static",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Final amended checker; checker plus evidence/docs; wall seconds 3.169725087005645",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/final-static.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-final-4",
+      "suite": "final-build",
+      "command": "pnpm build",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Final amended checker; checker plus evidence/docs; wall seconds 3.729601497761905",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/final-build.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "clean_exact_commit",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-final-5",
+      "suite": "final-isolated-lint",
+      "command": "pnpm lint",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Final amended checker; isolated clean; wall seconds 47.75527466414496",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/final-isolated-lint.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [
+        "F1journal generator fails to exercise cross-turn pending reasoning",
+        "F2deep snapshot claim unsupported by shallow freshness assertion"
+      ],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-review-initial",
+      "suite": "independent-review-and-installed-use",
+      "command": "Fresh Opus5.5 code/use review and in-memory fault challenges",
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 2,
+        "skipped": null
+      },
+      "notes": "REJECT2journal findings: missing stranded-turn coverage and overclaimed deep snapshot isolation; others accepted. Approximately14.6k independent cases plus mutants. Resolved by8d789a2c.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/independent-opus.md"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-review-amended",
+      "suite": "independent-review-and-installed-use",
+      "command": "Fresh Opus5.5 code/use review and in-memory fault challenges (amended recheck)",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "ACCEPT; J2previously surviving mutant now fails;9journal mutants have expected outcomes inclvalid alternatives. Approx8.6k cases plus exact red/replay/restored green. No permission denials. Cumulative resumed-session list-price cost USD2.110373, not summed with first1.7723466.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/amended-independent-opus.md"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "committed_checker_and_explicit_in_memory_mutants",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-final-journal-mutants",
+      "suite": "final-journal-mutants",
+      "command": "Commands and intervention source retained in final-journal-mutations.json",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Two final journal in-memory mutants both fail/shrink/replay red and same replay passes restored. Earlier hook used uncompiled text and failed to apply, infrastructure evidence retained; exact compiled edits then validated.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/final-journal-mutations.json"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+      "revision_kind": "committed_checker_and_explicit_in_memory_mutants",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-final-replays-network",
+      "suite": "final-replays-network",
+      "command": "Commands and intervention source retained in final-replays-network.json",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "Unchanged-area final shrunk replays pass. All10,000 final cases pass with external network denied, zero external attempts; loader IPC denied and counted separately.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/final-replays-network.json"
+        }
+      ]
     }
   ]
 }

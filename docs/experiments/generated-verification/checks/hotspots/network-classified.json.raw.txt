@@ -1,0 +1,10 @@
+{
+  "command": ["pnpm", "verify:generated", "--seed", "770011", "--runs", "1000"],
+  "exit": 0,
+  "wallSeconds": 5.446415496058762,
+  "revision": "65de0f5d",
+  "environment": {
+    "NODE_OPTIONS": "data URL of network-deny-classified.mjs.txt excluding final newline"
+  },
+  "notes": "All socket attempts denied, loader Unix IPC counted separately, no TCP/HTTP/TLS/fetch allowed. Earlier blanket socket probe misclassified tsx IPC as external network."
+}

@@ -1,0 +1,56 @@
+[
+  {
+    "name": "help",
+    "expectedExit": 0,
+    "observedExit": 0,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  },
+  {
+    "name": "cli-compaction",
+    "expectedExit": 0,
+    "observedExit": 0,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  },
+  {
+    "name": "cli-continuity",
+    "expectedExit": 0,
+    "observedExit": 0,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  },
+  {
+    "name": "cli-journal",
+    "expectedExit": 0,
+    "observedExit": 0,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  },
+  {
+    "name": "cli-opaque",
+    "expectedExit": 0,
+    "observedExit": 0,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  },
+  {
+    "name": "invalid-target",
+    "expectedExit": 2,
+    "observedExit": 2,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  },
+  {
+    "name": "invalid-property-target",
+    "expectedExit": 2,
+    "observedExit": 2,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  },
+  {
+    "name": "new-output",
+    "expectedExit": 0,
+    "observedExit": 0,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  },
+  {
+    "name": "existing-output",
+    "expectedExit": 2,
+    "observedExit": 2,
+    "notes": "Completed before aggregate harness failed on later network probe; log evidence retained, no replayed output writes."
+  }
+]

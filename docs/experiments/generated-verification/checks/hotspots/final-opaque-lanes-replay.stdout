@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 6.776074999999992,
+  "results": [
+    {
+      "property": "opaque.lane-isolation",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 6.750144999999975,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+[
+  {
+    "name": "seed-1",
+    "command": "pnpm verify:generated --seed=1 --runs 10000",
+    "exit": 0,
+    "wallSeconds": 42.327145592309535,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/seed-1.log"
+  },
+  {
+    "name": "seed-424242",
+    "command": "pnpm verify:generated --seed=424242 --runs 10000",
+    "exit": 0,
+    "wallSeconds": 35.675528748426586,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/seed-424242.log"
+  },
+  {
+    "name": "seed-20261024",
+    "command": "pnpm verify:generated --seed=20261024 --runs 10000",
+    "exit": 0,
+    "wallSeconds": 30.14160608081147,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/seed-20261024.log"
+  },
+  {
+    "name": "seed--2147483648",
+    "command": "pnpm verify:generated --seed=-2147483648 --runs 10000",
+    "exit": 0,
+    "wallSeconds": 32.30761849414557,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/seed--2147483648.log"
+  },
+  {
+    "name": "syntax",
+    "command": "node --check scripts/generated-verification/run.mjs",
+    "exit": 0,
+    "wallSeconds": 0.04987933626398444,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+  },
+  {
+    "name": "syntax",
+    "command": "node --check scripts/generated-verification/compaction.mjs",
+    "exit": 0,
+    "wallSeconds": 0.025710643734782934,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+  },
+  {
+    "name": "syntax",
+    "command": "node --check scripts/generated-verification/continuity.mjs",
+    "exit": 0,
+    "wallSeconds": 0.02930698310956359,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+  },
+  {
+    "name": "syntax",
+    "command": "node --check scripts/generated-verification/journal.mjs",
+    "exit": 0,
+    "wallSeconds": 0.023486715275794268,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+  },
+  {
+    "name": "syntax",
+    "command": "node --check scripts/generated-verification/opaque.mjs",
+    "exit": 0,
+    "wallSeconds": 0.02685584593564272,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/syntax.log"
+  },
+  {
+    "name": "typecheck",
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "wallSeconds": 4.176807614974678,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/typecheck.log"
+  },
+  {
+    "name": "static",
+    "command": "pnpm test",
+    "exit": 0,
+    "wallSeconds": 4.659488756675273,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/static.log"
+  },
+  {
+    "name": "build",
+    "command": "pnpm build",
+    "exit": 0,
+    "wallSeconds": 5.523229906801134,
+    "commit": "65de0f5d",
+    "log": "docs/experiments/generated-verification/checks/hotspots/build.log"
+  }
+]

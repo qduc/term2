@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "revision": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 8.877741000000015,
+  "results": [
+    {
+      "property": "compaction.plan-cut",
+      "failed": true,
+      "seed": 555,
+      "path": "3:0:0:0:1:1:1:1:1",
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 8.852434000000017,
+      "counterexample": [
+        [
+          {
+            "user": "",
+            "payload": "",
+            "size": 1,
+            "parallel": 2,
+            "reverse": false,
+            "synthetic": false
+          }
+        ],
+        100,
+        false
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: cut split a pending round\n+ actual - expected\n\n  [\n    'call-0-0',\n-   'call-0-1'\n  ]\n\n    at checkPlan (file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/compaction.mjs:67:10)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/compaction.mjs:85:9\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:63:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+      "replay": "pnpm verify:generated --property compaction.plan-cut --seed=555 --path '3:0:0:0:1:1:1:1:1' --runs 1000"
+    }
+  ]
+}

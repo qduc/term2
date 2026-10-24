@@ -1,0 +1,17 @@
+{
+  "command": [
+    "node",
+    "--import",
+    "data:text/javascript;base64,aW1wb3J0IG5ldCBmcm9tICdub2RlOm5ldCc7aW1wb3J0IHRscyBmcm9tICdub2RlOnRscyc7aW1wb3J0IGh0dHAgZnJvbSAnbm9kZTpodHRwJztpbXBvcnQgaHR0cHMgZnJvbSAnbm9kZTpodHRwcyc7bGV0IGF0dGVtcHRzPTA7Y29uc3QgZGVueT0oKT0+e2F0dGVtcHRzKys7Y29uc29sZS5lcnJvcignTkVUV09SS19BVFRFTVBUX1NUQUNLICcrbmV3IEVycm9yKCkuc3RhY2spO3Rocm93IG5ldyBFcnJvcignbmV0d29yayBkZW5pZWQnKX07bmV0LlNvY2tldC5wcm90b3R5cGUuY29ubmVjdD1kZW55O3Rscy5jb25uZWN0PWRlbnk7aHR0cC5yZXF1ZXN0PWRlbnk7aHR0cC5nZXQ9ZGVueTtodHRwcy5yZXF1ZXN0PWRlbnk7aHR0cHMuZ2V0PWRlbnk7Z2xvYmFsVGhpcy5mZXRjaD1kZW55O3Byb2Nlc3Mub24oJ2V4aXQnLCgpPT57Y29uc29sZS5lcnJvcignTkVUV09SS19BVFRFTVBUUz0nK2F0dGVtcHRzKycgQVJHVj0nK0pTT04uc3RyaW5naWZ5KHByb2Nlc3MuYXJndikpO2lmKGF0dGVtcHRzKXByb2Nlc3MuZXhpdENvZGU9MTt9KTs=",
+    "--import",
+    "tsx",
+    "scripts/generated-verification/run.mjs",
+    "--seed",
+    "770011",
+    "--runs",
+    "1000"
+  ],
+  "exit": 1,
+  "wallSeconds": 4.234283021651208,
+  "revision": "65de0f5d"
+}

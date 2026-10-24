@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "revision": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 31.11288300000001,
+  "results": [
+    {
+      "property": "compaction.plan-cut",
+      "failed": true,
+      "seed": 424242,
+      "path": "0:1:0:1:1:1:1:1:1:1:1:1:1:1:1",
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 14,
+      "runtimeMs": 31.075481999999965,
+      "counterexample": [
+        [
+          {
+            "user": "",
+            "payload": "",
+            "size": 1,
+            "parallel": 1,
+            "reverse": false,
+            "synthetic": false
+          },
+          {
+            "user": "",
+            "payload": "",
+            "size": 1,
+            "parallel": 1,
+            "reverse": false,
+            "synthetic": false
+          }
+        ],
+        100,
+        false
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: partition lost or reordered content\n+ actual - expected\n\n  [\n    {\n-     content: 'user-0:',\n-     role: 'user',\n-     type: 'message'\n-   },\n-   {\n      content: 'assistant-0',\n      role: 'assistant',\n      type: 'message'\n    },\n    {\n\n    at checkPlan (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/scripts/generated-verification/compaction.mjs:60:10)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/scripts/generated-verification/compaction.mjs:85:9\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/scripts/generated-verification/run.mjs:63:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+      "replay": "pnpm verify:generated --property compaction.plan-cut --seed=424242 --path '0:1:0:1:1:1:1:1:1:1:1:1:1:1:1' --runs 1000"
+    }
+  ]
+}
+[ELIFECYCLE] Command failed with exit code 1.

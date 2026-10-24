@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "revision": "891411393c258db7c6a8bfa957f14d855bc3b67d",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 100,
+  "maxSequenceLength": 30,
+  "runtimeMs": 210.19107200000002,
+  "results": [
+    {
+      "property": "history.ledger-settlement",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 32.078666,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.ledger-reconciliation",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 54.308424,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.pair-projection",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 27.841444000000024,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "queue.restore-pause",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 6.436176000000046,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "queue.serial-actions",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 5.851699000000053,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "compaction.plan-cut",
+      "failed": true,
+      "seed": 424242,
+      "path": "0:1:1:1:1:1:1:1:2:2:2:2:2:2:2:2:2:2:2:2",
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 19,
+      "runtimeMs": 11.931720000000041,
+      "counterexample": [
+        [
+          {
+            "user": "",
+            "payload": "",
+            "size": 1,
+            "parallel": 1,
+            "reverse": false,
+            "synthetic": false
+          },
+          {
+            "user": "",
+            "payload": "",
+            "size": 1,
+            "parallel": 1,
+            "reverse": false,
+            "synthetic": false
+          },
+          {
+            "user": "",
+            "payload": "",
+            "size": 1,
+            "parallel": 1,
+            "reverse": false,
+            "synthetic": false
+          }
+        ],
+        100,
+        false
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ 'blocked'\n- 'planned'\n\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/compaction.mjs:68:16\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:55:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+      "replay": "pnpm verify:generated --property compaction.plan-cut --seed=424242 --path '0:1:1:1:1:1:1:1:2:2:2:2:2:2:2:2:2:2:2:2' --runs 100"
+    },
+    {
+      "property": "compaction.unsafe-pairs",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 17.675996000000055,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "continuity.debt-filter",
+      "failed": true,
+      "seed": 424242,
+      "path": "0:0:0:0:1:1",
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 5,
+      "runtimeMs": 3.555923000000007,
+      "counterexample": [
+        [
+          {
+            "count": 1,
+            "selected": 1,
+            "reverse": false,
+            "boundary": "break",
+            "output": []
+          }
+        ]
+      ],
+      "error": "TypeError: continuity.markChainingBroken is not a function\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/continuity.mjs:46:25\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:55:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+      "replay": "pnpm verify:generated --property continuity.debt-filter --seed=424242 --path '0:0:0:0:1:1' --runs 100"
+    },
+    {
+      "property": "journal.reconstruction",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 50.39449400000001,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}
+[ELIFECYCLE] Command failed with exit code 1.

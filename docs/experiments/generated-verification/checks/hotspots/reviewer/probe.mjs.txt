@@ -1,0 +1,12 @@
+// Runs one committed property against whatever module graph the hook produced.
+import fc from 'fast-check';
+const [mod, exportName, propName, runs, seed] = process.argv.slice(2);
+const props = (await import(new URL(`../../../../../../scripts/generated-verification/${mod}.mjs`, import.meta.url)))[exportName];
+const p = props.find((x) => x.name === propName);
+const opts = { numRuns: Number(runs), seed: Number(seed) };
+const out = p.property.isAsync?.() || p.property.constructor.name.includes('Async')
+  ? await fc.check(p.property, opts) : fc.check(p.property, opts);
+const r = out instanceof Promise ? await out : out;
+console.log(JSON.stringify({ property: propName, failed: r.failed, numRuns: r.numRuns, shrinks: r.numShrinks,
+  error: r.failed ? String(r.errorInstance?.message ?? r.error).split('\n')[0].slice(0, 200) : null,
+  counterexample: r.failed ? JSON.stringify(r.counterexample).slice(0, 300) : null }));

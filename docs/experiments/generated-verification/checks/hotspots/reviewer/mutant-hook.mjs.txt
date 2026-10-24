@@ -1,0 +1,19 @@
+// Reviewer-only in-memory mutation: rewrites one loaded module's source text.
+// MUTANT_FILE=<path suffix>, MUTANT_EDITS=JSON [[from,to],...]. Every `from`
+// must occur, so an unapplied mutant fails loudly instead of passing vacuously.
+import { registerHooks } from 'node:module';
+const file = process.env.MUTANT_FILE;
+const edits = JSON.parse(process.env.MUTANT_EDITS ?? '[]');
+registerHooks({
+  load(url, context, nextLoad) {
+    const result = nextLoad(url, context);
+    if (!file || !url.endsWith(file)) return result;
+    let source = String(result.source);
+    for (const [from, to] of edits) {
+      if (!source.includes(from)) throw new Error(`MUTANT NOT APPLIED: ${from}`);
+      source = source.replace(from, to);
+    }
+    process.stderr.write(`[mutant applied to ${file}: ${edits.length} edit(s)]\n`);
+    return { ...result, source };
+  },
+});

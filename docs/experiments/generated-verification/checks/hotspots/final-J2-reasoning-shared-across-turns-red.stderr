@@ -1,0 +1,2 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property journal.reconstruction --seed=424242 --runs 1000
+[mutant applied to journal-to-ledger.ts: 1 edit(s)]

@@ -1,0 +1,4 @@
+$ node --import tsx scripts/generated-verification/run.mjs --seed 770011 --runs 1000
+NETWORK_ATTEMPTS=2
+NETWORK_ATTEMPTS=0
+NETWORK_ATTEMPTS=0

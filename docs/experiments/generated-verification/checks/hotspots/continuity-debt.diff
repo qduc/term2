@@ -1,0 +1,11 @@
+--- source/services/provider-continuity.ts
++++ source/services/provider-continuity.ts
+@@ -305,7 +305,7 @@
+ 
+   clear(): void {
+     this.#previousResponseId = null;
+-    this.#outstandingToolCallIds = [];
++    // mutation: unpaid debt retained
+     this.#retireCheckpoint('reset');
+     this.#lineage++;
+   }

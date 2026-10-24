@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "revision": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 100,
+  "maxSequenceLength": 30,
+  "runtimeMs": 187.75088500000004,
+  "results": [
+    {
+      "property": "compaction.plan-cut",
+      "failed": false,
+      "seed": 990011,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 141.59678399999996,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "compaction.unsafe-pairs",
+      "failed": false,
+      "seed": 990011,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 46.109829000000104,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

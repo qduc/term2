@@ -4,7 +4,8 @@ import { buildToolLedgerFromJournalEvents } from '../../source/services/conversa
 import { normalizeRunItems } from '../../source/services/conversation/run-item-normalizer.ts';
 
 const unit = fc.record({
-  turn: fc.integer({ min: 0, max: 4 }),
+  newTurn: fc.boolean(),
+  danglingReasoning: fc.option(fc.string(), { nil: null }),
   arguments: fc.jsonValue(),
   output: fc.jsonValue(),
   reasoning: fc.option(fc.string(), { nil: null }),
@@ -18,8 +19,21 @@ export const journalProperties = [
       const counts = new Map();
       const events = [];
       const expected = new Map();
+      let turnNumber = 0;
       for (const u of units) {
-        const turnId = `turn-${u.turn}`;
+        if (u.newTurn) turnNumber++;
+        if (u.danglingReasoning !== null) {
+          // A completed/aborted reasoning-only turn must not donate its pending
+          // reasoning to the next turn's call. No interleaved live turns needed.
+          events.push({
+            type: 'assistant_journal_item',
+            turnId: `turn-${++turnNumber}`,
+            seq: 1,
+            item: { type: 'reasoning', text: u.danglingReasoning, providerMetadata: { origin: 'stranded' } },
+          });
+          turnNumber++;
+        }
+        const turnId = `turn-${turnNumber}`;
         const callId = `call-${counts.get(turnId) ?? 0}`; // deliberately reused across turns
         counts.set(turnId, (counts.get(turnId) ?? 0) + 1);
         const push = (item) => {
@@ -82,9 +96,10 @@ export const journalProperties = [
           assert.deepEqual(reasoning[0].providerData, { origin: e.turnId });
         }
       });
-      // Returned history payloads are snapshots, not writable views of journal data.
+      // Returned top-level history records are fresh. Nested arguments/output may
+      // alias the event payload; there is no deep-snapshot contract here.
       for (const entry of ledger) if (entry.historyItems?.[0]) entry.historyItems[0].probeMutation = true;
-      assert.deepEqual(events, before, 'history aliases persisted event payload');
+      assert.deepEqual(events, before, 'top-level history record aliases an event item');
     }),
   },
 ];

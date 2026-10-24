@@ -25,7 +25,7 @@ supported inputs, no permanent example-based unit tests. Worktree isolation and
 - Reconstruction: supported multi-turn journal histories with per-turn sequence
   identity, calls/results/reasoning and terminal statuses reconstruct exact
   per-(turn,call) entries and payloads, with no cross-turn reasoning leakage.
-  Input order and idempotent reconstruction/nonmutation hold. No claim of crash,
+  Sequential journal order and deterministic reconstruction/nonmutation hold. No claim of crash,
   filesystem durability or executing/retrying actual effects.
 - Opaque: real public adapter wire conversion with unique sentinels must never
   leak a foreign lane or explicitly foreign backend. Own compatible payloads
@@ -43,7 +43,7 @@ supported inputs, no permanent example-based unit tests. Worktree isolation and
 
 ## Current state
 
-Base89141139; own frozen install passed. No implementation edits yet. Production
+Base89141139; own frozen install passed. Implementation65de0f5d. Production
 and dependencies remain unchanged. Source confirms the legacy Grok policy issue
 still exists; its resolution is not implied by permission to add generated
 checks. All other supported lane behavior can be checked without deciding it.
@@ -66,3 +66,44 @@ reports are diagnostic only, not claimed final-version replays. Prevention is
 explicit canonical construction and real public request envelopes in generators;
 sibling construction sites checked. All ten properties passed seed424242 at
 1,000 cases/property before adding Grok (then focused Grok target also passed).
+
+## Parent verification at65de0f5d
+
+Four seeds x10,000 x10properties pass400,000 cases (200,000 new). Checker totals
+28.7–40.1s per seed on the concurrently loaded host, not author effort. Source
+identity retained in checks/hotspots/identity.json. Four isolated source faults
+(users lost at compaction, unpaid debt retained, journal turn identities merged,
+foreign opaque lanes accepted) all fail/shrink/replay red; same paths pass after
+byte-exact restoration. Mutation checkout never changed reviewer source.
+
+Installed help/four targets/invalid-target/property/output-nonoverwrite checks
+have expected outcomes. Blanket network denial initially misclassified two tsx
+loader local Unix socket attempts as external network. Direct diagnostic stacks
+identify both tsx IPC paths. Refined probe still denies ALL socket connections,
+counts IPC separately and passes all10,000 cases with zero external attempts.
+No network exemption or production change was made; both failed probes retained.
+
+Independent fresh Opus5.5 review and full clean isolated lint still pending.
+No production/package/dependency diff. No new whole integration/e2e/provider-tier
+claim: checker/docs-only rollout. Actual supported production defect not found.
+
+## Independent round1 triage
+
+Fresh Opus5.5 REJECT65de0f5d, accepts compaction/continuity/opaque and runner.
+F1 ACCEPT (must fix, small generator change): reasoning was always consumed
+before a different-turn event; global pending-reasoning mutant survived. Add
+reasoning-only aborted turns followed by another turn's call. Use sequential
+turn numbers rather than arbitrary turn interleaving, avoiding an unnecessary
+oracle commitment about interleaved journal ordering. Call IDs still reused
+across turns.
+F2 NARROW (false checker claim, no product repair): only top-level history
+records are fresh; nested arguments/output alias journal payloads. No production
+contract promises deep snapshots. README/comment now explicitly state nested
+values may alias. Nonmutation during reconstruction remains checked.
+Independent nested-alias probe is diagnosis, not an authorized new production
+requirement. No source change warranted. Fresh amended review required.
+Before-acceptance checker gap is preventable: immediate reasoning+call adjacency
+hid retained per-turn state. Durable category improvement is generated stranded
+reasoning turns plus sensitivity to the independent global-buffer mutant.
+Review cost USD1.7723466 is session-reported list price, not actual invoice;
+author active time/tokens unknown. No permission denials.

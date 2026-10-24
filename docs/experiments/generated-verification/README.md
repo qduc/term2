@@ -75,8 +75,8 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   and stale-lineage candidate refusal after reset.
 - `journal.reconstruction`: supported journal events reconstruct per-(turn,call)
   identity, statuses, JSON payloads, reasoning ownership and deterministic order,
-  including call IDs reused across turns. Checks nonmutation and snapshot history
-  isolation; not filesystem durability or executing recovered effects.
+  including call IDs reused across turns and reasoning-only aborted turns. Checks
+  nonmutation and fresh top-level history records (nested JSON may alias); not filesystem durability or executing recovered effects.
 - `opaque.lane-isolation`: sentinel-bearing native payloads pass through real
   OpenAI/Grok Responses and Chat Completions adapters plus the Codex converter.
   Foreign lanes cannot reach captured SDK input; compatible own payloads and

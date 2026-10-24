@@ -1,32 +1,11 @@
-import {
-  MENTOR_PROFILE_ID,
-  LITE_PROFILE_ID,
-  ORCHESTRATOR_PROFILE_ID,
-  PLAN_PROFILE_ID,
-  STANDARD_PROFILE_ID,
-} from './legacy-adapter.js';
+import { builtinProfileRegistry } from './registry.js';
 
 /**
- * Return the lowercase display label for a built-in Profile ID.
+ * Return the lowercase registry name for a built-in Profile ID.
+ * Display consumers apply casing, not their own ID-to-name maps.
  * Unknown IDs intentionally fall back to Standard for safe, stable display
  * while custom Profile presentation metadata is not yet available.
  */
 export function getProfileLabel(profileId: string): string {
-  switch (profileId) {
-    case 'builtin:bare':
-      return 'bare';
-    case LITE_PROFILE_ID:
-      return 'lite';
-    case 'builtin:pair':
-      return 'pair';
-    case PLAN_PROFILE_ID:
-      return 'plan';
-    case MENTOR_PROFILE_ID:
-      return 'mentor';
-    case ORCHESTRATOR_PROFILE_ID:
-      return 'orchestrator';
-    case STANDARD_PROFILE_ID:
-    default:
-      return 'standard';
-  }
+  return (builtinProfileRegistry.profiles.get(profileId)?.name ?? 'Standard').toLowerCase();
 }

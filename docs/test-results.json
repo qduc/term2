@@ -3110,6 +3110,401 @@
         "Smaller provider tools field (1632 to 1106 tokens) is not aggregate efficacy. Sampled 7/8 first-pass and 8/8 after rework each arm do not establish broad noninferiority. Candidate total elapsed is worse (666.39s vs 336.31s).",
         "Unknown effort/usage/cost stays unknown. No paid experiment or usage recovery rerun. Original EDD acceptance/resolutions and frozen interim artifacts untouched."
       ]
+    },
+    {
+      "id": "2026-10-24-bare-footer-fixture-setup",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "task_ids": ["2026-10-24-bare-footer-label"],
+      "commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "source_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "tree": "eecaeb5d2e8ff825f7db6cae33c055e2ef2fced5",
+      "revision_kind": "unmodified_source_invalid_temporary_fixture",
+      "base_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "suite": "temporary-rendered-probe",
+      "command": "pnpm test source/components/layout/bare-footer-probe.test.tsx",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "architecture": "x64",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test",
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Fresh isolated worktree with its own pnpm install --frozen-lockfile; real temporary settings files and Ink renderer; no paid model calls. Build/lint/typecheck use inherited NODE_ENV=production."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "first two full probe attempts (28 cases each)",
+          "expected": "Existing-profile and provider controls render real footer text",
+          "actual": "28 failures each: named import of default-exported StatusBar yielded empty frames, including controls; invalid fixture, not product evidence"
+        },
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "third fixture attempt (36 cases)",
+          "expected": "Provider control contains real provider display name",
+          "actual": "30 failed, 6 passed; provider control incorrectly expected lowercase codex rather than Codex; also contains real missing-profile failures"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/bare-profile-display-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-before-20261024.log",
+          "sha256": "fa719f05ea21b50595782f1cca6194b01785c7708721ba972d700536ee7990e9"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-baseline-20261024.log",
+          "sha256": "c68eae7e93972b4b64865b6a06712a81a34ebb7d8af6a48de0e776d8d4123d3c"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-valid-baseline-20261024.log",
+          "sha256": "319e808293b7cd7f59198f878b901b24dd0a36c9fd5efed72c01fb3fc3ae8176"
+        }
+      ],
+      "notes": [
+        "Invalid/ineffective controls retained; corrected import, act flag and provider casing before matched baseline/fixed comparison. Totals above are per attempt, not product-defect counts."
+      ]
+    },
+    {
+      "id": "2026-10-24-bare-footer-matched-baseline",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "task_ids": ["2026-10-24-bare-footer-label"],
+      "commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "source_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "tree": "eecaeb5d2e8ff825f7db6cae33c055e2ef2fced5",
+      "revision_kind": "committed_source_with_untracked_temporary_probe",
+      "base_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "suite": "temporary-settings-filesystem-ink-integration",
+      "command": "pnpm test source/components/layout/bare-footer-probe.test.tsx",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "architecture": "x64",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test",
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Fresh isolated worktree with its own pnpm install --frozen-lockfile; real temporary settings files and Ink renderer; no paid model calls. Build/lint/typecheck use inherited NODE_ENV=production."
+      },
+      "result": {
+        "passed": 32,
+        "failed": 24,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "Bare and Pair classic footer at 40/80/120 columns (6 cases)",
+          "expected": "Bare or Pair in rendered footer",
+          "actual": "Codex/gpt-5 \u2502 Sandboxed; profile word absent"
+        },
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "Footer settings transitions at 40/80/120 columns (3 cases)",
+          "expected": "Bare after settings.set without remount",
+          "actual": "Bare absent"
+        },
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "Rail/cards/ledger/zen footer samples (4 cases)",
+          "expected": "Bare present",
+          "actual": "Bare absent"
+        },
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "Rail/cards/ledger/zen banner samples (4 cases)",
+          "expected": "BARE present",
+          "actual": "BARE absent"
+        },
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "Banner settings transition (1 case)",
+          "expected": "BARE after settings.set",
+          "actual": "STANDARD shown"
+        },
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "Bare and Pair classic banner at 40/80/120 columns (6 cases)",
+          "expected": "BARE or PAIR",
+          "actual": "STANDARD shown"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/bare-profile-display-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-probe-20261024.tsx",
+          "sha256": "bb307aa3cea151172ce291ba08c88dbcbf4716152c3dbee7640f64bee21c03d2"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-baseline-run-20261024.py",
+          "sha256": "ecf30e9f2a112222f4cc3ea84df7b5c96b0bdbef48a443e717a8bb7fd0174e16"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-final-baseline-20261024.log",
+          "sha256": "89e4164877324b3a00c0cdc98862cfd81043e37dc47353ec7cf4c9324378f4cf"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-final-baseline-20261024.jsonl",
+          "sha256": "274c14c7b93c84659fbd0ec097e52e7c3f970e31e28179ee281d2376c4682af2"
+        }
+      ],
+      "notes": [],
+      "runtime_seconds": 6.84,
+      "comparison": {
+        "classification": "expected_reproduction",
+        "baseline_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+        "notes": "Same 56-case probe as fixed run. Only four source files substituted with git-show base bytes; exact patch restored in finally. All other tracked source still base."
+      }
+    },
+    {
+      "id": "2026-10-24-bare-footer-committed-rendered",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "task_ids": ["2026-10-24-bare-footer-label"],
+      "commit": "269728e3a17a7699dbcaafab49c136bb15892f3f",
+      "source_commit": "269728e3a17a7699dbcaafab49c136bb15892f3f",
+      "tree": "1e303aa12d8aff35fb887fc6aec07351a59f02df",
+      "revision_kind": "committed_feature_with_untracked_temporary_probe",
+      "base_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "suite": "temporary-settings-filesystem-ink-integration",
+      "command": "pnpm test source/components/layout/bare-footer-probe.test.tsx",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "architecture": "x64",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test",
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Fresh isolated worktree with its own pnpm install --frozen-lockfile; real temporary settings files and Ink renderer; no paid model calls. Build/lint/typecheck use inherited NODE_ENV=production."
+      },
+      "result": {
+        "passed": 56,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/bare-profile-display-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-probe-20261024.tsx",
+          "sha256": "bb307aa3cea151172ce291ba08c88dbcbf4716152c3dbee7640f64bee21c03d2"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-committed-fixed-20261024.log",
+          "sha256": "d9476cdb44ffd62d1daa4a7926918c8da51cecff9ddf9cf596becf6208ee77c8"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-committed-fixed-20261024.jsonl",
+          "sha256": "d0450fb909b1e66956d5e4db173e0e46a803588657e6958ee1df3a245b7262da"
+        }
+      ],
+      "notes": [
+        "Real persisted SettingsService active profiles; all seven registry built-ins in classic footer/banner at 40/80/120, settings-event transitions, other four skins at 80, casing/default/Mentor controls, unknown label fallback. No permanent test committed; no full CLI PTY or provider calls."
+      ],
+      "runtime_seconds": 3.13,
+      "comparison": {
+        "classification": "matched_baseline_fixed",
+        "baseline_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+        "resolves_run_ids": ["2026-10-24-bare-footer-matched-baseline", "2026-10-24-bare-footer-fixture-setup"]
+      }
+    },
+    {
+      "id": "2026-10-24-bare-footer-precommit-floor",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "task_ids": ["2026-10-24-bare-footer-label"],
+      "commit": null,
+      "source_commit": "269728e3a17a7699dbcaafab49c136bb15892f3f",
+      "tree": "1e303aa12d8aff35fb887fc6aec07351a59f02df",
+      "revision_kind": "precommit_dirty_snapshot_later_matched_to_source_commit",
+      "base_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "suite": "typecheck-and-lint",
+      "command": "pnpm typecheck; pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "architecture": "x64",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test",
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Fresh isolated worktree with its own pnpm install --frozen-lockfile; real temporary settings files and Ink renderer; no paid model calls. Build/lint/typecheck use inherited NODE_ENV=production."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "typecheck_exit": 0,
+        "lint_exit": 0,
+        "lint_errors": 0,
+        "lint_warnings": 31,
+        "prettier": "passed"
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/bare-profile-display-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-typecheck-20261024.log",
+          "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-lint-20261024.log",
+          "sha256": "3f8b2fe0df10773b87321efb504a3a72ff04a30fe22deff557c87cbf689b3f83"
+        }
+      ],
+      "notes": [
+        "Ran before source commit with final temporary probe present; committed four-file production diff is identical. All 31 lint warnings are in untouched files."
+      ]
+    },
+    {
+      "id": "2026-10-24-bare-footer-committed-build",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "task_ids": ["2026-10-24-bare-footer-label"],
+      "commit": "269728e3a17a7699dbcaafab49c136bb15892f3f",
+      "source_commit": "269728e3a17a7699dbcaafab49c136bb15892f3f",
+      "tree": "1e303aa12d8aff35fb887fc6aec07351a59f02df",
+      "revision_kind": "committed_feature",
+      "base_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "suite": "production-build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "architecture": "x64",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test",
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Fresh isolated worktree with its own pnpm install --frozen-lockfile; real temporary settings files and Ink renderer; no paid model calls. Build/lint/typecheck use inherited NODE_ENV=production."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/bare-profile-display-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-build-20261024.log",
+          "sha256": "6a03a26e0d317f12c2c0a87fa7780b8742851dd27ffe6d197a67bb263513871d"
+        }
+      ],
+      "notes": [
+        "Temporary probe existed untracked at build time. Build excludes tests; no product source modifications."
+      ]
+    },
+    {
+      "id": "2026-10-24-bare-footer-committed-static",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "task_ids": ["2026-10-24-bare-footer-label"],
+      "commit": "269728e3a17a7699dbcaafab49c136bb15892f3f",
+      "source_commit": "269728e3a17a7699dbcaafab49c136bb15892f3f",
+      "tree": "1e303aa12d8aff35fb887fc6aec07351a59f02df",
+      "revision_kind": "committed_feature",
+      "base_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "suite": "static-guards",
+      "command": "pnpm test; pnpm check:no-unit-tests; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "architecture": "x64",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test",
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Fresh isolated worktree with its own pnpm install --frozen-lockfile; real temporary settings files and Ink renderer; no paid model calls. Build/lint/typecheck use inherited NODE_ENV=production."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "policy_exit": 0,
+        "diff_check_exit": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/bare-profile-display-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-footer-static-20261024.log",
+          "sha256": "5c1710a41ff3373a6cf40aeb7bee0eaf0bc77cde3a2c88f6d0b1942d5e78582a"
+        }
+      ],
+      "notes": ["Temporary test moved outside checkout before run. No full integration/e2e/provider suite run."],
+      "runtime_seconds": 1.79
     }
   ]
 }

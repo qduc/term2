@@ -47,7 +47,7 @@ export type ColorRole =
   | 'reasoning'
   | 'toolOutput';
 
-export type ModeBadge = 'STANDARD' | 'LITE' | 'SHELL' | 'PLAN' | 'ORCHESTRATOR' | 'MENTOR';
+export type ModeBadge = 'STANDARD' | 'BARE' | 'PAIR' | 'LITE' | 'SHELL' | 'PLAN' | 'ORCHESTRATOR' | 'MENTOR';
 export type ToolStatusKind = 'pending' | 'running' | 'completed' | 'failed' | 'rejected';
 
 export interface ThemeTokens {
@@ -116,6 +116,8 @@ export interface ThemeTokens {
 
 const MODE_BADGES_ON_LIGHT_TEXT: Record<ModeBadge, string> = {
   STANDARD: '#0f766e',
+  BARE: '#0f766e',
+  PAIR: '#0f766e',
   LITE: '#047857',
   SHELL: '#b45309',
   PLAN: '#0369a1',
@@ -208,6 +210,8 @@ const HIGH_CONTRAST: ThemeTokens = {
   toolOutput: '#e6e6e6',
   modeBadge: {
     STANDARD: '#0f766e',
+    BARE: '#0f766e',
+    PAIR: '#0f766e',
     LITE: '#047857',
     SHELL: '#92400e',
     PLAN: '#075985',
@@ -226,6 +230,8 @@ const HIGH_CONTRAST: ThemeTokens = {
 
 const NO_COLOR_BADGES: Record<ModeBadge, Color> = {
   STANDARD: undefined,
+  BARE: undefined,
+  PAIR: undefined,
   LITE: undefined,
   SHELL: undefined,
   PLAN: undefined,

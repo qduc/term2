@@ -1,4 +1,5 @@
 import { toTierModelPoolEntries } from '../../services/agent-runtime/model-resolver.js';
+import { getProfileLabel } from '../../services/profiles/labels.js';
 import React, { FC } from 'react';
 import { useSetting } from '../../hooks/use-setting.js';
 import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
@@ -23,14 +24,6 @@ import type { StatusAlertView, StatusQuotaWindow, StatusSegmentView, StatusView 
 function formatStatusBarTokens(tokens: number): string {
   return tokens > 1_000 ? `${(tokens / 1_000).toFixed(1)}k` : tokens.toLocaleString();
 }
-
-const PROFILE_MODE_LABELS: Record<string, string> = {
-  'builtin:standard': 'Standard',
-  'builtin:lite': 'Lite',
-  'builtin:plan': 'Plan',
-  'builtin:mentor': 'Mentor',
-  'builtin:orchestrator': 'Orchestrator',
-};
 
 /** Compact rate for the bar (`48.2t/s`); prose contexts keep `formatTokensPerSecond`. */
 function formatStatusBarRate(tps: number, approximate: boolean): string {
@@ -352,10 +345,10 @@ const StatusBar: FC<StatusBarProps> = ({
     return `Static blocked ${sender}/${status} ${staticCommitBlocker.dynamicMessageCount}msg/${chars}k`;
   })();
 
-  const profileLabel = PROFILE_MODE_LABELS[String(activeProfileId)] ?? 'Standard';
+  const profileLabel = getProfileLabel(activeProfileId);
   // The unlabeled state *is* Standard: absence of a mode word is the signal,
   // so the common case never spends columns restating the default.
-  const modeLabel = profileLabel === 'Standard' ? '' : profileLabel;
+  const modeLabel = profileLabel === 'standard' ? '' : profileLabel[0].toUpperCase() + profileLabel.slice(1);
   // 'always' (YOLO) overrides the sandbox label so YOLO mode is always visible,
   // rendered in red below. When the sandbox is on it still confines commands,
   // but every approval is auto-granted, so the mode must not hide behind

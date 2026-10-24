@@ -1,4 +1,5 @@
 import { toTierModelPoolEntries } from '../../services/agent-runtime/model-resolver.js';
+import { getProfileLabel } from '../../services/profiles/labels.js';
 import React, { FC } from 'react';
 import { createRequire } from 'node:module';
 import { useSetting } from '../../hooks/use-setting.js';
@@ -33,14 +34,6 @@ interface BannerProps {
   settingsService: SettingsService;
 }
 
-const PROFILE_BASE_BADGES: Record<string, ModeBadge> = {
-  'builtin:standard': 'STANDARD',
-  'builtin:lite': 'LITE',
-  'builtin:plan': 'PLAN',
-  'builtin:mentor': 'STANDARD',
-  'builtin:orchestrator': 'ORCHESTRATOR',
-};
-
 const Banner: FC<BannerProps> = ({ settingsService }) => {
   const { Banner: SkinBanner } = useSkin();
   const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
@@ -57,12 +50,15 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
+  // Mentor keeps the Standard base badge and adds its own badge/model.
+  const mentor = activeProfileId === 'builtin:mentor';
+  const baseMode = (mentor ? 'STANDARD' : getProfileLabel(activeProfileId).toUpperCase()) as ModeBadge;
 
   return (
     <SkinBanner
       version={version}
-      mode={PROFILE_BASE_BADGES[String(activeProfileId)] ?? 'STANDARD'}
-      mentor={activeProfileId === 'builtin:mentor'}
+      mode={baseMode}
+      mentor={mentor}
       providerLabel={providerLabel}
       model={model}
       reasoningEffort={reasoningEffort}

@@ -1837,6 +1837,10 @@ it.each(['flag', 'config'])(
       );
       expect(result.status, result.stderr).toBe(0);
       expect(result.stderr).toContain('Profile: bare');
+      expect(
+        fs.existsSync(path.join(repo, 'result.txt')),
+        JSON.stringify(lastWireToolExchange(mock.capturedRequests())),
+      ).toBe(true);
       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).toBe('bare edit succeeded\n');
       const request = mock.capturedRequests()[0];
       const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
@@ -2037,7 +2041,7 @@ it.each<[string, boolean]>([
       workspace,
     );
     expect(result.status, result.stderr).toBe(0);
-    expect(fs.existsSync(target), result.stderr).toBe(scratch);
+    expect(fs.existsSync(target), JSON.stringify(lastWireToolExchange(mock.capturedRequests()))).toBe(scratch);
     expect(result.stdout).toContain(reply);
     const toolExchange = lastWireToolExchange(mock.capturedRequests());
     expect(toolExchange.results).toHaveLength(1);

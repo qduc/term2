@@ -6,6 +6,10 @@ description: Which test tiers exist in this repo during the evidence-driven deve
 # Testing
 
 This repository is running an [evidence-driven development experiment](../../../docs/experiments/evidence-driven-development/README.md).
+The user-authorized [generated verification pilot](../../../docs/experiments/generated-verification/README.md)
+permits persistent bounded generated properties via `pnpm verify:generated`; this
+exception does not restore example-based unit tests or replace required tiers.
+
 There is no permanent unit test suite, and no test-first requirement; the global `tdd`
 skill does not apply here. Prove changes with the `verification` skill.
 

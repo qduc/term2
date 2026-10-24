@@ -22,7 +22,9 @@ The [evidence-driven development experiment](docs/experiments/evidence-driven-de
 is active. Its repository-specific verification policy takes precedence over
 conflicting testing guidance: permanent unit tests are prohibited; integration,
 e2e, provider black-box tests, and existing static guards remain. Temporary tests
-are allowed. High-risk changes require an independent verifier. Completed tasks
+are allowed. The user-authorized [generated verification pilot](docs/experiments/generated-verification/README.md)
+permits persistent bounded generated properties, not restored example-based unit tests.
+High-risk changes require an independent verifier. Completed tasks
 and escaped defects are recorded in the experiment's JSONL ledgers. The experiment
 README contains the full policy and decision criteria; historical unit-test
 references point to tag `unit-suite-baseline`.

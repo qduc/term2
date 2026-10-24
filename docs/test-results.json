@@ -4687,6 +4687,50 @@
           "path": "/tmp/term2-final-check-no-unit-tests.log"
         }
       ]
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-primary-after-merge",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T07:15:53+00:00",
+      "commit": "0e28bf0d9f772e222c68b7ffed2333d53a0d0926",
+      "revision_kind": "merged_commit_with_unrelated_untracked_files",
+      "suite": "static-and-build",
+      "command": "pnpm install --frozen-lockfile --config.confirmModulesPurge=false; pnpm test; pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Primary checkout after merge; commands executed separately. Existing untracked docs/architecture.html and experiments/ untouched."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "notes": "Normal pnpm build first stopped before compilation with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY because primary dependency metadata named version 0.35.0. Build with verify-deps-before-run=false succeeded. Frozen install then reported Already up to date and refreshed metadata without tracked dependency changes. Both normal pnpm test and pnpm build now pass. No full integration/e2e/provider repeat claimed for primary; those passed on the same merged source in the isolated worktree.",
+      "evidence": [
+        {
+          "path": "/tmp/term2-primary-build.log"
+        },
+        {
+          "path": "/tmp/term2-primary-build-direct.log"
+        },
+        {
+          "path": "/tmp/term2-primary-install.log"
+        },
+        {
+          "path": "/tmp/term2-primary-final-test.log"
+        },
+        {
+          "path": "/tmp/term2-primary-final-build.log"
+        }
+      ]
     }
   ]
 }

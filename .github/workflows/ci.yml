@@ -49,8 +49,9 @@ jobs:
       # code-context requires it). Install rg so CI runs the same primary lane
       # developer machines use; the fallback lane is covered by forced-probe
       # tests that run regardless of host binaries.
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      # Shell integration checks require the real sandbox (bubblewrap + socat).
+      - name: Install shell sandbox prerequisites
+        run: sudo apt-get update && sudo apt-get install -y ripgrep bubblewrap socat
 
       # Evidence-driven development experiment: no permanent unit tests may be
       # committed. See docs/experiments/evidence-driven-development/README.md.
@@ -85,8 +86,9 @@ jobs:
 
       # Keep the search-tool environment consistent with the unit job. Some
       # integration journeys exercise the same application tools end to end.
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      # Shell integration checks require the real sandbox (bubblewrap + socat).
+      - name: Install shell sandbox prerequisites
+        run: sudo apt-get update && sudo apt-get install -y ripgrep bubblewrap socat
 
       # vitest.config.ts excludes this tier, so run it explicitly. It needs no
       # dist/ — cli.integration.test.ts compiles the CLI into node_modules/.cache.

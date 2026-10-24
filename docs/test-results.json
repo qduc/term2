@@ -9293,6 +9293,66 @@
         "skipped": null
       },
       "evidence": "Generated settings validated against 136 defaults; 26 pages built; all internal links verified. Non-fatal existing /404 route conflict warning."
+    },
+    {
+      "id": "2026-10-24-038-release-gates",
+      "recorded_on": "2026-10-24",
+      "commit": "a72aed2773a738392f3dae51874eb1372597448e",
+      "revision_kind": "release_metadata_precommit_snapshot",
+      "suite": "release",
+      "command": "scripts/release.sh 0.38.0 --push --non-interactive",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": "Typecheck, source eslint (31 warnings; 0 errors), formatting, build and static suite passed. Release commit and tag pushed."
+    },
+    {
+      "id": "2026-10-24-038-publish-failed",
+      "recorded_on": "2026-10-24",
+      "commit": "a72aed2773a738392f3dae51874eb1372597448e",
+      "revision_kind": "clean_release_commit",
+      "suite": "integration",
+      "command": "GitHub Actions Publish package run 40088904547",
+      "command_complete": true,
+      "environment": {
+        "os": "ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 223,
+        "failed": 4,
+        "skipped": 1
+      },
+      "evidence": "Bare shell integration failures: two missing result.txt, outside write expected nonzero exit but got approval refusal, scratch write absent. Publish skipped. Root cause: missing sandbox prerequisites; local runtime check reports socat not installed."
+    },
+    {
+      "id": "2026-10-24-038-sandbox-repaired",
+      "recorded_on": "2026-10-24",
+      "commit": "a72aed2773a738392f3dae51874eb1372597448e",
+      "revision_kind": "dirty_workflow_only_snapshot",
+      "suite": "integration",
+      "command": "PATH=/tmp/term2-release-038-deps/unpacked/usr/bin:$PATH pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 227,
+        "failed": 0,
+        "skipped": 1
+      },
+      "evidence": "All 25 integration files passed, 1 file skipped. Same product and tests as release; only workflow setup changed. Adding locally extracted socat made all four failing checks pass unchanged. Workflow YAML parsing and Prettier checks passed."
     }
   ]
 }

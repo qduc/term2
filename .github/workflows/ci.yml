@@ -65,7 +65,9 @@ jobs:
         run: pnpm test
 
   integration:
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04 hosted runners reject bubblewrap loopback setup with
+    # RTM_NEWADDR EPERM. Keep the real sandbox checks on a compatible image.
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - name: Check out repository

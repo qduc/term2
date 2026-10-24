@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createShellToolDefinition, type BackgroundShellExecutionResult } from '../shell.js';
+import { presentBareShell } from '../bare-shell.js';
 import { createRunCodeToolDefinition } from './run-code.js';
 import { buildAgentTools, type AgentFactoryDeps } from '../../../lib/agent-factory.js';
 import { createEditorImpl } from '../../../lib/editor-impl.js';
@@ -39,6 +40,7 @@ async function harness(
     sandboxRunner?: ShellSandboxRunner;
     approve?: (snapshot: NestedApprovalSnapshot) => string | undefined;
     owner?: boolean;
+    bare?: boolean;
   } = {},
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'term2-script-shell-'));
@@ -104,7 +106,7 @@ async function harness(
     checkToolInterceptors: async () => null,
   };
   const tools = buildAgentTools({
-    toolDefinitions: [shell, code],
+    toolDefinitions: [options.bare ? presentBareShell(shell) : shell, code],
     resolvedModel: 'gpt-4o',
     shouldUseNativePatchTool: false,
     deps,
@@ -147,6 +149,43 @@ function sandboxFixture() {
 }
 
 describe('shell inside run_code through the wrapped tool graph', () => {
+  it('keeps canonical validation and normalization when bare advertises fewer shell options', async () => {
+    const graph = await harness({ bare: true });
+    const shell = graph.tools.find((tool) => tool.name === 'shell')!;
+    for (const [index, extra] of [
+      { background: null, monitor: null, check_in: null },
+      { background: 'false' },
+    ].entries()) {
+      const file = `normalized-${index}.txt`;
+      const output = await shell.execute({ command: `printf canonical > ${file}`, ...extra }, {});
+      expect(String(output)).toContain('exit 0');
+      expect(await readFile(join(graph.cwd, file), 'utf8')).toBe('canonical');
+      expect(graph.background.list()).toEqual([]);
+    }
+    for (const extra of [{ background: 'garbage' }, { monitor: { pattern: 5 } }]) {
+      const params = { command: 'printf invalid > must-not-exist.txt', ...extra };
+      expect(await shell.needsApproval(params, {})).toBe(false);
+      expect(String(await shell.execute(params, {}))).toContain('Tool input did not match schema for shell');
+      expect(existsSync(join(graph.cwd, 'must-not-exist.txt'))).toBe(false);
+    }
+  });
+
+  it('preserves bare failure evidence and nested approval denial with a projected shell schema', async () => {
+    const graph = await harness({ bare: true, approve: () => 'approve' });
+    graph.settings.set('shell.autoApproveMode', 'always');
+    const failed = await graph.run(
+      'return await tools.shell({command:"printf failure-evidence; exit 7", description:"Run a failing check"});',
+    );
+    expect(failed).toContain('exit 7');
+    expect(failed).toContain('failure-evidence');
+    const deniedGraph = await harness({ bare: true, approve: () => 'reject' });
+    const denied = await deniedGraph.run(
+      'return await tools.shell({command:"printf denied > denied.txt", sandbox:"unsandboxed", description:"Requires approval"});',
+    );
+    expect(denied).toContain('not approved');
+    expect(existsSync(join(deniedGraph.cwd, 'denied.txt'))).toBe(false);
+  });
+
   it('keeps direct shell and executes a scripted shell only after approval', async () => {
     let executedBeforeApproval = false;
     const h = await harness({

@@ -183,6 +183,8 @@ export function buildAgentTools({
       const canonicalParameters =
         definition.canonicalParameters ??
         (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined);
+      // Provider presentation may omit unavailable options. It must never
+      // replace the schema that normalizes, validates, or authorizes execution.
       const wrappedDefinition: AnyToolDefinition = {
         ...definition,
         canonicalParameters,
@@ -202,14 +204,17 @@ export function buildAgentTools({
               // an honest JSON-schema substitution, not an erased Zod schema.
               (z.toJSONSchema(toOpenAIStrictToolSchema(providerParameters)) as JsonSchemaObject)
             : definition.parameters,
-        needsApproval: wrapNeedsApproval(definition, {
-          checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
-          toolName: definition.name,
-          bypassApproval: () => shouldBypassToolApproval(definition.name, deps.settings.get('shell.autoApproveMode')),
-          registry: deps.approvalPolicyRegistry,
-        }),
+        needsApproval: wrapNeedsApproval(
+          canonicalParameters ? { ...definition, parameters: canonicalParameters } : definition,
+          {
+            checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
+            toolName: definition.name,
+            bypassApproval: () => shouldBypassToolApproval(definition.name, deps.settings.get('shell.autoApproveMode')),
+            registry: deps.approvalPolicyRegistry,
+          },
+        ),
         execute: async (params, _context: unknown, details: unknown) => {
-          const normalizedParams = normalizeToolParameters(params, definition.parameters);
+          const normalizedParams = normalizeToolParameters(params, canonicalParameters ?? definition.parameters);
           if (deps.readOnly && READ_ONLY_FILE_MUTATING_TOOLS.has(definition.name)) {
             return 'Error: file-mutating tool ' + definition.name + ' is unavailable in a read-only gateway session.';
           }
@@ -287,11 +292,9 @@ export function buildAgentTools({
       // executor, which dereferenced a missing required field and returned a
       // raw TypeError the model could not act on. `wrapToolInvoke` turns that
       // into a schema diagnostic naming the offending fields.
-      const validatedDefinition = wrapToolInvoke(
-        wrappedDefinition,
-        isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined,
-        { argumentParsing: definition.argumentParsing },
-      );
+      const validatedDefinition = wrapToolInvoke(wrappedDefinition, canonicalParameters, {
+        argumentParsing: definition.argumentParsing,
+      });
       const shim: ToolInvokeShim = {
         type: 'function',
         invoke: async (context: unknown, input: unknown, details?: unknown) => {

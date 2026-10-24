@@ -1,4 +1,5 @@
 import { createGrepToolDefinition } from './tools/file/grep.js';
+import { presentBareShell } from './tools/system/bare-shell.js';
 import { createReadFileToolDefinition } from './tools/file/read-file.js';
 import type { SessionAccessState } from './services/session/session-access-state.js';
 import { createFindFilesToolDefinition } from './tools/file/glob.js';
@@ -489,7 +490,7 @@ export const getAgentDefinition = (
     activateSkill: hasCapability('skills') && Boolean(skillsService),
   };
   const tools: RegistryToolDefinition[] = [];
-  if (hasCapability('shell')) tools.push(shellTool);
+  if (hasCapability('shell')) tools.push(bareMode ? presentBareShell(shellTool) : shellTool);
   if (features.web) tools.push(...createWebToolDefinitions({ settingsService, loggingService }));
 
   if (

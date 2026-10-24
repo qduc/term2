@@ -87,6 +87,13 @@ environment context (OS, shell, cwd, home, date, top-level tree). Memory, delega
 workflows remain omitted.
 Missing capabilities must be reported, not silently skipped.
 
+The shell advertises foreground options only; runtime normalization and approval
+still use the complete canonical shell schema. Bare's task-neutral guidance
+encourages batching known steps and filtering output locally without dropping
+checks or failure evidence. `run_code` remains absent. The
+[token-efficiency measurements](../research/bare-token-efficiency-20261024.md)
+record the tested scope, failures, and limits rather than promise a universal gain.
+
 Root sessions also expose `goal_check`. A supplied `--goal` uses the existing
 request-time goal context, stop checks, and configured completion verification.
 Bare does not waive required review. Ordinary replies without an active goal do

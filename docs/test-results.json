@@ -2535,6 +2535,363 @@
         "Tested/current/evidence non-document tree identity verified. Frozen interim report/cutoff and inconclusive total-cost/quality finding unchanged.",
         "No behavior tests rerun for this evidence-only integration; source report retains remaining coverage and measurement limits."
       ]
+    },
+    {
+      "id": "2026-10-24-bare-focused-fixture-before-approval-setup",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "pre_commit_dirty_snapshot",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": null,
+      "suite": "integration-focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/tools/system/run-code/shell.integration.test.ts source/lib/native-apply-patch.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Linux worktree-local pnpm install; preserved original deadline settings. Source60f; later d7c88812 imports only test-history documentation. Loopback provider fixtures, no live model calls in suite counts."
+      },
+      "result": {
+        "passed": 15,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "preserves bare failure evidence and nested approval denial with a projected shell schema",
+          "signature": "expected exit 7; received Tool execution was not approved.",
+          "cause": "New test fixture lacked explicit auto-approval for its failure-propagation subcase; denial is tested separately."
+        }
+      ],
+      "comparison": null,
+      "runtime_seconds": 5.88,
+      "evidence": ["/tmp/bare-efficiency-focused-fixture-failures.md"],
+      "snapshot_checksums": null,
+      "notes": ["Dirty snapshots are not clean-commit runs."]
+    },
+    {
+      "id": "2026-10-24-bare-focused-fixture-denial-wording",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "pre_commit_dirty_snapshot",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": null,
+      "suite": "integration-focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/tools/system/run-code/shell.integration.test.ts source/lib/native-apply-patch.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Linux worktree-local pnpm install; preserved original deadline settings. Source60f; later d7c88812 imports only test-history documentation. Loopback provider fixtures, no live model calls in suite counts."
+      },
+      "result": {
+        "passed": 15,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "preserves bare failure evidence and nested approval denial with a projected shell schema",
+          "signature": "expected rejected; received Tool execution was not approved.",
+          "cause": "New test asserted a different denial phrase; no denied file created."
+        }
+      ],
+      "comparison": null,
+      "runtime_seconds": 6.05,
+      "evidence": ["/tmp/bare-efficiency-focused-fixture-failures.md"],
+      "snapshot_checksums": null,
+      "notes": ["Dirty snapshots are not clean-commit runs."]
+    },
+    {
+      "id": "2026-10-24-bare-focused-canonical-resolving",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "pre_commit_dirty_snapshot",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": null,
+      "suite": "integration-focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/tools/system/run-code/shell.integration.test.ts source/lib/native-apply-patch.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Linux worktree-local pnpm install; preserved original deadline settings. Source60f; later d7c88812 imports only test-history documentation. Loopback provider fixtures, no live model calls in suite counts."
+      },
+      "result": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "resolved",
+        "baseline_commit": null,
+        "resolves_run_ids": [
+          "2026-10-24-bare-focused-fixture-before-approval-setup",
+          "2026-10-24-bare-focused-fixture-denial-wording"
+        ],
+        "notes": "Pre-commit dirty snapshot; fixture fixes only. Real process validation, invalid/coercible hidden args, failure evidence and approval denial passed."
+      },
+      "runtime_seconds": 5.93,
+      "evidence": ["/tmp/bare-efficiency-focused-fixture-failures.md"],
+      "snapshot_checksums": null,
+      "notes": ["Dirty snapshots are not clean-commit runs."]
+    },
+    {
+      "id": "2026-10-24-bare-integration-60f105ed-timeout",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+      "revision_kind": "committed_feature",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": "2ef49e64fd6e541e0e68fda09bf6ff5f1d3c617b",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Linux worktree-local pnpm install; preserved original deadline settings. Source60f; later d7c88812 imports only test-history documentation. Loopback provider fixtures, no live model calls in suite counts."
+      },
+      "result": {
+        "passed": 225,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 23,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs",
+          "signature": "Test timed out in 10000ms (observed 10044ms).",
+          "cause": null
+        }
+      ],
+      "comparison": {
+        "classification": "unresolved_at_run",
+        "baseline_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+        "resolves_run_ids": [],
+        "notes": "No matching failure in test-results history; do not classify as pre-existing. Focused and unchanged full resolving runs retained below."
+      },
+      "runtime_seconds": 134.73,
+      "evidence": ["/tmp/bare-efficiency-integration-60f105ed.log"],
+      "snapshot_checksums": null,
+      "notes": ["No production source changes between this tested commit and documentation-only merge d7c88812."]
+    },
+    {
+      "id": "2026-10-24-bare-model-listing-focused-resolving",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+      "revision_kind": "committed_feature",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": "2ef49e64fd6e541e0e68fda09bf6ff5f1d3c617b",
+      "suite": "integration-focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t 'generic model listing'",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Linux worktree-local pnpm install; preserved original deadline settings. Source60f; later d7c88812 imports only test-history documentation. Loopback provider fixtures, no live model calls in suite counts."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 54,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "focused_resolving_observation",
+        "baseline_commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+        "resolves_run_ids": ["2026-10-24-bare-integration-60f105ed-timeout"],
+        "notes": "Same source; focused test passed in 2566ms. Does not prove full suite or establish root cause."
+      },
+      "runtime_seconds": 3.03,
+      "evidence": ["/tmp/bare-efficiency-model-listing-60f105ed.log"],
+      "snapshot_checksums": null,
+      "notes": ["No production source changes between this tested commit and documentation-only merge d7c88812."]
+    },
+    {
+      "id": "2026-10-24-bare-integration-60f105ed-resolving",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+      "revision_kind": "committed_feature",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": "2ef49e64fd6e541e0e68fda09bf6ff5f1d3c617b",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Linux worktree-local pnpm install; preserved original deadline settings. Source60f; later d7c88812 imports only test-history documentation. Loopback provider fixtures, no live model calls in suite counts."
+      },
+      "result": {
+        "passed": 226,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 24,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "resolved_on_unchanged_source",
+        "baseline_commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+        "resolves_run_ids": ["2026-10-24-bare-integration-60f105ed-timeout"],
+        "notes": "Repeated same full command/source after focused diagnosis; no product or timeout edits. Initial timeout retained, cause not established."
+      },
+      "runtime_seconds": 88.22,
+      "evidence": ["/tmp/bare-efficiency-integration-repeat-60f105ed.log"],
+      "snapshot_checksums": null,
+      "notes": ["No production source changes between this tested commit and documentation-only merge d7c88812."]
+    },
+    {
+      "id": "2026-10-24-bare-provider-60f105ed",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+      "revision_kind": "committed_feature",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": "2ef49e64fd6e541e0e68fda09bf6ff5f1d3c617b",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Linux worktree-local pnpm install; preserved original deadline settings. Source60f; later d7c88812 imports only test-history documentation. Loopback provider fixtures, no live model calls in suite counts."
+      },
+      "result": {
+        "passed": 221,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 25,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": null,
+      "runtime_seconds": 101.6,
+      "evidence": ["/tmp/bare-efficiency-provider-60f105ed.log"],
+      "snapshot_checksums": null,
+      "notes": ["No production source changes between this tested commit and documentation-only merge d7c88812."]
+    },
+    {
+      "id": "2026-10-24-bare-e2e-60f105ed",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+      "revision_kind": "committed_feature",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "tree": "2ef49e64fd6e541e0e68fda09bf6ff5f1d3c617b",
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Linux worktree-local pnpm install; preserved original deadline settings. Source60f; later d7c88812 imports only test-history documentation. Loopback provider fixtures, no live model calls in suite counts."
+      },
+      "result": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 4,
+        "files_passed": 5,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "comparison": null,
+      "runtime_seconds": 7.72,
+      "evidence": ["/tmp/bare-efficiency-e2e-60f105ed.log"],
+      "snapshot_checksums": null,
+      "notes": ["No production source changes between this tested commit and documentation-only merge d7c88812."]
+    },
+    {
+      "id": "2026-10-24-bare-static-final-documentation-snapshot",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_documentation_snapshot",
+      "base_commit": "d7c88812",
+      "tree": null,
+      "suite": "typecheck-lint-static",
+      "command": "pnpm typecheck && pnpm lint && pnpm test && pnpm check:no-unit-tests",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Source identical to 60f105ed; documentation/profile/history edits uncommitted. Lint 0 errors, 31 warnings retained in untouched files."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": null,
+      "runtime_seconds": null,
+      "evidence": ["/tmp/bare-efficiency-static-final.log"],
+      "snapshot_checksums": null,
+      "notes": [
+        "Counts refer to static guard suite. Typecheck, lint and no-unit-test commands also exited 0; no fabricated test counts for them."
+      ]
     }
   ]
 }

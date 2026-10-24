@@ -89,7 +89,7 @@ const checkInOptionsSchema = z.object({
     .describe('Custom interval in seconds between proactive check-ins.'),
 });
 
-const shellParametersSchema = z.object({
+export const shellParametersSchema = z.object({
   command: z.string().min(1).describe('Single shell command to execute.'),
   description: z
     .string()

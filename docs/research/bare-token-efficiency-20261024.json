@@ -1,0 +1,504 @@
+{
+  "schema_version": 1,
+  "source_commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+  "baseline_source_commit": "5b5395aa61104b6ae69b997b1c267528d5a88ea8",
+  "fixture_base_commit": "12dabc92",
+  "environment": {
+    "os": "Linux 7.0.14-17-pve",
+    "node": "v24.19.0",
+    "pnpm": "11.7.0",
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "reasoning": "low",
+    "tier": "standard"
+  },
+  "design": {
+    "tasks": ["audit", "inspect", "r2", "r4"],
+    "repetitions": 2,
+    "order": "seed 60124, shuffle task order, alternate arms, reverse each task in repetition 2",
+    "deadline_seconds": 300,
+    "quality": "Identical frozen prompts and artifacts: exact audit, source facts/citations, 136 event cases, 14 grouped pagination checks",
+    "reworks": "One original-prompt rework per failed arm. Original failures retained; neither receives answer hints.",
+    "cache": "First reported requests have 0 cached tokens; subsequent cache hits observed. No warm-start population claim."
+  },
+  "totals": {
+    "baseline": {
+      "attempts": 9,
+      "first_attempt_passes": 7,
+      "first_attempt_total": 8,
+      "accepted_after_rework": 8,
+      "known_tokens": 797015,
+      "known_input": 783845,
+      "known_output": 13170,
+      "cached_input": 619008,
+      "cost_proxy_known": 0.523278,
+      "latency": 336.31,
+      "usage_unknown_attempts": 0,
+      "schema_tokens": [1632],
+      "first_cache_tokens": [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    "candidate": {
+      "attempts": 9,
+      "first_attempt_passes": 7,
+      "first_attempt_total": 8,
+      "accepted_after_rework": 8,
+      "known_tokens": 643603,
+      "known_input": 633001,
+      "known_output": 10602,
+      "cached_input": 513408,
+      "cost_proxy_known": 0.396548,
+      "latency": 666.39,
+      "usage_unknown_attempts": 2,
+      "schema_tokens": [1106],
+      "first_cache_tokens": [0, 0, 0, 0, null, 0, 0, 0, 0]
+    }
+  },
+  "unknown_usage_requests": [
+    {
+      "attempt": "rep2-audit-candidate",
+      "file": "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-04-31_non-i/00-04-31.931Z_eb0c4.json",
+      "received": false,
+      "archive_file": "wire/final/2026-10-24/00-04-31_non-i/00-04-31.931Z_eb0c4.json"
+    },
+    {
+      "attempt": "rep2-r2-candidate",
+      "file": "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-13-06_non-i/00-13-08.292Z_40456.json",
+      "received": true,
+      "archive_file": "wire/final/2026-10-24/00-13-06_non-i/00-13-08.292Z_40456.json"
+    },
+    {
+      "attempt": "rep2-r2-candidate",
+      "file": "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-13-06_non-i/00-14-04.336Z_3b0cc.json",
+      "received": true,
+      "archive_file": "wire/final/2026-10-24/00-13-06_non-i/00-14-04.336Z_3b0cc.json"
+    }
+  ],
+  "prototype": {
+    "attempts": 16,
+    "known_tokens": 1357238,
+    "status": "Rejected before publication: canonical runtime validation regression. All attempts retained, including an investigation timeout. Not pooled with final efficacy cohort."
+  },
+  "limitations": [
+    "Reported token/cost totals are lower bounds for candidate due to unreported response usage; no exact all-attempt percentage saving claimed.",
+    "One candidate oversized-generation timeout and one baseline wrong investigation answer; both first-attempt success rates 7/8 and both accepted after bounded rework.",
+    "Small synthetic/real-source workflow sample; no global optimum, broad noninferiority or universal model claim.",
+    "One source-investigation and small-edit control do not show uniform token savings.",
+    "Candidate aggregate latency is worse when its timeout is included."
+  ],
+  "evidence_root": "/home/qduc/term2/.worktrees/bare-efficiency-final-evidence-20261024",
+  "attempts": [
+    {
+      "name": "rep1-audit-baseline",
+      "rep": 1,
+      "task": "audit",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 38.95,
+      "quality": "PASS",
+      "total_tokens": 64222,
+      "usage": {
+        "prompt_tokens": 62712,
+        "completion_tokens": 1510,
+        "cache_read_tokens": 47872
+      },
+      "cost_proxy": 0.049568,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-23/23-58-40_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "29b636e5cd4511ed19a9e4b549d1ac9f2e5d0d126c9d85a611c05024b1f7d375"
+    },
+    {
+      "name": "rep1-audit-candidate",
+      "rep": 1,
+      "task": "audit",
+      "arm": "candidate",
+      "status": 0,
+      "seconds": 31.58,
+      "quality": "PASS",
+      "total_tokens": 36075,
+      "usage": {
+        "prompt_tokens": 34717,
+        "completion_tokens": 1358,
+        "cache_read_tokens": 26496
+      },
+      "cost_proxy": 0.032672,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-23/23-59-18_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "00cfefb0ed0be40a7c9a8c09c3499728a91ffd88abec0d49e366753b91766c97"
+    },
+    {
+      "name": "rep1-r2-candidate",
+      "rep": 1,
+      "task": "r2",
+      "arm": "candidate",
+      "status": 0,
+      "seconds": 30.3,
+      "quality": "PASS",
+      "total_tokens": 74371,
+      "usage": {
+        "prompt_tokens": 73416,
+        "completion_tokens": 955,
+        "cache_read_tokens": 53888
+      },
+      "cost_proxy": 0.053995,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-23/23-59-50_non-i",
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/23-59-50_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "e7fe09758ee4fce52f1c7e48314d3c10d254f32505bbf5d8d3ed7a0482d43fc0"
+    },
+    {
+      "name": "rep1-r2-baseline",
+      "rep": 1,
+      "task": "r2",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 34.48,
+      "quality": "PASS",
+      "total_tokens": 74321,
+      "usage": {
+        "prompt_tokens": 73139,
+        "completion_tokens": 1182,
+        "cache_read_tokens": 59520
+      },
+      "cost_proxy": 0.04501,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-00-20_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "1affa477256da07cbe0dfe2f3a81619d9448f4c909c2e5da71ead9e242b0a2da"
+    },
+    {
+      "name": "rep1-r4-baseline",
+      "rep": 1,
+      "task": "r4",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 38.13,
+      "quality": "PASS",
+      "total_tokens": 88057,
+      "usage": {
+        "prompt_tokens": 86703,
+        "completion_tokens": 1354,
+        "cache_read_tokens": 63616
+      },
+      "cost_proxy": 0.066076,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-00-55_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "a480efcb17af6a1c8f68f20c00ae35b669bf1630960ed353bc0f2ebedd25f77b"
+    },
+    {
+      "name": "rep1-r4-candidate",
+      "rep": 1,
+      "task": "r4",
+      "arm": "candidate",
+      "status": 0,
+      "seconds": 40.48,
+      "quality": "PASS",
+      "total_tokens": 77870,
+      "usage": {
+        "prompt_tokens": 76417,
+        "completion_tokens": 1453,
+        "cache_read_tokens": 53888
+      },
+      "cost_proxy": 0.064977,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-01-33_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "d3e516d7284be61d477d636a57e312eb7574542f219b7cd94b6293724e58259c"
+    },
+    {
+      "name": "rep1-inspect-candidate",
+      "rep": 1,
+      "task": "inspect",
+      "arm": "candidate",
+      "status": 0,
+      "seconds": 60.94,
+      "quality": "PASS",
+      "total_tokens": 120440,
+      "usage": {
+        "prompt_tokens": 118836,
+        "completion_tokens": 1604,
+        "cache_read_tokens": 102912
+      },
+      "cost_proxy": 0.058179,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-02-13_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "38aa5980647c1968f2edc119497e737b7fc9686376bf55c86bb124a827b77f60"
+    },
+    {
+      "name": "rep1-inspect-baseline",
+      "rep": 1,
+      "task": "inspect",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 49.31,
+      "quality": "FAIL",
+      "total_tokens": 134197,
+      "usage": {
+        "prompt_tokens": 132349,
+        "completion_tokens": 1848,
+        "cache_read_tokens": 103424
+      },
+      "cost_proxy": 0.086673,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-03-14_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "3ff8f122a29ec80987d1a2b78d784ba3f0690090af331ec99aa11f28eeda9e9e"
+    },
+    {
+      "name": "rep2-audit-candidate",
+      "rep": 2,
+      "task": "audit",
+      "arm": "candidate",
+      "status": "TIMEOUT",
+      "seconds": 300.06,
+      "quality": "FAIL",
+      "total_tokens": 0,
+      "usage": {},
+      "cost_proxy": 0.0,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-04-31_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 1,
+      "stdout_sha256": "e64ae05b62c7b76a9f3eda47c927c77fff01b829083390a5c1ba1ab09103de11"
+    },
+    {
+      "name": "rep2-audit-baseline",
+      "rep": 2,
+      "task": "audit",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 33.79,
+      "quality": "PASS",
+      "total_tokens": 55961,
+      "usage": {
+        "prompt_tokens": 54392,
+        "completion_tokens": 1569,
+        "cache_read_tokens": 38144
+      },
+      "cost_proxy": 0.052,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-11-59_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "c8b72ab5ebc987db0deaca6ad970006899fd21d335b1067ee6598e51a9980006"
+    },
+    {
+      "name": "rep2-r2-baseline",
+      "rep": 2,
+      "task": "r2",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 33.38,
+      "quality": "PASS",
+      "total_tokens": 73942,
+      "usage": {
+        "prompt_tokens": 72820,
+        "completion_tokens": 1122,
+        "cache_read_tokens": 60288
+      },
+      "cost_proxy": 0.042313,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-12-32_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "f207eccde2e0eb77452f6b64ff132ac7305d0d3edbdc89f8b7feef08149c88b3"
+    },
+    {
+      "name": "rep2-r2-candidate",
+      "rep": 2,
+      "task": "r2",
+      "arm": "candidate",
+      "status": 0,
+      "seconds": 86.95,
+      "quality": "PASS",
+      "total_tokens": 80231,
+      "usage": {
+        "prompt_tokens": 79231,
+        "completion_tokens": 1000,
+        "cache_read_tokens": 65920
+      },
+      "cost_proxy": 0.043215,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-13-06_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 2,
+      "stdout_sha256": "aaf95f64ee7f7bfb35f3833284bc3f26cd31d00b53d716f86f688bd28c8d9628"
+    },
+    {
+      "name": "rep2-r4-candidate",
+      "rep": 2,
+      "task": "r4",
+      "arm": "candidate",
+      "status": 0,
+      "seconds": 34.08,
+      "quality": "PASS",
+      "total_tokens": 71764,
+      "usage": {
+        "prompt_tokens": 70382,
+        "completion_tokens": 1382,
+        "cache_read_tokens": 57856
+      },
+      "cost_proxy": 0.044657,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-14-33_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "0bb052e3659f4dd93d90358cd355cc8fc0b283b880683df422f4d4734402c2b2"
+    },
+    {
+      "name": "rep2-r4-baseline",
+      "rep": 2,
+      "task": "r4",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 43.36,
+      "quality": "PASS",
+      "total_tokens": 94096,
+      "usage": {
+        "prompt_tokens": 92571,
+        "completion_tokens": 1525,
+        "cache_read_tokens": 69248
+      },
+      "cost_proxy": 0.068821,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-15-07_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "24c7fca278239b1d834c43414430d45ce0d28015671638574e089d55b14402e9"
+    },
+    {
+      "name": "rep2-inspect-baseline",
+      "rep": 2,
+      "task": "inspect",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 31.73,
+      "quality": "PASS",
+      "total_tokens": 109879,
+      "usage": {
+        "prompt_tokens": 108310,
+        "completion_tokens": 1569,
+        "cache_read_tokens": 91904
+      },
+      "cost_proxy": 0.057694,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-15-50_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "c46203f304ba83fb9d04992b609b397fe6a91b9052e24ba78462457165332df1"
+    },
+    {
+      "name": "rep2-inspect-candidate",
+      "rep": 2,
+      "task": "inspect",
+      "arm": "candidate",
+      "status": 0,
+      "seconds": 47.01,
+      "quality": "PASS",
+      "total_tokens": 141470,
+      "usage": {
+        "prompt_tokens": 139942,
+        "completion_tokens": 1528,
+        "cache_read_tokens": 121472
+      },
+      "cost_proxy": 0.064368,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-16-22_non-i"
+      ],
+      "rework_for": null,
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "c6b4165a72597d98d8ff397f40315817dd076ad29c4d42f0f30cadd1fd9a82bc"
+    },
+    {
+      "name": "rep3-audit-candidate",
+      "rep": 3,
+      "task": "audit",
+      "arm": "candidate",
+      "status": 0,
+      "seconds": 34.99,
+      "quality": "PASS",
+      "total_tokens": 41382,
+      "usage": {
+        "prompt_tokens": 40060,
+        "completion_tokens": 1322,
+        "cache_read_tokens": 30976
+      },
+      "cost_proxy": 0.034485,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-19-00_non-i"
+      ],
+      "rework_for": "rep2-audit-candidate",
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "4dbc47f15b21f66df0f5785ed8ae041fec74ff0c422bbdcfdb10bacba70f1cdb"
+    },
+    {
+      "name": "rep3-inspect-baseline",
+      "rep": 3,
+      "task": "inspect",
+      "arm": "baseline",
+      "status": 0,
+      "seconds": 33.18,
+      "quality": "PASS",
+      "total_tokens": 102340,
+      "usage": {
+        "prompt_tokens": 100849,
+        "completion_tokens": 1491,
+        "cache_read_tokens": 84992
+      },
+      "cost_proxy": 0.055123,
+      "provider_session_paths": [
+        "/home/qduc/.local/state/term2-nodejs/logs/provider-traffic/2026-10-24/00-19-35_non-i"
+      ],
+      "rework_for": "rep1-inspect-baseline",
+      "unknown_usage_requests": 0,
+      "stdout_sha256": "578ceec693d18410722ce9d72498da3d4143ec508b5addb1feec9ec79aa187ae"
+    }
+  ],
+  "objective_status": "blocked_aggregate_efficiency_unverified",
+  "implementation_verdict": "accept",
+  "sampled_quality_verdict": "accept",
+  "aggregate_efficiency_verdict": "reject_completion_claim_missing_authoritative_usage",
+  "independent_final_report": "/tmp/bare-efficiency-independent-final-result.md",
+  "retained_archive": {
+    "root": "/home/qduc/term2/.term2/evidence/bare-efficiency-20261024",
+    "manifest_sha256": "0bf8449798df0927c76b59a15725e2979f87966dba3912c6b9242f7e393fc1c3",
+    "hashed_data_files": 1095,
+    "wire_captures": 397,
+    "privacy": "Logger sanitization supplemented by credential/account/installation and encoded JSON redaction. Original/archive hashes and changed paths retained.",
+    "recovery_report": "usage-recovery.json",
+    "recovery_status": "UNAVAILABLE",
+    "recovery_paid_requests": 0
+  },
+  "pending_options": [
+    "Recover authoritative request/session usage or a defensible authoritative model-token bound for the three named requests; no estimates from character counts.",
+    "If that is unavailable, explicitly authorize a new predeclared fully metered comparison after addressing interruption/accounting capture; retain this cohort, do not reinterpret missing usage as zero.",
+    "Controller may separately decide whether to integrate accepted source as a smaller-interface change without claiming the original aggregate-efficiency objective completed."
+  ]
+}

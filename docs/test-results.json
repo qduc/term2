@@ -2454,6 +2454,87 @@
         "Only verification-only source task annotation appended. Current scoped resolutions are later observations, not original completion certification or global experiment quality/cost success.",
         "Mandatory gates run with command-local nonstashing hook; no persistent hook/config changes. Source commit indexed in a later documentation entry."
       ]
+    },
+    {
+      "id": "2026-10-24-edd-acceptance-integration-committed",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:55:31.939690+00:00",
+      "commit": "e2103d42a128aee523e24502ea24ac1094d928d1",
+      "tree": "82177392457f4c6683e8949a2216b029b4ac4c06",
+      "base_commit": "40db193150970d74a585070a06ffbba1de6a8042",
+      "source_commit": "5d7e530d9c5251053a071de8bc15b4df96d9b8c9",
+      "revision_kind": "committed_source_with_unrelated_dirty_ledger",
+      "suite": "documentation-evidence",
+      "task_ids": ["2026-10-24-independent-acceptance-followups"],
+      "dirty_paths": ["docs/experiments/evidence-driven-development/tasks.jsonl"],
+      "command": "python3 /tmp/edd_acceptance_main_check_20261024.py --committed; pnpm --dir /home/qduc/term2 exec prettier --check docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md docs/experiments/evidence-driven-development/continuation-2026-10-24.json docs/test-results.json; pnpm --dir /home/qduc/term2 exec node scripts/check-no-unit-tests.mjs; git -C /home/qduc/term2 diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "checks": {
+        "all_original_run_objects": "preserved",
+        "new_evidence_run_ids": 23,
+        "log_hashes_verified": 20,
+        "source_compatibility": "tested 36b490f2/current main/evidence non-doc trees identical",
+        "closure_links": "three exact scoped acceptance run/source/time/evidence links; original open states retained",
+        "unrelated_dirty_rows": "six raw rows hash-identical and unstaged",
+        "behavior_tests": "not_rerun"
+      },
+      "snapshot_checksums": [
+        {
+          "file": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md",
+          "sha256": "a6a9fd6852c28d39a973463f2015f0e0f63254315680120ae43dbb891713b44b"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/continuation-2026-10-24.json",
+          "sha256": "da0fbc9ea0eee2faebb90d9378ac931c3d770f890b370550eddcfdbd2291b794"
+        }
+      ],
+      "failures": [],
+      "comparison": {
+        "classification": "verified_integrated_scoped_acceptance_evidence",
+        "baseline_commit": "40db193150970d74a585070a06ffbba1de6a8042",
+        "resolves_run_ids": ["2026-10-24-edd-acceptance-integration-dirty"],
+        "notes": "Evidence/source/JSON/format/policy checks on integrated main, not behavior-test reruns or whole-checkout cleanliness."
+      },
+      "evidence": [
+        {
+          "kind": "git_commit",
+          "commit": "e2103d42a128aee523e24502ea24ac1094d928d1"
+        },
+        {
+          "kind": "git_commit",
+          "commit": "5d7e530d9c5251053a071de8bc15b4df96d9b8c9"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-main-integration-20261024/validation-committed-e2103d42a128.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-main-integration-20261024/manifest.json"
+        }
+      ],
+      "notes": [
+        "Source identity recorded in later documentation commit. All original 10 main objects and all 23 verifier objects unchanged, including every historical failure and ineffective control.",
+        "One source annotation appended, with six unrelated raw task rows unstaged and hash-identical; no stash/hiding or persistent hook/config change.",
+        "Three current scoped resolutions link exact ACCEPT runs/source/tree/timestamp/evidence and preserve their original open histories. Original author/pending rows are not backdated or rewritten.",
+        "Tested/current/evidence non-document tree identity verified. Frozen interim report/cutoff and inconclusive total-cost/quality finding unchanged.",
+        "No behavior tests rerun for this evidence-only integration; source report retains remaining coverage and measurement limits."
+      ]
     }
   ]
 }

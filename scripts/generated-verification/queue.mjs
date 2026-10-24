@@ -4,7 +4,7 @@ import { QueueController } from '../../source/services/queue/queue-controller.ts
 
 // A serial reference model for the public follow-up queue lane: FIFO dispatch,
 // failure pauses retained work; removing/discarding all retained work releases
-// the pause (see #cancel and #restore's explicit empty-pause invariant).
+// the pause (see #cancel and interrupted-active restoration's empty-pause invariant).
 const action = fc.oneof(
   fc.record({
     kind: fc.constant('submit'),
@@ -17,19 +17,62 @@ const action = fc.oneof(
 );
 export const queueProperties = [
   {
+    name: 'queue.restore-pause',
+    property: fc.asyncProperty(
+      fc.constantFrom('failure', 'manual', 'recovered_interrupted'),
+      fc.array(
+        fc.string({ minLength: 1, maxLength: 30 }).filter((s) => !!s.trim()),
+        { maxLength: 30 },
+      ),
+      async (reason, texts) => {
+        const queue = texts.map((text, index) => ({
+          id: `saved-${index}`,
+          text,
+          sequence: index + 1,
+          submittedAt: '2026-01-01T00:00:00.000Z',
+        }));
+        const starts = [];
+        const controller = new QueueController({
+          driver: {
+            start: (execution) => {
+              starts.push(execution.item.text);
+            },
+            cancel: () => true,
+          },
+          snapshotFactory: (item) => ({ text: item.text }),
+          persistence: {
+            load: () => ({ version: 1, nextSequence: queue.length + 1, queue, pause: { reason } }),
+            replace: () => {},
+          },
+        });
+        assert.equal(controller.state().kind, queue.length ? 'paused' : 'idle');
+        assert.deepEqual(
+          controller.state().queue.map(({ text }) => text),
+          texts,
+        );
+        assert.deepEqual(starts, []);
+        await controller.command({ kind: 'submit', text: 'fresh input' });
+        assert.deepEqual(starts, queue.length ? [] : ['fresh input']);
+        if (queue.length) assert.equal(controller.state().reason, reason);
+      },
+    ),
+  },
+  {
     name: 'queue.serial-actions',
     property: fc.asyncProperty(fc.array(action, { maxLength: 30 }), async (actions) => {
       let next = 0;
+      let execution = 0;
+      let previousExecutionId;
       const starts = [];
       const controller = new QueueController({
         driver: {
           start: (execution) => {
-            starts.push(execution.item.id);
+            starts.push({ id: execution.item.id, text: execution.item.text, snapshotText: execution.snapshot.text });
           },
           cancel: () => true,
         },
         snapshotFactory: (item) => ({ text: item.text }),
-        ids: { item: () => `item-${++next}`, execution: () => `execution-${next}` },
+        ids: { item: () => `item-${++next}`, execution: () => `execution-${++execution}` },
         now: () => '2026-01-01T00:00:00.000Z',
         capacity: 100,
       });
@@ -37,7 +80,7 @@ export const queueProperties = [
       const dispatch = () => {
         if (!model.active && !model.paused && model.queue.length) {
           model.active = model.queue.shift();
-          model.starts.push(model.active.id);
+          model.starts.push({ ...model.active, snapshotText: model.active.text });
         }
       };
       for (const [step, action] of actions.entries()) {
@@ -58,6 +101,7 @@ export const queueProperties = [
                 terminal: {},
                 failure: 'generated',
               });
+              previousExecutionId = state.active.executionId;
               model.active = null;
               model.paused = action.kind === 'fail' && model.queue.length > 0;
               dispatch();
@@ -88,7 +132,11 @@ export const queueProperties = [
             model.paused = false;
             break;
           case 'stale':
-            await controller.event({ kind: 'completed', executionId: 'never-issued', terminal: {} });
+            await controller.event({
+              kind: 'completed',
+              executionId: previousExecutionId ?? 'never-issued',
+              terminal: {},
+            });
             break;
         }
         const actual = controller.state();

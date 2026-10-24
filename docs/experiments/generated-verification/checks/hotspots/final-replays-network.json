@@ -1,0 +1,27 @@
+[
+  {
+    "name": "final-compaction-users-replay",
+    "command": "pnpm verify:generated --property compaction.plan-cut --seed=424242 --path 0:1:0:1:1:1:1:1:1:1:1:1:1:1:1 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.4096598774194717
+  },
+  {
+    "name": "final-continuity-debt-replay",
+    "command": "pnpm verify:generated --property continuity.debt-filter --seed=424242 --path 0:1:1:1:1:1:1:1:1:0:0:0 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.426876649260521
+  },
+  {
+    "name": "final-opaque-lanes-replay",
+    "command": "pnpm verify:generated --property opaque.lane-isolation --seed=424242 --path 0:1:0:2:2:2 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.4338699970394373
+  },
+  {
+    "name": "final-network",
+    "command": "pnpm verify:generated --seed=770011 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 5.001229984685779,
+    "environment": "NODE_OPTIONS data URL of network-deny-classified.mjs.txt excluding final newline"
+  }
+]

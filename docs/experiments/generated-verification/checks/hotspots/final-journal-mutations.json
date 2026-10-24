@@ -1,0 +1,260 @@
+[
+  {
+    "name": "final-J1-call-lookup-across-turns",
+    "revision": "8d789a2c",
+    "edits": [
+      [
+        "if(item.type===\"tool_call\"){const existing=turnEntries.find(",
+        "if(item.type===\"tool_call\"){const existing=[...entriesByTurn.values()].flat().find("
+      ]
+    ],
+    "hook": "parent-final-mutant-hook.mjs.txt",
+    "sourceSHA256": "d118f6306f49c2419c477360570a39a6b3ee123a3765da20e9a079335ac4e1a6",
+    "red": {
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --runs 1000",
+      "exit": 1,
+      "wallSeconds": 1.8075590590015054,
+      "report": {
+        "schemaVersion": 1,
+        "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+        "dirty": true,
+        "node": "v24.19.0",
+        "requestedRunsPerProperty": 1000,
+        "maxSequenceLength": 30,
+        "runtimeMs": 26.863950999999986,
+        "results": [
+          {
+            "property": "journal.reconstruction",
+            "failed": true,
+            "seed": 424242,
+            "path": "0:1:1:1:1:1:1:1:1:3:3:3:3",
+            "cases": 1,
+            "skips": 0,
+            "shrinks": 12,
+            "runtimeMs": 26.829105000000027,
+            "counterexample": [
+              [
+                {
+                  "newTurn": false,
+                  "danglingReasoning": null,
+                  "arguments": [],
+                  "output": {},
+                  "reasoning": null,
+                  "status": "started"
+                },
+                {
+                  "newTurn": true,
+                  "danglingReasoning": null,
+                  "arguments": [],
+                  "output": {},
+                  "reasoning": null,
+                  "status": "started"
+                }
+              ]
+            ],
+            "error": "AssertionError [ERR_ASSERTION]: lost or merged event identity\n\n1 !== 2\n\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/journal.mjs:63:14\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:63:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+            "replay": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path '0:1:1:1:1:1:1:1:1:3:3:3:3' --runs 1000"
+          }
+        ]
+      }
+    },
+    "redReplay": {
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path 0:1:1:1:1:1:1:1:1:3:3:3:3 --runs 1000",
+      "exit": 1,
+      "wallSeconds": 2.0840013618580997,
+      "report": {
+        "schemaVersion": 1,
+        "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+        "dirty": true,
+        "node": "v24.19.0",
+        "requestedRunsPerProperty": 1000,
+        "maxSequenceLength": 30,
+        "runtimeMs": 12.023775,
+        "results": [
+          {
+            "property": "journal.reconstruction",
+            "failed": true,
+            "seed": 424242,
+            "path": "0:1:1:1:1:1:1:1:1:3:3:3:3",
+            "cases": 1,
+            "skips": 0,
+            "shrinks": 0,
+            "runtimeMs": 11.995420999999965,
+            "counterexample": [
+              [
+                {
+                  "newTurn": false,
+                  "danglingReasoning": null,
+                  "arguments": [],
+                  "output": {},
+                  "reasoning": null,
+                  "status": "started"
+                },
+                {
+                  "newTurn": true,
+                  "danglingReasoning": null,
+                  "arguments": [],
+                  "output": {},
+                  "reasoning": null,
+                  "status": "started"
+                }
+              ]
+            ],
+            "error": "AssertionError [ERR_ASSERTION]: lost or merged event identity\n\n1 !== 2\n\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/journal.mjs:63:14\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:63:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+            "replay": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path '0:1:1:1:1:1:1:1:1:3:3:3:3' --runs 1000"
+          }
+        ]
+      }
+    },
+    "restoredReplay": {
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path 0:1:1:1:1:1:1:1:1:3:3:3:3 --runs 1000",
+      "exit": 0,
+      "wallSeconds": 1.9077044571749866,
+      "report": {
+        "schemaVersion": 1,
+        "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+        "dirty": true,
+        "node": "v24.19.0",
+        "requestedRunsPerProperty": 1000,
+        "maxSequenceLength": 30,
+        "runtimeMs": 9.693939,
+        "results": [
+          {
+            "property": "journal.reconstruction",
+            "failed": false,
+            "seed": 424242,
+            "path": null,
+            "cases": 1,
+            "skips": 0,
+            "shrinks": 0,
+            "runtimeMs": 9.667619000000002,
+            "counterexample": null,
+            "error": null,
+            "replay": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "final-J2-reasoning-shared-across-turns",
+    "revision": "8d789a2c",
+    "edits": [
+      [
+        "const pendingReasoning=pendingReasoningByTurn.get(event.turnId)??[];pendingReasoningByTurn.set(event.turnId,pendingReasoning);",
+        "const pendingReasoning=pendingReasoningByTurn.get(\"*\")??[];pendingReasoningByTurn.set(\"*\",pendingReasoning);"
+      ]
+    ],
+    "hook": "parent-final-mutant-hook.mjs.txt",
+    "sourceSHA256": "d118f6306f49c2419c477360570a39a6b3ee123a3765da20e9a079335ac4e1a6",
+    "red": {
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --runs 1000",
+      "exit": 1,
+      "wallSeconds": 1.7788814920932055,
+      "report": {
+        "schemaVersion": 1,
+        "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+        "dirty": true,
+        "node": "v24.19.0",
+        "requestedRunsPerProperty": 1000,
+        "maxSequenceLength": 30,
+        "runtimeMs": 31.713706000000002,
+        "results": [
+          {
+            "property": "journal.reconstruction",
+            "failed": true,
+            "seed": 424242,
+            "path": "0:1:1:2:1:1:1:1:1:1",
+            "cases": 1,
+            "skips": 0,
+            "shrinks": 9,
+            "runtimeMs": 31.681223999999986,
+            "counterexample": [
+              [
+                {
+                  "newTurn": false,
+                  "danglingReasoning": "",
+                  "arguments": [],
+                  "output": {},
+                  "reasoning": null,
+                  "status": "started"
+                }
+              ]
+            ],
+            "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n1 !== 0\n\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/journal.mjs:93:16\n    at Array.forEach (<anonymous>)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/journal.mjs:65:14\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:63:31",
+            "replay": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path '0:1:1:2:1:1:1:1:1:1' --runs 1000"
+          }
+        ]
+      }
+    },
+    "redReplay": {
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path 0:1:1:2:1:1:1:1:1:1 --runs 1000",
+      "exit": 1,
+      "wallSeconds": 1.86178432777524,
+      "report": {
+        "schemaVersion": 1,
+        "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+        "dirty": true,
+        "node": "v24.19.0",
+        "requestedRunsPerProperty": 1000,
+        "maxSequenceLength": 30,
+        "runtimeMs": 12.308034999999961,
+        "results": [
+          {
+            "property": "journal.reconstruction",
+            "failed": true,
+            "seed": 424242,
+            "path": "0:1:1:2:1:1:1:1:1:1",
+            "cases": 1,
+            "skips": 0,
+            "shrinks": 0,
+            "runtimeMs": 12.279300999999975,
+            "counterexample": [
+              [
+                {
+                  "newTurn": false,
+                  "danglingReasoning": "",
+                  "arguments": [],
+                  "output": {},
+                  "reasoning": null,
+                  "status": "started"
+                }
+              ]
+            ],
+            "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n1 !== 0\n\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/journal.mjs:93:16\n    at Array.forEach (<anonymous>)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/journal.mjs:65:14\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:63:31",
+            "replay": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path '0:1:1:2:1:1:1:1:1:1' --runs 1000"
+          }
+        ]
+      }
+    },
+    "restoredReplay": {
+      "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path 0:1:1:2:1:1:1:1:1:1 --runs 1000",
+      "exit": 0,
+      "wallSeconds": 2.1218392038717866,
+      "report": {
+        "schemaVersion": 1,
+        "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+        "dirty": true,
+        "node": "v24.19.0",
+        "requestedRunsPerProperty": 1000,
+        "maxSequenceLength": 30,
+        "runtimeMs": 210.478071,
+        "results": [
+          {
+            "property": "journal.reconstruction",
+            "failed": false,
+            "seed": 424242,
+            "path": null,
+            "cases": 769,
+            "skips": 0,
+            "shrinks": 0,
+            "runtimeMs": 210.44768299999998,
+            "counterexample": null,
+            "error": null,
+            "replay": null
+          }
+        ]
+      }
+    }
+  }
+]

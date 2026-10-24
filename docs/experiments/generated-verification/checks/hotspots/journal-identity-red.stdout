@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "revision": "65de0f5dc8ac462c9a1f727f234af9dfb2179791",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 32.55620899999997,
+  "results": [
+    {
+      "property": "journal.reconstruction",
+      "failed": true,
+      "seed": 424242,
+      "path": "0:1:1:1:1:1:3:3:3:3:3",
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 10,
+      "runtimeMs": 32.52646199999998,
+      "counterexample": [
+        [
+          {
+            "turn": 0,
+            "arguments": null,
+            "output": "",
+            "reasoning": null,
+            "status": "started"
+          },
+          {
+            "turn": 1,
+            "arguments": "",
+            "output": {},
+            "reasoning": null,
+            "status": "started"
+          }
+        ]
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: lost or merged event identity\n\n1 !== 2\n\n    at file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/scripts/generated-verification/journal.mjs:49:14\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots-mutants/scripts/generated-verification/run.mjs:63:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+      "replay": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path '0:1:1:1:1:1:3:3:3:3:3' --runs 1000"
+    }
+  ]
+}
+[ELIFECYCLE] Command failed with exit code 1.

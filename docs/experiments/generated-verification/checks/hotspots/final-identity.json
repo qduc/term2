@@ -1,0 +1,17 @@
+{
+  "commit": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+  "productionUnchanged": true,
+  "hashes": {
+    "opaque.mjs": "9d52597e9ad438172442644c087c9f450b353a5376307fde06b80bb36272b058",
+    "history.mjs": "85c32fd252ab8cbf62fbda5d6efbe3b3ef57f1e21212747aa0fb3292904c64d5",
+    "journal.mjs": "afce47565e2f103ea15ac87b3af4b9a21ca53df1f0233bb0323041c3e89c3440",
+    "ledger.mjs": "89764f679d5670ee7c3d04451439365657118ea87b6d159972ff170ff0194cda",
+    "compaction.mjs": "a68973c593135202eb569f68e02e89628b36270f1e78914f719604d86927eb17",
+    "run.mjs": "6c913cf963bf8d61b676fb66c6d615ad413a284ee0d185634363bbaf95c0a11b",
+    "queue.mjs": "5a67e2ffe91006a5bdb92d4a3bda215a46ca4af09a7c056c46456da843beec71",
+    "continuity.mjs": "28a68409c3ae09cdf1f4ecdb552e947b66d7076aae236e105bffc0635f0172c9"
+  },
+  "independentSession": "4d48034c-b1cd-4ae4-85ab-442052ad8259",
+  "reviewCumulativeListPriceUSD": 2.110373,
+  "actualBillingAndAuthorEffort": null
+}

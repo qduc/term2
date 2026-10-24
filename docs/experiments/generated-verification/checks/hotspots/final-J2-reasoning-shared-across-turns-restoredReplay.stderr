@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property journal.reconstruction --seed=424242 --path 0:1:1:2:1:1:1:1:1:1 --runs 1000

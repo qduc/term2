@@ -1,0 +1,22 @@
+NETWORK_ATTEMPT_STACK Error
+    at Socket.deny [as connect] (data:text/javascript;base64,aW1wb3J0IG5ldCBmcm9tICdub2RlOm5ldCc7aW1wb3J0IHRscyBmcm9tICdub2RlOnRscyc7aW1wb3J0IGh0dHAgZnJvbSAnbm9kZTpodHRwJztpbXBvcnQgaHR0cHMgZnJvbSAnbm9kZTpodHRwcyc7bGV0IGF0dGVtcHRzPTA7Y29uc3QgZGVueT0oKT0+e2F0dGVtcHRzKys7Y29uc29sZS5lcnJvcignTkVUV09SS19BVFRFTVBUX1NUQUNLICcrbmV3IEVycm9yKCkuc3RhY2spO3Rocm93IG5ldyBFcnJvcignbmV0d29yayBkZW5pZWQnKX07bmV0LlNvY2tldC5wcm90b3R5cGUuY29ubmVjdD1kZW55O3Rscy5jb25uZWN0PWRlbnk7aHR0cC5yZXF1ZXN0PWRlbnk7aHR0cC5nZXQ9ZGVueTtodHRwcy5yZXF1ZXN0PWRlbnk7aHR0cHMuZ2V0PWRlbnk7Z2xvYmFsVGhpcy5mZXRjaD1kZW55O3Byb2Nlc3Mub24oJ2V4aXQnLCgpPT57Y29uc29sZS5lcnJvcignTkVUV09SS19BVFRFTVBUUz0nK2F0dGVtcHRzKycgQVJHVj0nK0pTT04uc3RyaW5naWZ5KHByb2Nlc3MuYXJndikpO2lmKGF0dGVtcHRzKXByb2Nlc3MuZXhpdENvZGU9MTt9KTs=:1:196)
+    at Object.connect (node:net:254:17)
+    at file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/client-BQVF1NaW.mjs:1:206
+    at new Promise (<anonymous>)
+    at connectToServer (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/client-BQVF1NaW.mjs:1:162)
+    at file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/client-BQVF1NaW.mjs:1:445
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:643:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:96:9)
+NETWORK_ATTEMPT_STACK Error
+    at Socket.deny [as connect] (data:text/javascript;base64,aW1wb3J0IG5ldCBmcm9tICdub2RlOm5ldCc7aW1wb3J0IHRscyBmcm9tICdub2RlOnRscyc7aW1wb3J0IGh0dHAgZnJvbSAnbm9kZTpodHRwJztpbXBvcnQgaHR0cHMgZnJvbSAnbm9kZTpodHRwcyc7bGV0IGF0dGVtcHRzPTA7Y29uc3QgZGVueT0oKT0+e2F0dGVtcHRzKys7Y29uc29sZS5lcnJvcignTkVUV09SS19BVFRFTVBUX1NUQUNLICcrbmV3IEVycm9yKCkuc3RhY2spO3Rocm93IG5ldyBFcnJvcignbmV0d29yayBkZW5pZWQnKX07bmV0LlNvY2tldC5wcm90b3R5cGUuY29ubmVjdD1kZW55O3Rscy5jb25uZWN0PWRlbnk7aHR0cC5yZXF1ZXN0PWRlbnk7aHR0cC5nZXQ9ZGVueTtodHRwcy5yZXF1ZXN0PWRlbnk7aHR0cHMuZ2V0PWRlbnk7Z2xvYmFsVGhpcy5mZXRjaD1kZW55O3Byb2Nlc3Mub24oJ2V4aXQnLCgpPT57Y29uc29sZS5lcnJvcignTkVUV09SS19BVFRFTVBUUz0nK2F0dGVtcHRzKycgQVJHVj0nK0pTT04uc3RyaW5naWZ5KHByb2Nlc3MuYXJndikpO2lmKGF0dGVtcHRzKXByb2Nlc3MuZXhpdENvZGU9MTt9KTs=:1:196)
+    at Object.connect (node:net:254:17)
+    at /home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/client-D6NvIMSC.cjs:1:231
+    at new Promise (<anonymous>)
+    at connectToServer (/home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/client-D6NvIMSC.cjs:1:175)
+    at Object.<anonymous> (/home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/client-D6NvIMSC.cjs:1:470)
+    at Module._compile (node:internal/modules/cjs/loader:1872:14)
+    at Object..js (node:internal/modules/cjs/loader:2003:10)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+NETWORK_ATTEMPTS=2 ARGV=["/home/qduc/.nvm/versions/node/v24.19.0/bin/node","/home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs","--seed","770011","--runs","1000"]

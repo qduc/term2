@@ -107,3 +107,24 @@ hid retained per-turn state. Durable category improvement is generated stranded
 reasoning turns plus sensitivity to the independent global-buffer mutant.
 Review cost USD1.7723466 is session-reported list price, not actual invoice;
 author active time/tokens unknown. No permission denials.
+
+## Final amended verification
+
+Opus5.5 ACCEPT8d789a2c; the formerly surviving reasoning-scope mutant now
+fails, as do identity/payload/own-reasoning faults; valid deep-clone and retired
+other-turn-buffer alternatives pass. Raw reports, captured outputs and tool-use
+trace retained. Reviewer-only probe modules archived as .mjs.txt evidence, not
+installed suite modules. Final cumulative list-price session estimate USD2.110373
+is not added to the earlier USD1.7723466. Actual billing/author effort unknown.
+
+Parent final amended seed passes100,000 cases; earlier400,000 at65de0f5d is
+separate evidence, not relabeled. Final syntax/types/28static/build/clean isolated
+lint all pass. Two final journal faults fail/shrink/replay and restore green;
+three unchanged-area final replays pass. Final10,000case network-denied run
+passes with zero external attempts (all sockets still denied). Initial in-memory
+hook failed to apply an uncompiled text edit; retained as infrastructure failure,
+then corrected to the verifier's compiled-module edits. No production change.
+
+Integration and task acceptance records follow after primary checks. Policy
+question about legacy Grok compatibility remains excluded/unchanged; no settings,
+approval or broad filesystem/crash coverage has been added by implication.

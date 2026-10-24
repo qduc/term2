@@ -1,0 +1,11 @@
+--- source/services/agent-runtime/context-compaction/index.ts
++++ source/services/agent-runtime/context-compaction/index.ts
+@@ -181,7 +181,7 @@
+       const message = projectConversationMessage(item);
+       return message?.role === 'user' && !message.isSynthetic;
+     });
+-  const tailAt = (cut: number) => [...protectedUsersBefore(cut), ...history.slice(cut)];
++  const tailAt = (cut: number) => [...history.slice(cut)];
+   const tailTokensAt = (cut: number) => Math.ceil(serializedBytes(filterHistoryForEstimate(tailAt(cut))) / 4);
+   // Prefer the latest two whole user turns while they fit the hot-tail budget.
+   // Past it, cut at a settled tool round instead: every user request stays

@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --target opaque --seed 990011 --runs 100

@@ -1,0 +1,100 @@
+[
+  {
+    "id": "J0-baseline",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "pass",
+    "file": null,
+    "edits": []
+  },
+  {
+    "id": "J1-call-lookup-across-turns",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "fail",
+    "file": "journal-to-ledger.ts",
+    "edits": [
+      [
+        "if(item.type===\"tool_call\"){const existing=turnEntries.find(",
+        "if(item.type===\"tool_call\"){const existing=[...entriesByTurn.values()].flat().find("
+      ]
+    ]
+  },
+  {
+    "id": "J2-reasoning-shared-across-turns",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "fail",
+    "file": "journal-to-ledger.ts",
+    "edits": [
+      [
+        "const pendingReasoning=pendingReasoningByTurn.get(event.turnId)??[];pendingReasoningByTurn.set(event.turnId,pendingReasoning);",
+        "const pendingReasoning=pendingReasoningByTurn.get(\"*\")??[];pendingReasoningByTurn.set(\"*\",pendingReasoning);"
+      ]
+    ]
+  },
+  {
+    "id": "J3-no-reasoning-metadata-clone",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "fail",
+    "file": "journal-to-ledger.ts",
+    "edits": [
+      [
+        "const providerData=item.providerMetadata?clone(item.providerMetadata):void 0",
+        "const providerData=item.providerMetadata?item.providerMetadata:void 0"
+      ]
+    ]
+  },
+  {
+    "id": "J4-call-history-aliases-event-item",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "fail",
+    "file": "journal-to-ledger.ts",
+    "edits": [
+      [
+        "return{type:\"function_call\",callId:item.callId,name:item.toolName,arguments:item.arguments}},\"makeHistoryItemForToolCall\"",
+        "return Object.assign(item,{type:\"function_call\",callId:item.callId,name:item.toolName,arguments:item.arguments})},\"makeHistoryItemForToolCall\""
+      ]
+    ]
+  },
+  {
+    "id": "J5-VALID-deep-clone-arguments",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "pass",
+    "file": "journal-to-ledger.ts",
+    "edits": [
+      [
+        "return{type:\"function_call\",callId:item.callId,name:item.toolName,arguments:item.arguments}},\"makeHistoryItemForToolCall\"",
+        "return{type:\"function_call\",callId:item.callId,name:item.toolName,arguments:clone(item.arguments)}},\"makeHistoryItemForToolCall\""
+      ]
+    ]
+  },
+  {
+    "id": "J6-VALID-retire-other-turn-pending-on-new-turn",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "pass",
+    "file": "journal-to-ledger.ts",
+    "edits": [
+      [
+        "const pendingReasoning=pendingReasoningByTurn.get(event.turnId)??[];",
+        "if(!pendingReasoningByTurn.has(event.turnId))pendingReasoningByTurn.clear();const pendingReasoning=pendingReasoningByTurn.get(event.turnId)??[];"
+      ]
+    ]
+  },
+  {
+    "id": "J7-drop-own-turn-reasoning",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "fail",
+    "file": "journal-to-ledger.ts",
+    "edits": [["pendingReasoning.push(makeHistoryItemForReasoning(item))", "void 0"]]
+  },
+  {
+    "id": "J8-stranded-turn-emits-entry",
+    "prop": "journal journalProperties journal.reconstruction",
+    "expect": "fail",
+    "file": "journal-to-ledger.ts",
+    "edits": [
+      [
+        "if(item.type===\"reasoning\"){pendingReasoning.push(makeHistoryItemForReasoning(item));continue}",
+        "if(item.type===\"reasoning\"){pendingReasoning.push(makeHistoryItemForReasoning(item));if(!turnEntries.length)turnEntries.push({turnId:event.turnId,callId:\"reasoning\",toolName:\"none\",status:\"started\",startedAt,historyItems:[]});continue}"
+      ]
+    ]
+  }
+]

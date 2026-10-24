@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 543.515866,
+  "results": [
+    {
+      "property": "journal.reconstruction",
+      "failed": false,
+      "seed": -88,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 543.4897960000001,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{"id":"C0-baseline","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"C1-cut-mid-parallel-round","expect":"fail","observed":"fail","ok":true,"numRuns":5,"error":"cut split a pending round"}
+{"id":"C2-drop-protected-users","expect":"fail","observed":"fail","ok":true,"numRuns":3,"error":"partition lost or reordered content"}
+{"id":"C3-protect-synthetic-users","expect":"fail","observed":"fail","ok":true,"numRuns":3,"error":"partition lost or reordered content"}
+{"id":"C4-mutate-input","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"planner mutated history"}
+{"id":"C5-always-blocked","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"Expected values to be strictly equal:"}
+{"id":"C6-VALID-latest-settled-round","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"C7-VALID-earliest-settled-round","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"C8-duplicate-hot-tail-user","expect":"fail","observed":"fail","ok":true,"numRuns":3,"error":"partition lost or reordered content"}
+{"id":"U0-baseline","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"U1-accept-duplicate-call","expect":"fail","observed":"fail","ok":true,"numRuns":2,"error":"Expected values to be strictly deep-equal:"}
+{"id":"U2-accept-orphan-result","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"Expected values to be strictly deep-equal:"}
+{"id":"K0-baseline","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"K1-no-debt-dedupe","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"lost or duplicated authoritative debt"}
+{"id":"K2-new-turn-keeps-debt","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"Expected values to be strictly equal:"}
+{"id":"K3-reset-keeps-lineage","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"stale lineage candidate accepted"}
+{"id":"K4-candidate-ignores-lineage","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"stale lineage candidate accepted"}
+{"id":"K5-break-keeps-debt","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"retired tool debt retained"}
+{"id":"K6-filter-reorders-by-debt","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"filter changed selected output values/order or kept unrelated items"}
+{"id":"K7-no-orphan-check","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"Missing expected exception (OrphanedChainedToolOutputError)."}
+{"id":"K8-no-missing-error","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"Missing expected exception (MissingChainedToolOutputError)."}
+{"id":"K9-VALID-break-also-bumps-lineage","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"J0-baseline","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"J1-call-lookup-across-turns","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"lost or merged event identity"}
+{"id":"J2-reasoning-shared-across-turns","expect":"fail","observed":"pass","ok":false,"numRuns":300,"error":null}
+{"id":"J3-no-reasoning-metadata-clone","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"reconstruction mutated journal"}
+{"id":"J4-call-history-aliases-event-item","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"reconstruction mutated journal"}
+{"id":"J5-VALID-deep-clone-arguments","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"O0-baseline","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"O1-responses-no-lane-filter","expect":"fail","observed":"fail","ok":true,"numRuns":3,"error":"opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for openai"}
+{"id":"O2-no-origin-pin","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for openai"}
+{"id":"O3-chat-accepts-any-tag","expect":"fail","observed":"fail","ok":true,"numRuns":2,"error":"opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for chat-b"}
+{"id":"O4-responses-accepts-legacy-tag","expect":"fail","observed":"fail","ok":true,"numRuns":3,"error":"opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for openai"}
+{"id":"O5-EXCLUDED-grok-rejects-legacy","expect":"pass","observed":"pass","ok":true,"numRuns":300,"error":null}
+{"id":"O6-chat-drops-own-payload","expect":"fail","observed":"fail","ok":true,"numRuns":2,"error":"opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for chat-b"}
+{"id":"O7-responses-rewrites-own-payload","expect":"fail","observed":"fail","ok":true,"numRuns":3,"error":"own opaque payload changed"}
+{"id":"O8-codex-pins-to-openai","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"opaque sentinel OPAQUE_SENTINEL_0_END crossed lane or was lost for codex"}

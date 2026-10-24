@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "revision": "891411393c258db7c6a8bfa957f14d855bc3b67d",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 3197.829871,
+  "results": [
+    {
+      "property": "history.ledger-settlement",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 160.39784400000002,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.ledger-reconciliation",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 484.894051,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.pair-projection",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 271.31282399999986,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "queue.restore-pause",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 97.45644199999992,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "queue.serial-actions",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 104.88896299999988,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "compaction.plan-cut",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 400.05080999999996,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "compaction.unsafe-pairs",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 204.38773000000015,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "continuity.debt-filter",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 847.1724430000004,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "journal.reconstruction",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 620.919484,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "opaque.lane-isolation",
+      "failed": true,
+      "seed": 424242,
+      "path": "1",
+      "cases": 2,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 3.4378700000002027,
+      "counterexample": [
+        [],
+        "chat-b"
+      ],
+      "error": "TypeError: Cannot read properties of undefined (reading 'length')\n    at OpenAIChatCompletionsModel.stream (/home/qduc/term2/.worktrees/generated-hotspots/source/providers/openai-chat-completions-model.ts:57:27)\n    at stream.next (<anonymous>)\n    at wireInput (file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/opaque.mjs:29:20)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/opaque.mjs:55:24\n    at AsyncProperty.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1283:104)\n    at AsyncProperty.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1217:30)\n    at asyncPropertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2564:29)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async asyncRunIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2557:15)\n    at async file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:56:22",
+      "replay": "pnpm verify:generated --property opaque.lane-isolation --seed=424242 --path '1' --runs 1000"
+    }
+  ]
+}
+[ELIFECYCLE] Command failed with exit code 1.

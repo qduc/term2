@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --target opaque --seed 42 --runs 10 --output /home/qduc/term2/.worktrees/generated-hotspots/docs/experiments/generated-verification/checks/hotspots/cli-output.json

@@ -1,0 +1,9 @@
+{"id":"J0-baseline","expect":"pass","observed":"pass","ok":true,"numRuns":500,"error":null}
+{"id":"J1-call-lookup-across-turns","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"lost or merged event identity"}
+{"id":"J2-reasoning-shared-across-turns","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"Expected values to be strictly equal:"}
+{"id":"J3-no-reasoning-metadata-clone","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"reconstruction mutated journal"}
+{"id":"J4-call-history-aliases-event-item","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"reconstruction mutated journal"}
+{"id":"J5-VALID-deep-clone-arguments","expect":"pass","observed":"pass","ok":true,"numRuns":500,"error":null}
+{"id":"J6-VALID-retire-other-turn-pending-on-new-turn","expect":"pass","observed":"pass","ok":true,"numRuns":500,"error":null}
+{"id":"J7-drop-own-turn-reasoning","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"Expected values to be strictly equal:"}
+{"id":"J8-stranded-turn-emits-entry","expect":"fail","observed":"fail","ok":true,"numRuns":1,"error":"lost or merged event identity"}

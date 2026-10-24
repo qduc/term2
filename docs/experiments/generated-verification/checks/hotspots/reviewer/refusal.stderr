@@ -1,0 +1,5 @@
+Error: EEXIST: file already exists, open 'docs/experiments/generated-verification/checks/hotspots/reviewer/full-1730000001.json'
+    at Object.openSync (node:fs:622:18)
+    at writeFileSync (node:fs:2497:35)
+    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:95:24
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

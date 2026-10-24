@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "revision": "8d789a2c6acf25818751cb5d8a3bbcd343579aa2",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 9.748233000000027,
+  "results": [
+    {
+      "property": "journal.reconstruction",
+      "failed": true,
+      "seed": 31337,
+      "path": "0:1:0:0:0:2:1:1:1",
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 9.722855999999979,
+      "counterexample": [
+        [
+          {
+            "newTurn": false,
+            "danglingReasoning": "",
+            "arguments": [],
+            "output": [],
+            "reasoning": null,
+            "status": "started"
+          }
+        ]
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n1 !== 0\n\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/journal.mjs:93:16\n    at Array.forEach (<anonymous>)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/journal.mjs:65:14\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-hotspots/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-hotspots/scripts/generated-verification/run.mjs:63:31",
+      "replay": "pnpm verify:generated --property journal.reconstruction --seed=31337 --path '0:1:0:0:0:2:1:1:1' --runs 1000"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+--- source/providers/provider-opaque-compatibility.ts
++++ source/providers/provider-opaque-compatibility.ts
+@@ -88,7 +88,7 @@
+ 
+ /** True when a lane may replay an opaque item carrying `tag`. */
+ export function acceptsProviderOpaqueTag(tag: string, laneTag: string): boolean {
+-  if (tag === laneTag) return true;
++  if (true) return true;
+   // The legacy shared tag is only honoured by Chat Completions lanes, which are
+   // the only lanes that ever produced it. The Responses lane must not adopt it.
+   return laneTag !== OPENAI_RESPONSES_OPAQUE_TAG && tag === LEGACY_SHARED_PROVIDER_TAG;

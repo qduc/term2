@@ -1,0 +1,13 @@
+--- source/services/conversation/journal-to-ledger.ts
++++ source/services/conversation/journal-to-ledger.ts
+@@ -176,8 +176,8 @@
+   const pendingReasoningByTurn = new Map<string, unknown[]>();
+ 
+   for (const event of events) {
+-    const turnEntries = entriesByTurn.get(event.turnId) ?? [];
+-    entriesByTurn.set(event.turnId, turnEntries);
++    const turnEntries = entriesByTurn.get('all-turns') ?? [];
++    entriesByTurn.set('all-turns', turnEntries);
+     const pendingReasoning = pendingReasoningByTurn.get(event.turnId) ?? [];
+     pendingReasoningByTurn.set(event.turnId, pendingReasoning);
+ 

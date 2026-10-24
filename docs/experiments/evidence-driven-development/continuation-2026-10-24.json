@@ -148,7 +148,7 @@
   "targeted_followups": [
     {
       "id": "EDD-LOG-01",
-      "status": "open",
+      "status": "resolved",
       "task_ids": [
         "2026-10-22-log-enospc-failure",
         "2026-10-22-log-enospc-review-repair",
@@ -184,11 +184,75 @@
         "source/services/logging/logging-failures.integration.test.ts"
       ],
       "closure_record": "Append docs/test-results.json run with these task_ids, exact source identity, failure-path evidence and independent verdict; do not rewrite prior author/pending rows.",
-      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up."
+      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up.",
+      "status_history": [
+        {
+          "status": "open",
+          "recorded_at": "2026-10-24T00:22:39.840485+00:00",
+          "artifact_commit": "40db193150970d74a585070a06ffbba1de6a8042",
+          "note": "Original opening observation, not independent acceptance at original task completion."
+        },
+        {
+          "status": "resolved",
+          "recorded_at": "2026-10-24T00:54:31.818826+00:00",
+          "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+          "acceptance_run_id": "2026-10-24-edd-log-01-independent-acceptance"
+        }
+      ],
+      "resolution": {
+        "verdict": "ACCEPT",
+        "acceptance_run_id": "2026-10-24-edd-log-01-independent-acceptance",
+        "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+        "tested_source_commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+        "tested_source_tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+        "evidence_commit": "5d7e530d9c5251053a071de8bc15b4df96d9b8c9",
+        "evidence_report": {
+          "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md",
+          "sha256": "a6a9fd6852c28d39a973463f2015f0e0f63254315680120ae43dbb891713b44b"
+        },
+        "evidence_run_ids": [
+          "2026-10-24-edd-log-focused-adak",
+          "2026-10-24-edd-log-cli-adak",
+          "2026-10-24-edd-log-controls",
+          "2026-10-24-edd-log-sibling-current-activated",
+          "2026-10-24-edd-log-sibling-parent"
+        ],
+        "evidence": [
+          {
+            "kind": "repository",
+            "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md"
+          },
+          {
+            "kind": "machine_local",
+            "path": "/tmp/edd-acceptance-20261024"
+          }
+        ],
+        "scope": "Only named claims and exercised paths in the durable independent report; original author rows unchanged.",
+        "limits": [
+          "Not an independent live-provider or full-PTY certification; historical controls use extracted module bodies on current dependencies.",
+          "Tokens/cost/active effort unknown; no post-delivery surveillance inferred.",
+          "Native macOS/Windows, full PTY rollover, all logging errno variants, arbitrary execution-requiring criteria and long-term surveillance remain outside this bounded acceptance."
+        ],
+        "integrated_at": "2026-10-24T00:54:31.818826+00:00",
+        "source_compatibility": {
+          "main_before_integration": "40db193150970d74a585070a06ffbba1de6a8042",
+          "documentation_only_delta_paths": [
+            "docs/experiments/evidence-driven-development/README.md",
+            "docs/experiments/evidence-driven-development/continuation-2026-10-24.json",
+            "docs/experiments/evidence-driven-development/interim-results-2026-10-24.json",
+            "docs/experiments/evidence-driven-development/interim-results-2026-10-24.md",
+            "docs/experiments/evidence-driven-development/tasks.jsonl",
+            "docs/test-results.json"
+          ],
+          "non_document_tree_sha256": "d3aa01c2305881866e7df077a44cd1eea919224316935091280d419af29c8edc",
+          "verification_run_id": "2026-10-24-edd-acceptance-integration-dirty"
+        },
+        "original_completion_independently_verified_then": false
+      }
     },
     {
       "id": "EDD-ROLLOVER-01",
-      "status": "open",
+      "status": "resolved",
       "task_ids": ["2026-10-22-rollover-queued-submission"],
       "artifact": {
         "commits": ["05f694cf2744126acfa99030ed18b65730d4057b"],
@@ -211,11 +275,69 @@
         "docs/plans/sessions/session-rollover-handoff.md"
       ],
       "closure_record": "Append task-linked verification run and discovery/repair relationship. The defect currently links its repair, not a proven introducing task; keep causal origin unknown until evidenced.",
-      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up."
+      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up.",
+      "status_history": [
+        {
+          "status": "open",
+          "recorded_at": "2026-10-24T00:22:39.840485+00:00",
+          "artifact_commit": "40db193150970d74a585070a06ffbba1de6a8042",
+          "note": "Original opening observation, not independent acceptance at original task completion."
+        },
+        {
+          "status": "resolved",
+          "recorded_at": "2026-10-24T00:54:31.818826+00:00",
+          "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+          "acceptance_run_id": "2026-10-24-edd-rollover-01-independent-acceptance"
+        }
+      ],
+      "resolution": {
+        "verdict": "ACCEPT",
+        "acceptance_run_id": "2026-10-24-edd-rollover-01-independent-acceptance",
+        "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+        "tested_source_commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+        "tested_source_tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+        "evidence_commit": "5d7e530d9c5251053a071de8bc15b4df96d9b8c9",
+        "evidence_report": {
+          "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md",
+          "sha256": "a6a9fd6852c28d39a973463f2015f0e0f63254315680120ae43dbb891713b44b"
+        },
+        "evidence_run_ids": ["2026-10-24-edd-rollover-current-combined", "2026-10-24-edd-rollover-parent-combined"],
+        "evidence": [
+          {
+            "kind": "repository",
+            "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md"
+          },
+          {
+            "kind": "machine_local",
+            "path": "/tmp/edd-acceptance-20261024"
+          }
+        ],
+        "scope": "Only named claims and exercised paths in the durable independent report; original author rows unchanged.",
+        "limits": [
+          "Not an independent live-provider or full-PTY certification; historical controls use extracted module bodies on current dependencies.",
+          "Tokens/cost/active effort unknown; no post-delivery surveillance inferred.",
+          "Native macOS/Windows, full PTY rollover, all logging errno variants, arbitrary execution-requiring criteria and long-term surveillance remain outside this bounded acceptance."
+        ],
+        "integrated_at": "2026-10-24T00:54:31.818826+00:00",
+        "source_compatibility": {
+          "main_before_integration": "40db193150970d74a585070a06ffbba1de6a8042",
+          "documentation_only_delta_paths": [
+            "docs/experiments/evidence-driven-development/README.md",
+            "docs/experiments/evidence-driven-development/continuation-2026-10-24.json",
+            "docs/experiments/evidence-driven-development/interim-results-2026-10-24.json",
+            "docs/experiments/evidence-driven-development/interim-results-2026-10-24.md",
+            "docs/experiments/evidence-driven-development/tasks.jsonl",
+            "docs/test-results.json"
+          ],
+          "non_document_tree_sha256": "d3aa01c2305881866e7df077a44cd1eea919224316935091280d419af29c8edc",
+          "verification_run_id": "2026-10-24-edd-acceptance-integration-dirty"
+        },
+        "original_completion_independently_verified_then": false
+      }
     },
     {
       "id": "EDD-VERIFY-01",
-      "status": "open",
+      "status": "resolved",
       "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
       "artifact": {
         "commits": ["a1d0d623461da0e2e9c029b7c12fef1de9e8fb5e"],
@@ -243,10 +365,82 @@
         "docs/plans/agent-runtime/adaptive-independent-verification.md"
       ],
       "closure_record": "Append independent task-linked run with evidence/defect_ids and resolving run links when known; missing prior run IDs stay unknown, not invented.",
-      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up."
+      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up.",
+      "status_history": [
+        {
+          "status": "open",
+          "recorded_at": "2026-10-24T00:22:39.840485+00:00",
+          "artifact_commit": "40db193150970d74a585070a06ffbba1de6a8042",
+          "note": "Original opening observation, not independent acceptance at original task completion."
+        },
+        {
+          "status": "resolved",
+          "recorded_at": "2026-10-24T00:54:31.818826+00:00",
+          "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+          "acceptance_run_id": "2026-10-24-edd-verify-01-independent-acceptance"
+        }
+      ],
+      "resolution": {
+        "verdict": "ACCEPT",
+        "acceptance_run_id": "2026-10-24-edd-verify-01-independent-acceptance",
+        "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+        "tested_source_commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+        "tested_source_tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+        "evidence_commit": "5d7e530d9c5251053a071de8bc15b4df96d9b8c9",
+        "evidence_report": {
+          "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md",
+          "sha256": "a6a9fd6852c28d39a973463f2015f0e0f63254315680120ae43dbb891713b44b"
+        },
+        "evidence_run_ids": [
+          "2026-10-24-edd-verify-whitespace-current",
+          "2026-10-24-edd-verify-whitespace-parent",
+          "2026-10-24-edd-verify-cli-default-on",
+          "2026-10-24-edd-verify-cli-unsupported-final",
+          "2026-10-24-edd-verify-cli-default-off-final"
+        ],
+        "evidence": [
+          {
+            "kind": "repository",
+            "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md"
+          },
+          {
+            "kind": "machine_local",
+            "path": "/tmp/edd-acceptance-20261024"
+          }
+        ],
+        "scope": "Only named claims and exercised paths in the durable independent report; original author rows unchanged.",
+        "limits": [
+          "Not an independent live-provider or full-PTY certification; historical controls use extracted module bodies on current dependencies.",
+          "Tokens/cost/active effort unknown; no post-delivery surveillance inferred.",
+          "Native macOS/Windows, full PTY rollover, all logging errno variants, arbitrary execution-requiring criteria and long-term surveillance remain outside this bounded acceptance."
+        ],
+        "integrated_at": "2026-10-24T00:54:31.818826+00:00",
+        "source_compatibility": {
+          "main_before_integration": "40db193150970d74a585070a06ffbba1de6a8042",
+          "documentation_only_delta_paths": [
+            "docs/experiments/evidence-driven-development/README.md",
+            "docs/experiments/evidence-driven-development/continuation-2026-10-24.json",
+            "docs/experiments/evidence-driven-development/interim-results-2026-10-24.json",
+            "docs/experiments/evidence-driven-development/interim-results-2026-10-24.md",
+            "docs/experiments/evidence-driven-development/tasks.jsonl",
+            "docs/test-results.json"
+          ],
+          "non_document_tree_sha256": "d3aa01c2305881866e7df077a44cd1eea919224316935091280d419af29c8edc",
+          "verification_run_id": "2026-10-24-edd-acceptance-integration-dirty"
+        },
+        "original_completion_independently_verified_then": false
+      }
     }
   ],
   "followup_scope": "Open in the reviewed task ledger and four-run main index at the stated revision, not a claim that every possible later acceptance artifact has been searched.",
   "execution": "Documentation/data inspection only; no product probe closes these independent behavioral acceptance gaps within this follow-up scope.",
-  "integration": "Controller owns primary integration. Preserve existing JSONL objects; append only this lane documentation records. Do not append the worked example as a second delivery or alter historical measurement fields."
+  "integration": "Controller owns primary integration. Preserve existing JSONL objects; append only this lane documentation records. Do not append the worked example as a second delivery or alter historical measurement fields.",
+  "acceptance_update": {
+    "recorded_at": "2026-10-24T00:54:31.818826+00:00",
+    "evidence_commit": "5d7e530d9c5251053a071de8bc15b4df96d9b8c9",
+    "tested_source": "36b490f27c937c0e4852614aba5c21cf136621ad",
+    "controller_review": "All three bounded independent claims ACCEPT; no must-fix source defect or human decision.",
+    "historical_context": "Existing source_reconciliation, execution, next_owner and original acceptance criteria describe the opening record. Its open state is preserved in status_history; later bounded resolution does not backdate independent acceptance of original delivery.",
+    "experiment_conclusion": "Unchanged: total-cost reduction and quality equivalence remain unresolved. No frozen interim observations or task completion timestamps rewritten."
+  }
 }

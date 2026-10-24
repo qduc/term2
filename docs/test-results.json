@@ -789,6 +789,1671 @@
         "Interim report/data and continuation/guidance match reviewed source blobs exactly. Historical cutoff and inconclusive cost/quality finding are unchanged.",
         "Initial read-only preflight assumed committed bytes were a contiguous working-file prefix. Existing six pending rows precede the previously integrated approval row. Row-ID/raw-byte comparison confirmed all 71 committed observations and six pending rows; no primary writes occurred before correcting the positional assumption."
       ]
+    },
+    {
+      "id": "2026-10-24-edd-log-focused",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:31:11.771375+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": [
+        "2026-10-22-log-enospc-failure",
+        "2026-10-22-log-enospc-review-repair",
+        "2026-10-22-log-enospc-local-date"
+      ],
+      "followup_id": "EDD-LOG-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/services/logging/logging-failures.integration.test.ts --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 1.717,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": "Pacific/Kiritimati",
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/services/logging/logging-failures.integration.test.ts > keeps a process alive after ENOSPC, reports once, and drops further logs without Winston noise",
+          "diagnostic_signatures": [
+            "AssertionError: expected '2026-10-24' not to be '2026-10-24' // Object.is equality"
+          ]
+        }
+      ],
+      "comparison": {
+        "classification": "ineffective_or_overstrict_probe",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-focused.log",
+          "sha256": "d6a64241d8b97a5515c7de84d17caf9495484b204bfdc8d915e8c8fab49e6bd8"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-focused.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Clock premise failed before ENOSPC: Kiritimati local day equaled UTC day at run time."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-log-focused-adak",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:31:38.923249+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": [
+        "2026-10-22-log-enospc-failure",
+        "2026-10-22-log-enospc-review-repair",
+        "2026-10-22-log-enospc-local-date"
+      ],
+      "followup_id": "EDD-LOG-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/services/logging/logging-failures.integration.test.ts --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 2.32,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": "America/Adak",
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "targeted_current_revision_pass",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-focused-adak.log",
+          "sha256": "73592f2f8540cc464b70346cdc24ebbd9f77056e2e8672548fffd13a1ef2e6df"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-focused-adak.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-log-cli-adak",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:31:41.306820+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": [
+        "2026-10-22-log-enospc-failure",
+        "2026-10-22-log-enospc-review-repair",
+        "2026-10-22-log-enospc-local-date"
+      ],
+      "followup_id": "EDD-LOG-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.integration.test.ts -t 'finishes a provider turn when file logging hits ENOSPC'",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 5.087,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": "America/Adak",
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 54,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "targeted_current_revision_pass",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-cli-adak.log",
+          "sha256": "100da3f5df405e2d3f81fccc46ca121e02ece552a9c9f358dbd5f85a2e8d0c2c"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-cli-adak.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-log-controls",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:32:22.096291+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": [
+        "2026-10-22-log-enospc-failure",
+        "2026-10-22-log-enospc-review-repair",
+        "2026-10-22-log-enospc-local-date"
+      ],
+      "followup_id": "EDD-LOG-01",
+      "suite": "temporary-process-filesystem-probe",
+      "command": "python3 /tmp/edd-logging-controls-20261024.py",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 3.524,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "mixed_exploratory_controls",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-controls.log",
+          "sha256": "567e2bd4cecbc761fb413d7659a94d3892ecdd73269d3e1f57ca769129ab30ee"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-controls.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Per-case observations distinguish valid ENOSPC/noise/retention controls from unsupported private logger.clear() manipulation; aggregate exit 1 is not a current production-failure verdict."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-rollover-current-attempt1",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:34:54.184283+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-22-rollover-queued-submission"],
+      "followup_id": "EDD-ROLLOVER-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/edd-rollover.integration.test.tsx --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 3.272,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "targeted_current_revision_pass",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/rollover-current-attempt1.log",
+          "sha256": "6e726f3fcf0b6cade7c845cdd6263d5417ecf14844cba9a72782e8c8e7937945"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/rollover-current-attempt1.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-rollover-parent",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:35:01.155462+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_control",
+      "task_ids": ["2026-10-22-rollover-queued-submission"],
+      "followup_id": "EDD-ROLLOVER-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/edd-rollover.integration.test.tsx --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 3.421,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": "parent"
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 2,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/edd-rollover.integration.test.tsx > EDD real queue reaches second turn-start ownership before rollover consumption and delivers once",
+          "diagnostic_signatures": [
+            "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
+            "Error: EDD_CALLBACK_REJECTED"
+          ]
+        },
+        {
+          "test": "source/edd-rollover.integration.test.tsx > EDD real hook contains a rejected rollover callback and presents the retained briefing without resend",
+          "diagnostic_signatures": [
+            "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
+            "Error: EDD_CALLBACK_REJECTED"
+          ]
+        }
+      ],
+      "comparison": {
+        "classification": "expected_negative_control",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/rollover-parent.log",
+          "sha256": "8021777bae65bb165c84b4fffe366a62eb99ac43d99bdb23e6227d933b16bb94"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/rollover-parent.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "negative-control"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Negative control intended to fail semantic assertions. Historical controls replace selected module bodies on current dependencies, not entire historical checkouts."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-rollover-current-combined",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:35:49.884340+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-22-rollover-queued-submission"],
+      "followup_id": "EDD-ROLLOVER-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/edd-rollover.integration.test.tsx --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 3.428,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "targeted_current_revision_pass",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/rollover-current-combined.log",
+          "sha256": "68da23d824c8b02f991cc398cccae40b73066febad9b1108ce1fbb8b6fe7775d"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/rollover-current-combined.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-rollover-parent-combined",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:35:57.228395+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_control",
+      "task_ids": ["2026-10-22-rollover-queued-submission"],
+      "followup_id": "EDD-ROLLOVER-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/edd-rollover.integration.test.tsx --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 3.372,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": "parent"
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 3,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/edd-rollover.integration.test.tsx > EDD real queue reaches second turn-start ownership before rollover consumption and delivers once",
+          "diagnostic_signatures": [
+            "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
+            "Error: Session rollover is blocked while a queued submission is pending.",
+            "Error: EDD_CALLBACK_REJECTED"
+          ]
+        },
+        {
+          "test": "source/edd-rollover.integration.test.tsx > EDD real hook contains a rejected rollover callback and presents the retained briefing without resend",
+          "diagnostic_signatures": [
+            "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
+            "Error: Session rollover is blocked while a queued submission is pending.",
+            "Error: EDD_CALLBACK_REJECTED"
+          ]
+        },
+        {
+          "test": "source/edd-rollover.integration.test.tsx > EDD combined real hook turn-end consumes rollover while queued successor turn owns zero remaining items",
+          "diagnostic_signatures": [
+            "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
+            "Error: Session rollover is blocked while a queued submission is pending.",
+            "Error: EDD_CALLBACK_REJECTED"
+          ]
+        }
+      ],
+      "comparison": {
+        "classification": "expected_negative_control",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/rollover-parent-combined.log",
+          "sha256": "57d180eacbc5fa961d2c0f80fd2edfdba029891c0c6bab46d9f18b306b9374e5"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/rollover-parent-combined.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "negative-control"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Negative control intended to fail semantic assertions. Historical controls replace selected module bodies on current dependencies, not entire historical checkouts."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-whitespace-current",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:36:21.942784+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/services/completion-verification/completion-verification.integration.test.ts -t 'inside the attested revision|an unsupported workspace blocks' --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 3.971,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 36,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "targeted_current_revision_pass",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-whitespace-current.log",
+          "sha256": "2c192c030e2c8893c1c76b555ef9d6f96907cae089dc97c02b59bdc986ae2bd8"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-whitespace-current.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-cli-default-on",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:36:25.977320+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.integration.test.ts -t 'the shipped CLI verifies a durable goal' --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 4.929,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 53,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "targeted_current_revision_pass",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-default-on.log",
+          "sha256": "54efcab96a8ab7d13934cff7226534bb4bd3e40d3d39ee3b98e5622fc5dc3092"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-default-on.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-whitespace-parent",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:37:17.623078+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_control",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/services/completion-verification/completion-verification.edd-parent.integration.test.ts -t 'inside the attested revision|an unsupported workspace blocks'",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 4.123,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 3,
+        "skipped": 36,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/services/completion-verification/completion-verification.edd-parent.integration.test.ts > completion verification through repository and persisted task boundaries > the deterministic checker fails on a staged whitespace error inside the attested revision",
+          "diagnostic_signatures": ["AssertionError: expected 'complete' to be 'repair' // Object.is equality"]
+        },
+        {
+          "test": "source/services/completion-verification/completion-verification.edd-parent.integration.test.ts > completion verification through repository and persisted task boundaries > the deterministic checker fails on a untracked whitespace error inside the attested revision",
+          "diagnostic_signatures": ["AssertionError: expected 'complete' to be 'repair' // Object.is equality"]
+        },
+        {
+          "test": "source/services/completion-verification/completion-verification.edd-parent.integration.test.ts > an unsupported workspace blocks with a named reason and an operational alert",
+          "diagnostic_signatures": ["AssertionError: expected 'complete' to be 'repair' // Object.is equality"]
+        }
+      ],
+      "comparison": {
+        "classification": "expected_negative_control",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-whitespace-parent.log",
+          "sha256": "5964961f0cf2e2da5d5110c3b4fa3ef90920a0f54efeee0d20d7161d9093df6a"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-whitespace-parent.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "negative-control"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Negative control intended to fail semantic assertions. Historical controls replace selected module bodies on current dependencies, not entire historical checkouts."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-cli-unsupported",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:37:24.125008+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.edd-unsupported.integration.test.ts -t 'headless bare completion in an unsupported workspace'",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 4.329,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 54,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/cli.edd-unsupported.integration.test.ts > headless bare completion in an unsupported workspace reports missing verification",
+          "diagnostic_signatures": ["AssertionError: Profile: bare"]
+        }
+      ],
+      "comparison": {
+        "classification": "ineffective_or_overstrict_probe",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-unsupported.log",
+          "sha256": "af2c553d7f480f520d88bbd9b32d0008d0c46735e9aa21784ff323a1fde65489"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-unsupported.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Fixture XDG_STATE_HOME differed from settings writer; local provider not selected, HTTP 401; no target-path conclusion."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-cli-unsupported-aligned",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:37:45.370110+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.edd-unsupported.integration.test.ts -t 'headless bare completion in an unsupported workspace'",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 4.028,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 54,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/cli.edd-unsupported.integration.test.ts > headless bare completion in an unsupported workspace reports missing verification",
+          "diagnostic_signatures": ["AssertionError: Profile: bare"]
+        }
+      ],
+      "comparison": {
+        "classification": "ineffective_or_overstrict_probe",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-unsupported-aligned.log",
+          "sha256": "a23bd70511d34e0387df8b04e0a64ae06fb71f98327f7fad02462905700add89"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-unsupported-aligned.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Wrong config-dir hypothesis did not align actual state settings path; HTTP 401; no target-path conclusion."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-cli-unsupported-state-aligned",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:38:11.728562+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.edd-unsupported.integration.test.ts -t 'headless bare completion in an unsupported workspace'",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 3.281,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 54,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/cli.edd-unsupported.integration.test.ts > headless bare completion in an unsupported workspace reports missing verification",
+          "diagnostic_signatures": [
+            "AssertionError: expected 'fatal: not a git repository (or any o\u2026' to contain 'not inside a Git repository'"
+          ]
+        }
+      ],
+      "comparison": {
+        "classification": "ineffective_or_overstrict_probe",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-unsupported-state-aligned.log",
+          "sha256": "8775c429c3064633dd522a5a2251b900f26f032a71b36f508f2215d648c7fe52"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-unsupported-state-aligned.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Target alert reached; new probe over-specified detail text instead of raw Git stderr. Named output/reason already passed."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-cli-unsupported-final",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:38:27.625722+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.edd-unsupported.integration.test.ts -t 'headless bare completion in an unsupported workspace'",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 3.223,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 54,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "targeted_current_revision_pass",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-unsupported-final.log",
+          "sha256": "be5cf2965c2f62c503efa9e742f76f0f498a197335a459e28970f3870a8001a6"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-unsupported-final.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-cli-default-off-control",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:38:34.363351+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.edd-default-off.integration.test.ts -t 'the shipped CLI verifies a durable goal'",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 6.641,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 53,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "ineffective_or_overstrict_probe",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-default-off-control.log",
+          "sha256": "b2331fc0dcf7a84f8076f7d9d0b9574ede95dca079bb01d603bf77bc32c96a85"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-default-off-control.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Ineffective one-field mutation: schema still defaulted true. Passing tests do not prove default-off non-vacuity."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-cli-default-off-activated",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:39:21.619773+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.edd-default-off.integration.test.ts -t 'the shipped CLI verifies a durable goal'",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 4.838,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 2,
+        "skipped": 53,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/cli.edd-default-off.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=",
+          "diagnostic_signatures": [
+            "Error: Effective default did not become false: false",
+            "Error: Default-off control did not reach the compiled true default"
+          ]
+        },
+        {
+          "test": "source/cli.edd-default-off.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "diagnostic_signatures": [
+            "Error: Effective default did not become false: false",
+            "Error: Default-off control did not reach the compiled true default"
+          ]
+        }
+      ],
+      "comparison": {
+        "classification": "ineffective_or_overstrict_probe",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-default-off-activated.log",
+          "sha256": "08be9bb8493f1ea00eeecef75691702eb1d3f6410c5c4ae4619855450fe60a43"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-default-off-activated.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Effective default false but console ANSI caused preflight comparison failure before target CLI dispatch."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-cli-default-off-final",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:39:36.678376+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_control",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/cli.edd-default-off.integration.test.ts -t 'the shipped CLI verifies a durable goal'",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 6.737,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 2,
+        "skipped": 53,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/cli.edd-default-off.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=",
+          "diagnostic_signatures": [
+            "AssertionError: expected [ { model: 'mock-alpha', \u2026(5) }, \u2026(1) ] to have a length of 4 but got 2"
+          ]
+        },
+        {
+          "test": "source/cli.edd-default-off.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "diagnostic_signatures": [
+            "AssertionError: expected [ { model: 'mock-alpha', \u2026(5) }, \u2026(1) ] to have a length of 4 but got 2"
+          ]
+        }
+      ],
+      "comparison": {
+        "classification": "expected_negative_control",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-default-off-final.log",
+          "sha256": "e419adb918f6f8778506dd78f03ac5813af4bb05cd947760393362eb8a3c4a20"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/verify-cli-default-off-final.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "negative-control"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Negative control intended to fail semantic assertions. Historical controls replace selected module bodies on current dependencies, not entire historical checkouts."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-log-sibling-current-activated",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:41:13.908642+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_probe",
+      "task_ids": [
+        "2026-10-22-log-enospc-failure",
+        "2026-10-22-log-enospc-review-repair",
+        "2026-10-22-log-enospc-local-date"
+      ],
+      "followup_id": "EDD-LOG-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/services/logging/logging-failures.edd-active.integration.test.ts -t 'one subdirectory is unreadable'",
+      "command_complete": true,
+      "exit_code": 0,
+      "runtime_seconds": 1.567,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 4,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "targeted_current_revision_pass",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-sibling-current-activated.log",
+          "sha256": "28cb741bb343d638e62d19cbd18aae515e9fba472214c3b055a9c6e496a452d2"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-sibling-current-activated.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "probe-only"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-log-sibling-parent",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:41:19.257297+00:00",
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "committed_source_with_temporary_untracked_control",
+      "task_ids": [
+        "2026-10-22-log-enospc-failure",
+        "2026-10-22-log-enospc-review-repair",
+        "2026-10-22-log-enospc-local-date"
+      ],
+      "followup_id": "EDD-LOG-01",
+      "suite": "targeted-integration",
+      "command": "pnpm test:integration source/services/logging/logging-failures.edd-sibling-parent.integration.test.ts -t 'one subdirectory is unreadable'",
+      "command_complete": true,
+      "exit_code": 1,
+      "runtime_seconds": 1.721,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/edd-acceptance-verification",
+        "runner_env": {
+          "TZ": null,
+          "NODE_ENV": "production",
+          "TMPDIR": "/tmp/qduc/term2-nodejs",
+          "EDD_CONTROL": null
+        },
+        "notes": "Vitest scripts set NODE_ENV=test; process controls use isolated child TZ/clock as recorded in retained probe source."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 4,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/services/logging/logging-failures.edd-sibling-parent.integration.test.ts > continues measuring sibling traffic entries when one subdirectory is unreadable",
+          "diagnostic_signatures": ["AssertionError: expected true to be false // Object.is equality"]
+        }
+      ],
+      "comparison": {
+        "classification": "expected_negative_control",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "See linked independent claim verdict and matched-control details in acceptance-verification-2026-10-24.md."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-sibling-parent.log",
+          "sha256": "1f762fe4ebbed8ee19754b1534033d2bac6f28686cb77479fc1db9e2804d491d"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024/log-sibling-parent.json"
+        }
+      ],
+      "independent_verification": {
+        "role": "verifier",
+        "original_implementer": false,
+        "verdict": "negative-control"
+      },
+      "notes": [
+        "Independent non-implementing verifier; no permanent tests or product/default changes.",
+        "Source revision is committed; temporary untracked probes and, for controls, extracted historical module bodies/disposable compiled mutation are not part of that tree.",
+        "Command wall duration is observed verifier execution time, not active effort or monetary cost.",
+        "Negative control intended to fail semantic assertions. Historical controls replace selected module bodies on current dependencies, not entire historical checkouts."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-log-01-independent-acceptance",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "independent_acceptance_of_identified_committed_source",
+      "task_ids": [
+        "2026-10-22-log-enospc-failure",
+        "2026-10-22-log-enospc-review-repair",
+        "2026-10-22-log-enospc-local-date"
+      ],
+      "followup_id": "EDD-LOG-01",
+      "suite": "independent-claim-acceptance",
+      "command": null,
+      "command_complete": null,
+      "environment": null,
+      "result": null,
+      "failures": [],
+      "comparison": {
+        "classification": "independent_acceptance",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "Original missing/pending task evidence had no known run IDs; none invented. This is not a new product delivery."
+      },
+      "evidence_run_ids": [
+        "2026-10-24-edd-log-focused-adak",
+        "2026-10-24-edd-log-cli-adak",
+        "2026-10-24-edd-log-controls",
+        "2026-10-24-edd-log-sibling-current-activated",
+        "2026-10-24-edd-log-sibling-parent"
+      ],
+      "defect_ids": [],
+      "independent_verification": {
+        "verdict": "ACCEPT",
+        "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+        "scope": "Only named claims and exercised paths in the durable independent report; original author rows unchanged.",
+        "verifier": "term2 independent acceptance lane, controller-assigned non-implementer",
+        "session_id": null
+      },
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024"
+        }
+      ],
+      "notes": [
+        "Not an independent live-provider or full-PTY certification; historical controls use extracted module bodies on current dependencies.",
+        "Tokens/cost/active effort unknown; no post-delivery surveillance inferred."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-rollover-01-independent-acceptance",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "independent_acceptance_of_identified_committed_source",
+      "task_ids": ["2026-10-22-rollover-queued-submission"],
+      "followup_id": "EDD-ROLLOVER-01",
+      "suite": "independent-claim-acceptance",
+      "command": null,
+      "command_complete": null,
+      "environment": null,
+      "result": null,
+      "failures": [],
+      "comparison": {
+        "classification": "independent_acceptance",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "Original missing/pending task evidence had no known run IDs; none invented. This is not a new product delivery."
+      },
+      "evidence_run_ids": ["2026-10-24-edd-rollover-current-combined", "2026-10-24-edd-rollover-parent-combined"],
+      "defect_ids": ["2026-10-22-rollover-queue-turn-end-crash"],
+      "independent_verification": {
+        "verdict": "ACCEPT",
+        "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+        "scope": "Only named claims and exercised paths in the durable independent report; original author rows unchanged.",
+        "verifier": "term2 independent acceptance lane, controller-assigned non-implementer",
+        "session_id": null
+      },
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024"
+        }
+      ],
+      "notes": [
+        "Not an independent live-provider or full-PTY certification; historical controls use extracted module bodies on current dependencies.",
+        "Tokens/cost/active effort unknown; no post-delivery surveillance inferred."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-verify-01-independent-acceptance",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "tree": "c2ac0113f9e3715de96d18f0ef8a0d3757bcd664",
+      "revision_kind": "independent_acceptance_of_identified_committed_source",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "followup_id": "EDD-VERIFY-01",
+      "suite": "independent-claim-acceptance",
+      "command": null,
+      "command_complete": null,
+      "environment": null,
+      "result": null,
+      "failures": [],
+      "comparison": {
+        "classification": "independent_acceptance",
+        "baseline_commit": null,
+        "resolves_run_ids": [],
+        "notes": "Original missing/pending task evidence had no known run IDs; none invented. This is not a new product delivery."
+      },
+      "evidence_run_ids": [
+        "2026-10-24-edd-verify-whitespace-current",
+        "2026-10-24-edd-verify-whitespace-parent",
+        "2026-10-24-edd-verify-cli-default-on",
+        "2026-10-24-edd-verify-cli-unsupported-final",
+        "2026-10-24-edd-verify-cli-default-off-final"
+      ],
+      "defect_ids": [],
+      "independent_verification": {
+        "verdict": "ACCEPT",
+        "accepted_at": "2026-10-24T00:43:53.706060+00:00",
+        "scope": "Only named claims and exercised paths in the durable independent report; original author rows unchanged.",
+        "verifier": "term2 independent acceptance lane, controller-assigned non-implementer",
+        "session_id": null
+      },
+      "evidence": [
+        {
+          "kind": "repository",
+          "path": "docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-20261024"
+        }
+      ],
+      "notes": [
+        "Not an independent live-provider or full-PTY certification; historical controls use extracted module bodies on current dependencies.",
+        "Tokens/cost/active effort unknown; no post-delivery surveillance inferred."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-acceptance-integration-dirty",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:54:31.818826+00:00",
+      "commit": null,
+      "base_commit": "40db193150970d74a585070a06ffbba1de6a8042",
+      "source_commit": "5d7e530d9c5251053a071de8bc15b4df96d9b8c9",
+      "revision_kind": "dirty_pre_commit_snapshot",
+      "suite": "documentation-evidence",
+      "task_ids": ["2026-10-24-independent-acceptance-followups"],
+      "command": "python3 /tmp/edd_acceptance_main_check_20261024.py --staged; pnpm --dir /home/qduc/term2 exec prettier --check docs/experiments/evidence-driven-development/acceptance-verification-2026-10-24.md docs/experiments/evidence-driven-development/continuation-2026-10-24.json docs/test-results.json; pnpm --dir /home/qduc/term2 exec node scripts/check-no-unit-tests.mjs; git -C /home/qduc/term2 diff --cached --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "checks": {
+        "all_original_run_objects": "preserved",
+        "new_evidence_run_ids": 23,
+        "log_hashes_verified": 20,
+        "source_compatibility": "tested 36b490f2/current main/evidence non-doc trees identical",
+        "closure_links": "three exact scoped acceptance run/source/time/evidence links; original open states retained",
+        "unrelated_dirty_rows": "six raw rows hash-identical and unstaged",
+        "behavior_tests": "not_rerun"
+      },
+      "failures": [],
+      "comparison": {
+        "classification": "evidence_only_acceptance_integration",
+        "baseline_commit": "40db193150970d74a585070a06ffbba1de6a8042",
+        "resolves_run_ids": []
+      },
+      "evidence": [
+        {
+          "kind": "git_commit",
+          "commit": "5d7e530d9c5251053a071de8bc15b4df96d9b8c9"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-main-integration-20261024/manifest.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-acceptance-main-integration-20261024/validation-staged.json"
+        }
+      ],
+      "notes": [
+        "Controller accepted all three bounded independent claims. No production source/default changes or behavioral tests rerun for integration.",
+        "Preserve all main and verifier run objects, including failed/setup/negative controls; unknown usage/cost remains unknown.",
+        "Only verification-only source task annotation appended. Current scoped resolutions are later observations, not original completion certification or global experiment quality/cost success.",
+        "Mandatory gates run with command-local nonstashing hook; no persistent hook/config changes. Source commit indexed in a later documentation entry."
+      ]
     }
   ]
 }

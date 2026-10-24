@@ -1,0 +1,34 @@
+[
+  {
+    "name": "post-concurrent-smoke",
+    "command": ["pnpm", "verify:generated", "--seed=20261024"],
+    "exit": 0,
+    "commit": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+    "headAfter": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+    "wallSeconds": 4.961856062058359
+  },
+  {
+    "name": "post-concurrent-types",
+    "command": ["pnpm", "typecheck"],
+    "exit": 0,
+    "commit": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+    "headAfter": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+    "wallSeconds": 4.347352935001254
+  },
+  {
+    "name": "post-concurrent-static",
+    "command": ["pnpm", "test"],
+    "exit": 0,
+    "commit": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+    "headAfter": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+    "wallSeconds": 4.447593193966895
+  },
+  {
+    "name": "post-concurrent-build",
+    "command": ["pnpm", "build"],
+    "exit": 0,
+    "commit": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+    "headAfter": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+    "wallSeconds": 4.948285406921059
+  }
+]

@@ -145,3 +145,16 @@ bug found. Legacy shared-tag -> Grok compatibility still needs an owner decision
 it is explicitly excluded rather than encoded as policy. Author effort remains
 unknown; independent cumulative list-price estimate USD2.110373. Opt-in retention,
 not automatic CI or proof of whole-subsystem correctness.
+
+## Concurrent primary integration preserved
+
+During final hygiene, primary advanced through sibling mergebc3ea5a1 (explicit
+session-read latency optimization). Final validation comparing89141139 to the
+entire later HEAD therefore failed its no-production-diff assertion. This was
+not a change from this slice:89141139..f366e4e3 has no source/package/dependency
+diff, and checker hashes still match the accepted artifact. Sibling changes in
+conversation-persistence/session-browser and its integration test were preserved.
+On subsequent primaryce066705, default10,000cases, types,28static and build all
+pass with HEAD stable during each command. Logs/SHAs retained. Full isolated lint
+was verified on exact feature mergef366e4e3, not relabeled as a later whole-main
+run. All owned feature/mutation worktrees and branch cleaned; no live workers.

@@ -8263,6 +8263,122 @@
           "path": "docs/experiments/generated-verification/checks/hotspots/exact-merge-isolated-lint.log"
         }
       ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+      "revision_kind": "primary_after_preserved_concurrent_merge_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-post-concurrent-smoke",
+      "suite": "post-concurrent-smoke",
+      "command": "pnpm verify:generated --seed=20261024",
+      "exit_code": 0,
+      "result": {
+        "passed": 10000,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "HEAD remained unchanged throughout command; wall seconds 4.961856062058359. Concurrent bc3ea5a1 session-read merge preserved. Exact original feature merge lint remains evidence atf366e4e3, not claimed rerun on this later whole tree.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/post-concurrent-smoke.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+      "revision_kind": "primary_after_preserved_concurrent_merge_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-post-concurrent-types",
+      "suite": "post-concurrent-types",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "HEAD remained unchanged throughout command; wall seconds 4.347352935001254. Concurrent bc3ea5a1 session-read merge preserved. Exact original feature merge lint remains evidence atf366e4e3, not claimed rerun on this later whole tree.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/post-concurrent-types.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+      "revision_kind": "primary_after_preserved_concurrent_merge_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-post-concurrent-static",
+      "suite": "post-concurrent-static",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "HEAD remained unchanged throughout command; wall seconds 4.447593193966895. Concurrent bc3ea5a1 session-read merge preserved. Exact original feature merge lint remains evidence atf366e4e3, not claimed rerun on this later whole tree.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/post-concurrent-static.log"
+        }
+      ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce066705a9d8e14309bb6e0daf939bf077c3daa2",
+      "revision_kind": "primary_after_preserved_concurrent_merge_with_evidence_changes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-hotspots"],
+      "id": "2026-10-24-generated-hotspots-post-concurrent-build",
+      "suite": "post-concurrent-build",
+      "command": "pnpm build",
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "notes": "HEAD remained unchanged throughout command; wall seconds 4.948285406921059. Concurrent bc3ea5a1 session-read merge preserved. Exact original feature merge lint remains evidence atf366e4e3, not claimed rerun on this later whole tree.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/hotspots/post-concurrent-build.log"
+        }
+      ]
     }
   ]
 }

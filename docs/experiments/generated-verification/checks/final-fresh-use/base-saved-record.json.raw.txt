@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "nextSequence": 3,
+  "queue": [],
+  "pause": {
+    "reason": "failure"
+  }
+}

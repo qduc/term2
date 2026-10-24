@@ -1,0 +1,11 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property queue.restore-pause --seed 424242 --path not-a-path
+Error: Unable to replay, got invalid path=not-a-path
+    at pathWalk (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2338:54)
+    at Module.check (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2652:146)
+    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:53:31
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:643:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+{"networkGuard":true,"attempts":0,"localIpcConnections":4,"pid":259}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":241}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":229}

@@ -1,0 +1,178 @@
+$ cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/generated-verification[39m
+
+ [31m❯[39m source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts [2m([22m[2m12 tests[22m[2m | [22m[31m6 failed[39m[2m)[22m[33m 3141[2mms[22m[39m
+[31m   [31m×[31m preserves a healthy cwd for a real built worker[39m[32m 37[2mms[22m[39m
+[31m   [31m×[31m preserves a healthy cwd for a real built index worker[39m[32m 34[2mms[22m[39m
+[31m   [31m×[31m starts a real built index worker after cwd deletion[39m[32m 34[2mms[22m[39m
+[31m   [31m×[31m starts a real built worker after a cached cwd is deleted[39m[32m 36[2mms[22m[39m
+[31m   [31m×[31m starts a real built index worker after a cached cwd is deleted[39m[32m 35[2mms[22m[39m
+[31m   [31m×[31m starts a real built worker from an actual child module after cwd deletion[39m[32m 1[2mms[22m[39m
+ [31m❯[39m source/cli-tool-rows.e2e.test.ts [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 60035[2mms[22m[39m
+[31m   [31m×[31m the terminal UI shows a later turn tool call that reuses an earlier call id[39m[33m 60034[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 7 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/cli-tool-rows.e2e.test.ts[2m > [22mthe terminal UI shows a later turn tool call that reuses an earlier call id
+[31m[1mError[22m: Timed out waiting for harness idle generation > 0 at /tmp/qduc/term2-nodejs/term2-tool-rows-e2e-iQ9yLA/home/input-idle after 60000ms; got 0.[39m
+[36m [2m❯[22m waitForHarnessIdleGeneration source/lib/harness-input-idle.ts:[2m82:9[22m[39m
+    [90m 80|[39m     [35mawait[39m [34mdelay[39m([34m20[39m)[33m;[39m
+    [90m 81|[39m   }
+    [90m 82|[39m   [35mthrow[39m [35mnew[39m [33mError[39m(
+    [90m   |[39m         [31m^[39m
+    [90m 83|[39m     `Timed out waiting for harness idle generation > ${after} at ${pat…
+    [90m 84|[39m       path[33m,[39m
+[90m [2m❯[22m source/cli-tool-rows.e2e.test.ts:[2m128:14[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts[2m > [22mpreserves a healthy cwd for a real built worker
+[31m[1mError[22m: worker bootstrap child exited 1: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/qduc/term2/.worktrees/generated-verification/dist/services/sandboxed-code-host/sandboxed-code-host.js' imported from /tmp/qduc/term2-nodejs/term2-sandbox-startup-fixture-5gLAHI/worker-bootstrap-child.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at node:internal/modules/esm/loader:632:32
+    at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///home/qduc/term2/.worktrees/generated-verification/dist/services/sandboxed-code-host/sandboxed-code-host.js'
+}
+[39m
+[36m [2m❯[22m ChildProcess.<anonymous> source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts:[2m182:18[22m[39m
+    [90m180|[39m         [34mclearTimeout[39m(timeout)[33m;[39m
+    [90m181|[39m         [35mif[39m (code [33m!==[39m [34m0[39m) {
+    [90m182|[39m           reject(new Error(`worker bootstrap child exited ${code}: ${s…
+    [90m   |[39m                  [31m^[39m
+    [90m183|[39m           [35mreturn[39m[33m;[39m
+    [90m184|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts[2m > [22mpreserves a healthy cwd for a real built index worker
+[31m[1mError[22m: worker bootstrap child exited 1: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/qduc/term2/.worktrees/generated-verification/dist/services/conversation/session-index/session-index-worker-client.js' imported from /tmp/qduc/term2-nodejs/term2-sandbox-startup-fixture-Z060th/worker-bootstrap-child.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at node:internal/modules/esm/loader:632:32
+    at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///home/qduc/term2/.worktrees/generated-verification/dist/services/conversation/session-index/session-index-worker-client.js'
+}
+[39m
+[36m [2m❯[22m ChildProcess.<anonymous> source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts:[2m182:18[22m[39m
+    [90m180|[39m         [34mclearTimeout[39m(timeout)[33m;[39m
+    [90m181|[39m         [35mif[39m (code [33m!==[39m [34m0[39m) {
+    [90m182|[39m           reject(new Error(`worker bootstrap child exited ${code}: ${s…
+    [90m   |[39m                  [31m^[39m
+    [90m183|[39m           [35mreturn[39m[33m;[39m
+    [90m184|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts[2m > [22mstarts a real built index worker after cwd deletion
+[31m[1mError[22m: worker bootstrap child exited 1: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/qduc/term2/.worktrees/generated-verification/dist/services/conversation/session-index/session-index-worker-client.js' imported from /tmp/qduc/term2-nodejs/term2-sandbox-startup-fixture-BW9Prh/worker-bootstrap-child.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at node:internal/modules/esm/loader:632:32
+    at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///home/qduc/term2/.worktrees/generated-verification/dist/services/conversation/session-index/session-index-worker-client.js'
+}
+[39m
+[36m [2m❯[22m ChildProcess.<anonymous> source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts:[2m182:18[22m[39m
+    [90m180|[39m         [34mclearTimeout[39m(timeout)[33m;[39m
+    [90m181|[39m         [35mif[39m (code [33m!==[39m [34m0[39m) {
+    [90m182|[39m           reject(new Error(`worker bootstrap child exited ${code}: ${s…
+    [90m   |[39m                  [31m^[39m
+    [90m183|[39m           [35mreturn[39m[33m;[39m
+    [90m184|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts[2m > [22mstarts a real built worker after a cached cwd is deleted
+[31m[1mError[22m: worker bootstrap child exited 1: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/qduc/term2/.worktrees/generated-verification/dist/services/sandboxed-code-host/sandboxed-code-host.js' imported from /tmp/qduc/term2-nodejs/term2-sandbox-startup-fixture-THXDDQ/worker-bootstrap-child.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at node:internal/modules/esm/loader:632:32
+    at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///home/qduc/term2/.worktrees/generated-verification/dist/services/sandboxed-code-host/sandboxed-code-host.js'
+}
+[39m
+[36m [2m❯[22m ChildProcess.<anonymous> source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts:[2m182:18[22m[39m
+    [90m180|[39m         [34mclearTimeout[39m(timeout)[33m;[39m
+    [90m181|[39m         [35mif[39m (code [33m!==[39m [34m0[39m) {
+    [90m182|[39m           reject(new Error(`worker bootstrap child exited ${code}: ${s…
+    [90m   |[39m                  [31m^[39m
+    [90m183|[39m           [35mreturn[39m[33m;[39m
+    [90m184|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts[2m > [22mstarts a real built index worker after a cached cwd is deleted
+[31m[1mError[22m: worker bootstrap child exited 1: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/qduc/term2/.worktrees/generated-verification/dist/services/conversation/session-index/session-index-worker-client.js' imported from /tmp/qduc/term2-nodejs/term2-sandbox-startup-fixture-l4Kcgo/worker-bootstrap-child.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at node:internal/modules/esm/loader:632:32
+    at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///home/qduc/term2/.worktrees/generated-verification/dist/services/conversation/session-index/session-index-worker-client.js'
+}
+[39m
+[36m [2m❯[22m ChildProcess.<anonymous> source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts:[2m182:18[22m[39m
+    [90m180|[39m         [34mclearTimeout[39m(timeout)[33m;[39m
+    [90m181|[39m         [35mif[39m (code [33m!==[39m [34m0[39m) {
+    [90m182|[39m           reject(new Error(`worker bootstrap child exited ${code}: ${s…
+    [90m   |[39m                  [31m^[39m
+    [90m183|[39m           [35mreturn[39m[33m;[39m
+    [90m184|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts[2m > [22mstarts a real built worker from an actual child module after cwd deletion
+[31m[1mError[22m: ENOENT: no such file or directory, stat '/home/qduc/term2/.worktrees/generated-verification/dist/services/sandboxed-code-host/sandboxed-code-host.js'[39m
+[36m [2m❯[22m source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts:[2m265:37[22m[39m
+    [90m263|[39m     join(repositoryRoot, 'dist/services/conversation/session-index/ses…
+    [90m264|[39m   ][33m;[39m
+    [90m265|[39m   [35mconst[39m [sourceStats[33m,[39m builtStats] [33m=[39m [35mawait[39m [33mPromise[39m[33m.[39m[34mall[39m([
+    [90m   |[39m                                     [31m^[39m
+    [90m266|[39m     [33mPromise[39m[33m.[39m[34mall[39m(sourcePaths[33m.[39m[34mmap[39m((sourcePath) [33m=>[39m [34mstat[39m(sourcePath)))[33m,[39m
+    [90m267|[39m     [33mPromise[39m[33m.[39m[34mall[39m(builtPaths[33m.[39m[34mmap[39m((builtPath) [33m=>[39m [34mstat[39m(builtPath)))[33m,[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (6)[39m
+[2m      Tests [22m [1m[31m7 failed[39m[22m[2m | [22m[1m[32m25 passed[39m[22m[2m | [22m[33m4 skipped[39m[90m (36)[39m
+[2m   Start at [22m 16:22:51
+[2m   Duration [22m 60.30s[2m (transform 440ms, setup 99ms, import 669ms, tests 69.34s, environment 1ms)[22m
+
+[ELIFECYCLE] Command failed with exit code 1.

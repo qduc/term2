@@ -1,0 +1,11 @@
+{
+  "command": [
+    "node",
+    "--input-type=module",
+    "-e",
+    "import {execFile,execFileSync} from \"node:child_process\"; import {promisify} from \"node:util\"; let sync;try{sync={stdout:execFileSync(\"git\",[\"rev-parse\",\"HEAD\"],{encoding:\"utf8\"})}}catch(e){sync={code:e.code}}const asyncGit=await promisify(execFile)(\"git\",[\"rev-parse\",\"HEAD\"]);console.log(JSON.stringify({sync,asyncGit}));"
+  ],
+  "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+  "exit": 0,
+  "wallSeconds": 0.05889745708554983
+}

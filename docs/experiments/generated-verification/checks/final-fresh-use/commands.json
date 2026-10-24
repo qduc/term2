@@ -1,0 +1,238 @@
+[
+  {
+    "name": "installed",
+    "command": ["pnpm", "verify:generated", "--seed", "424242"],
+    "exit": 0,
+    "wallSeconds": 1.45237195212394
+  },
+  {
+    "name": "replay-discovery.json",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.0068899812176824
+  },
+  {
+    "name": "replay-replay-before.json",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.042834588792175
+  },
+  {
+    "name": "replay-serial-strengthened-red.json",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.0042157098650932
+  },
+  {
+    "name": "replay-restore-red.json",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.restore-pause",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0",
+      "--runs",
+      "1000"
+    ],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 0.9872259311378002
+  },
+  {
+    "name": "history",
+    "command": ["pnpm", "verify:generated", "--target", "history", "--runs", "1000", "--seed", "20261024"],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.2489277268759906
+  },
+  {
+    "name": "queue",
+    "command": ["pnpm", "verify:generated", "--target", "queue", "--runs", "1000", "--seed", "20261024"],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.077467320021242
+  },
+  {
+    "name": "negative-min",
+    "command": ["pnpm", "verify:generated", "--seed=-2147483648"],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.418149596080184
+  },
+  {
+    "name": "help",
+    "command": ["pnpm", "verify:generated", "--help"],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 0.9877317370846868
+  },
+  {
+    "name": "bad-target",
+    "command": ["pnpm", "verify:generated", "--target", "x"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0108207953162491
+  },
+  {
+    "name": "bad-property",
+    "command": ["pnpm", "verify:generated", "--property", "x"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0329385991208255
+  },
+  {
+    "name": "wrong-target-property",
+    "command": ["pnpm", "verify:generated", "--target", "history", "--property", "queue.restore-pause"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0263247578404844
+  },
+  {
+    "name": "zero-runs",
+    "command": ["pnpm", "verify:generated", "--runs", "0"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0277330167591572
+  },
+  {
+    "name": "fractional-runs",
+    "command": ["pnpm", "verify:generated", "--runs", "1.2"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0134358941577375
+  },
+  {
+    "name": "bad-seed",
+    "command": ["pnpm", "verify:generated", "--seed", "2147483648"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.021677078679204
+  },
+  {
+    "name": "noninteger-seed",
+    "command": ["pnpm", "verify:generated", "--seed", "nan"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0428100428543985
+  },
+  {
+    "name": "path-without-property",
+    "command": ["pnpm", "verify:generated", "--path", "0", "--seed", "1"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0574713442474604
+  },
+  {
+    "name": "path-without-seed",
+    "command": ["pnpm", "verify:generated", "--property", "queue.serial-actions", "--path", "0"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.015380036085844
+  },
+  {
+    "name": "unknown-option",
+    "command": ["pnpm", "verify:generated", "--bogus"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0143050458282232
+  },
+  {
+    "name": "positional",
+    "command": ["pnpm", "verify:generated", "oops"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0108174988999963
+  },
+  {
+    "name": "missing-value",
+    "command": ["pnpm", "verify:generated", "--runs"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0208199098706245
+  },
+  {
+    "name": "output-new",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "queue",
+      "--seed",
+      "42",
+      "--runs",
+      "100",
+      "--output",
+      "docs/experiments/generated-verification/checks/final-fresh-use/explicit-output.json"
+    ],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.0506947552785277
+  },
+  {
+    "name": "output-existing",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "43",
+      "--runs",
+      "1",
+      "--output",
+      "docs/experiments/generated-verification/checks/final-fresh-use/explicit-output.json"
+    ],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0380000788718462
+  },
+  {
+    "name": "boundary",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "docs/experiments/generated-verification/checks/final-fresh-use/boundary-probe.mjs"
+    ],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 0.18281878903508186
+  }
+]

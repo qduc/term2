@@ -1,0 +1,4 @@
+$ node --import tsx scripts/generated-verification/run.mjs --target history --runs 1000 --seed 123456
+{"networkGuard":true,"attempts":0,"localIpcConnections":4,"pid":86}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":68}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":56}

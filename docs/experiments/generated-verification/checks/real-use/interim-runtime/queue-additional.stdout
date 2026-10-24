@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 10000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 445.584789,
+  "results": [
+    {
+      "property": "queue.restore-pause",
+      "failed": false,
+      "seed": 8675309,
+      "path": null,
+      "cases": 10000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 203.51743900000002,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "queue.serial-actions",
+      "failed": false,
+      "seed": 8675309,
+      "path": null,
+      "cases": 10000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 242.03747299999998,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

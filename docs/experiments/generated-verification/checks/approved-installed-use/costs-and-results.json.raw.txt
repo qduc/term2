@@ -1,0 +1,118 @@
+{
+  "installedCommandInvocations": 18,
+  "sumCommandWallSeconds": 27.345457952003926,
+  "sumCheckerRuntimeMs": 1363.141241,
+  "totalSampledCasesIncludingReplayTraversal": 7008,
+  "allExpectedExits": true,
+  "checkerAIRequests": 0,
+  "checkerProviderRequests": 0,
+  "checkerNetworkCalls": 0,
+  "networkClaimEvidence": "Static inspection of checker and production runtime import closure; no syscall network trace. pnpm bootstrap is separate and not claimed network-free.",
+  "verifierTokens": null,
+  "verifierMonetaryCost": null,
+  "verifierElapsedSecondsThroughEvidenceCapture": 114.319971,
+  "reports": [
+    {
+      "label": "installed-seed-424242",
+      "runtimeMs": 567.144035,
+      "results": [
+        {
+          "property": "history.pair-projection",
+          "failed": false,
+          "seed": 424242,
+          "cases": 1000,
+          "skips": 0,
+          "shrinks": 0
+        },
+        {
+          "property": "queue.restore-pause",
+          "failed": false,
+          "seed": 424242,
+          "cases": 1000,
+          "skips": 0,
+          "shrinks": 0
+        },
+        {
+          "property": "queue.serial-actions",
+          "failed": false,
+          "seed": 424242,
+          "cases": 1000,
+          "skips": 0,
+          "shrinks": 0
+        }
+      ]
+    },
+    {
+      "label": "replay-serial",
+      "runtimeMs": 17.48411999999996,
+      "results": [
+        {
+          "property": "queue.serial-actions",
+          "failed": false,
+          "seed": 424242,
+          "cases": 7,
+          "skips": 0,
+          "shrinks": 0
+        }
+      ]
+    },
+    {
+      "label": "replay-restore",
+      "runtimeMs": 6.693362999999977,
+      "results": [
+        {
+          "property": "queue.restore-pause",
+          "failed": false,
+          "seed": 424242,
+          "cases": 1,
+          "skips": 0,
+          "shrinks": 0
+        }
+      ]
+    },
+    {
+      "label": "history",
+      "runtimeMs": 375.785663,
+      "results": [
+        {
+          "property": "history.pair-projection",
+          "failed": false,
+          "seed": -2132446967,
+          "cases": 1000,
+          "skips": 0,
+          "shrinks": 0
+        }
+      ]
+    },
+    {
+      "label": "negative-seed",
+      "runtimeMs": 396.03406000000007,
+      "results": [
+        {
+          "property": "history.pair-projection",
+          "failed": false,
+          "seed": -2147483648,
+          "cases": 1000,
+          "skips": 0,
+          "shrinks": 0
+        },
+        {
+          "property": "queue.restore-pause",
+          "failed": false,
+          "seed": -2147483648,
+          "cases": 1000,
+          "skips": 0,
+          "shrinks": 0
+        },
+        {
+          "property": "queue.serial-actions",
+          "failed": false,
+          "seed": -2147483648,
+          "cases": 1000,
+          "skips": 0,
+          "shrinks": 0
+        }
+      ]
+    }
+  ]
+}

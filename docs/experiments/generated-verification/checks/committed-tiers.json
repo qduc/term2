@@ -1,0 +1,50 @@
+[
+  {
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "runtimeSeconds": 2.8489849478937685,
+    "log": "docs/experiments/generated-verification/checks/committed-tier-0.log",
+    "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+    "snapshot": "committed product/checker; uncommitted documentation/evidence only"
+  },
+  {
+    "command": "pnpm test",
+    "exit": 0,
+    "runtimeSeconds": 3.073476448189467,
+    "log": "docs/experiments/generated-verification/checks/committed-tier-1.log",
+    "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+    "snapshot": "committed product/checker; uncommitted documentation/evidence only"
+  },
+  {
+    "command": "pnpm test:integration",
+    "exit": 1,
+    "runtimeSeconds": 62.12575840763748,
+    "log": "docs/experiments/generated-verification/checks/committed-tier-2.log",
+    "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+    "snapshot": "committed product/checker; uncommitted documentation/evidence only"
+  },
+  {
+    "command": "pnpm build",
+    "exit": 0,
+    "runtimeSeconds": 3.6030983300879598,
+    "log": "docs/experiments/generated-verification/checks/committed-tier-3.log",
+    "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+    "snapshot": "committed product/checker; uncommitted documentation/evidence only"
+  },
+  {
+    "command": "pnpm test:e2e",
+    "exit": 0,
+    "runtimeSeconds": 7.887263840995729,
+    "log": "docs/experiments/generated-verification/checks/committed-tier-4.log",
+    "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+    "snapshot": "committed product/checker; uncommitted documentation/evidence only"
+  },
+  {
+    "command": "pnpm test:provider-black-box",
+    "exit": 1,
+    "runtimeSeconds": 116.2916294070892,
+    "log": "docs/experiments/generated-verification/checks/committed-tier-5.log",
+    "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+    "snapshot": "committed product/checker; uncommitted documentation/evidence only"
+  }
+]

@@ -1,0 +1,97 @@
+{
+  "checks": 21,
+  "passed": 14,
+  "results": [
+    {
+      "name": "restore-failure-0",
+      "passed": true
+    },
+    {
+      "name": "restore-failure-1",
+      "passed": false,
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    {\n      id: 'saved-0',\n+     preflight: undefined,\n      sequence: 1,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-0 Ω'\n    }\n  ]\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:29:56\n    at check (file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:7:40)\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:24:32"
+    },
+    {
+      "name": "restore-failure-3",
+      "passed": false,
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    {\n      id: 'saved-0',\n+     preflight: undefined,\n      sequence: 1,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-0 Ω'\n    },\n    {\n      id: 'saved-1',\n+     preflight: undefined,\n      sequence: 2,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-1 Ω'\n    },\n    {\n      id: 'saved-2',\n+     preflight: undefined,\n      sequence: 3,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-2 Ω'\n    }\n  ]\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:29:56\n    at check (file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:7:40)\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:24:32"
+    },
+    {
+      "name": "restore-manual-0",
+      "passed": true
+    },
+    {
+      "name": "restore-manual-1",
+      "passed": false,
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    {\n      id: 'saved-0',\n+     preflight: undefined,\n      sequence: 1,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-0 Ω'\n    }\n  ]\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:29:56\n    at check (file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:7:40)\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:24:32"
+    },
+    {
+      "name": "restore-manual-3",
+      "passed": false,
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    {\n      id: 'saved-0',\n+     preflight: undefined,\n      sequence: 1,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-0 Ω'\n    },\n    {\n      id: 'saved-1',\n+     preflight: undefined,\n      sequence: 2,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-1 Ω'\n    },\n    {\n      id: 'saved-2',\n+     preflight: undefined,\n      sequence: 3,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-2 Ω'\n    }\n  ]\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:29:56\n    at check (file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:7:40)\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:24:32"
+    },
+    {
+      "name": "restore-recovered_interrupted-0",
+      "passed": true
+    },
+    {
+      "name": "restore-recovered_interrupted-1",
+      "passed": false,
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    {\n      id: 'saved-0',\n+     preflight: undefined,\n      sequence: 1,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-0 Ω'\n    }\n  ]\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:29:56\n    at check (file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:7:40)\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:24:32"
+    },
+    {
+      "name": "restore-recovered_interrupted-3",
+      "passed": false,
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    {\n      id: 'saved-0',\n+     preflight: undefined,\n      sequence: 1,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-0 Ω'\n    },\n    {\n      id: 'saved-1',\n+     preflight: undefined,\n      sequence: 2,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-1 Ω'\n    },\n    {\n      id: 'saved-2',\n+     preflight: undefined,\n      sequence: 3,\n      submittedAt: '2026-01-01T00:00:00Z',\n      text: 'payload-2 Ω'\n    }\n  ]\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:29:56\n    at check (file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:7:40)\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:24:32"
+    },
+    {
+      "name": "failure-remove-last-persists-idle-and-fresh-dispatch",
+      "passed": true
+    },
+    {
+      "name": "failure-remove-partial-preserves-payload-and-reason",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-0-none",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-0-remove-all",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-0-discard",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-1-none",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-1-remove-all",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-1-discard",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-3-none",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-3-remove-all",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-3-discard",
+      "passed": true
+    },
+    {
+      "name": "edited-dispatch-snapshot-isolated-and-issued-id-stale-events-ignored",
+      "passed": false,
+      "error": "AssertionError [ERR_ASSERTION]: Missing expected exception (TypeError).\n    at file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:77:9\n    at async check (file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:7:34)\n    at async file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/boundary-probe.mjs:75:1"
+    }
+  ]
+}

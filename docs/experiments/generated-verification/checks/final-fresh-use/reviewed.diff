@@ -1,0 +1,993 @@
+diff --git a/.agents/skills/testing/SKILL.md b/.agents/skills/testing/SKILL.md
+index 057f6dab..48ff287c 100644
+--- a/.agents/skills/testing/SKILL.md
++++ b/.agents/skills/testing/SKILL.md
+@@ -6,6 +6,10 @@ description: Which test tiers exist in this repo during the evidence-driven deve
+ # Testing
+ 
+ This repository is running an [evidence-driven development experiment](../../../docs/experiments/evidence-driven-development/README.md).
++The user-authorized [generated verification pilot](../../../docs/experiments/generated-verification/README.md)
++permits persistent bounded generated properties via `pnpm verify:generated`; this
++exception does not restore example-based unit tests or replace required tiers.
++
+ There is no permanent unit test suite, and no test-first requirement; the global `tdd`
+ skill does not apply here. Prove changes with the `verification` skill.
+ 
+diff --git a/.agents/skills/verification/SKILL.md b/.agents/skills/verification/SKILL.md
+index 02eeca02..b2d1534d 100644
+--- a/.agents/skills/verification/SKILL.md
++++ b/.agents/skills/verification/SKILL.md
+@@ -6,7 +6,11 @@ description: How to establish that a change works without permanent unit tests 
+ # Verification
+ 
+ This repository is running an [evidence-driven development experiment](../../../docs/experiments/evidence-driven-development/README.md).
+-Do not commit permanent unit tests. You choose how to verify a change, but the
++Do not commit permanent unit tests. The user-authorized
++[generated verification pilot](../../../docs/experiments/generated-verification/README.md)
++allows persistent bounded generated properties as an additional method. Use
++`pnpm verify:generated` for its supported history/queue boundaries; retain failed
++seeds, shrinks and source snapshots, and triage the oracle before fixing code. You choose how to verify a change, but the
+ result must be evidence someone else can check, not a belief about the code.
+ 
+ ## The contract
+diff --git a/AGENTS.md b/AGENTS.md
+index e807e718..3c80e660 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -22,7 +22,9 @@ The [evidence-driven development experiment](docs/experiments/evidence-driven-de
+ is active. Its repository-specific verification policy takes precedence over
+ conflicting testing guidance: permanent unit tests are prohibited; integration,
+ e2e, provider black-box tests, and existing static guards remain. Temporary tests
+-are allowed. High-risk changes require an independent verifier. Completed tasks
++are allowed. The user-authorized [generated verification pilot](docs/experiments/generated-verification/README.md)
++permits persistent bounded generated properties, not restored example-based unit tests.
++High-risk changes require an independent verifier. Completed tasks
+ and escaped defects are recorded in the experiment's JSONL ledgers. The experiment
+ README contains the full policy and decision criteria; historical unit-test
+ references point to tag `unit-suite-baseline`.
+diff --git a/docs/experiments/evidence-driven-development/README.md b/docs/experiments/evidence-driven-development/README.md
+index 6cea674f..1114ed45 100644
+--- a/docs/experiments/evidence-driven-development/README.md
++++ b/docs/experiments/evidence-driven-development/README.md
+@@ -16,6 +16,9 @@ result is a decision about the next step, not proof that unit tests are unnecess
+ 
+ 1. Do not commit permanent unit tests. CI and the pre-commit hook enforce this with
+    `scripts/check-no-unit-tests.mjs`.
++   Explicit user-authorized exception: the [generated verification pilot](../generated-verification/README.md)
++   may retain bounded generated properties/tooling. This does not authorize a restored
++   example-based unit suite or change the remaining required tiers.
+ 2. Integration, e2e, provider black-box tests and the seven static repository guards stay and keep running
+    in CI.
+ 3. Every change gets verification proportional to its risk.
+diff --git a/docs/experiments/generated-verification/PLAN.md b/docs/experiments/generated-verification/PLAN.md
+new file mode 100644
+index 00000000..d22b31be
+--- /dev/null
++++ b/docs/experiments/generated-verification/PLAN.md
+@@ -0,0 +1,74 @@
++# Generated edge-case verification
++
++## Goal and authority
++
++Deliver a permanent, inexpensive, LLM-free-at-runtime edge-case discovery command.
++The user authorized end-to-end implementation, evaluation, independent verification,
++and integration. LLMs may build/maintain/investigate the tool, never participate in
++its execution. The user explicitly clarified that the traditional-unit-test ban
++**does not prohibit this generated verification method or persistent tooling**.
++This exception is not permission to restore the example-based unit suite.
++
++## Acceptance criteria (frozen before implementation)
++
++1. A documented installed command generates supported inputs/action sequences
++   against production code without models, credentials, or AI network calls.
++2. Properties cite contracts; explicit case and sequence-size budgets make runs
++   finite. Initial evaluation budget: 1,000 cases/property, at most 30 actions/case,
++   target <=30 seconds per target on this host after dependencies are installed.
++   These are evaluation defaults, not correctness guarantees or runtime guards
++   on product execution. Record actual costs and revise explicitly if unsuitable.
++3. Failed properties exit nonzero, shrink to a replayable example, retain seed,
++   replay path, revision/dirty state, case counts and runtime in structured output.
++4. History repair/projection is the first target. A queue-controller action model
++   is the proposed second target (confirm contracts/callers before implementing).
++   Demonstrate structured properties and generated state-machine sequences.
++5. Demonstrate detection of a genuine current or historical supported edge-case
++   defect, not merely a deliberately injected fault. Independently validate it.
++6. Classify every candidate discovered during bounded evaluation. Fix confirmed
++   defects and verify before/after, or obtain explicit human agreement to defer.
++   Reject/narrow unsupported properties; do not silently weaken contracts.
++7. Measure runtime/cases and observed setup/triage effort; distinguish unknown
++   effort from zero. No invented token-cost or speedup comparison.
++8. Required static and behavioral checks pass; required independent review and
++   fresh-agent real-use verification pass on the final artifact. If unavailable,
++   completion remains verification-pending.
++9. Integrate commands, docs, policy clarification and retained evidence. Promote
++   only if the pilot is useful and inexpensive; an evidence-backed do-not-promote
++   decision is a valid endpoint, with experimental additions isolated or removed.
++
++## Scope and design direction
++
++Prefer fast-check for structured generation, shrinking, seeds and state commands;
++check compatibility before adopting. Keep tooling separate from runtime code and
++Vitest unit-test discovery. No generic verification platform, no whole-repo proof,
++no model-driven oracle, no mandatory provider spend. Do not auto-enable expensive
++CI until its value is demonstrated. Any product bug fix is a separately reviewed
++change with appropriate project checks.
++
++## Execution and evidence
++
++- Worktree: `.worktrees/generated-verification`, branch `feat/generated-verification`.
++- Base: `6075a3cf` (primary clean when inspected).
++- Dependencies installed with frozen lockfile successfully, Node 24.19.0 / pnpm 11.7.0.
++- Loaded methods: agentic-loop, implementation, testing, verification, writing-docs,
++  guard-design (test-only budgets excluded), finding-triage, term2.
++- Required real-use guide: `/home/qduc/.agents/skills/coordinator/references/real-use-verification.md`.
++  The global AGENTS link through `qduc-skills/skills/coordinator` is stale; the
++  installed canonical equivalent above was read.
++- No checker or source modifications yet. Original Gemini checker is hand-written
++  deterministic cases plus limited BFS, not conventional fuzzing or formal proof.
++- Old queue finding may already be mitigated by `QueueController.#snapshot`:
++  inspect before claiming it. Current remove_queued lacks explicit paused cleanup,
++  but snapshots can normalize the state.
++- `dropUnpairedFunctionCalls` uses first canonical item only; investigate supported
++  multi-tool-call histories through `projectHistoryForProvider` (actual export name
++  to confirm) in conversation-state-projector.ts before claiming a defect.
++
++## Next steps
++
++1. Inspect contracts, public callers and existing suites for the two targets.
++2. Implement small generated runner and target properties; update policy docs.
++3. Run bounded discovery, classify/reproduce findings, fix confirmed scoped bugs.
++4. Execute required tiers and CLI failure/replay checks; retain evidence.
++5. Independent review plus fresh-agent use, evaluate promotion, integrate cleanly.
+diff --git a/docs/experiments/generated-verification/README.md b/docs/experiments/generated-verification/README.md
+new file mode 100644
+index 00000000..36962c36
+--- /dev/null
++++ b/docs/experiments/generated-verification/README.md
+@@ -0,0 +1,63 @@
++# Generated edge-case verification pilot
++
++This opt-in method searches bounded input spaces using fast-check, not an LLM.
++The user explicitly authorized persistent generated checks as an exception to the
++traditional permanent-unit-test ban. This is not a restored example-based suite.
++
++## Use it on a real change
++
++Read the production contract before choosing a property. Run the installed command
++from the repository root after installing dependencies:
++
++```sh
++pnpm verify:generated --seed 424242
++pnpm verify:generated --target history --runs 1000
++pnpm verify:generated --help
++```
++
++The default is 1,000 cases per property, sequences at most 30 actions. These are
++sampling budgets, not exhaustive coverage or a proof. No credentials, provider,
++model, or network calls are used by the checker. Production code runs in process;
++the queue driver only records dispatches at the external executor boundary.
++
++JSON stdout records revision/dirty state, seed, counts, shrinks, elapsed checker
++time and minimized failures. `--output FILE` also saves JSON, refusing to overwrite
++an existing file. Package-manager diagnostics may appear on stderr. Exit 0 means
++sampled properties passed, 1 means a counterexample, 2 means invalid invocation or
++infrastructure failure. Startup/package-manager time is outside `runtimeMs`. The launcher uses Node’s
++`tsx` import loader, without the tsx CLI’s IPC-listener requirement. Use equals
++syntax for negative seeds (for example, `--seed=-2147483648`); generated replay
++commands include it automatically.
++
++For failure triage, preserve the JSON, inspect whether the property follows the
++actual production contract, then use its `replay` command at the same source and
++dependency revision. `--property`, `--seed`, `--path` and `--runs` reproduce the
++shrunk failure. A dirty revision alone is not a reconstructible snapshot: retain
++the diff or commit it. Replay paths depend on property/generator/fast-check versions.
++Do not weaken an invariant to silence a supported defect. Fix confirmed defects
++or obtain human agreement to defer them. Independently verify high-risk fixes.
++
++## Current scope
++
++- `history.pair-projection`: structured, unique Responses-style call IDs, JSON
++  arguments, arbitrary result text, missing results and an orphan result.
++  `projectProviderHistory` promises non-mutation and idempotence;
++  `dropUnpairedFunctionCalls` promises complete-pair retention/orphan removal.
++- `queue.serial-actions`: generated public submit, completion, failure, removal,
++  edit, resume, discard and stale-completion sequences compared at every step to
++  an independent serial FIFO model. The empty-pause invariant is explicit in
++  `QueueController.#cancel` and interrupted-active restoration: no retained work means idle, so future
++  input is not blocked behind an empty pause.
++- `queue.restore-pause`: generated valid saved queue records and pause reasons;
++  empty saved pauses must admit fresh work, while nonempty saved queues retain
++  their payloads and pause reason without replay on construction.
++
++Not covered: parallel command interleavings, persistence failures, approvals,
++steering, provider transports, multi-call chat envelopes, ledger recovery, or
++arbitrary malformed inputs. Passing does not establish these behaviors.
++
++Add a property only for a named supported contract and a meaningful generated
++space. Keep runtime bounded, shrinks readable and failure output reproducible.
++Use this when changing these boundaries; do not substitute it for required static,
++integration, e2e, provider, or independent checks. Pilot acceptance and evidence
++are tracked in [PLAN.md](PLAN.md).
+diff --git a/docs/experiments/generated-verification/discovery.json b/docs/experiments/generated-verification/discovery.json
+new file mode 100644
+index 00000000..c6b35b80
+--- /dev/null
++++ b/docs/experiments/generated-verification/discovery.json
+@@ -0,0 +1,56 @@
++{
++  "schemaVersion": 1,
++  "revision": "6075a3cf1507a050baf690240b89fc776cd2aedc",
++  "dirty": true,
++  "node": "v24.19.0",
++  "requestedRunsPerProperty": 1000,
++  "maxSequenceLength": 30,
++  "runtimeMs": 280.971405,
++  "results": [
++    {
++      "property": "history.pair-projection",
++      "failed": false,
++      "seed": 424242,
++      "path": null,
++      "cases": 1000,
++      "skips": 0,
++      "shrinks": 0,
++      "runtimeMs": 248.639427,
++      "counterexample": null,
++      "error": null,
++      "replay": null
++    },
++    {
++      "property": "queue.serial-actions",
++      "failed": true,
++      "seed": 424242,
++      "path": "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
++      "cases": 314,
++      "skips": 0,
++      "shrinks": 22,
++      "runtimeMs": 32.30407599999995,
++      "counterexample": [
++        [
++          {
++            "kind": "submit",
++            "text": "!"
++          },
++          {
++            "kind": "submit",
++            "text": "!"
++          },
++          {
++            "kind": "fail",
++            "index": 0
++          },
++          {
++            "kind": "remove",
++            "index": 0
++          }
++        ]
++      ],
++      "error": "AssertionError [ERR_ASSERTION]: phase at step 3\n\n'paused' !== 'idle'\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/queue.mjs:76:14\n    at async AsyncProperty.run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1217:19)\n    at async asyncPropertyExecution (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2564:14)\n    at async asyncRunIt (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2557:15)\n    at async file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:35:22",
++      "replay": "pnpm verify:generated --property queue.serial-actions --seed 424242 --path '313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11' --runs 1000"
++    }
++  ]
++}
+diff --git a/docs/experiments/generated-verification/green-424242.json b/docs/experiments/generated-verification/green-424242.json
+new file mode 100644
+index 00000000..ed151adc
+--- /dev/null
++++ b/docs/experiments/generated-verification/green-424242.json
+@@ -0,0 +1,50 @@
++{
++  "schemaVersion": 1,
++  "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
++  "dirty": true,
++  "node": "v24.19.0",
++  "requestedRunsPerProperty": 1000,
++  "maxSequenceLength": 30,
++  "runtimeMs": 396.59896899999995,
++  "results": [
++    {
++      "property": "history.pair-projection",
++      "failed": false,
++      "seed": 424242,
++      "path": null,
++      "cases": 1000,
++      "skips": 0,
++      "shrinks": 0,
++      "runtimeMs": 298.68617599999993,
++      "counterexample": null,
++      "error": null,
++      "replay": null
++    },
++    {
++      "property": "queue.restore-pause",
++      "failed": false,
++      "seed": 424242,
++      "path": null,
++      "cases": 1000,
++      "skips": 0,
++      "shrinks": 0,
++      "runtimeMs": 56.17536400000006,
++      "counterexample": null,
++      "error": null,
++      "replay": null
++    },
++    {
++      "property": "queue.serial-actions",
++      "failed": false,
++      "seed": 424242,
++      "path": null,
++      "cases": 1000,
++      "skips": 0,
++      "shrinks": 0,
++      "runtimeMs": 41.699597999999924,
++      "counterexample": null,
++      "error": null,
++      "replay": null
++    }
++  ]
++}
+diff --git a/docs/experiments/generated-verification/replay-before.json b/docs/experiments/generated-verification/replay-before.json
+new file mode 100644
+index 00000000..cdc86ba6
+--- /dev/null
++++ b/docs/experiments/generated-verification/replay-before.json
+@@ -0,0 +1,43 @@
++{
++  "schemaVersion": 1,
++  "revision": "6075a3cf1507a050baf690240b89fc776cd2aedc",
++  "dirty": true,
++  "node": "v24.19.0",
++  "requestedRunsPerProperty": 1000,
++  "maxSequenceLength": 30,
++  "runtimeMs": 11.533131999999995,
++  "results": [
++    {
++      "property": "queue.serial-actions",
++      "failed": true,
++      "seed": 424242,
++      "path": "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
++      "cases": 1,
++      "skips": 0,
++      "shrinks": 0,
++      "runtimeMs": 11.512423000000013,
++      "counterexample": [
++        [
++          {
++            "kind": "submit",
++            "text": "!"
++          },
++          {
++            "kind": "submit",
++            "text": "!"
++          },
++          {
++            "kind": "fail",
++            "index": 0
++          },
++          {
++            "kind": "remove",
++            "index": 0
++          }
++        ]
++      ],
++      "error": "AssertionError [ERR_ASSERTION]: phase at step 3\n\n'paused' !== 'idle'\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/queue.mjs:105:16\n    at async AsyncProperty.run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1217:19)\n    at async asyncPropertyExecution (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2564:14)\n    at async asyncRunIt (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2557:15)\n    at async file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:53:22",
++      "replay": "pnpm verify:generated --property queue.serial-actions --seed 424242 --path '313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11' --runs 1000"
++    }
++  ]
++}
+diff --git a/docs/experiments/generated-verification/restore-red.json b/docs/experiments/generated-verification/restore-red.json
+new file mode 100644
+index 00000000..75051867
+--- /dev/null
++++ b/docs/experiments/generated-verification/restore-red.json
+@@ -0,0 +1,24 @@
++{
++  "schemaVersion": 1,
++  "revision": "0f40efc8a475487874488312640b8c252cd13550",
++  "dirty": true,
++  "node": "v24.19.0",
++  "requestedRunsPerProperty": 1000,
++  "maxSequenceLength": 30,
++  "runtimeMs": 10.923211999999978,
++  "results": [
++    {
++      "property": "queue.restore-pause",
++      "failed": true,
++      "seed": 424242,
++      "path": "6:0",
++      "cases": 7,
++      "skips": 0,
++      "shrinks": 1,
++      "runtimeMs": 10.893136000000027,
++      "counterexample": ["failure", []],
++      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n'paused' !== 'idle'\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/queue.mjs:37:16\n    at AsyncProperty.predicate (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1283:104)\n    at AsyncProperty.run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1217:30)\n    at asyncPropertyExecution (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2564:29)\n    at async asyncRunIt (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2557:15)\n    at async file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:53:22",
++      "replay": "pnpm verify:generated --property queue.restore-pause --seed 424242 --path '6:0' --runs 1000"
++    }
++  ]
++}
+diff --git a/docs/experiments/generated-verification/restore-replay-green.json b/docs/experiments/generated-verification/restore-replay-green.json
+new file mode 100644
+index 00000000..b1320e7d
+--- /dev/null
++++ b/docs/experiments/generated-verification/restore-replay-green.json
+@@ -0,0 +1,24 @@
++{
++  "schemaVersion": 1,
++  "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
++  "dirty": true,
++  "node": "v24.19.0",
++  "requestedRunsPerProperty": 1000,
++  "maxSequenceLength": 30,
++  "runtimeMs": 4.818663000000015,
++  "results": [
++    {
++      "property": "queue.restore-pause",
++      "failed": false,
++      "seed": 424242,
++      "path": null,
++      "cases": 1,
++      "skips": 0,
++      "shrinks": 0,
++      "runtimeMs": 4.7929340000000025,
++      "counterexample": null,
++      "error": null,
++      "replay": null
++    }
++  ]
++}
+diff --git a/docs/experiments/generated-verification/serial-replay-green.json b/docs/experiments/generated-verification/serial-replay-green.json
+new file mode 100644
+index 00000000..68be6c58
+--- /dev/null
++++ b/docs/experiments/generated-verification/serial-replay-green.json
+@@ -0,0 +1,24 @@
++{
++  "schemaVersion": 1,
++  "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
++  "dirty": true,
++  "node": "v24.19.0",
++  "requestedRunsPerProperty": 1000,
++  "maxSequenceLength": 30,
++  "runtimeMs": 10.852158000000003,
++  "results": [
++    {
++      "property": "queue.serial-actions",
++      "failed": false,
++      "seed": 424242,
++      "path": null,
++      "cases": 7,
++      "skips": 0,
++      "shrinks": 0,
++      "runtimeMs": 10.825037000000009,
++      "counterexample": null,
++      "error": null,
++      "replay": null
++    }
++  ]
++}
+diff --git a/docs/experiments/generated-verification/serial-strengthened-red.json b/docs/experiments/generated-verification/serial-strengthened-red.json
+new file mode 100644
+index 00000000..eddc7549
+--- /dev/null
++++ b/docs/experiments/generated-verification/serial-strengthened-red.json
+@@ -0,0 +1,43 @@
++{
++  "schemaVersion": 1,
++  "revision": "0f40efc8a475487874488312640b8c252cd13550",
++  "dirty": true,
++  "node": "v24.19.0",
++  "requestedRunsPerProperty": 1000,
++  "maxSequenceLength": 30,
++  "runtimeMs": 78.31465099999997,
++  "results": [
++    {
++      "property": "queue.serial-actions",
++      "failed": true,
++      "seed": 424242,
++      "path": "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
++      "cases": 314,
++      "skips": 0,
++      "shrinks": 22,
++      "runtimeMs": 78.285597,
++      "counterexample": [
++        [
++          {
++            "kind": "submit",
++            "text": "!"
++          },
++          {
++            "kind": "submit",
++            "text": "!"
++          },
++          {
++            "kind": "fail",
++            "index": 0
++          },
++          {
++            "kind": "remove",
++            "index": 0
++          }
++        ]
++      ],
++      "error": "AssertionError [ERR_ASSERTION]: phase at step 3\n\n'paused' !== 'idle'\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/queue.mjs:135:16\n    at async AsyncProperty.run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1217:19)\n    at async asyncPropertyExecution (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2564:14)\n    at async asyncRunIt (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2557:15)\n    at async file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:53:22",
++      "replay": "pnpm verify:generated --property queue.serial-actions --seed 424242 --path '313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11' --runs 1000"
++    }
++  ]
++}
+diff --git a/docs/plans/approvals-and-sandbox/guard-ledger.md b/docs/plans/approvals-and-sandbox/guard-ledger.md
+index d1de0df7..ed46edbe 100644
+--- a/docs/plans/approvals-and-sandbox/guard-ledger.md
++++ b/docs/plans/approvals-and-sandbox/guard-ledger.md
+@@ -3794,3 +3794,41 @@ opaque reasoning item without its `reasoning` twin makes the estimate
+ non-monotonic, so a mixed-provider history can be refused where main planned a
+ cut. That is a refusal only. Rollback is the `planLocalCompaction` cut selection
+ and the constant together.
++
++
++## Empty retained-work pause release (generated verification pilot)
++
++Harm prevented: new foreground input accepted but never dispatched after removal
++of the last failure-retained item, including the saved empty pause on restart.
++Class: existing lifecycle/admission pause; enforcement and recovery remain with
++`QueueController`. Signal: exactly `paused` and zero retained queue items, direct
++state evidence. No new capacity, timeout, configuration source, default, clamp,
++setting migration, replay or provider request is introduced. Nonempty pauses
++retain their reason and work. `cancelling` never qualifies: removal/discard cannot
++release an active execution before its matching cancellation proof.
++
++The private `#releaseEmptyPause` owner operation is shared by removal, discard
++and saved-pause restoration. Interrupted-active restoration already avoids an
++empty pause and still drops the interrupted item without replay. Restoration
++normalizes valid legacy empty pauses in memory; the next ordinary persistence
++write saves the normalized state. Custom nonempty saved pauses are unchanged.
++State kind, queue contents, pause reason and existing recovery diagnostics expose
++the result without new content logging. Rollback: the queue repair commit,
++independently from the generated checker commits.
++
++Red proof at unchanged production base: `queue.serial-actions`, seed 424242,
++case 314, 22 shrinks, submit/submit/fail/remove. An independent public-API probe
++confirmed fresh input stays blocked until explicit resume. `queue.restore-pause`
++then failed case 7, one shrink to saved failure pause with zero items. Red
++artifacts and checker reconstruction: commits `0f40efc8` and `9288a02c` under
++`docs/experiments/generated-verification/`. Same shrunk replay commands pass
++after the owner repair; seed 424242 passes 1,000 cases for each of history,
++serial queue and saved-pause properties. Broader gates and independent final
++acceptance are recorded in that experiment's PLAN and checks, not inferred here.
++
++Prevention/retro: pause phase and queue length are independently representable;
++previous empty-pause normalization was distributed across transitions. Removal
++and saved-pause loading omitted it. A small shared operation plus generated
++transition/valid-record contracts protect this category without a second queue
++manager or replacing the state machine. The cancellation-retention path remains
++separately identity-fenced; no weaker cancellation proxy was introduced.
+diff --git a/package.json b/package.json
+index e7ecf075..3972fe03 100644
+--- a/package.json
++++ b/package.json
+@@ -72,7 +72,8 @@
+     "logs": "node tools/log_viewer/src/server.js",
+     "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
+     "prepare": "husky",
+-    "catalog:update": "tsx scripts/update-model-catalog.ts"
++    "catalog:update": "tsx scripts/update-model-catalog.ts",
++    "verify:generated": "node --import tsx scripts/generated-verification/run.mjs"
+   },
+   "files": [
+     "dist"
+@@ -122,6 +123,7 @@
+     "eslint-config-prettier": "^10.1.8",
+     "eslint-plugin-react": "^7.32.2",
+     "eslint-plugin-react-hooks": "^7.1.1",
++    "fast-check": "^4.10.2",
+     "globals": "^17.6.0",
+     "husky": "^9.1.7",
+     "ink-testing-library": "^4.0.0",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index d02eaf4b..929e777c 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -350,6 +350,9 @@ importers:
+       eslint-plugin-react-hooks:
+         specifier: ^7.1.1
+         version: 7.1.1(eslint@9.39.4(jiti@2.7.0))
++      fast-check:
++        specifier: ^4.10.2
++        version: 4.10.2
+       globals:
+         specifier: ^17.6.0
+         version: 17.6.0
+@@ -2158,6 +2161,10 @@ packages:
+     resolution: {integrity: sha512-knvyeauYhqjOYvQ66MznSMs83wmHrCycNEN6Ao+2AeYEfxUIkuiVxdEa1qlGEPK+We3n0THiDciYSsCcgW/DoA==}
+     engines: {node: '>=12.0.0'}
+ 
++  fast-check@4.10.2:
++    resolution: {integrity: sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw==}
++    engines: {node: '>=12.17.0'}
++
+   fast-deep-equal@3.1.3:
+     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
+ 
+@@ -3156,6 +3163,9 @@ packages:
+     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
+     engines: {node: '>=6'}
+ 
++  pure-rand@8.4.2:
++    resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
++
+   querystringify@2.2.0:
+     resolution: {integrity: sha512-FIqgj2EUvTa7R50u0rGsyTftzjYmv/a3hO345bZNrqabNqjtgiDMgmo4mkUjd+nzU5oF3dClKqFIPUKybUyqoQ==}
+ 
+@@ -5591,6 +5601,10 @@ snapshots:
+ 
+   expect-type@1.3.0: {}
+ 
++  fast-check@4.10.2:
++    dependencies:
++      pure-rand: 8.4.2
++
+   fast-deep-equal@3.1.3: {}
+ 
+   fast-json-stable-stringify@2.1.0: {}
+@@ -6604,6 +6618,8 @@ snapshots:
+ 
+   punycode@2.3.1: {}
+ 
++  pure-rand@8.4.2: {}
++
+   querystringify@2.2.0: {}
+ 
+   quick-lru@6.1.2: {}
+diff --git a/scripts/generated-verification/history.mjs b/scripts/generated-verification/history.mjs
+new file mode 100644
+index 00000000..32b45fba
+--- /dev/null
++++ b/scripts/generated-verification/history.mjs
+@@ -0,0 +1,38 @@
++import assert from 'node:assert/strict';
++import fc from 'fast-check';
++import { projectProviderHistory } from '../../source/services/conversation/conversation-state-projector.ts';
++
++// projectProviderHistory's contract: stateless, non-mutating, idempotent;
++// dropUnpairedFunctionCalls: retain complete pairs, discard orphan sides.
++export const historyProperties = [
++  {
++    name: 'history.pair-projection',
++    property: fc.property(
++      fc.array(fc.record({ paired: fc.boolean(), output: fc.string(), arguments: fc.jsonValue() }), { maxLength: 30 }),
++      (entries) => {
++        const history = entries.flatMap((entry, index) => [
++          {
++            type: 'function_call',
++            call_id: `call-${index}`,
++            name: 'probe',
++            arguments: JSON.stringify(entry.arguments),
++          },
++          ...(entry.paired ? [{ type: 'function_call_output', call_id: `call-${index}`, output: entry.output }] : []),
++        ]);
++        history.push({ type: 'function_call_output', call_id: 'orphan', output: '' });
++        const before = structuredClone(history);
++        const projected = projectProviderHistory({ history });
++        assert.deepEqual(history, before, 'projection mutated input');
++        const expected = before.filter(
++          (item) => item.call_id !== 'orphan' && entries[Number(item.call_id.slice(5))].paired,
++        );
++        assert.deepEqual(projected.history, expected, 'complete pairs changed or orphan survived');
++        assert.deepEqual(
++          projectProviderHistory({ history: projected.history }).history,
++          projected.history,
++          'not idempotent',
++        );
++      },
++    ),
++  },
++];
+diff --git a/scripts/generated-verification/queue.mjs b/scripts/generated-verification/queue.mjs
+new file mode 100644
+index 00000000..afd61b8c
+--- /dev/null
++++ b/scripts/generated-verification/queue.mjs
+@@ -0,0 +1,158 @@
++import assert from 'node:assert/strict';
++import fc from 'fast-check';
++import { QueueController } from '../../source/services/queue/queue-controller.ts';
++
++// A serial reference model for the public follow-up queue lane: FIFO dispatch,
++// failure pauses retained work; removing/discarding all retained work releases
++// the pause (see #cancel and interrupted-active restoration's empty-pause invariant).
++const action = fc.oneof(
++  fc.record({
++    kind: fc.constant('submit'),
++    text: fc.string({ minLength: 1, maxLength: 30 }).filter((s) => !!s.trim()),
++  }),
++  fc.record({
++    kind: fc.constantFrom('complete', 'fail', 'remove', 'edit', 'resume', 'discard', 'stale'),
++    index: fc.nat(30),
++  }),
++);
++export const queueProperties = [
++  {
++    name: 'queue.restore-pause',
++    property: fc.asyncProperty(
++      fc.constantFrom('failure', 'manual', 'recovered_interrupted'),
++      fc.array(
++        fc.string({ minLength: 1, maxLength: 30 }).filter((s) => !!s.trim()),
++        { maxLength: 30 },
++      ),
++      async (reason, texts) => {
++        const queue = texts.map((text, index) => ({
++          id: `saved-${index}`,
++          text,
++          sequence: index + 1,
++          submittedAt: '2026-01-01T00:00:00.000Z',
++        }));
++        const starts = [];
++        const controller = new QueueController({
++          driver: {
++            start: (execution) => {
++              starts.push(execution.item.text);
++            },
++            cancel: () => true,
++          },
++          snapshotFactory: (item) => ({ text: item.text }),
++          persistence: {
++            load: () => ({ version: 1, nextSequence: queue.length + 1, queue, pause: { reason } }),
++            replace: () => {},
++          },
++        });
++        assert.equal(controller.state().kind, queue.length ? 'paused' : 'idle');
++        assert.deepEqual(
++          controller.state().queue.map(({ text }) => text),
++          texts,
++        );
++        assert.deepEqual(starts, []);
++        await controller.command({ kind: 'submit', text: 'fresh input' });
++        assert.deepEqual(starts, queue.length ? [] : ['fresh input']);
++        if (queue.length) assert.equal(controller.state().reason, reason);
++      },
++    ),
++  },
++  {
++    name: 'queue.serial-actions',
++    property: fc.asyncProperty(fc.array(action, { maxLength: 30 }), async (actions) => {
++      let next = 0;
++      let execution = 0;
++      let previousExecutionId;
++      const starts = [];
++      const controller = new QueueController({
++        driver: {
++          start: (execution) => {
++            starts.push({ id: execution.item.id, text: execution.item.text, snapshotText: execution.snapshot.text });
++          },
++          cancel: () => true,
++        },
++        snapshotFactory: (item) => ({ text: item.text }),
++        ids: { item: () => `item-${++next}`, execution: () => `execution-${++execution}` },
++        now: () => '2026-01-01T00:00:00.000Z',
++        capacity: 100,
++      });
++      const model = { active: null, queue: [], paused: false, starts: [] };
++      const dispatch = () => {
++        if (!model.active && !model.paused && model.queue.length) {
++          model.active = model.queue.shift();
++          model.starts.push({ ...model.active, snapshotText: model.active.text });
++        }
++      };
++      for (const [step, action] of actions.entries()) {
++        const state = controller.state();
++        switch (action.kind) {
++          case 'submit': {
++            assert.equal((await controller.command({ kind: 'submit', text: action.text })).kind, 'accepted');
++            model.queue.push({ id: `item-${next}`, text: action.text });
++            dispatch();
++            break;
++          }
++          case 'complete':
++          case 'fail':
++            if (model.active) {
++              await controller.event({
++                kind: action.kind === 'complete' ? 'completed' : 'failed',
++                executionId: state.active.executionId,
++                terminal: {},
++                failure: 'generated',
++              });
++              previousExecutionId = state.active.executionId;
++              model.active = null;
++              model.paused = action.kind === 'fail' && model.queue.length > 0;
++              dispatch();
++            }
++            break;
++          case 'remove':
++          case 'edit':
++            if (model.queue.length) {
++              const index = action.index % model.queue.length;
++              await controller.command({
++                kind: action.kind === 'remove' ? 'remove_queued' : 'edit_queued',
++                itemId: model.queue[index].id,
++                text: 'edited',
++              });
++              if (action.kind === 'remove') model.queue.splice(index, 1);
++              else model.queue[index].text = 'edited';
++              if (!model.queue.length) model.paused = false;
++            }
++            break;
++          case 'resume':
++            await controller.command({ kind: 'resume_queue' });
++            model.paused = false;
++            dispatch();
++            break;
++          case 'discard':
++            await controller.command({ kind: 'discard_queue' });
++            model.queue = [];
++            model.paused = false;
++            break;
++          case 'stale':
++            await controller.event({
++              kind: 'completed',
++              executionId: previousExecutionId ?? 'never-issued',
++              terminal: {},
++            });
++            break;
++        }
++        const actual = controller.state();
++        assert.deepEqual(
++          actual.queue.map(({ id, text }) => ({ id, text })),
++          model.queue,
++          `queue at step ${step}`,
++        );
++        assert.deepEqual(
++          actual.active ? { id: actual.active.item.id, text: actual.active.item.text } : null,
++          model.active,
++          `active at step ${step}`,
++        );
++        assert.equal(actual.kind, model.active ? 'running' : model.paused ? 'paused' : 'idle', `phase at step ${step}`);
++        assert.deepEqual(starts, model.starts, `dispatch at step ${step}`);
++      }
++    }),
++  },
++];
+diff --git a/scripts/generated-verification/run.mjs b/scripts/generated-verification/run.mjs
+new file mode 100644
+index 00000000..4c0a2ba8
+--- /dev/null
++++ b/scripts/generated-verification/run.mjs
+@@ -0,0 +1,94 @@
++import { execFile } from 'node:child_process';
++import { promisify } from 'node:util';
++import { parseArgs } from 'node:util';
++import { writeFileSync } from 'node:fs';
++import fc from 'fast-check';
++import { historyProperties } from './history.mjs';
++import { queueProperties } from './queue.mjs';
++
++// No provider, credential, model, or network dependency: only production APIs
++// and fast-check. JSON on stdout is the durable replay/evaluation artifact.
++try {
++  const { values } = parseArgs({
++    options: {
++      target: { type: 'string', default: 'all' },
++      property: { type: 'string' },
++      seed: { type: 'string' },
++      path: { type: 'string' },
++      runs: { type: 'string', default: '1000' },
++      output: { type: 'string' },
++      help: { type: 'boolean' },
++    },
++  });
++  if (values.help) {
++    console.log(
++      'pnpm verify:generated [--target all|history|queue] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
++    );
++  } else {
++    const runs = Number(values.runs);
++    const seed = values.seed === undefined ? undefined : Number(values.seed);
++    if (
++      !Number.isSafeInteger(runs) ||
++      runs < 1 ||
++      (seed !== undefined && (!Number.isInteger(seed) || seed < -2147483648 || seed > 2147483647))
++    )
++      throw new Error('runs must be a positive safe integer; seed must be int32');
++    if (!['all', 'history', 'queue'].includes(values.target)) throw new Error('unknown target');
++    let properties =
++      values.target === 'history'
++        ? historyProperties
++        : values.target === 'queue'
++        ? queueProperties
++        : [...historyProperties, ...queueProperties];
++    if (values.property) properties = properties.filter((p) => p.name === values.property);
++    if (!properties.length) throw new Error('unknown property for target');
++    if (values.path !== undefined && (properties.length !== 1 || seed === undefined))
++      throw new Error('replay path requires --property and --seed');
++    const exec = promisify(execFile);
++    const git = async (...args) => (await exec('git', args, { encoding: 'utf8' })).stdout.trim();
++    const revision = await git('rev-parse', 'HEAD');
++    const dirty = (await git('status', '--porcelain')).length > 0;
++    const started = performance.now();
++    const results = [];
++    for (const { name, property } of properties) {
++      const start = performance.now();
++      const result = await fc.check(property, {
++        numRuns: runs,
++        ...(seed === undefined ? {} : { seed }),
++        ...(values.path === undefined ? {} : { path: values.path }),
++      });
++      results.push({
++        property: name,
++        failed: result.failed,
++        seed: result.seed,
++        path: result.counterexamplePath,
++        cases: result.numRuns,
++        skips: result.numSkips,
++        shrinks: result.numShrinks,
++        runtimeMs: performance.now() - start,
++        counterexample: result.counterexample,
++        error: result.errorInstance ? String(result.errorInstance.stack ?? result.errorInstance) : null,
++        replay: result.failed
++          ? `pnpm verify:generated --property ${name} --seed=${result.seed} --path '${result.counterexamplePath}' --runs ${runs}`
++          : null,
++      });
++    }
++    const report = {
++      schemaVersion: 1,
++      revision,
++      dirty,
++      node: process.version,
++      requestedRunsPerProperty: runs,
++      maxSequenceLength: 30,
++      runtimeMs: performance.now() - started,
++      results,
++    };
++    const json = JSON.stringify(report, null, 2) + '\n';
++    if (values.output) writeFileSync(values.output, json, { flag: 'wx' });
++    process.stdout.write(json);
++    if (results.some((r) => r.failed)) process.exitCode = 1;
++  }
++} catch (error) {
++  console.error(String(error.stack ?? error));
++  process.exitCode = 2;
++}
+diff --git a/source/services/queue/queue-controller.ts b/source/services/queue/queue-controller.ts
+index e0e465fc..4f918a57 100644
+--- a/source/services/queue/queue-controller.ts
++++ b/source/services/queue/queue-controller.ts
+@@ -468,10 +468,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+           // effective retention decision, but never releases active ownership.
+           this.#cancelRetainedItemIds.clear();
+         }
+-        if (this.#phase === 'paused' && this.#queue.length === 0) {
+-          this.#phase = 'idle';
+-          this.#pauseReason = undefined;
+-        }
++        this.#releaseEmptyPause();
+         await this.#persist();
+         return { kind: 'accepted' };
+       case 'edit_queued': {
+@@ -485,6 +482,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+         const index = this.#queue.findIndex((item) => item.id === cmd.itemId);
+         if (index < 0) return { kind: 'rejected', reason: 'not_queued' };
+         this.#queue.splice(index, 1);
++        this.#releaseEmptyPause();
+         if (this.#phase === 'cancelling') {
+           this.#cancelRetainedItemIds.delete(cmd.itemId);
+         }
+@@ -755,6 +753,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+     if (record.pause) {
+       this.#phase = 'paused';
+       this.#pauseReason = record.pause.reason;
++      this.#releaseEmptyPause();
+       return;
+     }
+     if (this.#queue.length > 0) {
+@@ -763,6 +762,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
+     }
+   }
+ 
++  /** A pause retains queued work, never active cancellation ownership. */
++  #releaseEmptyPause(): void {
++    if (this.#phase !== 'paused' || this.#queue.length > 0) return;
++    this.#phase = 'idle';
++    this.#pauseReason = undefined;
++  }
++
+   async #persist(): Promise<void> {
+     if (!this.#persistence) return;
+     const active = this.#active

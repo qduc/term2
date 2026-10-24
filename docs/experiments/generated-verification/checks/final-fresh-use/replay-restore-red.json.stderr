@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property queue.restore-pause --seed 424242 --path 6:0 --runs 1000

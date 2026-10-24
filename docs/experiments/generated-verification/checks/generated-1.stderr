@@ -1,0 +1,1 @@
+$ tsx scripts/generated-verification/run.mjs --seed 1 --runs 10000

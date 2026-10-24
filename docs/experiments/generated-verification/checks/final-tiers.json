@@ -1,0 +1,50 @@
+[
+  {
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "runtimeSeconds": 3.167646219022572,
+    "log": "docs/experiments/generated-verification/checks/final-tier-0.log",
+    "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "snapshot": "dirty: empty-pause owner repair on 9288a02c; source unchanged during run"
+  },
+  {
+    "command": "pnpm test",
+    "exit": 0,
+    "runtimeSeconds": 3.12339274212718,
+    "log": "docs/experiments/generated-verification/checks/final-tier-1.log",
+    "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "snapshot": "dirty: empty-pause owner repair on 9288a02c; source unchanged during run"
+  },
+  {
+    "command": "pnpm test:integration",
+    "exit": 1,
+    "runtimeSeconds": 65.13903949130327,
+    "log": "docs/experiments/generated-verification/checks/final-tier-2.log",
+    "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "snapshot": "dirty: empty-pause owner repair on 9288a02c; source unchanged during run"
+  },
+  {
+    "command": "pnpm build",
+    "exit": 0,
+    "runtimeSeconds": 3.535251366905868,
+    "log": "docs/experiments/generated-verification/checks/final-tier-3.log",
+    "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "snapshot": "dirty: empty-pause owner repair on 9288a02c; source unchanged during run"
+  },
+  {
+    "command": "pnpm test:e2e",
+    "exit": 0,
+    "runtimeSeconds": 7.927721511572599,
+    "log": "docs/experiments/generated-verification/checks/final-tier-4.log",
+    "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "snapshot": "dirty: empty-pause owner repair on 9288a02c; source unchanged during run"
+  },
+  {
+    "command": "pnpm test:provider-black-box",
+    "exit": 0,
+    "runtimeSeconds": 95.71554053062573,
+    "log": "docs/experiments/generated-verification/checks/final-tier-5.log",
+    "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "snapshot": "dirty: empty-pause owner repair on 9288a02c; source unchanged during run"
+  }
+]

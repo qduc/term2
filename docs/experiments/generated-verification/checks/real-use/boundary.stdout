@@ -1,0 +1,90 @@
+{
+  "checks": 21,
+  "passed": 21,
+  "results": [
+    {
+      "name": "restore-failure-0",
+      "passed": true
+    },
+    {
+      "name": "restore-failure-1",
+      "passed": true
+    },
+    {
+      "name": "restore-failure-3",
+      "passed": true
+    },
+    {
+      "name": "restore-manual-0",
+      "passed": true
+    },
+    {
+      "name": "restore-manual-1",
+      "passed": true
+    },
+    {
+      "name": "restore-manual-3",
+      "passed": true
+    },
+    {
+      "name": "restore-recovered_interrupted-0",
+      "passed": true
+    },
+    {
+      "name": "restore-recovered_interrupted-1",
+      "passed": true
+    },
+    {
+      "name": "restore-recovered_interrupted-3",
+      "passed": true
+    },
+    {
+      "name": "failure-remove-last-persists-idle-and-fresh-dispatch",
+      "passed": true
+    },
+    {
+      "name": "failure-remove-partial-preserves-payload-and-reason",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-0-none",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-0-remove-all",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-0-discard",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-1-none",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-1-remove-all",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-1-discard",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-3-none",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-3-remove-all",
+      "passed": true
+    },
+    {
+      "name": "unproven-cancel-retain-3-discard",
+      "passed": true
+    },
+    {
+      "name": "edited-dispatch-snapshot-isolated-and-issued-id-stale-events-ignored",
+      "passed": true
+    }
+  ]
+}

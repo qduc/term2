@@ -1,0 +1,44 @@
+[
+  {
+    "args": ["--help"],
+    "expectedExit": 0,
+    "exit": 0,
+    "stdout": "pnpm verify:generated [--target all|history|queue] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]\n",
+    "stderr": ""
+  },
+  {
+    "args": ["--target", "bogus"],
+    "expectedExit": 2,
+    "exit": 2,
+    "stdout": "",
+    "stderr": "Error: unknown target\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:35:69\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n"
+  },
+  {
+    "args": ["--runs", "0"],
+    "expectedExit": 2,
+    "exit": 2,
+    "stdout": "",
+    "stderr": "Error: runs must be a positive safe integer; seed must be int32\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:34:13\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n"
+  },
+  {
+    "args": ["--seed", "no"],
+    "expectedExit": 2,
+    "exit": 2,
+    "stdout": "",
+    "stderr": "Error: runs must be a positive safe integer; seed must be int32\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:34:13\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n"
+  },
+  {
+    "args": ["--property", "absent"],
+    "expectedExit": 2,
+    "exit": 2,
+    "stdout": "",
+    "stderr": "Error: unknown property for target\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:43:35\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n"
+  },
+  {
+    "args": ["--path", "0"],
+    "expectedExit": 2,
+    "exit": 2,
+    "stdout": "",
+    "stderr": "Error: replay path requires --property and --seed\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:45:13\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n"
+  }
+]

@@ -1,0 +1,835 @@
+diff --git a/docs/experiments/generated-verification/PLAN.md b/docs/experiments/generated-verification/PLAN.md
+new file mode 100644
+index 00000000..005b127e
+--- /dev/null
++++ b/docs/experiments/generated-verification/PLAN.md
+@@ -0,0 +1,331 @@
++# Generated edge-case verification
++
++## Goal and authority
++
++Deliver a permanent, inexpensive, LLM-free-at-runtime edge-case discovery command.
++The user authorized end-to-end implementation, evaluation, independent verification,
++and integration. LLMs may build/maintain/investigate the tool, never participate in
++its execution. The user explicitly clarified that the traditional-unit-test ban
++**does not prohibit this generated verification method or persistent tooling**.
++This exception is not permission to restore the example-based unit suite.
++
++## Acceptance criteria (frozen before implementation)
++
++1. A documented installed command generates supported inputs/action sequences
++   against production code without models, credentials, or AI network calls.
++2. Properties cite contracts; explicit case and sequence-size budgets make runs
++   finite. Initial evaluation budget: 1,000 cases/property, at most 30 actions/case,
++   target <=30 seconds per target on this host after dependencies are installed.
++   These are evaluation defaults, not correctness guarantees or runtime guards
++   on product execution. Record actual costs and revise explicitly if unsuitable.
++3. Failed properties exit nonzero, shrink to a replayable example, retain seed,
++   replay path, revision/dirty state, case counts and runtime in structured output.
++4. History repair/projection is the first target. A queue-controller action model
++   is the proposed second target (confirm contracts/callers before implementing).
++   Demonstrate structured properties and generated state-machine sequences.
++5. Demonstrate detection of a genuine current or historical supported edge-case
++   defect, not merely a deliberately injected fault. Independently validate it.
++6. Classify every candidate discovered during bounded evaluation. Fix confirmed
++   defects and verify before/after, or obtain explicit human agreement to defer.
++   Reject/narrow unsupported properties; do not silently weaken contracts.
++7. Measure runtime/cases and observed setup/triage effort; distinguish unknown
++   effort from zero. No invented token-cost or speedup comparison.
++8. Required static and behavioral checks pass; required independent review and
++   fresh-agent real-use verification pass on the final artifact. If unavailable,
++   completion remains verification-pending.
++9. Integrate commands, docs, policy clarification and retained evidence. Promote
++   only if the pilot is useful and inexpensive; an evidence-backed do-not-promote
++   decision is a valid endpoint, with experimental additions isolated or removed.
++
++## Scope and design direction
++
++Prefer fast-check for structured generation, shrinking, seeds and state commands;
++check compatibility before adopting. Keep tooling separate from runtime code and
++Vitest unit-test discovery. No generic verification platform, no whole-repo proof,
++no model-driven oracle, no mandatory provider spend. Do not auto-enable expensive
++CI until its value is demonstrated. Any product bug fix is a separately reviewed
++change with appropriate project checks.
++
++## Execution and evidence
++
++- Worktree: `.worktrees/generated-verification`, branch `feat/generated-verification`.
++- Base: `6075a3cf` (primary clean when inspected).
++- Dependencies installed with frozen lockfile successfully, Node 24.19.0 / pnpm 11.7.0.
++- Loaded methods: agentic-loop, implementation, testing, verification, writing-docs,
++  guard-design (test-only budgets excluded), finding-triage, term2.
++- Required real-use guide: `/home/qduc/.agents/skills/coordinator/references/real-use-verification.md`.
++  The global AGENTS link through `qduc-skills/skills/coordinator` is stale; the
++  installed canonical equivalent above was read.
++- No checker or source modifications yet. Original Gemini checker is hand-written
++  deterministic cases plus limited BFS, not conventional fuzzing or formal proof.
++- Old queue finding may already be mitigated by `QueueController.#snapshot`:
++  inspect before claiming it. Current remove_queued lacks explicit paused cleanup,
++  but snapshots can normalize the state.
++- `dropUnpairedFunctionCalls` uses first canonical item only; investigate supported
++  multi-tool-call histories through `projectHistoryForProvider` (actual export name
++  to confirm) in conversation-state-projector.ts before claiming a defect.
++
++## Next steps
++
++1. Inspect contracts, public callers and existing suites for the two targets.
++2. Implement small generated runner and target properties; update policy docs.
++3. Run bounded discovery, classify/reproduce findings, fix confirmed scoped bugs.
++4. Execute required tiers and CLI failure/replay checks; retain evidence.
++5. Independent review plus fresh-agent use, evaluate promotion, integrate cleanly.
++
++## Discovery checkpoint (2026-10-24)
++
++- Checker implementation retained at `0f40efc8a475487874488312640b8c252cd13550`.
++  Production queue/history code still equals base. Discovery and replay JSON are
++  committed alongside the checker, making the dirty discovery snapshot recoverable.
++- Seed 424242: history 1,000 cases passed (248.6ms); queue failed at case 314,
++  shrank 22 times to submit/submit/fail/remove (32.3ms). Replay exits 1 in one
++  case with the same four-action failure (11.5ms). No fault injection used.
++- Finding Q1: empty paused queue after removing last failure-retained item.
++  Candidate supported by explicit empty-pause invariant in controller cancellation
++  and restore paths; public UI caller confirmation/independent validation pending.
++  Proposed route: fix at queue owner, keep nonempty failure pause and unproven
++  cancellation ownership unchanged. No new queue manager or settings needed.
++- No other candidate discovered by these bounded runs. Multi-call chat histories
++  are outside initial property scope; first-item normalization observation remains
++  an unvalidated lead, not a reported supported defect.
++- Independent discovery/fresh-agent attempt uses existing Codex configuration,
++  read-only sandbox, trace `independent-discovery.trace.jsonl`. It reports command
++  execution blocked by sandbox/pnpm/Git; any helper-only fallback is supporting
++  evidence, not a completed real-use gate. Must rerun shipped workflow with usable
++  workspace permissions on final artifact. No author implementation hints sent.
++- Package dependency mandates all tiers; background job is running sequential
++  typecheck/lint/static/integration/e2e/provider with individual logs and exits in
++  `checks/baseline-tiers.json`. Source must remain unchanged until this ends.
++
++### Queue repair guard contract (before code)
++
++Harm prevented: fresh input blocked behind an empty failure pause after removal.
++Scope/owners: public QueueController queue mutation and restart restoration;
++controller owns admission/pause/recovery, adapter/UI only reflect state.
++Class: existing lifecycle/admission pause, not a new budget or timeout.
++Signal: phase paused plus zero retained queue items, direct state evidence.
++Legitimate signal: a user just removed all retained follow-ups; must become idle.
++True-positive protection: retained nonempty queues stay paused; cancelling active
++execution stays owned until matching proof, even if its queue becomes empty.
++Configuration/default/clamping: none added or changed; capacity and cancellation
++policy remain unchanged. No environment/persisted setting migration.
++Action: release only an empty paused phase, do not abort or replay anything.
++Partial work: no active execution exists in paused state; queued removals remain
++explicit user actions. Unobserved effects are neither labeled failed nor retried.
++Retry/fallback/provider continuity: unchanged, no model request added.
++Observability: state kind, retained queue, pause reason; no new content logging.
++Persisted state: normalize an existing empty pause on load if included in repair;
++retain nonempty customized records and recovery diagnostics.
++Rollback: separate queue repair commit, generated checker independently retained.
++Ledger: append scoped empty-pause incident and red/green evidence to guard ledger.
++
++## Independent discovery outcome and next implementation
++
++`independent-discovery.md` ACCEPTS the defect, independently reproduced with
++public API plus actual next-submit non-dispatch; it confirms adapter retract
++caller and input ownership consequences but did not drive a full keyboard journey.
++Review trace contains hashes/identity. Its direct-property fallback does NOT meet
++fresh-agent installed-command real-use gate (read-only sandbox blocked pnpm/Git).
++Use workspace-write sandbox for final fresh-agent run, no profile/model override.
++
++Finding triage (all findings from discovery review):
++- Q1 empty failure pause: **Route**. Supported production defect, parent already
++  independently reproduced the shrunk property. Add minimal owner fix.
++- Q2 saved empty pause: **Route for generated characterization**, then minimal
++  restoration normalization if red. `#restore` saved-pause branch currently
++  unconditionally pauses even when empty (unlike interrupted-active branch).
++  This is a supported record producible by Q1 with persistence. Suggested small
++  shared `#releaseEmptyPause` helper for discard/remove/restore, not a new manager.
++- F1 checker execution IDs share submission counter: **Route**. Genuine fixture
++  defect. Use independent execution counter. Preserve queue generator/action shape
++  so original failure path stays replayable. This changes no production behavior.
++- F2 stale event only never-issued: **Route narrowly**. Replay a previous real
++  execution ID when available, retaining never-issued case when none completed.
++- F3 driver checks only IDs: **Route narrowly**. Record/check dispatch snapshot
++  text and item text too. Same generated sequences, no extra simulation framework.
++- F4 readonly pnpm/Git restriction: **Narrow**. Method requires usable local
++  workspace process permissions. Fresh gate must rerun shipped command in writable
++  sandbox; helper fallback is supporting evidence only.
++- F5 README claims #restore universally normalizes: **Route docs correction**.
++  Scope backing to interrupted-active restoration before fix; no false historical
++  claim even if repair later covers saved pauses.
++
++Baseline tier job `fd765420-a11a-459b-adf0-03dd3dffdd8a` still running. At latest
++notification: typecheck PASS 3.13s; lint FAIL 35.27s solely prettier formatting in
++new `checks/cli-contract.json` (ESLint 0 errors/31 warnings); static PASS 3.06s.
++No product edits yet. Fix evidence formatting and rerun lint after all logs settle.
++Do not call that lint failure pre-existing. All tier logs are retained.
++
++Before queue repair, guard-design skill read; complete ledger was requested via
++cat but model-visible output truncated. Read uninspected ranges of mandatory
++`docs/plans/approvals-and-sandbox/guard-ledger.md` before editing source:
++1511–3103 and 3288–3600, and 400–499 (other ranges inspected). This ledger is
++3,796 lines, mostly historical; queue-specific enforcement/settlement contract
++is under “Interactive foreground cancellation proof settlement” near 340.
++Guard contract above is frozen and preserves cancellation fail-closed ownership.
++Skills implementation, testing, verification, writing-docs, guard-design,
++agentic-loop, finding-triage, debugging and bug-retro have been read in this run
++(some long outputs trimmed; consult exact relevant sections as needed).
++
++After source changes: generated replay red/green and bounded multi-seed runs,
++script syntax checks, final typecheck/lint/relevant integration, final independent
++review and fresh-agent real use, parent inspection/rerun, results/task ledger,
++promotion/cost decision, commits then merge --no-ff to primary (preserve others).
++Current checker includes no TS edits; scripts are .mjs run by tsx, ESLint excludes
++scripts but Prettier checks them. Node --check explicitly for changed .mjs.
++Persistent generated checks are user-authorized, do not disguise Vitest unit tests.
++
++Integration baseline tier finished exit 1, 65.24s Vitest / 66.46s wall:
++23 passed files, 1 failed, 1 skipped; 222 passed tests, 4 failed, 1 skipped.
++All failures in unchanged `source/cli.integration.test.ts`: two Bare small-tool-
++surface/config cases ENOENT `result.txt`; outside-workspace edit expected `/exit
++[1-9]/` but received noninteractive approval denial; scratch write required shell
++approval and target absent. Production code equals base but new dependency exists;
++MUST reproduce focused failures on base (isolated worktree + own install) before
++calling pre-existing. E2E/provider still running. Primary git status remained clean.
++Independent agent finished exit 0 after 193.6sec; thread ID
++`01a16d34-bb4b-7600-8953-3c51a8e5e6ce`, configured model gpt-6.1-sol / medium,
++no override. Live child agent work: none. Only tier job remains live.
++
++## Successor checkpoint
++
++Strengthened checker commit `9288a02c` preserves production code unchanged.
++Independent execution counter, real previous-ID stale events, and dispatch
++item/snapshot text are now checked. Original serial failure remains case 314,
++22 shrinks, same replay path (78.3ms). New `queue.restore-pause` fails case 7
++with saved `failure` pause and empty queue (10.9ms, one shrink, path `6:0`).
++Red artifacts retained in that commit; these dirty records are reconstructible
++with the committed checker against unchanged production code. Q2 confirmed.
++
++Baseline e2e: 2 failed files / 7 failed tests, 3 passed files / 25 passed tests,
++1 skipped file / 4 skipped tests. Several fail on missing built worker modules;
++e2e was run before an explicit build. Provider runner builds automatically.
++Do not classify e2e baseline until inspected/re-run with build prerequisite.
++Base reproduction worktree `.worktrees/generated-verification-base` detached at
++6075a3cf has its own successful frozen install; focused CLI integration is
++running, job `28a4d09a-4392-4a88-8451-18c61acf8653`. Logs in checks/base-*.log.
++
++Guard-ledger remaining designated ranges were read in successor (large calls
++had omitted display; short follow-up sections inspected). Methods reloaded:
++implementation, agentic-loop, testing, verification, guard-design, bug-retro,
++writing-docs, finding-triage, provider-testing, real-use gate.
++
++
++## Repair and bounded evaluation
++
++The owner repair adds shared `#releaseEmptyPause` for discard, remove, and saved
++pause restoration. No cancellation or provider logic changes. Seed 424242 passes
++all three 1,000-case properties (history 298.7ms, restore 56.2ms, serial 41.7ms;
++396.6ms total checker). Both exact previously failing shrink paths pass.
++Four further seeds each target 10,000 cases/property. Positive seeds 1,
++20261024 and 2147483647 pass; negative-seed space-separated invocation was
++rejected by Node parseArgs (exit 2, retained stderr), then equals syntax passed.
++This revealed runner replay strings use space-separated seeds and cannot replay
++negative seeds: **C1 Route**, supported CLI reproducibility defect, fix formatting
++rather than adding a parser. Pending until independent review finishes to keep
++its inspected checker snapshot stable. No claim that the invocation error is a
++production queue defect. Costs retained in checks/generated-costs.json; negative
++corrected run lacks separate wall timing, checker timing remains in its JSON.
++
++Baseline CLI integration reproduced exactly on unchanged detached 6075a3cf with
++own frozen install: 51 passed / 4 failed, same four bare profile approval/write
++signatures. Final full integration still fails; compare exact signatures before
++classification. Final typecheck/static/build pass. After explicit build, e2e
++passes (therefore initial missing-built-module failures were setup, not source).
++
++Independent final reviewer/real-use job `bae1fd28-7546-4f17-a87e-b430a8c12bb4`
++uses existing Codex config with workspace-write (no model/profile overrides),
++brief `review-brief.md`, JSONL trace and final report retained. Parent supplied
++acceptance and scope, not exact commands or intended implementation. Source
++must stay unchanged during final-tier job `df0be68d-ab81-4d5d-8ad3-febf3c8e24e7`.
++
++### Bug retrospective (proportional, prevention artifact implemented)
++
++1. Representability: separate phase/queue fields permit empty paused state; a
++   full union refactor is disproportionate. Shared normalization is local.
++2. Single source: empty-pause release logic was distributed; shared helper now
++   owns three affected transitions. Cancellation retains its stronger proof.
++3. Boundary: public removal and valid persisted record load lacked normalization.
++4. Coupling: removal changed retention without updating phase; generated model
++   checks phase and payload after every supported generated action.
++5. Assumption: pause could outlive its retained work; no timing assumption needed.
++6. Detection: no permanent generated transition/restore property existed; former
++   isolated path tests did not protect all ways of emptying a pause.
++7. Automation: pilot generated properties now cover the category, opt-in; no new
++   static guard or CI budget is imposed without authority.
++8. Siblings: inspected failure, discard, remove, resume, cancellation proof and
++   cleanup, interrupted-active/saved-pause/plain-queue restoration. Only removal
++   and saved-pause normalization are confirmed omissions; others already avoid
++   empty pause or preserve active ownership intentionally.
++9. Knowledge: invariant was explicit in cancellation/active recovery comments
++   but not shared with removal; now greppable helper plus generated oracle.
++10. Observability: existed at least in base; lifespan uncertain. State() exposed
++    paused/zero items, but generated property found it automatically at case314.
++11. Origin: remove branch dates to `15c50d2d2` (2026-07-12); later cancellation
++    retention repair updated IDs but did not normalize ordinary paused removal.
++    This supports a latent omitted transition; exact introduction of the complete
++    failure-retention scenario is not bisected or claimed.
++
++No remaining design friction requiring a new interface or manager. Generated
++category contracts are the structural prevention artifact, not just one fixed
++example; concurrency and full terminal keyboard reachability remain outside the
++bounded checker claims.
++
++
++### Required gate exposed launcher portability defect
++
++Fresh workspace-write agent could invoke pnpm, but installed tsx CLI launcher
++failed `listen EPERM` at its local IPC socket before executing the checker.
++Unlike the prior read-only attempt, this is a specific unnecessary launcher
++capability requirement. **C2 Narrow**: replace the tsx CLI with Node's supported
++`--import tsx` loader; same checker and no sandbox/model override. Do not count
++helper fallback as installed-command acceptance. Parent changed package script
++and negative-seed replay formatting while reviewer was active after observing
++its retained failure evidence; this is an author intervention. Must rerun the
++actual shipped workflow and independent review against the updated artifact.
++
++
++## Cost and promotion assessment (decision pending final independent gate)
++
++Observed bounded costs: four seeds, 10,000 cases for each of three properties
++(120,000 generated cases total), all passed after repair. Total checker time per
++seed: 4.6475s (seed1), 3.3085s (20261024), 3.5805s (-2147483648, corrected
++invocation), 3.3318s (2147483647). Per-property maxima: history 3.4445s, restore
++0.7696s, serial actions 0.4588s. Positive-seed wall totals including package
++startup: 6.4430s, 4.8257s, 4.6085s. Corrected negative wall not measured.
++Default 1,000-case/property run: 0.3966s checker total. All are comfortably under
++the frozen <=30s/target evaluation goal on this host. No claim about an unloaded
++host, exhaustive coverage, total engineering cost savings, or token speedup.
++
++There were real setup/triage costs: frozen dependency install, contract tracing,
++independent discovery/review, oracle fixture repair, baseline all-tier runs,
++isolated base install/reproduction, explicit e2e build prerequisite, negative
++seed invocation diagnosis and nested-sandbox launcher diagnosis. Author totals
++and initial install timing were not independently tracked: unknown, not zero.
++First independent discovery run took 193.6s; its trace records 691,992 input
++(including 642,176 cached) and 5,878 output tokens. Those are observed invocation
++usage, not the whole task's token cost, and no price comparison is inferred.
++
++Recommendation: retain the generated method as an opt-in installed development
++command if final independent/fresh-use gate passes. It found two supported queue
++lifecycle omissions, shrank the principal one to four actions, and reruns cheaply.
++Do not auto-enable CI or expand to provider transport/concurrency/malformed
++history without new contracts and measured benefit. The pilot is not evidence
++that the wider no-unit-test experiment is cheaper or equally safe.
++
++Parent boundary probe passed: unproven cancellation retained active ownership
++after removing retained work; stale proof did not release; matching proof alone
++dispatched fresh input; removing one of two failure-retained items preserved
++pause/reason; last removal persisted an empty queue without pause; all three
++valid empty saved-pause reasons normalized. Output:
++`checks/parent-queue-boundary.json`. Temporary CLI fault injection (explicitly
++not discovery evidence) verified a negative-seed failure exits1, emits equals
++syntax and replays with same seed/exit1; `checks/negative-replay-contract.json`.
++No temporary example test is committed.
++
++Final source/checker commits: queue repair `4de1cebf`; portable command and
++negative replay `db1c1f88`. All previously retained dirty green snapshots have
++matching source retained in the repair commit. Source unchanged during all-tier
++runs. Mandatory command results (including failures) are appended, not rewritten,
++in docs/test-results.json; committed-snapshot results will follow separately.
+diff --git a/docs/experiments/generated-verification/README.md b/docs/experiments/generated-verification/README.md
+new file mode 100644
+index 00000000..36962c36
+--- /dev/null
++++ b/docs/experiments/generated-verification/README.md
+@@ -0,0 +1,63 @@
++# Generated edge-case verification pilot
++
++This opt-in method searches bounded input spaces using fast-check, not an LLM.
++The user explicitly authorized persistent generated checks as an exception to the
++traditional permanent-unit-test ban. This is not a restored example-based suite.
++
++## Use it on a real change
++
++Read the production contract before choosing a property. Run the installed command
++from the repository root after installing dependencies:
++
++```sh
++pnpm verify:generated --seed 424242
++pnpm verify:generated --target history --runs 1000
++pnpm verify:generated --help
++```
++
++The default is 1,000 cases per property, sequences at most 30 actions. These are
++sampling budgets, not exhaustive coverage or a proof. No credentials, provider,
++model, or network calls are used by the checker. Production code runs in process;
++the queue driver only records dispatches at the external executor boundary.
++
++JSON stdout records revision/dirty state, seed, counts, shrinks, elapsed checker
++time and minimized failures. `--output FILE` also saves JSON, refusing to overwrite
++an existing file. Package-manager diagnostics may appear on stderr. Exit 0 means
++sampled properties passed, 1 means a counterexample, 2 means invalid invocation or
++infrastructure failure. Startup/package-manager time is outside `runtimeMs`. The launcher uses Node’s
++`tsx` import loader, without the tsx CLI’s IPC-listener requirement. Use equals
++syntax for negative seeds (for example, `--seed=-2147483648`); generated replay
++commands include it automatically.
++
++For failure triage, preserve the JSON, inspect whether the property follows the
++actual production contract, then use its `replay` command at the same source and
++dependency revision. `--property`, `--seed`, `--path` and `--runs` reproduce the
++shrunk failure. A dirty revision alone is not a reconstructible snapshot: retain
++the diff or commit it. Replay paths depend on property/generator/fast-check versions.
++Do not weaken an invariant to silence a supported defect. Fix confirmed defects
++or obtain human agreement to defer them. Independently verify high-risk fixes.
++
++## Current scope
++
++- `history.pair-projection`: structured, unique Responses-style call IDs, JSON
++  arguments, arbitrary result text, missing results and an orphan result.
++  `projectProviderHistory` promises non-mutation and idempotence;
++  `dropUnpairedFunctionCalls` promises complete-pair retention/orphan removal.
++- `queue.serial-actions`: generated public submit, completion, failure, removal,
++  edit, resume, discard and stale-completion sequences compared at every step to
++  an independent serial FIFO model. The empty-pause invariant is explicit in
++  `QueueController.#cancel` and interrupted-active restoration: no retained work means idle, so future
++  input is not blocked behind an empty pause.
++- `queue.restore-pause`: generated valid saved queue records and pause reasons;
++  empty saved pauses must admit fresh work, while nonempty saved queues retain
++  their payloads and pause reason without replay on construction.
++
++Not covered: parallel command interleavings, persistence failures, approvals,
++steering, provider transports, multi-call chat envelopes, ledger recovery, or
++arbitrary malformed inputs. Passing does not establish these behaviors.
++
++Add a property only for a named supported contract and a meaningful generated
++space. Keep runtime bounded, shrinks readable and failure output reproducible.
++Use this when changing these boundaries; do not substitute it for required static,
++integration, e2e, provider, or independent checks. Pilot acceptance and evidence
++are tracked in [PLAN.md](PLAN.md).
+diff --git a/package.json b/package.json
+index e7ecf075..3972fe03 100644
+--- a/package.json
++++ b/package.json
+@@ -72,7 +72,8 @@
+     "logs": "node tools/log_viewer/src/server.js",
+     "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
+     "prepare": "husky",
+-    "catalog:update": "tsx scripts/update-model-catalog.ts"
++    "catalog:update": "tsx scripts/update-model-catalog.ts",
++    "verify:generated": "node --import tsx scripts/generated-verification/run.mjs"
+   },
+   "files": [
+     "dist"
+@@ -122,6 +123,7 @@
+     "eslint-config-prettier": "^10.1.8",
+     "eslint-plugin-react": "^7.32.2",
+     "eslint-plugin-react-hooks": "^7.1.1",
++    "fast-check": "^4.10.2",
+     "globals": "^17.6.0",
+     "husky": "^9.1.7",
+     "ink-testing-library": "^4.0.0",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index d02eaf4b..929e777c 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -350,6 +350,9 @@ importers:
+       eslint-plugin-react-hooks:
+         specifier: ^7.1.1
+         version: 7.1.1(eslint@9.39.4(jiti@2.7.0))
++      fast-check:
++        specifier: ^4.10.2
++        version: 4.10.2
+       globals:
+         specifier: ^17.6.0
+         version: 17.6.0
+@@ -2158,6 +2161,10 @@ packages:
+     resolution: {integrity: sha512-knvyeauYhqjOYvQ66MznSMs83wmHrCycNEN6Ao+2AeYEfxUIkuiVxdEa1qlGEPK+We3n0THiDciYSsCcgW/DoA==}
+     engines: {node: '>=12.0.0'}
+ 
++  fast-check@4.10.2:
++    resolution: {integrity: sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw==}
++    engines: {node: '>=12.17.0'}
++
+   fast-deep-equal@3.1.3:
+     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
+ 
+@@ -3156,6 +3163,9 @@ packages:
+     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
+     engines: {node: '>=6'}
+ 
++  pure-rand@8.4.2:
++    resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
++
+   querystringify@2.2.0:
+     resolution: {integrity: sha512-FIqgj2EUvTa7R50u0rGsyTftzjYmv/a3hO345bZNrqabNqjtgiDMgmo4mkUjd+nzU5oF3dClKqFIPUKybUyqoQ==}
+ 
+@@ -5591,6 +5601,10 @@ snapshots:
+ 
+   expect-type@1.3.0: {}
+ 
++  fast-check@4.10.2:
++    dependencies:
++      pure-rand: 8.4.2
++
+   fast-deep-equal@3.1.3: {}
+ 
+   fast-json-stable-stringify@2.1.0: {}
+@@ -6604,6 +6618,8 @@ snapshots:
+ 
+   punycode@2.3.1: {}
+ 
++  pure-rand@8.4.2: {}
++
+   querystringify@2.2.0: {}
+ 
+   quick-lru@6.1.2: {}
+diff --git a/scripts/generated-verification/history.mjs b/scripts/generated-verification/history.mjs
+new file mode 100644
+index 00000000..32b45fba
+--- /dev/null
++++ b/scripts/generated-verification/history.mjs
+@@ -0,0 +1,38 @@
++import assert from 'node:assert/strict';
++import fc from 'fast-check';
++import { projectProviderHistory } from '../../source/services/conversation/conversation-state-projector.ts';
++
++// projectProviderHistory's contract: stateless, non-mutating, idempotent;
++// dropUnpairedFunctionCalls: retain complete pairs, discard orphan sides.
++export const historyProperties = [
++  {
++    name: 'history.pair-projection',
++    property: fc.property(
++      fc.array(fc.record({ paired: fc.boolean(), output: fc.string(), arguments: fc.jsonValue() }), { maxLength: 30 }),
++      (entries) => {
++        const history = entries.flatMap((entry, index) => [
++          {
++            type: 'function_call',
++            call_id: `call-${index}`,
++            name: 'probe',
++            arguments: JSON.stringify(entry.arguments),
++          },
++          ...(entry.paired ? [{ type: 'function_call_output', call_id: `call-${index}`, output: entry.output }] : []),
++        ]);
++        history.push({ type: 'function_call_output', call_id: 'orphan', output: '' });
++        const before = structuredClone(history);
++        const projected = projectProviderHistory({ history });
++        assert.deepEqual(history, before, 'projection mutated input');
++        const expected = before.filter(
++          (item) => item.call_id !== 'orphan' && entries[Number(item.call_id.slice(5))].paired,
++        );
++        assert.deepEqual(projected.history, expected, 'complete pairs changed or orphan survived');
++        assert.deepEqual(
++          projectProviderHistory({ history: projected.history }).history,
++          projected.history,
++          'not idempotent',
++        );
++      },
++    ),
++  },
++];
+diff --git a/scripts/generated-verification/queue.mjs b/scripts/generated-verification/queue.mjs
+new file mode 100644
+index 00000000..afd61b8c
+--- /dev/null
++++ b/scripts/generated-verification/queue.mjs
+@@ -0,0 +1,158 @@
++import assert from 'node:assert/strict';
++import fc from 'fast-check';
++import { QueueController } from '../../source/services/queue/queue-controller.ts';
++
++// A serial reference model for the public follow-up queue lane: FIFO dispatch,
++// failure pauses retained work; removing/discarding all retained work releases
++// the pause (see #cancel and interrupted-active restoration's empty-pause invariant).
++const action = fc.oneof(
++  fc.record({
++    kind: fc.constant('submit'),
++    text: fc.string({ minLength: 1, maxLength: 30 }).filter((s) => !!s.trim()),
++  }),
++  fc.record({
++    kind: fc.constantFrom('complete', 'fail', 'remove', 'edit', 'resume', 'discard', 'stale'),
++    index: fc.nat(30),
++  }),
++);
++export const queueProperties = [
++  {
++    name: 'queue.restore-pause',
++    property: fc.asyncProperty(
++      fc.constantFrom('failure', 'manual', 'recovered_interrupted'),
++      fc.array(
++        fc.string({ minLength: 1, maxLength: 30 }).filter((s) => !!s.trim()),
++        { maxLength: 30 },
++      ),
++      async (reason, texts) => {
++        const queue = texts.map((text, index) => ({
++          id: `saved-${index}`,
++          text,
++          sequence: index + 1,
++          submittedAt: '2026-01-01T00:00:00.000Z',
++        }));
++        const starts = [];
++        const controller = new QueueController({
++          driver: {
++            start: (execution) => {
++              starts.push(execution.item.text);
++            },
++            cancel: () => true,
++          },
++          snapshotFactory: (item) => ({ text: item.text }),
++          persistence: {
++            load: () => ({ version: 1, nextSequence: queue.length + 1, queue, pause: { reason } }),
++            replace: () => {},
++          },
++        });
++        assert.equal(controller.state().kind, queue.length ? 'paused' : 'idle');
++        assert.deepEqual(
++          controller.state().queue.map(({ text }) => text),
++          texts,
++        );
++        assert.deepEqual(starts, []);
++        await controller.command({ kind: 'submit', text: 'fresh input' });
++        assert.deepEqual(starts, queue.length ? [] : ['fresh input']);
++        if (queue.length) assert.equal(controller.state().reason, reason);
++      },
++    ),
++  },
++  {
++    name: 'queue.serial-actions',
++    property: fc.asyncProperty(fc.array(action, { maxLength: 30 }), async (actions) => {
++      let next = 0;
++      let execution = 0;
++      let previousExecutionId;
++      const starts = [];
++      const controller = new QueueController({
++        driver: {
++          start: (execution) => {
++            starts.push({ id: execution.item.id, text: execution.item.text, snapshotText: execution.snapshot.text });
++          },
++          cancel: () => true,
++        },
++        snapshotFactory: (item) => ({ text: item.text }),
++        ids: { item: () => `item-${++next}`, execution: () => `execution-${++execution}` },
++        now: () => '2026-01-01T00:00:00.000Z',
++        capacity: 100,
++      });
++      const model = { active: null, queue: [], paused: false, starts: [] };
++      const dispatch = () => {
++        if (!model.active && !model.paused && model.queue.length) {
++          model.active = model.queue.shift();
++          model.starts.push({ ...model.active, snapshotText: model.active.text });
++        }
++      };
++      for (const [step, action] of actions.entries()) {
++        const state = controller.state();
++        switch (action.kind) {
++          case 'submit': {
++            assert.equal((await controller.command({ kind: 'submit', text: action.text })).kind, 'accepted');
++            model.queue.push({ id: `item-${next}`, text: action.text });
++            dispatch();
++            break;
++          }
++          case 'complete':
++          case 'fail':
++            if (model.active) {
++              await controller.event({
++                kind: action.kind === 'complete' ? 'completed' : 'failed',
++                executionId: state.active.executionId,
++                terminal: {},
++                failure: 'generated',
++              });
++              previousExecutionId = state.active.executionId;
++              model.active = null;
++              model.paused = action.kind === 'fail' && model.queue.length > 0;
++              dispatch();
++            }
++            break;
++          case 'remove':
++          case 'edit':
++            if (model.queue.length) {
++              const index = action.index % model.queue.length;
++              await controller.command({
++                kind: action.kind === 'remove' ? 'remove_queued' : 'edit_queued',
++                itemId: model.queue[index].id,
++                text: 'edited',
++              });
++              if (action.kind === 'remove') model.queue.splice(index, 1);
++              else model.queue[index].text = 'edited';
++              if (!model.queue.length) model.paused = false;
++            }
++            break;
++          case 'resume':
++            await controller.command({ kind: 'resume_queue' });
++            model.paused = false;
++            dispatch();
++            break;
++          case 'discard':
++            await controller.command({ kind: 'discard_queue' });
++            model.queue = [];
++            model.paused = false;
++            break;
++          case 'stale':
++            await controller.event({
++              kind: 'completed',
++              executionId: previousExecutionId ?? 'never-issued',
++              terminal: {},
++            });
++            break;
++        }
++        const actual = controller.state();
++        assert.deepEqual(
++          actual.queue.map(({ id, text }) => ({ id, text })),
++          model.queue,
++          `queue at step ${step}`,
++        );
++        assert.deepEqual(
++          actual.active ? { id: actual.active.item.id, text: actual.active.item.text } : null,
++          model.active,
++          `active at step ${step}`,
++        );
++        assert.equal(actual.kind, model.active ? 'running' : model.paused ? 'paused' : 'idle', `phase at step ${step}`);
++        assert.deepEqual(starts, model.starts, `dispatch at step ${step}`);
++      }
++    }),
++  },
++];
+diff --git a/scripts/generated-verification/run.mjs b/scripts/generated-verification/run.mjs
+new file mode 100644
+index 00000000..73a5ad27
+--- /dev/null
++++ b/scripts/generated-verification/run.mjs
+@@ -0,0 +1,92 @@
++import { execFileSync } from 'node:child_process';
++import { parseArgs } from 'node:util';
++import { writeFileSync } from 'node:fs';
++import fc from 'fast-check';
++import { historyProperties } from './history.mjs';
++import { queueProperties } from './queue.mjs';
++
++// No provider, credential, model, or network dependency: only production APIs
++// and fast-check. JSON on stdout is the durable replay/evaluation artifact.
++try {
++  const { values } = parseArgs({
++    options: {
++      target: { type: 'string', default: 'all' },
++      property: { type: 'string' },
++      seed: { type: 'string' },
++      path: { type: 'string' },
++      runs: { type: 'string', default: '1000' },
++      output: { type: 'string' },
++      help: { type: 'boolean' },
++    },
++  });
++  if (values.help) {
++    console.log(
++      'pnpm verify:generated [--target all|history|queue] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
++    );
++  } else {
++    const runs = Number(values.runs);
++    const seed = values.seed === undefined ? undefined : Number(values.seed);
++    if (
++      !Number.isSafeInteger(runs) ||
++      runs < 1 ||
++      (seed !== undefined && (!Number.isInteger(seed) || seed < -2147483648 || seed > 2147483647))
++    )
++      throw new Error('runs must be a positive safe integer; seed must be int32');
++    if (!['all', 'history', 'queue'].includes(values.target)) throw new Error('unknown target');
++    let properties =
++      values.target === 'history'
++        ? historyProperties
++        : values.target === 'queue'
++        ? queueProperties
++        : [...historyProperties, ...queueProperties];
++    if (values.property) properties = properties.filter((p) => p.name === values.property);
++    if (!properties.length) throw new Error('unknown property for target');
++    if (values.path !== undefined && (properties.length !== 1 || seed === undefined))
++      throw new Error('replay path requires --property and --seed');
++    const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
++    const revision = git('rev-parse', 'HEAD');
++    const dirty = git('status', '--porcelain').length > 0;
++    const started = performance.now();
++    const results = [];
++    for (const { name, property } of properties) {
++      const start = performance.now();
++      const result = await fc.check(property, {
++        numRuns: runs,
++        ...(seed === undefined ? {} : { seed }),
++        ...(values.path === undefined ? {} : { path: values.path }),
++      });
++      results.push({
++        property: name,
++        failed: result.failed,
++        seed: result.seed,
++        path: result.counterexamplePath,
++        cases: result.numRuns,
++        skips: result.numSkips,
++        shrinks: result.numShrinks,
++        runtimeMs: performance.now() - start,
++        counterexample: result.counterexample,
++        error: result.errorInstance ? String(result.errorInstance.stack ?? result.errorInstance) : null,
++        replay: result.failed
++          ? `pnpm verify:generated --property ${name} --seed=${result.seed} --path '${result.counterexamplePath}' --runs ${runs}`
++          : null,
++      });
++    }
++    const report = {
++      schemaVersion: 1,
++      revision,
++      dirty,
++      node: process.version,
++      requestedRunsPerProperty: runs,
++      maxSequenceLength: 30,
++      runtimeMs: performance.now() - started,
++      results,
++    };
++    const json = JSON.stringify(report, null, 2) + '\n';
++    if (values.output) writeFileSync(values.output, json, { flag: 'wx' });
++    process.stdout.write(json);
++    if (results.some((r) => r.failed)) process.exitCode = 1;
++  }
++} catch (error) {
++  console.error(String(error.stack ?? error));
++  process.exitCode = 2;
++}
+diff --git a/source/services/queue/queue-controller.ts b/source/services/queue/queue-controller.ts
+index e0e465fc..4f918a57 100644
+--- a/source/services/queue/queue-controller.ts
++++ b/source/services/queue/queue-controller.ts
+@@ -468,10 +468,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+           // effective retention decision, but never releases active ownership.
+           this.#cancelRetainedItemIds.clear();
+         }
+-        if (this.#phase === 'paused' && this.#queue.length === 0) {
+-          this.#phase = 'idle';
+-          this.#pauseReason = undefined;
+-        }
++        this.#releaseEmptyPause();
+         await this.#persist();
+         return { kind: 'accepted' };
+       case 'edit_queued': {
+@@ -485,6 +482,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+         const index = this.#queue.findIndex((item) => item.id === cmd.itemId);
+         if (index < 0) return { kind: 'rejected', reason: 'not_queued' };
+         this.#queue.splice(index, 1);
++        this.#releaseEmptyPause();
+         if (this.#phase === 'cancelling') {
+           this.#cancelRetainedItemIds.delete(cmd.itemId);
+         }
+@@ -755,6 +753,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+     if (record.pause) {
+       this.#phase = 'paused';
+       this.#pauseReason = record.pause.reason;
++      this.#releaseEmptyPause();
+       return;
+     }
+     if (this.#queue.length > 0) {
+@@ -763,6 +762,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
+     }
+   }
+ 
++  /** A pause retains queued work, never active cancellation ownership. */
++  #releaseEmptyPause(): void {
++    if (this.#phase !== 'paused' || this.#queue.length > 0) return;
++    this.#phase = 'idle';
++    this.#pauseReason = undefined;
++  }
++
+   async #persist(): Promise<void> {
+     if (!this.#persistence) return;
+     const active = this.#active

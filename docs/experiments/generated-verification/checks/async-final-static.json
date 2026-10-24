@@ -1,0 +1,23 @@
+[
+  {
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "runtimeSeconds": 2.9342459230683744,
+    "log": "docs/experiments/generated-verification/checks/async-typecheck.log",
+    "revision": "29d154543c31e9682499de4ecfefaee2c1786ddd"
+  },
+  {
+    "command": "pnpm test",
+    "exit": 0,
+    "runtimeSeconds": 3.049207591917366,
+    "log": "docs/experiments/generated-verification/checks/async-static.log",
+    "revision": "29d154543c31e9682499de4ecfefaee2c1786ddd"
+  },
+  {
+    "command": "node --check scripts/generated-verification/run.mjs && node --check scripts/generated-verification/queue.mjs && node --check scripts/generated-verification/history.mjs",
+    "exit": 0,
+    "runtimeSeconds": 0.05994753306731582,
+    "log": "docs/experiments/generated-verification/checks/async-syntax.log",
+    "revision": "29d154543c31e9682499de4ecfefaee2c1786ddd"
+  }
+]

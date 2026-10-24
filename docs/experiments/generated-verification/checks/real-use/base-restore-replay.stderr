@@ -1,0 +1,4 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property queue.restore-pause --seed 424242 --path 6:0 --runs 1000
+{"networkGuard":true,"attempts":0,"localIpcConnections":4,"pid":740}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":722}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":710}

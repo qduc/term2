@@ -1,0 +1,7 @@
+import { registerHooks } from 'node:module';
+const replacement=new URL('./base-queue.ts',import.meta.url).href;
+registerHooks({resolve(specifier,context,next){
+ const resolved=next(specifier,context);
+ if(resolved.url.endsWith('/source/services/queue/queue-controller.ts')) return {...resolved,url:replacement};
+ return resolved;
+}});

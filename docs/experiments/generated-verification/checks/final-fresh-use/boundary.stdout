@@ -1,0 +1,91 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "label": "base",
+      "afterRemoval": "paused",
+      "started": [
+        {
+          "id": "first",
+          "text": "first"
+        }
+      ],
+      "restartedStarted": []
+    },
+    {
+      "label": "current",
+      "afterRemoval": "idle",
+      "started": [
+        {
+          "id": "first",
+          "text": "first"
+        },
+        {
+          "id": "fresh",
+          "text": "fresh"
+        }
+      ],
+      "restartedStarted": [
+        {
+          "id": "9815b4f4-d988-4da7-81d8-47539b6f76cb",
+          "text": "after restart"
+        }
+      ]
+    },
+    {
+      "reason": "failure",
+      "count": 0,
+      "preservedAndResumed": true
+    },
+    {
+      "reason": "failure",
+      "count": 1,
+      "preservedAndResumed": true
+    },
+    {
+      "reason": "failure",
+      "count": 2,
+      "preservedAndResumed": true
+    },
+    {
+      "reason": "manual",
+      "count": 0,
+      "preservedAndResumed": true
+    },
+    {
+      "reason": "manual",
+      "count": 1,
+      "preservedAndResumed": true
+    },
+    {
+      "reason": "manual",
+      "count": 2,
+      "preservedAndResumed": true
+    },
+    {
+      "reason": "recovered_interrupted",
+      "count": 0,
+      "preservedAndResumed": true
+    },
+    {
+      "reason": "recovered_interrupted",
+      "count": 1,
+      "preservedAndResumed": true
+    },
+    {
+      "reason": "recovered_interrupted",
+      "count": 2,
+      "preservedAndResumed": true
+    },
+    {
+      "removal": "remove_queued",
+      "unprovenCancellationRetainedOwnership": true,
+      "matchingSettlementStartedFresh": true
+    },
+    {
+      "removal": "discard_queue",
+      "unprovenCancellationRetainedOwnership": true,
+      "matchingSettlementStartedFresh": true
+    }
+  ]
+}

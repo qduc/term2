@@ -1,0 +1,5 @@
+Error: EEXIST: file already exists, open '/home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/output-report.json'
+    at Object.openSync (node:fs:622:18)
+    at writeFileSync (node:fs:2497:35)
+    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:85:24
+{"networkGuard":true,"attempts":0,"localIpcConnections":4,"pid":204}

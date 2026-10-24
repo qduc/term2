@@ -6,7 +6,11 @@ description: How to establish that a change works without permanent unit tests â
 # Verification
 
 This repository is running an [evidence-driven development experiment](../../../docs/experiments/evidence-driven-development/README.md).
-Do not commit permanent unit tests. You choose how to verify a change, but the
+Do not commit permanent unit tests. The user-authorized
+[generated verification pilot](../../../docs/experiments/generated-verification/README.md)
+allows persistent bounded generated properties as an additional method. Use
+`pnpm verify:generated` for its supported history/queue boundaries; retain failed
+seeds, shrinks and source snapshots, and triage the oracle before fixing code. You choose how to verify a change, but the
 result must be evidence someone else can check, not a belief about the code.
 
 ## The contract

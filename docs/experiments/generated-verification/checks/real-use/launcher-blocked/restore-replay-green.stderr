@@ -1,0 +1,24 @@
+$ tsx scripts/generated-verification/run.mjs --property queue.restore-pause --seed 424242 --path 6:0 --runs 1000
+{"networkGuard":true,"attempts":0,"pid":515}
+node:net:2145
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /tmp/qduc/term2-nodejs/tsx-1000/515.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:2145:21)
+    at listenInCluster (node:net:2224:12)
+    at Server.listen (node:net:2361:5)
+    at file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/tmp/qduc/term2-nodejs/tsx-1000/515.pipe',
+  port: -1
+}
+
+Node.js v24.19.0
+{"networkGuard":true,"attempts":0,"pid":497}
+{"networkGuard":true,"attempts":0,"pid":485}

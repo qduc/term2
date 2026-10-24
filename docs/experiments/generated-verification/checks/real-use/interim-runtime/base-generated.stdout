@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 43.878806,
+  "results": [
+    {
+      "property": "queue.restore-pause",
+      "failed": true,
+      "seed": 424242,
+      "path": "6:0",
+      "cases": 7,
+      "skips": 0,
+      "shrinks": 1,
+      "runtimeMs": 7.251083999999992,
+      "counterexample": [
+        "failure",
+        []
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n'paused' !== 'idle'\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/queue.mjs:48:16\n    at AsyncProperty.predicate (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1283:104)\n    at AsyncProperty.run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1217:30)\n    at asyncPropertyExecution (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2564:29)\n    at async asyncRunIt (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2557:15)\n    at async file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:53:22",
+      "replay": "pnpm verify:generated --property queue.restore-pause --seed=424242 --path '6:0' --runs 1000"
+    },
+    {
+      "property": "queue.serial-actions",
+      "failed": true,
+      "seed": 424242,
+      "path": "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "cases": 314,
+      "skips": 0,
+      "shrinks": 22,
+      "runtimeMs": 36.592726,
+      "counterexample": [
+        [
+          {
+            "kind": "submit",
+            "text": "!"
+          },
+          {
+            "kind": "submit",
+            "text": "!"
+          },
+          {
+            "kind": "fail",
+            "index": 0
+          },
+          {
+            "kind": "remove",
+            "index": 0
+          }
+        ]
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: phase at step 3\n\n'paused' !== 'idle'\n\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/queue.mjs:153:16\n    at async AsyncProperty.run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1217:19)\n    at async asyncPropertyExecution (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2564:14)\n    at async asyncRunIt (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2557:15)\n    at async file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:53:22",
+      "replay": "pnpm verify:generated --property queue.serial-actions --seed=424242 --path '313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11' --runs 1000"
+    }
+  ]
+}

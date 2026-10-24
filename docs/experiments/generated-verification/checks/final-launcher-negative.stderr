@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --seed=-2147483648 --runs 1000 --output docs/experiments/generated-verification/checks/final-launcher-negative.json

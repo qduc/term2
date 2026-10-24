@@ -1,0 +1,4 @@
+$ node --import tsx scripts/generated-verification/run.mjs --help
+{"networkGuard":true,"attempts":0,"localIpcConnections":4,"pid":303}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":285}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":273}

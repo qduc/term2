@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property queue.serial-actions --seed 424242 --path 313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11 --runs 1000

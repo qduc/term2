@@ -1,0 +1,10 @@
+import cp from 'node:child_process';
+import {readFileSync} from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
+const captured=JSON.parse(readFileSync(new URL('./git-metadata.json',import.meta.url),'utf8'));
+const original=cp.execFileSync;
+cp.execFileSync=function(file,args,...rest){
+ if(file==='git' && Object.hasOwn(captured,args.join(' '))) return captured[args.join(' ')];
+ return Reflect.apply(original,this,[file,args,...rest]);
+};
+syncBuiltinESMExports();

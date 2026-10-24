@@ -1,0 +1,16 @@
+{
+  "command": [
+    "pnpm",
+    "verify:generated",
+    "--property",
+    "queue.restore-pause",
+    "--seed=-2147483648",
+    "--path",
+    "0:0",
+    "--runs",
+    "1000"
+  ],
+  "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/base-loader.mjs",
+  "exit": 1,
+  "wallSeconds": 1.0557415653020144
+}

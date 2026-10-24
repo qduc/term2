@@ -1,0 +1,146 @@
+{
+  "startedUtc": "2026-10-24T09:35:06.651952+00:00",
+  "identity": {
+    "role": "independent installed-use verifier /root",
+    "harness": "Codex API agent",
+    "model": "not exposed by runtime; no model/profile change",
+    "delegation": false
+  },
+  "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+  "gitExecutable": "/usr/bin/git",
+  "pnpmExecutable": "/home/qduc/.nvm/versions/node/v24.19.0/bin/pnpm",
+  "hashAlgorithm": "sha256",
+  "hashes": {
+    "AGENTS.md": "84cffaea7841a52836abee19739dc9173f17d45983cdbc0454226b74d5c7c248",
+    ".agents/skills/verification/SKILL.md": "2550c73e32ff33a468439bafdeb713a58fa1f8add822e1ea7efc9da5db208891",
+    ".agents/skills/testing/SKILL.md": "67038d4d32a25e3c93b5b5a50070cf76d442a4819ccd25fe90dcdde65f724047",
+    "docs/experiments/generated-verification/README.md": "5845c6bf41631c048b675c2209bd02846edd25301e7450f587231264b8812f3f",
+    "package.json": "a126cd0b31a62213f7af24a5f4ee711b3e709ae7f5404bb32cf1ddef09358576",
+    "pnpm-lock.yaml": "f9b0e87783a46e0c66aed30a35c79073e8b3d915331ffef8d1f289331c02fd6f",
+    "scripts/generated-verification/run.mjs": "3e43906067fb5920969f8580bab64cef20ea932c2a93bb718c5b85b43954b151",
+    "scripts/generated-verification/queue.mjs": "5a67e2ffe91006a5bdb92d4a3bda215a46ca4af09a7c056c46456da843beec71",
+    "scripts/generated-verification/history.mjs": "105aa5c60502c50eeb6f1a38147759aa7bde6e389c253283f8634e7e8d4c3f14",
+    "source/services/queue/queue-controller.ts": "4080f03c7f8317e96ec425a5254766c7fbb5bf66defcb1ead41058735b9ef5f1",
+    "source/services/conversation/conversation-state-projector.ts": "01fa7aed68aba8e347aee045620f936a9ae9c41e315a4c7e558c9785ceab72bf",
+    "docs/agent-context.md": "dc3e1101edcd9e5adbbbc9a9ec64f25277eb481b362a72c60b1b3d2019f6da6b",
+    "docs/plans/terminal-ui/queue-editing.md": "75d4603dc05a18b5837e166f5184cf3b60d146fb0420a98f9c94123083dd11b8",
+    "source/services/tool-execution-ledger.ts": "426f07f40a127dd0f4262c2332c4a462c49ba74b22da3668351779585af59b36",
+    "source/services/conversation/run-item-normalizer.ts": "33f2aad3a53ea33f3f17ae8cf6c41dd3280da0188053c414c828fffe1898dca1",
+    "source/contracts/provider-input.ts": "5c0c609dfe3e1a9456627c70f341f90235fe310503094626dc70d56561f71907",
+    "node_modules/fast-check/package.json": "3df7a54da656099e4f63c1577fc10aac90cb0078212067c856fa99970dcccdbb",
+    "node_modules/tsx/package.json": "1712340c8942ca0af1efaf2b42fd0cd608fb023f6a4fae427399ed08c61cf0f4",
+    "docs/experiments/generated-verification/discovery.json": "05086ad039467f2b437e3a22753ecae57ca2fe7d104bd6847692ba290da553d3",
+    "docs/experiments/generated-verification/serial-strengthened-red.json": "d6de96d827e10d226fd0f7c9ea5e9cf93a6b2ebacbdf98a432cce7880dcecf60",
+    "docs/experiments/generated-verification/restore-red.json": "4555aa9c02cbe31c5ad6decd6a9603376a7161d24798801c7d78eb56bc14a263",
+    "docs/experiments/generated-verification/checks/approved-installed-use/task-instruction.txt": "265abbfe760cdf10afa113fe58e26c960bbd15fa0b63edea86e7145c8bfb17e2"
+  },
+  "authority": "Read-only inspection and installed command; writes only in this evidence directory; no providers, installs, workers, code/config/instruction edits or full tiers.",
+  "revision": {
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "exit": 0,
+    "stdout": "db1c1f884d663cb14cc90da9487683fc1afab6ac\n",
+    "stderr": ""
+  },
+  "tree": {
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD^{tree}"
+    ],
+    "exit": 0,
+    "stdout": "b72eccf32b942bfb1852f855e9d44d76965cbde4\n",
+    "stderr": ""
+  },
+  "status": {
+    "command": [
+      "git",
+      "status",
+      "--porcelain"
+    ],
+    "exit": 0,
+    "stdout": " M docs/experiments/generated-verification/PLAN.md\n M docs/test-results.json\n?? docs/experiments/generated-verification/approved-installed-use.stderr\n?? docs/experiments/generated-verification/approved-installed-use.trace.jsonl\n?? docs/experiments/generated-verification/checks/\n?? docs/experiments/generated-verification/final-independent-review.stderr\n?? docs/experiments/generated-verification/final-independent-review.trace.jsonl\n?? docs/experiments/generated-verification/fresh-installed-use.md\n?? docs/experiments/generated-verification/fresh-installed-use.stderr\n?? docs/experiments/generated-verification/fresh-installed-use.trace.jsonl\n?? docs/experiments/generated-verification/independent-discovery.md\n?? docs/experiments/generated-verification/independent-discovery.stderr\n?? docs/experiments/generated-verification/independent-discovery.trace.jsonl\n?? docs/experiments/generated-verification/review-brief.md\n",
+    "stderr": ""
+  },
+  "git-version": {
+    "command": [
+      "git",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "git version 2.43.0\n",
+    "stderr": ""
+  },
+  "node-version": {
+    "command": [
+      "node",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "v24.19.0\n",
+    "stderr": ""
+  },
+  "executableHashes": {
+    "/usr/bin/git": "2a8c18fbf43da9f692d75474c72bea9dfd796c260b0f3dfe456376abc3bbd668",
+    "/home/qduc/.nvm/versions/node/v24.19.0/lib/node_modules/pnpm/bin/pnpm.mjs": "ff3224d46b47fbb24a7e9fe15fededef7e00892d07d4e376b6762d4899906bfd"
+  },
+  "versions": {
+    "fast-check": "4.10.2",
+    "tsx": "4.20.6"
+  },
+  "completedUtc": "2026-10-24T09:37:00.971923+00:00",
+  "hashesUnchangedAtEnd": true,
+  "final-status": {
+    "command": [
+      "git",
+      "status",
+      "--porcelain"
+    ],
+    "exit": 0,
+    "stdout": "final-status.stdout",
+    "stderr": "final-status.stderr"
+  },
+  "checker-changes-since-red": {
+    "command": [
+      "git",
+      "diff",
+      "9288a02c",
+      "HEAD",
+      "--",
+      "scripts/generated-verification/queue.mjs"
+    ],
+    "exit": 0,
+    "stdout": "checker-changes-since-red.stdout",
+    "stderr": "checker-changes-since-red.stderr"
+  },
+  "repair-diff": {
+    "command": [
+      "git",
+      "diff",
+      "9288a02c",
+      "HEAD",
+      "--",
+      "source/services/queue/queue-controller.ts"
+    ],
+    "exit": 0,
+    "stdout": "repair-diff.stdout",
+    "stderr": "repair-diff.stderr"
+  },
+  "launcher-diff": {
+    "command": [
+      "git",
+      "diff",
+      "4de1cebf",
+      "HEAD",
+      "--",
+      "package.json",
+      "scripts/generated-verification/run.mjs"
+    ],
+    "exit": 0,
+    "stdout": "launcher-diff.stdout",
+    "stderr": "launcher-diff.stderr"
+  }
+}

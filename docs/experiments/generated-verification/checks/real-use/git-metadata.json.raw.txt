@@ -1,0 +1,4 @@
+{
+  "rev-parse HEAD": "db1c1f884d663cb14cc90da9487683fc1afab6ac\n",
+  "status --porcelain": " M docs/experiments/generated-verification/PLAN.md\n M docs/test-results.json\n?? docs/experiments/generated-verification/checks/\n?? docs/experiments/generated-verification/final-independent-review.stderr\n?? docs/experiments/generated-verification/final-independent-review.trace.jsonl\n?? docs/experiments/generated-verification/fresh-installed-use.stderr\n?? docs/experiments/generated-verification/fresh-installed-use.trace.jsonl\n?? docs/experiments/generated-verification/independent-discovery.md\n?? docs/experiments/generated-verification/independent-discovery.stderr\n?? docs/experiments/generated-verification/independent-discovery.trace.jsonl\n?? docs/experiments/generated-verification/review-brief.md\n"
+}

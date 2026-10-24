@@ -16,6 +16,9 @@ result is a decision about the next step, not proof that unit tests are unnecess
 
 1. Do not commit permanent unit tests. CI and the pre-commit hook enforce this with
    `scripts/check-no-unit-tests.mjs`.
+   Explicit user-authorized exception: the [generated verification pilot](../generated-verification/README.md)
+   may retain bounded generated properties/tooling. This does not authorize a restored
+   example-based unit suite or change the remaining required tiers.
 2. Integration, e2e, provider black-box tests and the seven static repository guards stay and keep running
    in CI.
 3. Every change gets verification proportional to its risk.

@@ -1,0 +1,264 @@
+[
+  {
+    "name": "installed-default",
+    "command": ["node", "--import", "tsx", "scripts/generated-verification/run.mjs", "--seed", "424242"],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 0,
+    "wallSeconds": 0.571744523011148
+  },
+  {
+    "name": "history-separate",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--target",
+      "history",
+      "--runs",
+      "1000",
+      "--seed",
+      "123456"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 0,
+    "wallSeconds": 0.4682492008432746
+  },
+  {
+    "name": "queue-additional",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--target",
+      "queue",
+      "--runs",
+      "10000",
+      "--seed",
+      "8675309"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 0,
+    "wallSeconds": 0.6558767738752067
+  },
+  {
+    "name": "help",
+    "command": ["node", "--import", "tsx", "scripts/generated-verification/run.mjs", "--help"],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 0,
+    "wallSeconds": 0.21030203299596906
+  },
+  {
+    "name": "bad-target",
+    "command": ["node", "--import", "tsx", "scripts/generated-verification/run.mjs", "--target", "typo"],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 2,
+    "wallSeconds": 0.2092556580901146
+  },
+  {
+    "name": "bad-runs",
+    "command": ["node", "--import", "tsx", "scripts/generated-verification/run.mjs", "--runs", "0"],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 2,
+    "wallSeconds": 0.2113617341965437
+  },
+  {
+    "name": "bad-seed",
+    "command": ["node", "--import", "tsx", "scripts/generated-verification/run.mjs", "--seed", "2147483648"],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 2,
+    "wallSeconds": 0.2050635269843042
+  },
+  {
+    "name": "bad-property",
+    "command": ["node", "--import", "tsx", "scripts/generated-verification/run.mjs", "--property", "missing"],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 2,
+    "wallSeconds": 0.21976696467027068
+  },
+  {
+    "name": "path-without-property",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 2,
+    "wallSeconds": 0.2483783890493214
+  },
+  {
+    "name": "serial-replay-green",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 0,
+    "wallSeconds": 0.24110321095213294
+  },
+  {
+    "name": "restore-replay-green",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--property",
+      "queue.restore-pause",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0",
+      "--runs",
+      "1000"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 0,
+    "wallSeconds": 0.24269367242231965
+  },
+  {
+    "name": "base-generated",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--target",
+      "queue",
+      "--seed",
+      "424242"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/base-loader.mjs",
+    "baseControllerOnly": true,
+    "exit": 1,
+    "wallSeconds": 0.2735200161114335
+  },
+  {
+    "name": "base-serial-replay",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/base-loader.mjs",
+    "baseControllerOnly": true,
+    "exit": 1,
+    "wallSeconds": 0.27012444799765944
+  },
+  {
+    "name": "base-restore-replay",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--property",
+      "queue.restore-pause",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0",
+      "--runs",
+      "1000"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/base-loader.mjs",
+    "baseControllerOnly": true,
+    "exit": 1,
+    "wallSeconds": 0.2464818311855197
+  },
+  {
+    "name": "output-write",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--target",
+      "history",
+      "--runs",
+      "20",
+      "--seed",
+      "424242",
+      "--output",
+      "/home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/output-report.json"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 0,
+    "wallSeconds": 0.2604183512739837
+  },
+  {
+    "name": "output-refuse-overwrite",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "scripts/generated-verification/run.mjs",
+      "--target",
+      "history",
+      "--runs",
+      "20",
+      "--seed",
+      "424242",
+      "--output",
+      "/home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/output-report.json"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/git-metadata-loader.mjs",
+    "baseControllerOnly": false,
+    "exit": 2,
+    "wallSeconds": 0.25405287835747004
+  }
+]

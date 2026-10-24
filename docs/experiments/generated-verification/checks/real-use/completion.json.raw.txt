@@ -1,0 +1,12 @@
+{
+  "endedUTC": "2026-10-24T09:35:50.735509+00:00",
+  "head": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+  "changedReviewedHashes": {
+    "docs/experiments/generated-verification/PLAN.md": "0e787d20fe17ce43993d89950753c9a337a5d3c52c989ca676a8931cc2a54d18"
+  },
+  "boundaryChecks": 21,
+  "boundaryPassed": 21,
+  "negativeEmittedReplayExit": 1,
+  "finalCommandWallTotal": 31.835859989747405,
+  "decision": "REJECT: installed command fails synchronous Git metadata; all behavioral properties with metadata supplied and focused boundary checks pass"
+}

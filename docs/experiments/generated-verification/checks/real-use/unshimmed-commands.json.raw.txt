@@ -1,0 +1,25 @@
+[
+  {
+    "name": "final-unshimmed",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "424242"
+    ],
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "exit": 2,
+    "wallSeconds": 1.9451885255984962
+  },
+  {
+    "name": "final-unshimmed-help",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--help"
+    ],
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "exit": 0,
+    "wallSeconds": 2.369352971203625
+  }
+]

@@ -3814,6 +3814,424 @@
         "No duplicate completed task or unrelated defect annotation added. Exact original source task/defect rows retained; this later run carries integration status and limits. Unknown effort/usage/cost remains unknown.",
         "Source build identity references tested import commit, not later metadata-only commit. Aggregate efficiency objective remains blocked/unverified; combined build is not new efficacy evidence."
       ]
+    },
+    {
+      "id": "2026-10-24-lite-bare-merge-base-integration",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "da1d4ad2644d1db59b1bea0becc7598c4c7d0c72",
+      "revision_kind": "committed_base_clean_detached_worktree",
+      "tree": "b0ba13bdfc81bd4172d0e10e3ec3a3e38b07419a",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
+      },
+      "result": {
+        "passed": 216,
+        "failed": 10,
+        "skipped": 1,
+        "files_passed": 20,
+        "files_failed": 4,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "test": "source/acp-v2/session-backend.integration.test.ts > ACP v2 production backend integration > runs, cancels, and fail-closed-denies a real RuntimeFactory session",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/cli.integration.test.ts > finishes a provider turn when file logging hits ENOSPC",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > composes read-only and read-write tool surfaces from the gateway grant",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > rejects direct, nested, and subagent writes in a read-only gateway session",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > runs a real ConversationService turn and never exposes the fixture broker seam",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/gateway/serve.integration.test.ts > term2 serve (child process) > pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid",
+          "classification": "pre_existing_on_base_macos"
+        }
+      ],
+      "comparison": {
+        "classification": "baseline_for_task",
+        "notes": "Baseline for 2026-10-24-lite-bare-merge; on macOS. Compare Linux runs before classifying these as persistent."
+      },
+      "task_ids": ["2026-10-24-lite-bare-merge"],
+      "evidence": [
+        "/private/tmp/claude-501/-Users-qduc-src-term2/04930afb-db58-421e-b05a-1201e3cf89ad/scratchpad/integration-base.log"
+      ],
+      "notes": ["Machine-local log; may expire."]
+    },
+    {
+      "id": "2026-10-24-lite-bare-merge-integration",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "17e6e443fff1c388df45cd1c7aae8f472ff5086d",
+      "tree": "0d9d13c67eea10911711eeb80c1de050f64f93f1",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "da1d4ad2644d1db59b1bea0becc7598c4c7d0c72",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
+      },
+      "result": {
+        "passed": 218,
+        "failed": 8,
+        "skipped": 1,
+        "files_passed": 20,
+        "files_failed": 4,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "test": "source/acp-v2/session-backend.integration.test.ts > ACP v2 production backend integration > runs, cancels, and fail-closed-denies a real RuntimeFactory session",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/cli.integration.test.ts > finishes a provider turn when file logging hits ENOSPC",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > composes read-only and read-write tool surfaces from the gateway grant",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > rejects direct, nested, and subagent writes in a read-only gateway session",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > runs a real ConversationService turn and never exposes the fixture broker seam",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/gateway/serve.integration.test.ts > term2 serve (child process) > pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid",
+          "classification": "pre_existing_on_base_same_environment"
+        }
+      ],
+      "comparison": {
+        "classification": "no_new_failures",
+        "baseline_run_id": "2026-10-24-lite-bare-merge-base-integration",
+        "new_failures": [],
+        "resolved_vs_base": [
+          "source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity"
+        ],
+        "notes": "Failure signatures compared against the base run in the same environment."
+      },
+      "task_ids": ["2026-10-24-lite-bare-merge"],
+      "evidence": [
+        "/private/tmp/claude-501/-Users-qduc-src-term2/04930afb-db58-421e-b05a-1201e3cf89ad/scratchpad/f3-integration.log"
+      ],
+      "notes": [
+        "Run on the uncommitted tree before commit. After the run, only use-profile-selection.ts UI copy and docs changed, then lint-staged formatting at commit; profile resolution, prompt, and tool code are identical to the commit.",
+        "Machine-local log; may expire."
+      ]
+    },
+    {
+      "id": "2026-10-24-lite-bare-merge-base-e2e",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "da1d4ad2644d1db59b1bea0becc7598c4c7d0c72",
+      "revision_kind": "committed_base_clean_detached_worktree",
+      "tree": "b0ba13bdfc81bd4172d0e10e3ec3a3e38b07419a",
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
+      },
+      "result": {
+        "passed": 27,
+        "failed": 5,
+        "skipped": 4,
+        "files_passed": 3,
+        "files_failed": 2,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "test": "source/cli-tool-rows.e2e.test.ts > the terminal UI shows a later turn tool call that reuses an earlier call id",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built index worker after a cached cwd is deleted",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built worker after a cached cwd is deleted",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real source index worker after a cached cwd is deleted",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real source worker after a cached cwd is deleted",
+          "classification": "pre_existing_on_base_macos"
+        }
+      ],
+      "comparison": {
+        "classification": "baseline_for_task",
+        "notes": "Baseline for 2026-10-24-lite-bare-merge; on macOS. Compare Linux runs before classifying these as persistent."
+      },
+      "task_ids": ["2026-10-24-lite-bare-merge"],
+      "evidence": [
+        "/private/tmp/claude-501/-Users-qduc-src-term2/04930afb-db58-421e-b05a-1201e3cf89ad/scratchpad/e2e-base.log"
+      ],
+      "notes": ["Machine-local log; may expire."]
+    },
+    {
+      "id": "2026-10-24-lite-bare-merge-e2e",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "17e6e443fff1c388df45cd1c7aae8f472ff5086d",
+      "tree": "0d9d13c67eea10911711eeb80c1de050f64f93f1",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "da1d4ad2644d1db59b1bea0becc7598c4c7d0c72",
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
+      },
+      "result": {
+        "passed": 27,
+        "failed": 5,
+        "skipped": 4,
+        "files_passed": 3,
+        "files_failed": 2,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "test": "source/cli-tool-rows.e2e.test.ts > the terminal UI shows a later turn tool call that reuses an earlier call id",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built index worker after a cached cwd is deleted",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built worker after a cached cwd is deleted",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real source index worker after a cached cwd is deleted",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real source worker after a cached cwd is deleted",
+          "classification": "pre_existing_on_base_same_environment"
+        }
+      ],
+      "comparison": {
+        "classification": "no_new_failures",
+        "baseline_run_id": "2026-10-24-lite-bare-merge-base-e2e",
+        "new_failures": [],
+        "resolved_vs_base": [],
+        "notes": "Failure signatures compared against the base run in the same environment."
+      },
+      "task_ids": ["2026-10-24-lite-bare-merge"],
+      "evidence": [
+        "/private/tmp/claude-501/-Users-qduc-src-term2/04930afb-db58-421e-b05a-1201e3cf89ad/scratchpad/f3-e2e.log"
+      ],
+      "notes": [
+        "Run on the uncommitted tree before commit. After the run, only use-profile-selection.ts UI copy and docs changed, then lint-staged formatting at commit; profile resolution, prompt, and tool code are identical to the commit.",
+        "Machine-local log; may expire."
+      ]
+    },
+    {
+      "id": "2026-10-24-lite-bare-merge-base-provider-black-box",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "da1d4ad2644d1db59b1bea0becc7598c4c7d0c72",
+      "revision_kind": "committed_base_clean_detached_worktree",
+      "tree": "b0ba13bdfc81bd4172d0e10e3ec3a3e38b07419a",
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts (full, no --bail)",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
+      },
+      "result": {
+        "passed": 215,
+        "failed": 6,
+        "skipped": 1,
+        "files_passed": 21,
+        "files_failed": 4,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "scripts/provider-black-box/nested-hide.blackbox.ts > P1 nested hide result chain > approves a hidden nested editor through the scripted adapter and preserves result-chain identity",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > runs a bounded handoff through the real supervisor, private pipe, and built CLI",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > admits input beyond the old universal ceiling when known capacity permits",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=undefined and retains a locator",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=warn and retains a locator",
+          "classification": "pre_existing_on_base_macos"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > session_search through run_code completes canonical fallback in the shipped CLI",
+          "classification": "pre_existing_on_base_macos"
+        }
+      ],
+      "comparison": {
+        "classification": "baseline_for_task",
+        "notes": "Baseline for 2026-10-24-lite-bare-merge; on macOS. Compare Linux runs before classifying these as persistent."
+      },
+      "task_ids": ["2026-10-24-lite-bare-merge"],
+      "evidence": [
+        "/private/tmp/claude-501/-Users-qduc-src-term2/04930afb-db58-421e-b05a-1201e3cf89ad/scratchpad/bb-full-base.log"
+      ],
+      "notes": ["Machine-local log; may expire."]
+    },
+    {
+      "id": "2026-10-24-lite-bare-merge-provider-black-box",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "17e6e443fff1c388df45cd1c7aae8f472ff5086d",
+      "tree": "0d9d13c67eea10911711eeb80c1de050f64f93f1",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "da1d4ad2644d1db59b1bea0becc7598c4c7d0c72",
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts (full, no --bail)",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
+      },
+      "result": {
+        "passed": 215,
+        "failed": 6,
+        "skipped": 1,
+        "files_passed": 21,
+        "files_failed": 4,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "scripts/provider-black-box/nested-hide.blackbox.ts > P1 nested hide result chain > approves a hidden nested editor through the scripted adapter and preserves result-chain identity",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > runs a bounded handoff through the real supervisor, private pipe, and built CLI",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > admits input beyond the old universal ceiling when known capacity permits",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=undefined and retains a locator",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=warn and retains a locator",
+          "classification": "pre_existing_on_base_same_environment"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > session_search through run_code completes canonical fallback in the shipped CLI",
+          "classification": "pre_existing_on_base_same_environment"
+        }
+      ],
+      "comparison": {
+        "classification": "no_new_failures",
+        "baseline_run_id": "2026-10-24-lite-bare-merge-base-provider-black-box",
+        "new_failures": [],
+        "resolved_vs_base": [],
+        "notes": "Failure signatures compared against the base run in the same environment."
+      },
+      "task_ids": ["2026-10-24-lite-bare-merge"],
+      "evidence": [
+        "/private/tmp/claude-501/-Users-qduc-src-term2/04930afb-db58-421e-b05a-1201e3cf89ad/scratchpad/f3-bb.log"
+      ],
+      "notes": [
+        "Run on the uncommitted tree before commit. After the run, only use-profile-selection.ts UI copy and docs changed, then lint-staged formatting at commit; profile resolution, prompt, and tool code are identical to the commit.",
+        "Machine-local log; may expire."
+      ]
     }
   ]
 }

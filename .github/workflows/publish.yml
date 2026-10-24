@@ -45,10 +45,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # code-context requires rg on PATH; ci.yml installs it for the same
-      # reason. Without it the release gate fails with `rg_unavailable`.
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      # Search needs rg; Bare shell integration checks also execute the real
+      # Linux sandbox, which requires bubblewrap and socat. Keep these installed
+      # rather than disabling the sandbox or weakening the boundary assertions.
+      - name: Install shell sandbox prerequisites
+        run: sudo apt-get update && sudo apt-get install -y ripgrep bubblewrap socat
 
       - name: Build package
         run: pnpm run build

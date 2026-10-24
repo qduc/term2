@@ -702,6 +702,93 @@
         "Required lint-staged and no-unit-test gates run through a command-local hook with --no-stash --no-hide-partially-staged --fail-on-changes. No permanent hook/config change.",
         "This is documentation integration, not a new experimental implementation task. Source commit will be indexed in a later documentation entry."
       ]
+    },
+    {
+      "id": "2026-10-24-edd-main-integration-committed",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:35:38.243391+00:00",
+      "commit": "de7f05f0386b7ebd1600391cd4f8a949fee2712a",
+      "tree": "3a0941ca1ab139c9b9d073f2cea40f5ffbb6e921",
+      "base_commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "source_commit": "18efe5a52c33cd3ccb4fe0b78ffb19af8c64947d",
+      "revision_kind": "committed_source_with_unrelated_dirty_ledger",
+      "suite": "documentation-evidence",
+      "task_ids": ["2026-10-24-edd-continuation-measurement-guidance", "2026-10-24-no-unit-test-interim-assessment"],
+      "command": "python3 /tmp/edd_main_check_20261024.py --committed; pnpm --dir /home/qduc/term2 exec prettier --check docs/experiments/evidence-driven-development/README.md docs/experiments/evidence-driven-development/interim-results-2026-10-24.md docs/experiments/evidence-driven-development/interim-results-2026-10-24.json docs/experiments/evidence-driven-development/continuation-2026-10-24.json docs/test-results.json; pnpm --dir /home/qduc/term2 exec node scripts/check-no-unit-tests.mjs; git -C /home/qduc/term2 diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "python_version": "3.12.3",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Primary main checkout; six unrelated pending task rows intentionally unstaged. Narrow staging, no stash/hide of unrelated work."
+      },
+      "dirty_paths": ["docs/experiments/evidence-driven-development/tasks.jsonl"],
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "checks": {
+        "source_blob_parity": "passed",
+        "main_run_objects_preserved": "passed",
+        "stable_run_ids": "passed",
+        "only_two_own_task_rows_staged": "passed",
+        "unrelated_row_raw_hashes": "passed",
+        "json_templates_and_example": "passed",
+        "product_suites": "not_run",
+        "high_risk_gaps_closed": 0
+      },
+      "snapshot_checksums": [
+        {
+          "file": "docs/experiments/evidence-driven-development/README.md",
+          "sha256": "e40c4a93cdefd457d92c6219c562c2357b22902c6827eb0b5589d9d5ed952582"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/interim-results-2026-10-24.md",
+          "sha256": "1c52c2a02b6c631451b2686982d81f9f04e7406cd600c630705ea1324c9d1235"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/interim-results-2026-10-24.json",
+          "sha256": "ea6981eb6355586643e91e81996b3e15d52fd2aac0e80133f39cf2d354c33cf0"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/continuation-2026-10-24.json",
+          "sha256": "f19b1daf42871f5fbbe5cd439784766629aee54293ed824dffbda4bf06b9b3b5"
+        }
+      ],
+      "failures": [],
+      "comparison": {
+        "classification": "verified_integrated_documentation",
+        "baseline_commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+        "resolves_run_ids": ["2026-10-24-edd-main-integration-dirty"],
+        "notes": "Focused source/index/row-hash/template/example checks and format/policy checks passed on integrated main. Six unrelated pending task rows remained unstaged; not a wholly clean checkout or a product-suite run."
+      },
+      "evidence": [
+        {
+          "kind": "git_commit",
+          "commit": "de7f05f0386b7ebd1600391cd4f8a949fee2712a"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-main-integration-20261024/manifest.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-main-integration-20261024/validation-committed.json"
+        }
+      ],
+      "notes": [
+        "Appended in later documentation commit after source integration and verification. Original four main and four distinct lane run objects remain intact; subsequent integration records are distinct observations.",
+        "Narrow index-only task staging retained every unrelated pending raw row; nonstashing required hooks left stash ref and persistent hook/config unchanged.",
+        "Controller assigned EDD-LOG-01, EDD-ROLLOVER-01 and EDD-VERIFY-01 to separate lane w1:p3Z. Dispatch is not acceptance; all three follow-up records remain open.",
+        "Interim report/data and continuation/guidance match reviewed source blobs exactly. Historical cutoff and inconclusive cost/quality finding are unchanged.",
+        "Initial read-only preflight assumed committed bytes were a contiguous working-file prefix. Existing six pending rows precede the previously integrated approval row. Row-ID/raw-byte comparison confirmed all 71 committed observations and six pending rows; no primary writes occurred before correcting the positional assumption."
+      ]
     }
   ]
 }

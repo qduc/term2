@@ -3505,6 +3505,315 @@
       ],
       "notes": ["Temporary test moved outside checkout before run. No full integration/e2e/provider suite run."],
       "runtime_seconds": 1.79
+    },
+    {
+      "id": "2026-10-24-bare-footer-integrated-main",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T01:15:27.161575+00:00",
+      "commit": "e71e1903a9ba8290abf6134f34a96d19edc8700f",
+      "tree": "4f496ec463676e1fc73c58c77fb4a4ed2227604c",
+      "base_commit": "4c2ea9757e6d0ba306c2666482b36a3f5c9086d6",
+      "source_commit": "269728e3a17a7699dbcaafab49c136bb15892f3f",
+      "source_documentation_commit": "c8d9981a8abb2e3bc1607955ed5cd0223aac3dcc",
+      "revision_kind": "committed_source_with_unrelated_dirty_ledger_and_temporary_rendered_probes",
+      "suite": "footer-reviewed-source-main-integration",
+      "task_ids": ["2026-10-24-bare-footer-label"],
+      "defect_ids": ["2026-10-24-bare-profile-display-drift"],
+      "dirty_paths": ["docs/experiments/evidence-driven-development/tasks.jsonl"],
+      "temporary_paths": [
+        "source/components/layout/bare-footer-probe.test.tsx",
+        "source/components/layout/bare-footer-baseline-control.tsx",
+        "source/components/layout/bare-footer-version-control.test.tsx"
+      ],
+      "temporary_paths_removed": true,
+      "command": "Separate exact-main observations listed below; full 56-case real probe failed at 40-column Mentor with long dev version. Tracked-file argv retained in integrated-checks.json.",
+      "command_complete": true,
+      "command_observations": [
+        {
+          "name": "rendered-probe",
+          "argv": ["pnpm", "test", "source/components/layout/bare-footer-probe.test.tsx"],
+          "run_at": "2026-10-24T01:15:27.161575+00:00",
+          "runtime_seconds": 4.373,
+          "exit_code": 1,
+          "log": "/tmp/footer-main-integration-20261024/rendered-probe.log",
+          "log_sha256": "1fdef1e75b9083c0d7cad98d7e256a51d7719b3db1bffec071fa78c3cb2d1451",
+          "result": {
+            "passed": 55,
+            "failed": 1,
+            "skipped": 0,
+            "files_passed": 0,
+            "files_failed": 1
+          },
+          "failure_signature": "Mentor classic banner at 40 columns: MENTO rather than MENTOR with 0.36.0-dev+1a992d8 version",
+          "command": "pnpm test source/components/layout/bare-footer-probe.test.tsx"
+        },
+        {
+          "name": "version-layout-diagnostic",
+          "argv": ["pnpm", "test", "source/components/layout/bare-footer-version-control.test.tsx"],
+          "run_at": "2026-10-24T01:17:13.510693+00:00",
+          "runtime_seconds": 3.792,
+          "exit_code": 0,
+          "log": "/tmp/footer-main-integration-20261024/version-layout-diagnostic.log",
+          "log_sha256": "7d5b165e9e2355e055d21a532bce63253465cb2fa07614f213b383399d58d7c5",
+          "command": "pnpm test source/components/layout/bare-footer-version-control.test.tsx",
+          "result": {
+            "passed": 2,
+            "failed": 0,
+            "files_passed": 1
+          }
+        },
+        {
+          "name": "typecheck",
+          "argv": ["pnpm", "typecheck"],
+          "run_at": "2026-10-24T01:17:17.303436+00:00",
+          "runtime_seconds": 5.039,
+          "exit_code": 0,
+          "log": "/tmp/footer-main-integration-20261024/typecheck.log",
+          "log_sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+          "command": "pnpm typecheck"
+        },
+        {
+          "name": "full-lint",
+          "argv": ["pnpm", "lint"],
+          "run_at": "2026-10-24T01:17:22.344204+00:00",
+          "runtime_seconds": 29.998,
+          "exit_code": 1,
+          "log": "/tmp/footer-main-integration-20261024/full-lint.log",
+          "log_sha256": "77c19d478bbd3dee6975438f2058f219e3441a880014def92d45721126d63214",
+          "command": "pnpm lint"
+        },
+        {
+          "name": "tracked-eslint",
+          "run_at": "2026-10-24T01:17:52.361840+00:00",
+          "runtime_seconds": 22.948,
+          "exit_code": 0,
+          "log": "/tmp/footer-main-integration-20261024/tracked-eslint.log",
+          "log_sha256": "560a347b8ddf84a99742c0e52967349ef20dd6826629994e76e977a0e3c6dace",
+          "argument_count": 1036,
+          "command_scope": "Explicit git-ls-files argv with unchanged repository configuration; exact argv in retained integrated-checks.json. Not equivalent to full pnpm lint."
+        },
+        {
+          "name": "tracked-prettier",
+          "run_at": "2026-10-24T01:18:15.311160+00:00",
+          "runtime_seconds": 14.414,
+          "exit_code": 0,
+          "log": "/tmp/footer-main-integration-20261024/tracked-prettier.log",
+          "log_sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+          "argument_count": 1386,
+          "command_scope": "Explicit git-ls-files argv with unchanged repository configuration; exact argv in retained integrated-checks.json. Not equivalent to full pnpm lint."
+        },
+        {
+          "name": "static-guards",
+          "argv": ["pnpm", "test"],
+          "run_at": "2026-10-24T01:18:29.726579+00:00",
+          "runtime_seconds": 3.031,
+          "exit_code": 0,
+          "log": "/tmp/footer-main-integration-20261024/static-guards.log",
+          "log_sha256": "ec042a3dfaddc591cbaf2e116cbfd3f4e639cfeb85452a2fc6aa661c8ff4f041",
+          "command": "pnpm test",
+          "result": {
+            "passed": 28,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 7,
+            "files_failed": 0
+          }
+        },
+        {
+          "name": "no-unit-tests",
+          "argv": ["pnpm", "check:no-unit-tests"],
+          "run_at": "2026-10-24T01:18:32.759291+00:00",
+          "runtime_seconds": 0.865,
+          "exit_code": 0,
+          "log": "/tmp/footer-main-integration-20261024/no-unit-tests.log",
+          "log_sha256": "19a1b222d819e1875d1960dad7dc8f9f3714adba4e000018147e8c4f2f581378",
+          "command": "pnpm check:no-unit-tests"
+        },
+        {
+          "name": "runtime-build",
+          "argv": ["pnpm", "build"],
+          "run_at": "2026-10-24T01:18:33.625805+00:00",
+          "runtime_seconds": 3.831,
+          "exit_code": 0,
+          "log": "/tmp/footer-main-integration-20261024/runtime-build.log",
+          "log_sha256": "e3bbb2ac1f4221d64cea95bbaa89d22f8f37d14ef7173e04f389cd6bd9b40226",
+          "command": "pnpm build"
+        },
+        {
+          "name": "installed-version",
+          "argv": ["/home/qduc/.local/share/pnpm/bin/term2", "--version"],
+          "run_at": "2026-10-24T01:18:37.458137+00:00",
+          "runtime_seconds": 0.867,
+          "exit_code": 0,
+          "log": "/tmp/footer-main-integration-20261024/installed-version.log",
+          "log_sha256": "545deab0042033cbaa1a12d8417958efa3b062339c4fcb864c1bf9b3e2976bd0",
+          "command": "/home/qduc/.local/share/pnpm/bin/term2 --version"
+        },
+        {
+          "name": "rebuilt-rendered-probe",
+          "argv": ["pnpm", "test", "source/components/layout/bare-footer-probe.test.tsx"],
+          "run_at": "2026-10-24T01:18:38.326968+00:00",
+          "runtime_seconds": 4.477,
+          "exit_code": 1,
+          "log": "/tmp/footer-main-integration-20261024/rebuilt-rendered-probe.log",
+          "log_sha256": "9283b46031ef647735a9dc042b8273205bdb9d1fc92d89f0495c8c3642fc2d60",
+          "result": {
+            "passed": 55,
+            "failed": 1,
+            "skipped": 0,
+            "files_passed": 0,
+            "files_failed": 1
+          },
+          "failure_signature": "Same 40-column Mentor clipping with rebuilt dev version 0.36.0-dev+e71e190",
+          "command": "pnpm test source/components/layout/bare-footer-probe.test.tsx"
+        }
+      ],
+      "environment": {
+        "os": "Linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "test_commands": {
+            "NODE_ENV": "test"
+          }
+        },
+        "notes": "Primary main checkout, six unrelated raw task rows unstaged. Existing dev build identity before first probe; rebuilt combined dev identity before second. Both long identities differ from producer's short-version probe context. No live provider calls or pane restarts."
+      },
+      "result": {
+        "passed": 55,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "result_scope": "Final 56-case probe after combined runtime rebuild only; not sum of repeated probe/diagnostics/static suites.",
+      "verification_status": "partial_required_rendered_probe_failed_pre_existing_version_layout",
+      "failures": [
+        {
+          "file": "source/components/layout/bare-footer-probe.test.tsx",
+          "test": "banner preserves mentor identity at 40 columns",
+          "expected": "Full MENTOR text",
+          "actual": "MENTO clipped beside long 0.36.0-dev+e71e190 version; same failure before rebuild (0.36.0-dev+1a992d8)",
+          "classification": "pre_existing_classic_banner_layout_failure_reproduced_with_exact_base_banner",
+          "evidence": [
+            "/tmp/footer-main-integration-20261024/rendered-probe.log",
+            "/tmp/footer-main-integration-20261024/rebuilt-rendered-probe.log",
+            "/tmp/footer-main-integration-20261024/version-layout-diagnostic.log"
+          ],
+          "notes": "Exact original 56-case probe retained, no relaxed assertions or normalized-version replacement. Separate 2-case diagnostic reproduces same Mentor frame with base Banner under actual main runtime and isolates short vs long version in unchanged ClassicBanner. No layout source repair applied; exact reviewed import preserved."
+        },
+        {
+          "command": "pnpm lint",
+          "exit_code": 1,
+          "signature": "\u2716 9352 problems (9318 errors, 34 warnings)",
+          "classification": "observed_local_untracked_artifact_scan_failure",
+          "notes": "No tracked-file error blocks; Prettier not reached. Separate tracked eslint/prettier pass. No configuration/artifact cleanup or claim that full lint passed.",
+          "evidence": "/tmp/footer-main-integration-20261024/full-lint.log"
+        }
+      ],
+      "comparison": {
+        "classification": "exact_reviewed_footer_import_plus_prior_accepted_schema_with_partial_main_verification",
+        "baseline_commit": "4c2ea9757e6d0ba306c2666482b36a3f5c9086d6",
+        "resolves_run_ids": [],
+        "related_source_run_ids": [
+          "2026-10-24-bare-footer-fixture-setup",
+          "2026-10-24-bare-footer-matched-baseline",
+          "2026-10-24-bare-footer-committed-rendered",
+          "2026-10-24-bare-footer-precommit-floor",
+          "2026-10-24-bare-footer-committed-build",
+          "2026-10-24-bare-footer-committed-static"
+        ],
+        "related_prior_main_run_ids": ["2026-10-24-bare-schema-integrated-main"],
+        "source_file_hashes": {
+          "source/components/layout/Banner.tsx": "0ddc8bc61a8c6177e10288fb1d8251be5db064f70e53a02fa1e12b1fb27be382",
+          "source/components/layout/StatusBar.tsx": "98cd187356c74b495353a96f72e2a3185b98d6b2636c1bc20df57cfc5a9890ab",
+          "source/services/profiles/labels.ts": "2341d377a790054fcf858ec530b0b4f8d93ac2253ac42e75356c0df16b2c82a3",
+          "source/theme/palettes.ts": "064361722c6ed6fe297ba4050049ce31e04577c42c6fdaeffb809e286d67a6b0"
+        },
+        "combined_product_fingerprint_sha256": "4d4daf4150b956504f1001290af4078ea3cb5622629f672b2fe3a23960d4e932",
+        "fingerprint_method": "SHA256 of recursive non-doc git ls-tree entries sorted by path with final newline; current main product tree is exactly prior main overlaid with four accepted source blobs",
+        "notes": "All source/main records retained. Source footer 56/56 and source full lint are scoped historical observations, not passing combined-main results. Earlier bare broad suites are prior source-only evidence; combined product tree is not identical to either isolated source, so no full combined integration/provider/e2e pass is inferred."
+      },
+      "checks": {
+        "controller_review": "User supplied controller review of full four-file diff, no actionable issue; source import authorized. Does not waive new main runtime failure.",
+        "single_authority": "Registry ProfileDefinition.name -> getProfileLabel -> footer/banner presentation casing; competing helper switch and both UI identity maps removed. Mentor base STANDARD + one MENTOR preserved semantically; narrow layout clipping remains.",
+        "diagnosis": {
+          "status": "pre_existing_layout_clipping_reproduced_on_base_under_same_main_runtime",
+          "baseline_commit": "4c2ea9757e6d0ba306c2666482b36a3f5c9086d6",
+          "baseline_banner_sha256": "c7ff87960788650400ccd656976b9e258bd93fad964a8f74808e5447c282a98a",
+          "diagnostic_sha256": "dcbdab881461567d8ba4750655bbdeead0994b862dc47213feb27a7ce3affeb9",
+          "result": {
+            "passed": 2,
+            "failed": 0
+          },
+          "scope": "Temporary exact base Banner copy rendered beside accepted Banner, same actual main build version and real SettingsService. Frames identical at 40 columns. Untouched ClassicBanner short-version vs actual built-version control isolates clipping. This diagnoses a pre-existing narrow-layout defect; not a correction or replacement for the failed required 56-case probe.",
+          "source_changes": "none beyond exact accepted import"
+        },
+        "preservation": "45 prior main run objects plus six footer source observations preserved; 76 committed/82 working tasks; exact task/defect annotation deltas only; six unrelated raw pending rows unchanged unstaged.",
+        "schema_and_edd": "Prior bare source/report, blocked aggregate goal, EDD acceptance/resolutions/frozen documents and raw archive manifest unchanged.",
+        "installed_runtime": {
+          "command": "pnpm build",
+          "entrypoint": "/home/qduc/.local/share/pnpm/bin/term2",
+          "package_realpath": "/home/qduc/term2",
+          "build_info": {
+            "version": "0.36.0-dev+e71e190",
+            "commit": "e71e1903a9ba8290abf6134f34a96d19edc8700f",
+            "release": false,
+            "limitation": null
+          },
+          "bare_prompt_matches_source": true,
+          "compiled_footer_uses_registry_not_identity_maps": true,
+          "panes_restarted": false
+        }
+      },
+      "evidence": [
+        {
+          "kind": "git_commit",
+          "commit": "269728e3a17a7699dbcaafab49c136bb15892f3f"
+        },
+        {
+          "kind": "git_commit",
+          "commit": "c8d9981a8abb2e3bc1607955ed5cd0223aac3dcc"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/footer-main-integration-20261024/integrated-checks.json",
+          "sha256": "4504fe80c01d803a2711a9cbdda04cf5f7d480695c068bfbab192fdf15f2da1e"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/footer-main-integration-20261024/manifest.json"
+        },
+        {
+          "kind": "temporary_probe_retained_outside_checkout",
+          "path": "/tmp/bare-footer-probe-20261024.tsx",
+          "sha256": "bb307aa3cea151172ce291ba08c88dbcbf4716152c3dbee7640f64bee21c03d2"
+        },
+        {
+          "kind": "machine_local_diagnostic_source",
+          "path": "/tmp/footer-main-integration-20261024/version-layout-diagnostic-source.tsx",
+          "sha256": "dcbdab881461567d8ba4750655bbdeead0994b862dc47213feb27a7ce3affeb9"
+        },
+        {
+          "kind": "machine_local_rendered_frames",
+          "directory": "/tmp/footer-main-integration-20261024",
+          "sha256_by_file": {
+            "rendered-frames.jsonl": "d57cc32c0b8655b2b042fa5c89b607d5c02273e76b480d01e3d598986a0c46fa",
+            "rebuilt-rendered-frames.jsonl": "39d9035ba7fc8d069740f648f4ae3f5606df60423e215b74b8f1edf1863a14b3"
+          }
+        }
+      ],
+      "notes": [
+        "Exact reviewed source import is committed, not claimed fully verified: required main 56-case probe is 55 pass/1 fail twice with actual long dev-version identity. Baseline diagnostic establishes this narrow Mentor clipping predates footer import.",
+        "Passed: typecheck, explicit tracked eslint/prettier, 28 static guards in seven files, no-unit-test gate, rollback-aware build and installed CLI version. Two diagnostic tests pass as diagnosis only; they do not resolve the failed probe.",
+        "Bare/Pair footer/banner identity cases pass and unknown/default casing/settings transitions remain exercised. Full UI PTY and exhaustive skin/theme/width combinations are not certified.",
+        "All temporary copies removed before guards/build and after post-build probe. No permanent unit tests, new guard/policy, paid runs, pane kill/restart, stash/hiding or persistent hook/config edits.",
+        "Root cause of original identity bug is multiple sources of truth; structural prevention is deleting competing identity maps, not remembering to update all copies.",
+        "No duplicate completed task or unrelated defect annotation added. Exact original source task/defect rows retained; this later run carries integration status and limits. Unknown effort/usage/cost remains unknown.",
+        "Source build identity references tested import commit, not later metadata-only commit. Aggregate efficiency objective remains blocked/unverified; combined build is not new efficacy evidence."
+      ]
     }
   ]
 }

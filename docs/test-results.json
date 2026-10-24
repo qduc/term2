@@ -4232,6 +4232,461 @@
         "Run on the uncommitted tree before commit. After the run, only use-profile-selection.ts UI copy and docs changed, then lint-staged formatting at commit; profile resolution, prompt, and tool code are identical to the commit.",
         "Machine-local log; may expire."
       ]
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-baseline-integration",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "tree": null,
+      "revision_kind": "clean_baseline",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 218,
+        "failed": 8,
+        "skipped": 1,
+        "files_passed": 20,
+        "files_failed": 4,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "test": "source/cli.integration.test.ts > finishes a provider turn when file logging hits ENOSPC",
+          "diagnostic": "AssertionError: expected 'Profile: full\\n' to contain 'File logging disabled after write fai\u2026'"
+        },
+        {
+          "test": "source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=",
+          "diagnostic": "FAIL  source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=mock-verifier"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > runs a real ConversationService turn and never exposes the fixture broker seam",
+          "diagnostic": "RuntimeFactoryError: gateway runtime factory rejected"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > composes read-only and read-write tool surfaces from the gateway grant",
+          "diagnostic": "RuntimeFactoryError: gateway runtime factory rejected"
+        },
+        {
+          "test": "source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > rejects direct, nested, and subagent writes in a read-only gateway session",
+          "diagnostic": "RuntimeFactoryError: gateway runtime factory rejected"
+        },
+        {
+          "test": "source/gateway/serve.integration.test.ts > term2 serve (child process) > pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid",
+          "diagnostic": "Error: serve exited before readiness (code=1 signal=null)"
+        },
+        {
+          "test": "source/acp-v2/session-backend.integration.test.ts > ACP v2 production backend integration > runs, cancels, and fail-closed-denies a real RuntimeFactory session",
+          "diagnostic": "AssertionError: expected false to be true // Object.is equality"
+        }
+      ],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-repro-unrestricted-integration.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Observed before the final repair. Interim provider run includes incomplete fixture repairs and one additional fixture/host timeout; do not treat it as a clean baseline."
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-baseline-workers",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "tree": null,
+      "revision_kind": "clean_baseline",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "e2e-focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts --reporter=verbose",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 8,
+        "failed": 4,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real source worker after a cached cwd is deleted",
+          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q\u2026' to be '/var/folders/mf/vt165ks97dg5q2h4bh790\u2026' // Object.is equality"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built worker after a cached cwd is deleted",
+          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q\u2026' to be '/var/folders/mf/vt165ks97dg5q2h4bh790\u2026' // Object.is equality"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real source index worker after a cached cwd is deleted",
+          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q\u2026' to be '/var/folders/mf/vt165ks97dg5q2h4bh790\u2026' // Object.is equality"
+        },
+        {
+          "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built index worker after a cached cwd is deleted",
+          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q\u2026' to be '/var/folders/mf/vt165ks97dg5q2h4bh790\u2026' // Object.is equality"
+        }
+      ],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-focus-workers.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Observed before the final repair. Interim provider run includes incomplete fixture repairs and one additional fixture/host timeout; do not treat it as a clean baseline."
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-interim-provider",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": null,
+      "tree": null,
+      "revision_kind": "intermediate_dirty_snapshot_not_retained",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts --reporter=verbose",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 214,
+        "failed": 7,
+        "skipped": 1,
+        "files_passed": 20,
+        "files_failed": 5,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "scripts/provider-black-box/nested-hide.blackbox.ts > P1 nested hide result chain > approves a hidden nested editor through the scripted adapter and preserves result-chain identity",
+          "diagnostic": "AssertionError: expected [] to have a length of 1 but got +0"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > runs a bounded handoff through the real supervisor, private pipe, and built CLI",
+          "diagnostic": "AssertionError:"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > admits input beyond the old universal ceiling when known capacity permits",
+          "diagnostic": "AssertionError:"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=undefined and retains a locator",
+          "diagnostic": "FAIL  scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=warn and retains a locator"
+        },
+        {
+          "test": "scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > session_search through run_code completes canonical fallback in the shipped CLI",
+          "diagnostic": "AssertionError: expected '{\"type\":\"function_call_output\",\"outpu\u2026' to contain 'session-search-fixture'"
+        },
+        {
+          "test": "scripts/provider-black-box/turn-decisions.blackbox.ts > resumes repeated questions once per decision and settles cancellation before the next turn",
+          "diagnostic": "Error: Timed out waiting for PTY child state after 40000ms."
+        }
+      ],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-unrestricted-provider.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Observed before the final repair. Interim provider run includes incomplete fixture repairs and one additional fixture/host timeout; do not treat it as a clean baseline."
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-static",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574",
+      "tree": "09cabd46a56ac9e2a6212308291fb05e680c5b82",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "static-guards",
+      "command": "pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-green-test.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Pre-commit run matches source commit 4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574"
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-integration",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574",
+      "tree": "09cabd46a56ac9e2a6212308291fb05e680c5b82",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 226,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 24,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-green-integration.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Pre-commit run matches source commit 4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574"
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-e2e",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574",
+      "tree": "09cabd46a56ac9e2a6212308291fb05e680c5b82",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 4,
+        "files_passed": 5,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-green-e2e.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Pre-commit run matches source commit 4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574"
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-provider",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574",
+      "tree": "09cabd46a56ac9e2a6212308291fb05e680c5b82",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts --reporter=verbose",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 221,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 25,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-accepted-provider.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Pre-commit run matches source commit 4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574"
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-independent-completion",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574",
+      "tree": "09cabd46a56ac9e2a6212308291fb05e680c5b82",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "integration-focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/completion-verification/completion-verification.integration.test.ts --reporter=verbose",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-independent-completion.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Pre-commit run matches source commit 4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574"
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-independent-provider",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574",
+      "tree": "09cabd46a56ac9e2a6212308291fb05e680c5b82",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "base_commit": "86b6eae7f4854ec4621d5a1554429b9709cd3b93",
+      "suite": "provider-focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-ordinary-safety.blackbox.ts scripts/provider-black-box/nested-hide.blackbox.ts --reporter=verbose",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "evidence": [
+        {
+          "path": "/tmp/term2-independent-provider.log",
+          "notes": "Machine-local output; concise counts and failure names retained here."
+        }
+      ],
+      "notes": "Pre-commit run matches source commit 4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574"
+    },
+    {
+      "id": "2026-10-24-fix-failing-tests-floor-and-independent-picker",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "4a03d5fcc5c6c0a2e43b91efaf1c72b7adf60574",
+      "tree": "09cabd46a56ac9e2a6212308291fb05e680c5b82",
+      "revision_kind": "pre_commit_dirty_snapshot_of_source_commit",
+      "suite": "build-static-and-pty",
+      "command": "pnpm build; pnpm typecheck; pnpm lint; pnpm check:no-unit-tests; independent real PTY picker and headless Node import-hook probe",
+      "command_complete": true,
+      "environment": {
+        "os": "Darwin 25.6.0 (macOS arm64)",
+        "node_version": "v24.16.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Own worktree pnpm install; loopback providers only. Broad integration/e2e/provider runs require PTY, process inspection and nested sandbox permissions."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-fix-failing-tests"],
+      "notes": "Commands were executed separately. Build/typecheck/no-unit gate passed; lint passed with 31 warnings and zero errors. Independent verifier rendered and selected fixture model through a real PTY (exit 0), piped stdio cancelled (exit 0), and Node registerHooks denied ink/yoga resolution while built-host import/eligibility/headless cancellation passed. No permanent unit tests added. Linux supervisor success branch unrun on this host; macOS asserts exit 1, unsupported_platform, zero provider requests. Design friction: none; UI imports stay local behind the existing TTY guard.",
+      "evidence": [
+        {
+          "path": "/tmp/term2-final-build.log"
+        },
+        {
+          "path": "/tmp/term2-final-typecheck.log"
+        },
+        {
+          "path": "/tmp/term2-final-lint.log"
+        },
+        {
+          "path": "/tmp/term2-final-check-no-unit-tests.log"
+        }
+      ]
     }
   ]
 }

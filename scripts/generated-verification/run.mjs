@@ -5,6 +5,19 @@ import { writeFileSync } from 'node:fs';
 import fc from 'fast-check';
 import { historyProperties } from './history.mjs';
 import { queueProperties } from './queue.mjs';
+import { compactionProperties } from './compaction.mjs';
+import { continuityProperties } from './continuity.mjs';
+import { journalProperties } from './journal.mjs';
+import { opaqueProperties } from './opaque.mjs';
+
+const targets = {
+  history: historyProperties,
+  queue: queueProperties,
+  compaction: compactionProperties,
+  continuity: continuityProperties,
+  journal: journalProperties,
+  opaque: opaqueProperties,
+};
 
 // No provider, credential, model, or network dependency: only production APIs
 // and fast-check. JSON on stdout is the durable replay/evaluation artifact.
@@ -22,7 +35,7 @@ try {
   });
   if (values.help) {
     console.log(
-      'pnpm verify:generated [--target all|history|queue] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
+      'pnpm verify:generated [--target all|history|queue|compaction|continuity|journal|opaque] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
     );
   } else {
     const runs = Number(values.runs);
@@ -33,13 +46,8 @@ try {
       (seed !== undefined && (!Number.isInteger(seed) || seed < -2147483648 || seed > 2147483647))
     )
       throw new Error('runs must be a positive safe integer; seed must be int32');
-    if (!['all', 'history', 'queue'].includes(values.target)) throw new Error('unknown target');
-    let properties =
-      values.target === 'history'
-        ? historyProperties
-        : values.target === 'queue'
-        ? queueProperties
-        : [...historyProperties, ...queueProperties];
+    if (values.target !== 'all' && !Object.hasOwn(targets, values.target)) throw new Error('unknown target');
+    let properties = values.target === 'all' ? Object.values(targets).flat() : targets[values.target];
     if (values.property) properties = properties.filter((p) => p.name === values.property);
     if (!properties.length) throw new Error('unknown property for target');
     if (values.path !== undefined && (properties.length !== 1 || seed === undefined))

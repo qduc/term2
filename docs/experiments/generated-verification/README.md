@@ -16,10 +16,9 @@ pnpm verify:generated --help
 ```
 
 The default is 1,000 cases per property, with at most 30 generated actions or
-entries per case. An entry can invoke several ledger methods. These are
-sampling budgets, not exhaustive coverage or a proof. No credentials, provider,
-model, or network calls are used by the checker. Production code runs in process;
-the queue driver only records dispatches at the external executor boundary.
+entries per case. An entry can invoke several production methods or expand into several transcript items. These are
+sampling budgets, not exhaustive coverage or a proof. No credentials, external provider/model calls, or network calls are used by the checker. Production code runs in process;
+the queue driver only records dispatches at the external executor boundary. Opaque checks run real adapters with an in-memory SDK-client boundary that captures the serialized request.
 
 JSON stdout records revision/dirty state, seed, counts, shrinks, elapsed checker
 time and minimized failures. `--output FILE` also saves JSON, refusing to overwrite
@@ -64,9 +63,32 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   empty saved pauses must admit fresh work, while nonempty saved queues retain
   their payloads and pause reason without replay on construction.
 
+- `compaction.plan-cut`: generates genuine/synthetic user turns, parallel settled
+  rounds, reordered results, payload sizes and optional trailing unpaid calls.
+  Checks settled cut boundaries, exact prefix/tail partition, genuine-user
+  preservation and nonmutation, not which heuristic cut is selected.
+- `compaction.unsafe-pairs`: duplicate call identities and orphan results must
+  produce the planner's documented blocked outcome without mutation.
+- `continuity.debt-filter`: authoritative accepted segments feed real continuity
+  debt into chained filtering. Checks exact selected outputs/order, missing and
+  known-call orphan errors, debt retirement on new-user/reset/chaining-break,
+  and stale-lineage candidate refusal after reset.
+- `journal.reconstruction`: supported journal events reconstruct per-(turn,call)
+  identity, statuses, JSON payloads, reasoning ownership and deterministic order,
+  including call IDs reused across turns. Checks nonmutation and snapshot history
+  isolation; not filesystem durability or executing recovered effects.
+- `opaque.lane-isolation`: sentinel-bearing native payloads pass through real
+  OpenAI/Grok Responses and Chat Completions adapters plus the Codex converter.
+  Foreign lanes cannot reach captured SDK input; compatible own payloads and
+  ordinary content survive. Responses/Codex backend-origin pins are checked.
+  Chat checks lane tags only. Disputed legacy `openai-compatible` -> Grok
+  acceptance is excluded, not approved or changed.
+
 Not covered: parallel command interleavings, persistence failures, approvals,
-steering, provider transports, multi-call chat envelopes, full journal/crash recovery, reused-call reopening policy, or
-arbitrary malformed inputs. Passing does not establish these behaviors.
+steering, real provider transports, multi-call chat envelopes, full journal/crash
+recovery, reused-call reopening policy, arbitrary malformed inputs, compaction
+summary quality, full continuity selection, or disputed opaque compatibility.
+Passing does not establish these behaviors.
 
 Add a property only for a named supported contract and a meaningful generated
 space. Keep runtime bounded, shrinks readable and failure output reproducible.
@@ -75,6 +97,7 @@ integration, e2e, provider, or independent checks. Pilot acceptance and evidence
 are tracked in [PLAN.md](PLAN.md).
 
 The ledger rollout evidence and limits are in [LEDGER-PLAN.md](LEDGER-PLAN.md).
-The default now samples five properties (5,000 cases total); `--target history`
+The remaining hotspot rollout is tracked in [HOTSPOTS-PLAN.md](HOTSPOTS-PLAN.md).
+The default now samples ten properties (10,000 cases total); `--target history`
 samples the three history properties. A recorded replay can report fewer cases
 because it continues from a shrunk path, not a fresh full seed run.

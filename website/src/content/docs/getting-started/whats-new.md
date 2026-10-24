@@ -7,6 +7,17 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 0.37.0 - October 24, 2026
+
+- Local context compaction prefers a one-shot summary over the live request prefix when the conversation fits the input window, preserving prompt-cache and transport affinity on Codex, Grok, and OpenCode while keeping the serialized chunk reducer as the fallback for larger histories.
+- Local context compaction caps the verbatim hot tail at 16,000 tokens (keeping at least the newest settled round when a single round exceeds the budget) and renders up to 40 recent tool receipts as a one-line digest outside `<summary>`.
+- The Bare profile advertises a foreground-only `shell` schema and batching guidance while keeping the full canonical schema for runtime normalization and approval checks.
+- The interactive banner and status bar read profile labels (`Bare`, `Pair`, etc.) directly from the built-in profile registry instead of falling back to `Standard`.
+- Native Codex freeform `apply_patch` tool calls pass `{ patch }` to match the canonical tool schema instead of failing validation before writing.
+- `/resume` and `term2 --resume` sort session files by modification time before reading and stop full log parsing once the requested limit is filled.
+
+See the [0.37.0 changelog](https://github.com/qduc/term2/blob/v0.37.0/CHANGELOG.md) for details.
+
 ## 0.36.0 - October 23, 2026
 
 - The Bare profile now includes the skills catalog (`activate_skill`) and environment context.
@@ -107,4 +118,4 @@ This documentation site builds from `main`, so it can describe work ahead of the
 
 The `web-client/` application is separate from this documentation site and connects through the private `term2 serve` gateway. Follow [gateway setup](/term2/remote/web-gateway/) for integration requirements.
 
-For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 0.34.0, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v0.34.0...main).
+For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 0.37.0, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v0.37.0...main).

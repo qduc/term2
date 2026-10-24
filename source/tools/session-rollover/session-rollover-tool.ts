@@ -29,7 +29,7 @@ export function createSessionRolloverToolDefinition(
   return {
     name: 'session_rollover',
     description:
-      'Request an idle-boundary rotation into a fresh session. ' +
+      'Request a session rollover only when a system reminder prompts you to consider it or the user explicitly asks for one. Do not initiate rollover on your own. ' +
       'Before calling, save state the successor must not lose and the brief cannot hold (plans, findings, task state) to a durable artifact in the workspace, such as a plan doc, notes file, or commit, and point to it from the brief. Do not use /tmp for this; it does not survive a reboot. ' +
       'The brief is the only context the successor starts with, so write it for a capable engineer with no memory of this session:\n' +
       '- Goal and done condition, plus user constraints and preferences that still apply.\n' +

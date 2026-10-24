@@ -1,0 +1,37 @@
+[
+  {
+    "command": "node --check scripts/generated-verification/ledger.mjs",
+    "exit": 0,
+    "wallSeconds": 0.019672831054776907,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+    "log": "docs/experiments/generated-verification/checks/ledger/syntax.log"
+  },
+  {
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "wallSeconds": 3.0537648610770702,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+    "log": "docs/experiments/generated-verification/checks/ledger/types.log"
+  },
+  {
+    "command": "pnpm test",
+    "exit": 0,
+    "wallSeconds": 3.0511067137122154,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+    "log": "docs/experiments/generated-verification/checks/ledger/static.log"
+  },
+  {
+    "command": "pnpm build",
+    "exit": 0,
+    "wallSeconds": 3.7698917579837143,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+    "log": "docs/experiments/generated-verification/checks/ledger/build.log"
+  },
+  {
+    "command": "pnpm lint",
+    "exit": 0,
+    "wallSeconds": 38.06722631119192,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+    "log": "docs/experiments/generated-verification/checks/ledger/lint.log"
+  }
+]

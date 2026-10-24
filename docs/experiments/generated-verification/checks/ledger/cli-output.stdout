@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 100,
+  "maxSequenceLength": 30,
+  "runtimeMs": 102.512224,
+  "results": [
+    {
+      "property": "history.ledger-settlement",
+      "failed": false,
+      "seed": 19,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 27.509975999999995,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.ledger-reconciliation",
+      "failed": false,
+      "seed": 19,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 49.09212200000002,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.pair-projection",
+      "failed": false,
+      "seed": 19,
+      "path": null,
+      "cases": 100,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 25.871331999999995,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

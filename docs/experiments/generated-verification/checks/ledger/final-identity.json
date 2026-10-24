@@ -1,0 +1,15 @@
+{
+  "revision": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+  "files": {
+    "scripts/generated-verification/ledger.mjs": "89764f679d5670ee7c3d04451439365657118ea87b6d159972ff170ff0194cda",
+    "scripts/generated-verification/history.mjs": "85c32fd252ab8cbf62fbda5d6efbe3b3ef57f1e21212747aa0fb3292904c64d5",
+    "scripts/generated-verification/run.mjs": "92b2c5989b46915a819784b56d84f70a5f04aeabc3a05df5ca0bc3716cd32c13",
+    "source/services/tool-execution-ledger.ts": "426f07f40a127dd0f4262c2332c4a462c49ba74b22da3668351779585af59b36",
+    "source/services/conversation/conversation-state-projector.ts": "01fa7aed68aba8e347aee045620f936a9ae9c41e315a4c7e558c9785ceab72bf",
+    "pnpm-lock.yaml": "f9b0e87783a46e0c66aed30a35c79073e8b3d915331ffef8d1f289331c02fd6f"
+  },
+  "productionUnchanged": true,
+  "independentSession": "8d752a0d-fa66-47e8-9a7d-faa35d2a3de1",
+  "reportedSessionCostUSD": 1.1182691999999999,
+  "costNote": "Final cumulative session-reported list-price amount; do not add overlapping earlier response amount. Actual billing and author totals unknown."
+}

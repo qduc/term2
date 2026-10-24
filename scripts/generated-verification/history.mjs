@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
+import { ledgerProperties } from './ledger.mjs';
 import { projectProviderHistory } from '../../source/services/conversation/conversation-state-projector.ts';
 
 // projectProviderHistory's contract: stateless, non-mutating, idempotent;
 // dropUnpairedFunctionCalls: retain complete pairs, discard orphan sides.
 export const historyProperties = [
+  ...ledgerProperties,
   {
     name: 'history.pair-projection',
     property: fc.property(

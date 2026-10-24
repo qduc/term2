@@ -1,0 +1,59 @@
+[
+  {
+    "command": ["pnpm", "verify:generated", "--seed", "424242"],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 2.451360012870282,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c"
+  },
+  {
+    "command": ["pnpm", "verify:generated", "--property", "history.ledger-settlement", "--seed", "17"],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.4210795974358916,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c"
+  },
+  {
+    "command": ["pnpm", "verify:generated", "--target", "queue", "--property", "history.ledger-settlement"],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.2469591409899294,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c"
+  },
+  {
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "history",
+      "--runs",
+      "100",
+      "--seed",
+      "19",
+      "--output",
+      "docs/experiments/generated-verification/checks/ledger/cli-output.stdout"
+    ],
+    "exit": 0,
+    "expectedExit": 0,
+    "wallSeconds": 1.2619380340911448,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c"
+  },
+  {
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "history.ledger-reconciliation",
+      "--runs",
+      "1",
+      "--output",
+      "docs/experiments/generated-verification/checks/ledger/cli-output.stdout"
+    ],
+    "exit": 2,
+    "expectedExit": 2,
+    "wallSeconds": 1.0585321709513664,
+    "revision": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+    "sha256Before": "6d5e08eea1c6ba1503f419064d4d95657b8299ac639d2cfece784151ef7af79e",
+    "sha256After": "6d5e08eea1c6ba1503f419064d4d95657b8299ac639d2cfece784151ef7af79e"
+  }
+]

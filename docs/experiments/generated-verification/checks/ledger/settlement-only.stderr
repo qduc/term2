@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property history.ledger-settlement --seed 17

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "revision": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 18.160539,
+  "results": [
+    {
+      "property": "history.ledger-reconciliation",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 57,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 18.138438000000008,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

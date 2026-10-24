@@ -1,0 +1,22 @@
+[
+  {
+    "command": ["pnpm", "verify:generated", "--seed=424242", "--runs", "10000"],
+    "exit": 0,
+    "wallSeconds": 8.065674182027578
+  },
+  {
+    "command": ["pnpm", "verify:generated", "--seed=1", "--runs", "10000"],
+    "exit": 0,
+    "wallSeconds": 8.01488506468013
+  },
+  {
+    "command": ["pnpm", "verify:generated", "--seed=20261024", "--runs", "10000"],
+    "exit": 0,
+    "wallSeconds": 8.372778983786702
+  },
+  {
+    "command": ["pnpm", "verify:generated", "--seed=-2147483648", "--runs", "10000"],
+    "exit": 0,
+    "wallSeconds": 8.306463764980435
+  }
+]

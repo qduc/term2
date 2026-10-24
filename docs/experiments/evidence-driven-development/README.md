@@ -68,6 +68,18 @@ look worse just because more shipped.
 A defect counts whenever it is found, including after the experiment ends, as long as it traces to a task
 completed during it.
 
+### Accepted continuation, 2026-10-24
+
+Human decision on the [interim assessment](interim-results-2026-10-24.md):
+**"Continue with measurement and verification improvements."** The experiment remains running under
+the same ending rule, rollback triggers and no-permanent-unit-test constraint. Neither reduced total
+cost nor equivalent quality was established.
+
+[Continuation evidence and open acceptance work](continuation-2026-10-24.json) records the decision,
+source revisions, a worked measurement example and three targeted verification follow-ups. The interim
+report/data remain frozen at 2026-10-24 06:53:25 +07. Later evidence is recorded separately, not used to
+rewrite that cohort or silently close its acceptance gaps.
+
 ### Task record
 
 ```json
@@ -81,6 +93,64 @@ when they don't (discovering methods is part of the experiment): `typecheck`, `l
 `non-interactive-run`, `trace-inspection`, `log-inspection`, `browser-automation`, `fault-injection`,
 `before-after-comparison`, `independent-review`.
 
+#### Measurement annotations for new records
+
+Keep the existing fields. Add this optional `measurement` object to new task records (or task-linked
+verification runs in `docs/test-results.json`); historical rows need no migration:
+
+```json
+{
+  "measurement": {
+    "activity": "delivery",
+    "sessions": [
+      {"id": null, "role": "author", "agent": null, "locator": null}
+    ],
+    "completion": {
+      "status": "verification-pending",
+      "author_completed_at": null,
+      "accepted_at": null,
+      "accepted_commit": null,
+      "evidence_run_ids": []
+    },
+    "effort": [
+      {"actor": "author", "phase": "implementation", "metric": "active_minutes", "value": null, "basis": "unknown", "source": null, "session_id": null}
+    ],
+    "observed_through": null,
+    "followup_source": null,
+    "related_task_ids": [],
+    "unknowns": ["Verifier, rework and human effort; tokens and monetary cost not recorded"]
+  }
+}
+```
+
+- Use a stable task `id`; link verification runs with `task_ids`. Record actual persisted session IDs
+  and their log/artifact locators, role and provider/model when available. A pane ID, hash mention or
+  whole-session token counter does not establish task attribution; otherwise leave the ID `null`.
+- `activity` distinguishes `delivery`, `study`, `verification` and `docs`. `completion.status` is
+  `author-complete`, `verification-pending`, `accepted` or `rejected`. Retain old `verified_at` values;
+  for new rows, do not use author completion as high-risk acceptance. An `accepted` high-risk record
+  still requires the existing independent-verification and failure-path evidence, exact revision and
+  evidence-run links. Unknown acceptance time stays `null`, not an invented timestamp.
+- Effort entries name an `actor` (`author`, `verifier`, `human`), `phase` (`implementation`,
+  `verification`, `rework`, `coordination`), `metric` (`active_minutes`, `wall_seconds`, `tokens`,
+  `cost_usd`), `value`, `basis` (`observed`, `estimate`, `unknown`) and source field/artifact.
+  Keep author verification separate from implementation; include independent verifier, failed
+  attempts, rework and human effort where observable. Link later repair tasks rather than charging
+  their usage twice. For estimates, state the estimation/pricing/cache assumptions in `source`.
+- `null`, an absent field or an empty observation list means **unavailable**, never zero. Use zero
+  only for a supported observation of none. List unobserved phases/metrics in `unknowns`; do not
+  infer cost from missing usage or classify a passing rerun as measured repair work.
+- Do not sum overlapping session/turn counters or add command wall time, active effort and the
+  `started_at` → `verified_at` span together. Keep legacy `verification.minutes/tokens` for
+  compatibility, with their scope in `notes`; the annotations are a breakdown, not additional spend.
+  Report known-only denominators, observation/estimate coverage and activity/risk mix in comparisons.
+- Record timestamps with timezone and flag inconsistent clocks. `observed_through` and
+  `followup_source` describe the last actual defect follow-up and its surveillance scope, not the
+  record-writing date or a guarantee of no defects. Unknown follow-up stays `null`, including for
+  tasks with no reported defects. For later acceptance/corrections, append a task-linked
+  resolving run to `docs/test-results.json` (use `comparison.resolves_run_ids` when known); preserve
+  old rows and verdicts. Do not duplicate an existing task as a new completed delivery.
+
 ### Defect record
 
 ```json
@@ -89,6 +159,34 @@ when they don't (discovering methods is part of the experiment): `typecheck`, `l
 
 `found_by` is one of `user | agent | ci | verifier`. `kind` is `regression` (something that used to work
 broke) or `defect` (new behavior was wrong). Set `task` to `null` when the cause is unknown.
+
+For new defect records, also record `recorded_at`, `discovery_phase` (`before-acceptance`,
+`after-acceptance`, `unknown`), `repair_task` (or `null`), `evidence_run_ids`, and
+`attribution` (`confidence`, `reason`, `completion_evidence`, `observed_through`).
+`task` identifies the **introducing** task, not the repair; do not infer it merely from shared files.
+Distinguish product, fixture/environment and coverage findings in `attribution.reason`; preserve the
+existing `kind` rather than counting assertions as separate regressions. Completion/discovery evidence
+must support the phase; unknown origin, phase, reporting time or follow-up end stays `null`/`unknown`.
+Pre-acceptance findings belong in task-linked verification runs, not escaped-defect totals.
+Historical mixed-phase rows remain observations, not silently relabelled escapes. Append subsequent
+linkage corrections in a resolving verification record referencing the defect ID and original evidence.
+
+Optional fields to copy alongside the existing defect fields:
+
+```json
+{
+  "recorded_at": null,
+  "discovery_phase": "unknown",
+  "repair_task": null,
+  "evidence_run_ids": [],
+  "attribution": {
+    "confidence": "unknown",
+    "reason": null,
+    "completion_evidence": null,
+    "observed_through": null
+  }
+}
+```
 
 ## Baseline
 

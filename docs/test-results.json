@@ -356,6 +356,352 @@
         "Only unrelated tasks.jsonl rows were dirty during this run; committed source and test files matched HEAD. This is not a claim of a wholly clean checkout.",
         "No deadlines or approval policies changed. Native macOS/Windows and abrupt runner termination cleanup remain untested."
       ]
+    },
+    {
+      "id": "2026-10-24-no-unit-test-interim-docs-dirty",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:08:40.620825+00:00",
+      "commit": null,
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "revision_kind": "dirty_pre_commit_snapshot",
+      "suite": "documentation-evidence",
+      "command": "python3 /tmp/nut_validate.py; pnpm exec prettier --check docs/experiments/evidence-driven-development/interim-results-2026-10-24.md docs/experiments/evidence-driven-development/interim-results-2026-10-24.json; node scripts/check-no-unit-tests.mjs; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "python_version": "3.12.3",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Dedicated assessment worktree, automatically bootstrapped local dependencies on formatting command; read-only source assessment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "checks": {
+        "arithmetic_reference_groups_passed": 7,
+        "prettier": "passed after correction",
+        "whitespace": "passed",
+        "no_unit_tests": "passed",
+        "product_suites": "not_run"
+      },
+      "snapshot_checksums": [
+        {
+          "file": "docs/experiments/evidence-driven-development/interim-results-2026-10-24.md",
+          "sha256": "600e306585bb3014b072161e073e76ccfd4651b3ce3c154c988c522b51362ddb"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/interim-results-2026-10-24.json",
+          "sha256": "ea6981eb6355586643e91e81996b3e15d52fd2aac0e80133f39cf2d354c33cf0"
+        }
+      ],
+      "failures": [],
+      "resolved_check_failures": [
+        {
+          "command": "pnpm exec prettier --check <assessment.md> <assessment.json>",
+          "exit_code": 1,
+          "signature": "Code style issues found in interim-results-2026-10-24.json",
+          "resolution": "Formatted JSON; final two-file check passed."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/no-unit-test-assessment-20261024/validation.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/no-unit-test-assessment-independent-review-20261024.md"
+        }
+      ],
+      "notes": [
+        "Documentation checks only; null result counts do not imply product tests ran.",
+        "Fresh independent evidence reviewer accepted with limitations, no must-fix; reviewed hashes and subsequent author changes are explicitly recorded in assessment JSON.",
+        "Frozen outcome rows exclude this assessment; six pending primary rows are not part of this branch commit.",
+        "Source commit identity will be recorded in a subsequent documentation verification entry."
+      ]
+    },
+    {
+      "id": "2026-10-24-no-unit-test-interim-source-identity",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:10:59.907584+00:00",
+      "commit": "a16932878b6401277a4bfebde16bedc1a390b3e9",
+      "revision_kind": "committed_content_identity_check",
+      "base_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+      "suite": "documentation-evidence",
+      "command": "python3 /tmp/nut_postcommit.py",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "python_version": "3.12.3",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "checks": {
+        "committed_report_and_data_match_verified_dirty_snapshot": "passed",
+        "supporting_data_unchanged_after_commit": "passed"
+      },
+      "snapshot_checksums": [
+        {
+          "file": "docs/experiments/evidence-driven-development/interim-results-2026-10-24.md",
+          "sha256": "600e306585bb3014b072161e073e76ccfd4651b3ce3c154c988c522b51362ddb"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/interim-results-2026-10-24.json",
+          "sha256": "ea6981eb6355586643e91e81996b3e15d52fd2aac0e80133f39cf2d354c33cf0"
+        }
+      ],
+      "failures": [],
+      "comparison": {
+        "classification": "source_commit_identified",
+        "baseline_commit": null,
+        "resolves_run_ids": ["2026-10-24-no-unit-test-interim-docs-dirty"],
+        "notes": "Confirms prior pre-commit checks apply to exact report/data contents committed at this revision. Not a post-commit product-suite run or a clean runtime claim."
+      },
+      "notes": [
+        "Records source commit in later documentation commit, preserving prior dirty-snapshot history.",
+        "This follow-up also clarifies temporary-script wording in the report; final focused arithmetic/reference, format and whitespace checks were rerun. No metric or recommendation changed.",
+        "Only assessment docs/records changed on this branch; no primary pending rows were staged or committed."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-continuation-docs-dirty",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:22:40.905322+00:00",
+      "commit": null,
+      "base_commit": "8d8608db61642808542412a8b4b292d3b42e81e7",
+      "revision_kind": "dirty_pre_commit_snapshot",
+      "suite": "documentation-evidence",
+      "task_ids": ["2026-10-24-edd-continuation-measurement-guidance"],
+      "command": "python3 /tmp/edd_continuation_check.py; pnpm exec prettier --check docs/experiments/evidence-driven-development/README.md docs/experiments/evidence-driven-development/continuation-2026-10-24.json; node scripts/check-no-unit-tests.mjs; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "python_version": "3.12.3",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Dedicated existing assessment worktree; document/data inspection only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "checks": {
+        "document_data_groups_passed": 7,
+        "historical_jsonl_compatibility": "annotations applied to copy; historical fields preserved",
+        "worked_example": "two exact retained run projections, 287.121 observed command-wall seconds; total cost remains null",
+        "prettier": "passed",
+        "no_unit_tests": "passed",
+        "whitespace": "passed",
+        "product_suites": "not_run",
+        "high_risk_gaps_closed": 0
+      },
+      "snapshot_checksums": [
+        {
+          "file": "docs/experiments/evidence-driven-development/README.md",
+          "sha256": "e40c4a93cdefd457d92c6219c562c2357b22902c6827eb0b5589d9d5ed952582"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/continuation-2026-10-24.json",
+          "sha256": "f19b1daf42871f5fbbe5cd439784766629aee54293ed824dffbda4bf06b9b3b5"
+        }
+      ],
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-continuation-20261024-validation.json"
+        },
+        {
+          "kind": "git_commit",
+          "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+          "path": "docs/test-results.json"
+        },
+        {
+          "kind": "tracked",
+          "path": "docs/experiments/evidence-driven-development/continuation-2026-10-24.json"
+        }
+      ],
+      "notes": [
+        "Documentation checks, not product test counts; null results do not imply suites ran.",
+        "Human approved measurement/verification improvements, not restoration or policy relaxation. Interim report/data byte-identical to prior commit.",
+        "Later main run evidence is recorded in the continuation artifact without copying unrelated primary ledger rows into this branch.",
+        "No independent agent launch required for this low-risk docs follow-up. Three high-risk follow-ups require separate non-implementing verifiers.",
+        "Source commit will be identified in a later documentation entry."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-continuation-committed",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:24:45.020044+00:00",
+      "commit": "fd21b0c493cbc9d6c8cd596f3c2581832c2e79ce",
+      "tree": "37c4ab1b56ab7b92ac0d02c40e7b1a8d321cd3cc",
+      "revision_kind": "clean_commit",
+      "base_commit": "8d8608db61642808542412a8b4b292d3b42e81e7",
+      "suite": "documentation-evidence",
+      "task_ids": ["2026-10-24-edd-continuation-measurement-guidance"],
+      "command": "python3 /tmp/edd_continuation_check.py; pnpm exec prettier --check docs/experiments/evidence-driven-development/README.md docs/experiments/evidence-driven-development/continuation-2026-10-24.json docs/test-results.json; node scripts/check-no-unit-tests.mjs; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "python_version": "3.12.3",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Dedicated existing assessment worktree; document/data inspection only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "checks": {
+        "document_data_groups_passed": 7,
+        "historical_jsonl_compatibility": "annotations applied to copy; historical fields preserved",
+        "worked_example": "two exact retained run projections, 287.121 observed command-wall seconds; total cost remains null",
+        "prettier": "passed",
+        "no_unit_tests": "passed",
+        "whitespace": "passed",
+        "product_suites": "not_run",
+        "high_risk_gaps_closed": 0
+      },
+      "snapshot_checksums": [
+        {
+          "file": "docs/experiments/evidence-driven-development/README.md",
+          "sha256": "e40c4a93cdefd457d92c6219c562c2357b22902c6827eb0b5589d9d5ed952582"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/continuation-2026-10-24.json",
+          "sha256": "f19b1daf42871f5fbbe5cd439784766629aee54293ed824dffbda4bf06b9b3b5"
+        }
+      ],
+      "failures": [],
+      "comparison": {
+        "classification": "verified_committed_documentation",
+        "baseline_commit": "8d8608db61642808542412a8b4b292d3b42e81e7",
+        "resolves_run_ids": ["2026-10-24-edd-continuation-docs-dirty"],
+        "notes": "Same document/data checks rerun on clean committed source. No product suites and no closure of high-risk acceptance work."
+      },
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-continuation-20261024-validation.json"
+        },
+        {
+          "kind": "git_commit",
+          "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+          "path": "docs/test-results.json"
+        },
+        {
+          "kind": "tracked",
+          "path": "docs/experiments/evidence-driven-development/continuation-2026-10-24.json"
+        }
+      ],
+      "notes": [
+        "Source commit recorded in later documentation commit. Historical verification entries and task rows preserved.",
+        "Clean_commit describes the tested source revision before this append; it is not a claim of product-suite execution.",
+        "Main run IDs published at 36b490f2 remain separate evidence referenced in the continuation artifact; merge indices by stable run id during controller integration."
+      ]
+    },
+    {
+      "id": "2026-10-24-edd-main-integration-dirty",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T00:34:30.473337+00:00",
+      "commit": null,
+      "base_commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "source_commit": "18efe5a52c33cd3ccb4fe0b78ffb19af8c64947d",
+      "revision_kind": "dirty_pre_commit_snapshot",
+      "suite": "documentation-evidence",
+      "task_ids": ["2026-10-24-edd-continuation-measurement-guidance", "2026-10-24-no-unit-test-interim-assessment"],
+      "command": "python3 /tmp/edd_main_check_20261024.py --staged; pnpm --dir /home/qduc/term2 exec prettier --check docs/experiments/evidence-driven-development/README.md docs/experiments/evidence-driven-development/interim-results-2026-10-24.md docs/experiments/evidence-driven-development/interim-results-2026-10-24.json docs/experiments/evidence-driven-development/continuation-2026-10-24.json docs/test-results.json; pnpm --dir /home/qduc/term2 exec node scripts/check-no-unit-tests.mjs; git -C /home/qduc/term2 diff --cached --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "python_version": "3.12.3",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Primary main checkout; six unrelated pending task rows intentionally unstaged. Narrow staging, no stash/hide of unrelated work."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "checks": {
+        "source_blob_parity": "passed",
+        "main_run_objects_preserved": "passed",
+        "stable_run_ids": "passed",
+        "only_two_own_task_rows_staged": "passed",
+        "unrelated_row_raw_hashes": "passed",
+        "json_templates_and_example": "passed",
+        "product_suites": "not_run",
+        "high_risk_gaps_closed": 0
+      },
+      "snapshot_checksums": [
+        {
+          "file": "docs/experiments/evidence-driven-development/README.md",
+          "sha256": "e40c4a93cdefd457d92c6219c562c2357b22902c6827eb0b5589d9d5ed952582"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/interim-results-2026-10-24.md",
+          "sha256": "1c52c2a02b6c631451b2686982d81f9f04e7406cd600c630705ea1324c9d1235"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/interim-results-2026-10-24.json",
+          "sha256": "ea6981eb6355586643e91e81996b3e15d52fd2aac0e80133f39cf2d354c33cf0"
+        },
+        {
+          "file": "docs/experiments/evidence-driven-development/continuation-2026-10-24.json",
+          "sha256": "f19b1daf42871f5fbbe5cd439784766629aee54293ed824dffbda4bf06b9b3b5"
+        }
+      ],
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-main-integration-20261024/manifest.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/edd-main-integration-20261024/validation-staged.json"
+        },
+        {
+          "kind": "git_commit",
+          "commit": "18efe5a52c33cd3ccb4fe0b78ffb19af8c64947d"
+        }
+      ],
+      "notes": [
+        "Controller reviewed measurement/defect annotations and continuation structure: no must-fix.",
+        "Union by stable run id retains all four original main observations and four distinct lane documentation observations unchanged.",
+        "Historical cutoff and inconclusive finding remain unchanged. Controller dispatched three acceptance follow-ups to w1:p3Z; dispatch is not acceptance and all three remain open.",
+        "Required lint-staged and no-unit-test gates run through a command-local hook with --no-stash --no-hide-partially-staged --fail-on-changes. No permanent hook/config change.",
+        "This is documentation integration, not a new experimental implementation task. Source commit will be indexed in a later documentation entry."
+      ]
     }
   ]
 }

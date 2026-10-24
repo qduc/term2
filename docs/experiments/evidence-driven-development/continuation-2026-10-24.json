@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-24T00:22:39.840485+00:00",
+  "human_decision": "Continue with measurement and verification improvements.",
+  "policy_unchanged": {
+    "end_rule": "later of 2026-11-05 or 30 completed tasks",
+    "permanent_unit_tests": "prohibited",
+    "high_risk_independent_verification": "required"
+  },
+  "source_reconciliation": {
+    "interim_source_commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+    "interim_artifact_commit": "8d8608db61642808542412a8b4b292d3b42e81e7",
+    "interim_cutoff": "2026-10-24T06:53:25+07:00",
+    "interim_findings": "Total effort reduction and quality equivalence unresolved; 71 committed activities / 43 reported deliveries, six linked product/coverage findings across four tasks. No original observations reclassified.",
+    "followup_main_commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+    "read_at": "2026-10-24T00:22:39.844235+00:00",
+    "agents_sha256": "aa44fd3a451b79718c1a9e35488e9a5f78cab5fba683bb0843c3cb2eee51da5e",
+    "main_test_results_sha256": "98f13edff5990a560a56a33c9ea39e2740adbe60f2bf9503b47831cd733e1ea9",
+    "later_run_ids": ["2026-10-24-integration-main-12dabc92-first", "2026-10-24-integration-main-12dabc92-rerun"],
+    "interpretation": "These records were published after the frozen source snapshot. The passing full rerun finished at 2026-10-23T23:54:34Z, after the interim cutoff; it supplements rather than rewrites the assessment. It closes no logging/rollover/adaptive-fix acceptance gap.",
+    "index_compatibility": "Main has two additional integration run IDs; lane has its own documentation run IDs. Integration must append/union by run id, preserve failures and resolve links, never replace the main index or stage unrelated primary task rows."
+  },
+  "worked_example": {
+    "record_kind": "annotation_example_not_a_new_task_or_verification_run",
+    "task_ids": ["2026-10-24-approval-integration-temp-isolation"],
+    "task_source": {
+      "commit": "36b490f27c937c0e4852614aba5c21cf136621ad",
+      "path": "docs/experiments/evidence-driven-development/tasks.jsonl",
+      "id": "2026-10-24-approval-integration-temp-isolation",
+      "canonical_object_sha256": "88bcc1dc0ebb4183b63728a51e458cc905f1194ca0292151c8739441ec8d0b8f"
+    },
+    "observed_runs": [
+      {
+        "id": "2026-10-24-integration-main-12dabc92-first",
+        "commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+        "tree": "a296f1e223d58a076f20b4a73336b9db270831bf",
+        "revision_kind": "committed_source_with_unrelated_dirty_ledger",
+        "run_at": "2026-10-23T23:49:17+00:00",
+        "finished_at": "2026-10-23T23:51:40+00:00",
+        "runtime_seconds": 142.539,
+        "command": "pnpm test:integration",
+        "result": {
+          "passed": 223,
+          "failed": 1,
+          "skipped": 1,
+          "files_passed": 23,
+          "files_failed": 1,
+          "files_skipped": 1
+        }
+      },
+      {
+        "id": "2026-10-24-integration-main-12dabc92-rerun",
+        "commit": "12dabc925efc1b72a63b885829a05c38a437ef69",
+        "tree": "a296f1e223d58a076f20b4a73336b9db270831bf",
+        "revision_kind": "committed_source_with_unrelated_dirty_ledger",
+        "run_at": "2026-10-23T23:52:09+00:00",
+        "finished_at": "2026-10-23T23:54:34+00:00",
+        "runtime_seconds": 144.582,
+        "command": "pnpm test:integration",
+        "result": {
+          "passed": 224,
+          "failed": 0,
+          "skipped": 1,
+          "files_passed": 24,
+          "files_failed": 0,
+          "files_skipped": 1
+        }
+      }
+    ],
+    "measurement": {
+      "activity": "delivery",
+      "sessions": [
+        {
+          "id": null,
+          "role": "author",
+          "agent": "term2/implementation-lane",
+          "locator": "docs/test-results.json#2026-10-24-integration-main-12dabc92-first"
+        },
+        {
+          "id": null,
+          "role": "verifier",
+          "agent": null,
+          "locator": "/tmp/integration-approval-verifier-20261024.md"
+        }
+      ],
+      "completion": {
+        "status": "accepted",
+        "author_completed_at": "2026-10-23T23:27:52Z",
+        "accepted_at": null,
+        "accepted_commit": "26f0b0f596d056bffd7726c434382ed9607b38fb",
+        "evidence_run_ids": ["2026-10-24-integration-26f0b0f5"],
+        "scope": "Retained independent acceptance of the fixture-only patch, not independent execution of the later full-suite runs or all product behavior"
+      },
+      "effort": [
+        {
+          "actor": "author",
+          "phase": "verification",
+          "metric": "wall_seconds",
+          "value": 142.539,
+          "basis": "observed",
+          "source": "docs/test-results.json#2026-10-24-integration-main-12dabc92-first.runtime_seconds",
+          "session_id": null
+        },
+        {
+          "actor": "author",
+          "phase": "verification",
+          "metric": "wall_seconds",
+          "value": 144.582,
+          "basis": "observed",
+          "source": "docs/test-results.json#2026-10-24-integration-main-12dabc92-rerun.runtime_seconds",
+          "session_id": null
+        },
+        {
+          "actor": "verifier",
+          "phase": "verification",
+          "metric": "active_minutes",
+          "value": null,
+          "basis": "unknown",
+          "source": null,
+          "session_id": null
+        }
+      ],
+      "observed_through": null,
+      "followup_source": null,
+      "related_task_ids": ["2026-10-08-approval-reuse-guard", "2026-10-21-bare-headless-profile"],
+      "unknowns": [
+        "Persisted author/verifier session IDs; pane IDs are not session IDs",
+        "Author implementation, rework and human active effort",
+        "All task-scoped token usage and monetary cost",
+        "Independent verifier active effort and exact acceptance timestamp",
+        "Total task wall duration including diagnosis/review; these two suite runs are only a partial observation",
+        "Dated post-delivery defect surveillance and its scope were not established by these suite runs"
+      ]
+    },
+    "derived": {
+      "observed_two_command_wall_seconds": 287.121,
+      "known_command_duration_n": 2,
+      "total_task_cost": null,
+      "total_task_active_minutes": null,
+      "notes": "Transcribed observed command runtimes, not newly measured task cost. Keep failed and passing attempts. No measured rework is inferred from a same-source rerun."
+    },
+    "interpretation": "First run had 223 passed/1 failed/1 skipped (a different first CLI case timed out at 10000ms); unchanged-source rerun had 224/0/1. All original six approval assertions passed. Build contention is a hypothesis, not an established cause or a durable timeout repair.",
+    "source_acceptance": {
+      "verdict": "accept_reviewed_patch",
+      "notes": "Retained fresh-agent approval-fixture verdict applies: integrated test/doc hashes exactly match reviewed 26f0b0f5. Post-integration full runs were executed by implementer, not independently rerun."
+    }
+  },
+  "targeted_followups": [
+    {
+      "id": "EDD-LOG-01",
+      "status": "open",
+      "task_ids": [
+        "2026-10-22-log-enospc-failure",
+        "2026-10-22-log-enospc-review-repair",
+        "2026-10-22-log-enospc-local-date"
+      ],
+      "artifact": {
+        "commits": [
+          "c778010c09995c5d25f7f8a443188ef2e5148180",
+          "220fd838a8456655ed503ed2a0e5695a0b38d458",
+          "635513c32b6bdbb6953d036225e5a5dd8ec374c5"
+        ],
+        "paths": [
+          "source/services/logging/logging-service.ts",
+          "source/services/logging/logging-failures.integration.test.ts",
+          "source/cli.integration.test.ts"
+        ],
+        "symbols": ["LoggingService", "localLogDateKey"]
+      },
+      "gap": "Author repaired review defects, but retained task rows leave independent re-review pending. EACCES alone did not prove ENOSPC; an incorrectly dated fault fixture could miss the sink.",
+      "instructions": [
+        "A separate non-implementing verifier pins the final reviewed commit and reruns the five focused logging integration cases plus the built-CLI logging-failure case in owned isolated directories, never the user log tree.",
+        "Prove actual sink activation using the current local-date file linked to /dev/full; exercise local/UTC divergence (Pacific/Kiritimati), repeated writes and multiple logger instances. Retain failure/negative controls that fail before the relevant repair, not just a successful exit."
+      ],
+      "acceptance": [
+        "Actual ENOSPC does not terminate the process or expose/accumulate subsequent payloads; one file-failure warning, no recurring Winston no-transport output, built CLI finishes a mock-provider turn.",
+        "Application current-local-day logs survive retention; provider traffic retains UTC semantics; unreadable entries do not suppress sibling measurement; repeated failures remain nonfatal.",
+        "Independent accept/reject names exact revision, commands/environment, activated fault proof and residual limits; inability to execute remains inconclusive."
+      ],
+      "evidence_locators": [
+        "docs/experiments/evidence-driven-development/tasks.jsonl#2026-10-22-log-enospc-review-repair",
+        "docs/experiments/evidence-driven-development/tasks.jsonl#2026-10-22-log-enospc-local-date",
+        "docs/contracts/07-logging-and-provider-traffic.md",
+        "source/services/logging/logging-failures.integration.test.ts"
+      ],
+      "closure_record": "Append docs/test-results.json run with these task_ids, exact source identity, failure-path evidence and independent verdict; do not rewrite prior author/pending rows.",
+      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up."
+    },
+    {
+      "id": "EDD-ROLLOVER-01",
+      "status": "open",
+      "task_ids": ["2026-10-22-rollover-queued-submission"],
+      "artifact": {
+        "commits": ["05f694cf2744126acfa99030ed18b65730d4057b"],
+        "paths": ["source/hooks/use-conversation.ts", "source/services/conversation/conversation-service.ts"],
+        "symbols": ["useConversation", "consumeSessionRolloverRequest", "isQueueOwningSubmissions"]
+      },
+      "gap": "Task-specific before/after proof never reached the fake turn-start signal; broad-suite parity did not exercise the queue-owning/turn-end race. Independent acceptance remains pending.",
+      "instructions": [
+        "Independent verifier uses a controlled mock-provider PTY/real conversation boundary: establish turn-start, hold the turn, queue a steer, request rollover while queue ownership exists before its count is published, then release the turn.",
+        "Also inject rejection from the turn-end rollover callback. Run the same probe against the repair and its parent; retain the observed barrier/queue/callback sequence so a timeout before stimulus cannot pass as evidence."
+      ],
+      "acceptance": [
+        "Original race is reproduced before the fix and absent afterward, with the intended interleaving actually reached.",
+        "TUI remains alive without unhandled rejection; queued text is delivered exactly once by its original queue, no successor rollover occurs while queue-owned, no automatic resend; rejected rollover preserves a visible briefing.",
+        "Independent verdict and exact artifact identity are recorded; lack of a reproducible barrier/interleaving leaves this open."
+      ],
+      "evidence_locators": [
+        "docs/experiments/evidence-driven-development/tasks.jsonl#2026-10-22-rollover-queued-submission",
+        "docs/experiments/evidence-driven-development/defects.jsonl#2026-10-22-rollover-queue-turn-end-crash",
+        "docs/plans/sessions/session-rollover-handoff.md"
+      ],
+      "closure_record": "Append task-linked verification run and discovery/repair relationship. The defect currently links its repair, not a proven introducing task; keep causal origin unknown until evidenced.",
+      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up."
+    },
+    {
+      "id": "EDD-VERIFY-01",
+      "status": "open",
+      "task_ids": ["2026-10-19-adaptive-independent-verification-review-fixes"],
+      "artifact": {
+        "commits": ["a1d0d623461da0e2e9c029b7c12fef1de9e8fb5e"],
+        "paths": [
+          "source/services/completion-verification/verifier.ts",
+          "source/services/completion-verification/root-boundary.ts",
+          "source/services/completion-verification/completion-verification.integration.test.ts",
+          "source/cli.integration.test.ts"
+        ],
+        "symbols": ["runQuickCheck", "RootCompletionBoundary"]
+      },
+      "gap": "Review-fix task records independent:false despite high risk; the reviewer implemented these fixes. Its self-acceptance is not a separate final independent verdict.",
+      "instructions": [
+        "A separate agent verifies the final revision with bounded real-filesystem cases: stage a whitespace error and separately leave one untracked; each attested error must route to repair rather than complete. Retain matched pre-fix controls.",
+        "Exercise a non-Git workspace through the built CLI: named unsupported-workspace reason and completion_verification.operational_alert with task/workspace identity, without claiming an attested revision.",
+        "Exercise the built CLI default-on verification path with local fixture providers and real verification storage. Use the existing default-off non-vacuity control (four provider requests versus two) in an isolated temporary probe, not a committed default change."
+      ],
+      "acceptance": [
+        "Staged/untracked errors are checked in the attested set; unsupported-workspace evidence is actionable; default-on path engages the real gate and persistence boundary.",
+        "Independent verdict names exact revision and proof per claim; tool-limited static PASS is insufficient for execution criteria. No acceptance gate/default/provider policy is weakened."
+      ],
+      "evidence_locators": [
+        "docs/experiments/evidence-driven-development/tasks.jsonl#2026-10-19-adaptive-independent-verification-review-fixes",
+        "c71af120:docs/reports/pr34-completion-verification-review-2026-10-19.md",
+        "docs/plans/agent-runtime/adaptive-independent-verification.md"
+      ],
+      "closure_record": "Append independent task-linked run with evidence/defect_ids and resolving run links when known; missing prior run IDs stay unknown, not invented.",
+      "next_owner": "Controller to assign a verifier who did not implement the relevant repair; no agent dispatched by this documentation follow-up."
+    }
+  ],
+  "followup_scope": "Open in the reviewed task ledger and four-run main index at the stated revision, not a claim that every possible later acceptance artifact has been searched.",
+  "execution": "Documentation/data inspection only; no product probe closes these independent behavioral acceptance gaps within this follow-up scope.",
+  "integration": "Controller owns primary integration. Preserve existing JSONL objects; append only this lane documentation records. Do not append the worked example as a second delivery or alter historical measurement fields."
+}

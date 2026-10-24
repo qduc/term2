@@ -9353,6 +9353,132 @@
         "skipped": 1
       },
       "evidence": "All 25 integration files passed, 1 file skipped. Same product and tests as release; only workflow setup changed. Adding locally extracted socat made all four failing checks pass unchanged. Workflow YAML parsing and Prettier checks passed."
+    },
+    {
+      "id": "2026-10-24-038-final-retry1",
+      "recorded_on": "2026-10-24",
+      "commit": "a40c606f957f787ca61f1afc7bc0162cdd0671a4",
+      "revision_kind": "clean_commit",
+      "suite": "integration",
+      "command": "GitHub Actions retry1",
+      "command_complete": true,
+      "environment": {
+        "os": null,
+        "node_version": null,
+        "pnpm_version": null
+      },
+      "result": {
+        "passed": 224,
+        "failed": 3,
+        "skipped": 1
+      },
+      "evidence": "Dependencies installed; outside-denial check passed, three permitted-write checks still failed.",
+      "url": "https://github.com/qduc/term2/actions/runs/40089351891"
+    },
+    {
+      "id": "2026-10-24-038-final-diagnostic",
+      "recorded_on": "2026-10-24",
+      "commit": "172a736052fef65f377b9e090162c58d26dcb9dd",
+      "revision_kind": "clean_commit",
+      "suite": "integration",
+      "command": "GitHub Actions diagnostic",
+      "command_complete": true,
+      "environment": {
+        "os": null,
+        "node_version": null,
+        "pnpm_version": null
+      },
+      "result": {
+        "passed": 224,
+        "failed": 3,
+        "skipped": 1
+      },
+      "evidence": "Captured shell result: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted. Runner Ubuntu 24.04.5 image 20261012.334.1. Assertions unchanged except added wire-tool diagnostics.",
+      "url": "https://github.com/qduc/term2/actions/runs/40089637557"
+    },
+    {
+      "id": "2026-10-24-038-final-publish",
+      "recorded_on": "2026-10-24",
+      "commit": "808b19d89ca4c93f413ed59a93d23b79817dbeaa",
+      "revision_kind": "clean_commit",
+      "suite": "release",
+      "command": "GitHub Actions publish",
+      "command_complete": true,
+      "environment": {
+        "os": null,
+        "node_version": null,
+        "pnpm_version": null
+      },
+      "result": {
+        "passed": 227,
+        "failed": 0,
+        "skipped": 1
+      },
+      "evidence": "Ubuntu 22.04; build, 28 static checks and 227 integration checks passed. pnpm emitted Published package @qduc/term2@0.38.0. Registry visibility initially lagged; pnpm view subsequently returned version and tarball.",
+      "url": "https://github.com/qduc/term2/actions/runs/40089846812"
+    },
+    {
+      "id": "2026-10-24-038-final-main-first",
+      "recorded_on": "2026-10-24",
+      "commit": "808b19d89ca4c93f413ed59a93d23b79817dbeaa",
+      "revision_kind": "clean_commit",
+      "suite": "provider-black-box",
+      "command": "GitHub Actions main-first",
+      "command_complete": true,
+      "environment": {
+        "os": null,
+        "node_version": null,
+        "pnpm_version": null
+      },
+      "result": {
+        "passed": 87,
+        "failed": 1,
+        "skipped": 3
+      },
+      "evidence": "Bail after session_search through run_code completes canonical fallback in the shipped CLI: PTY state timeout 40000ms. Other jobs passed. No source/timeout changes before retry.",
+      "url": "https://github.com/qduc/term2/actions/runs/40089846492/attempts/1"
+    },
+    {
+      "id": "2026-10-24-038-final-main-retry",
+      "recorded_on": "2026-10-24",
+      "commit": "808b19d89ca4c93f413ed59a93d23b79817dbeaa",
+      "revision_kind": "clean_commit",
+      "suite": "ci",
+      "command": "GitHub Actions main-retry",
+      "command_complete": true,
+      "environment": {
+        "os": null,
+        "node_version": null,
+        "pnpm_version": null
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "evidence": "All jobs successful. Static 28 passed; integration 227 passed/1 skipped; e2e 32 passed/4 skipped; provider black-box retry 222 passed/1 skipped.",
+      "url": "https://github.com/qduc/term2/actions/runs/40089846492/attempts/2"
+    },
+    {
+      "id": "2026-10-24-038-final-local-static",
+      "recorded_on": "2026-10-24",
+      "commit": "808b19d89ca4c93f413ed59a93d23b79817dbeaa",
+      "revision_kind": "clean_commit_with_local_untracked_artifacts",
+      "suite": "static",
+      "command": "pnpm typecheck; pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": null,
+        "node_version": null,
+        "pnpm_version": null
+      },
+      "result": {
+        "passed": null,
+        "failed": 9431,
+        "skipped": null
+      },
+      "evidence": "pnpm typecheck passed. pnpm lint failed with 9431 errors/34 warnings, including untracked .cache comparison/probe scripts (Buffer/process no-undef, CJS no-require-imports). Release source-only lint gate passed with 31 warnings. Not classified as clean repository baseline. Focused Bare integration assertions passed 4/4 with socat on PATH.",
+      "url": null
     }
   ]
 }

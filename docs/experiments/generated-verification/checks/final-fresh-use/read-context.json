@@ -1,0 +1,14 @@
+{
+  "additionalContextSha256": {
+    ".agents/skills/guard-design/SKILL.md": "50e8e03280af18b0a3c9272590a0b8ee789b972d9fdac8ac1de628f78cbd7850",
+    "docs/contracts/12-queue-persistence-and-recovery.md": "d5ecf714bdcfe7b2a8fe79416b75ed5ff2de3d9e93f923923ac853203c65cd6f",
+    "docs/plans/terminal-ui/queue-editing.md": "75d4603dc05a18b5837e166f5184cf3b60d146fb0420a98f9c94123083dd11b8",
+    "docs/plans/approvals-and-sandbox/guard-ledger.md": "a1abfac394ebfd7ecbb9ae4f7846116735202b1d7458514cae28b3ecd7a7ea8c",
+    "docs/experiments/evidence-driven-development/README.md": "08fcf8533dea56f8bfd2ae5e6cf9ee9a92d80b06d3a89745c39725365509c2fd"
+  },
+  "gateResolution": "Global AGENTS stale path missing; canonical /home/qduc/.agents/skills/coordinator/references/real-use-verification.md found through shipped PLAN and read. No gate waived.",
+  "authorIntervention": "None during this independent workflow. User acceptance and bounds supplied; prior evidence inspected but not taken as verdict.",
+  "sourceEdits": false,
+  "childAgentsLaunched": 0,
+  "sandbox": "workspace-write; approval policy never; no escalation or model/profile change"
+}

@@ -1,0 +1,101 @@
+diff --git a/docs/experiments/generated-verification/README.md b/docs/experiments/generated-verification/README.md
+index d6720675..36962c36 100644
+--- a/docs/experiments/generated-verification/README.md
++++ b/docs/experiments/generated-verification/README.md
+@@ -24,7 +24,10 @@ JSON stdout records revision/dirty state, seed, counts, shrinks, elapsed checker
+ time and minimized failures. `--output FILE` also saves JSON, refusing to overwrite
+ an existing file. Package-manager diagnostics may appear on stderr. Exit 0 means
+ sampled properties passed, 1 means a counterexample, 2 means invalid invocation or
+-infrastructure failure. Startup/package-manager time is outside `runtimeMs`.
++infrastructure failure. Startup/package-manager time is outside `runtimeMs`. The launcher uses Node’s
++`tsx` import loader, without the tsx CLI’s IPC-listener requirement. Use equals
++syntax for negative seeds (for example, `--seed=-2147483648`); generated replay
++commands include it automatically.
+ 
+ For failure triage, preserve the JSON, inspect whether the property follows the
+ actual production contract, then use its `replay` command at the same source and
+@@ -43,8 +46,11 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
+ - `queue.serial-actions`: generated public submit, completion, failure, removal,
+   edit, resume, discard and stale-completion sequences compared at every step to
+   an independent serial FIFO model. The empty-pause invariant is explicit in
+-  `QueueController.#cancel` and `#restore`: no retained work means idle, so future
++  `QueueController.#cancel` and interrupted-active restoration: no retained work means idle, so future
+   input is not blocked behind an empty pause.
++- `queue.restore-pause`: generated valid saved queue records and pause reasons;
++  empty saved pauses must admit fresh work, while nonempty saved queues retain
++  their payloads and pause reason without replay on construction.
+ 
+ Not covered: parallel command interleavings, persistence failures, approvals,
+ steering, provider transports, multi-call chat envelopes, ledger recovery, or
+diff --git a/package.json b/package.json
+index a52a4dd5..3972fe03 100644
+--- a/package.json
++++ b/package.json
+@@ -73,7 +73,7 @@
+     "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
+     "prepare": "husky",
+     "catalog:update": "tsx scripts/update-model-catalog.ts",
+-    "verify:generated": "tsx scripts/generated-verification/run.mjs"
++    "verify:generated": "node --import tsx scripts/generated-verification/run.mjs"
+   },
+   "files": [
+     "dist"
+diff --git a/scripts/generated-verification/run.mjs b/scripts/generated-verification/run.mjs
+index 10df6b87..73a5ad27 100644
+--- a/scripts/generated-verification/run.mjs
++++ b/scripts/generated-verification/run.mjs
+@@ -67,7 +67,7 @@ try {
+         counterexample: result.counterexample,
+         error: result.errorInstance ? String(result.errorInstance.stack ?? result.errorInstance) : null,
+         replay: result.failed
+-          ? `pnpm verify:generated --property ${name} --seed ${result.seed} --path '${result.counterexamplePath}' --runs ${runs}`
++          ? `pnpm verify:generated --property ${name} --seed=${result.seed} --path '${result.counterexamplePath}' --runs ${runs}`
+           : null,
+       });
+     }
+diff --git a/source/services/queue/queue-controller.ts b/source/services/queue/queue-controller.ts
+index e0e465fc..4f918a57 100644
+--- a/source/services/queue/queue-controller.ts
++++ b/source/services/queue/queue-controller.ts
+@@ -468,10 +468,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+           // effective retention decision, but never releases active ownership.
+           this.#cancelRetainedItemIds.clear();
+         }
+-        if (this.#phase === 'paused' && this.#queue.length === 0) {
+-          this.#phase = 'idle';
+-          this.#pauseReason = undefined;
+-        }
++        this.#releaseEmptyPause();
+         await this.#persist();
+         return { kind: 'accepted' };
+       case 'edit_queued': {
+@@ -485,6 +482,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+         const index = this.#queue.findIndex((item) => item.id === cmd.itemId);
+         if (index < 0) return { kind: 'rejected', reason: 'not_queued' };
+         this.#queue.splice(index, 1);
++        this.#releaseEmptyPause();
+         if (this.#phase === 'cancelling') {
+           this.#cancelRetainedItemIds.delete(cmd.itemId);
+         }
+@@ -755,6 +753,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+     if (record.pause) {
+       this.#phase = 'paused';
+       this.#pauseReason = record.pause.reason;
++      this.#releaseEmptyPause();
+       return;
+     }
+     if (this.#queue.length > 0) {
+@@ -763,6 +762,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
+     }
+   }
+ 
++  /** A pause retains queued work, never active cancellation ownership. */
++  #releaseEmptyPause(): void {
++    if (this.#phase !== 'paused' || this.#queue.length > 0) return;
++    this.#phase = 'idle';
++    this.#pauseReason = undefined;
++  }
++
+   async #persist(): Promise<void> {
+     if (!this.#persistence) return;
+     const active = this.#active

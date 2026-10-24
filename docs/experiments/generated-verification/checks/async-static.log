@@ -1,0 +1,10 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/generated-verification[39m
+
+
+[2m Test Files [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[32m28 passed[39m[22m[90m (28)[39m
+[2m   Start at [22m 16:38:08
+[2m   Duration [22m 1.83s[2m (transform 1.23s, setup 160ms, import 112ms, tests 2.61s, environment 1ms)[22m
+

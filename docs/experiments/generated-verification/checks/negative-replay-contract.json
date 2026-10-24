@@ -1,0 +1,76 @@
+{
+  "purpose": "runner negative-seed failure and replay CLI contract only; injected failure is NOT discovery evidence",
+  "temporaryFaultInjection": true,
+  "command": [
+    "node",
+    "--import",
+    "tsx",
+    "scripts/generated-verification/.temporary-cli-probe.mjs",
+    "--property",
+    "queue.injected-cli-contract",
+    "--seed=-7"
+  ],
+  "exit": 1,
+  "report": {
+    "schemaVersion": 1,
+    "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "dirty": true,
+    "node": "v24.19.0",
+    "requestedRunsPerProperty": 1000,
+    "maxSequenceLength": 30,
+    "runtimeMs": 2.715644999999995,
+    "results": [
+      {
+        "property": "queue.injected-cli-contract",
+        "failed": true,
+        "seed": -7,
+        "path": "0:0",
+        "cases": 1,
+        "skips": 0,
+        "shrinks": 1,
+        "runtimeMs": 1.724394000000018,
+        "counterexample": [0],
+        "error": "Error: Property failed by returning false\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1325:66)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/.temporary-cli-probe.mjs:53:31\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)",
+        "replay": "pnpm verify:generated --property queue.injected-cli-contract --seed=-7 --path '0:0' --runs 1000"
+      }
+    ]
+  },
+  "replayCommand": [
+    "node",
+    "--import",
+    "tsx",
+    "scripts/generated-verification/.temporary-cli-probe.mjs",
+    "--property",
+    "queue.injected-cli-contract",
+    "--seed=-7",
+    "--path",
+    "0:0",
+    "--runs",
+    "1000"
+  ],
+  "replayExit": 1,
+  "replayReport": {
+    "schemaVersion": 1,
+    "revision": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "dirty": true,
+    "node": "v24.19.0",
+    "requestedRunsPerProperty": 1000,
+    "maxSequenceLength": 30,
+    "runtimeMs": 2.846291000000008,
+    "results": [
+      {
+        "property": "queue.injected-cli-contract",
+        "failed": true,
+        "seed": -7,
+        "path": "0:0",
+        "cases": 1,
+        "skips": 0,
+        "shrinks": 0,
+        "runtimeMs": 1.9154149999999959,
+        "counterexample": [0],
+        "error": "Error: Property failed by returning false\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1325:66)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-verification/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/.temporary-cli-probe.mjs:53:31\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)",
+        "replay": "pnpm verify:generated --property queue.injected-cli-contract --seed=-7 --path '0:0' --runs 1000"
+      }
+    ]
+  }
+}

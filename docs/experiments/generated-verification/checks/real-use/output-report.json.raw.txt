@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 20,
+  "maxSequenceLength": 30,
+  "runtimeMs": 40.28285199999999,
+  "results": [
+    {
+      "property": "history.pair-projection",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 20,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 40.25957900000003,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+$ node --import tsx scripts/generated-verification/run.mjs --target history --runs 20 --seed 424242 --output /home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/output-report.json
+{"networkGuard":true,"attempts":0,"localIpcConnections":4,"pid":784}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":766}
+{"networkGuard":true,"attempts":0,"localIpcConnections":0,"pid":754}

@@ -1,0 +1,26 @@
+diff --git a/package.json b/package.json
+index a52a4dd5..3972fe03 100644
+--- a/package.json
++++ b/package.json
+@@ -73,7 +73,7 @@
+     "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
+     "prepare": "husky",
+     "catalog:update": "tsx scripts/update-model-catalog.ts",
+-    "verify:generated": "tsx scripts/generated-verification/run.mjs"
++    "verify:generated": "node --import tsx scripts/generated-verification/run.mjs"
+   },
+   "files": [
+     "dist"
+diff --git a/scripts/generated-verification/run.mjs b/scripts/generated-verification/run.mjs
+index 10df6b87..73a5ad27 100644
+--- a/scripts/generated-verification/run.mjs
++++ b/scripts/generated-verification/run.mjs
+@@ -67,7 +67,7 @@ try {
+         counterexample: result.counterexample,
+         error: result.errorInstance ? String(result.errorInstance.stack ?? result.errorInstance) : null,
+         replay: result.failed
+-          ? `pnpm verify:generated --property ${name} --seed ${result.seed} --path '${result.counterexamplePath}' --runs ${runs}`
++          ? `pnpm verify:generated --property ${name} --seed=${result.seed} --path '${result.counterexamplePath}' --runs ${runs}`
+           : null,
+       });
+     }

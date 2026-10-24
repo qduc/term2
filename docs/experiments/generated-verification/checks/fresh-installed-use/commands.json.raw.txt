@@ -1,0 +1,205 @@
+[
+  {
+    "name": "help",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--help"
+    ],
+    "exitCode": 0,
+    "wallSeconds": 1.811015559360385,
+    "timeoutSeconds": 60
+  },
+  {
+    "name": "all-424242",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "424242",
+      "--output",
+      "docs/experiments/generated-verification/checks/fresh-installed-use/all-424242.json"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.5539443958550692,
+    "timeoutSeconds": 60
+  },
+  {
+    "name": "bad-target",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "bogus"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.8573972331359982,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "bad-property",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "bogus"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 2.122618699911982,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "bad-runs-zero",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--runs",
+      "0"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.9282469488680363,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "bad-runs-fraction",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--runs",
+      "1.5"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 2.2858079629950225,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "bad-seed-range",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "2147483648"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 2.0712954881601036,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "bad-seed-text",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "abc"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.751719991210848,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "bad-path",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--path",
+      "0"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.893735019955784,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "bad-option",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--bogus"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.6963136130943894,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "all-424242-rerun",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "424242"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.3287958758883178,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "history",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "history",
+      "--runs",
+      "1000",
+      "--seed",
+      "20261024"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.3123747818171978,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "queue",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "queue",
+      "--runs",
+      "1000",
+      "--seed=-2147483648"
+    ],
+    "exitCode": 2,
+    "wallSeconds": 1.4464178727939725,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "original-serial-replay",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "sourceArtifact": "serial-strengthened-red.json",
+    "literalReplay": "pnpm verify:generated --property queue.serial-actions --seed 424242 --path '313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11' --runs 1000",
+    "exitCode": 2,
+    "wallSeconds": 1.0145183987915516,
+    "timeoutSeconds": 30
+  },
+  {
+    "name": "original-restore-replay",
+    "argv": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.restore-pause",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0",
+      "--runs",
+      "1000"
+    ],
+    "sourceArtifact": "restore-red.json",
+    "literalReplay": "pnpm verify:generated --property queue.restore-pause --seed 424242 --path '6:0' --runs 1000",
+    "exitCode": 2,
+    "wallSeconds": 1.0322225750423968,
+    "timeoutSeconds": 30
+  }
+]

@@ -4731,6 +4731,976 @@
           "path": "/tmp/term2-primary-final-build.log"
         }
       ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-baseline-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "0f40efc8a475487874488312640b8c252cd13550",
+      "revision_kind": "committed_production_with_checker_and_evidence_edits",
+      "suite": "pnpm typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 3.1282416307367384,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Checker changed during provider tier; production unchanged from 6075a3cf throughout. Initial lint formatting failure is attributable to new cli-contract.json, not pre-existing. Initial e2e lacked built worker artifacts; final explicit-build e2e passed.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/baseline-tier-0.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-baseline-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "0f40efc8a475487874488312640b8c252cd13550",
+      "revision_kind": "committed_production_with_checker_and_evidence_edits",
+      "suite": "pnpm lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "duration_seconds": 35.26836970727891,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": ["Exit 1; see retained log for command diagnostics"],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Checker changed during provider tier; production unchanged from 6075a3cf throughout. Initial lint formatting failure is attributable to new cli-contract.json, not pre-existing. Initial e2e lacked built worker artifacts; final explicit-build e2e passed.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/baseline-tier-1.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-baseline-2",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "0f40efc8a475487874488312640b8c252cd13550",
+      "revision_kind": "committed_production_with_checker_and_evidence_edits",
+      "suite": "pnpm test",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 3.0612289598211646,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Checker changed during provider tier; production unchanged from 6075a3cf throughout. Initial lint formatting failure is attributable to new cli-contract.json, not pre-existing. Initial e2e lacked built worker artifacts; final explicit-build e2e passed.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/baseline-tier-2.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-baseline-3",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "0f40efc8a475487874488312640b8c252cd13550",
+      "revision_kind": "committed_production_with_checker_and_evidence_edits",
+      "suite": "pnpm test:integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "exit_code": 1,
+      "duration_seconds": 66.45603903802112,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 4,
+        "skipped": 1,
+        "files_passed": 23,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        "FAIL  source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        "FAIL  source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+        "FAIL  source/cli.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly",
+        "FAIL  source/cli.integration.test.ts > bare permits explicit sandbox scratch writes without approval"
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Checker changed during provider tier; production unchanged from 6075a3cf throughout. Initial lint formatting failure is attributable to new cli-contract.json, not pre-existing. Initial e2e lacked built worker artifacts; final explicit-build e2e passed.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/baseline-tier-3.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-baseline-4",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "0f40efc8a475487874488312640b8c252cd13550",
+      "revision_kind": "committed_production_with_checker_and_evidence_edits",
+      "suite": "pnpm test:e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "exit_code": 1,
+      "duration_seconds": 61.48998520988971,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": 25,
+        "failed": 7,
+        "skipped": 4,
+        "files_passed": 3,
+        "files_failed": 2,
+        "files_skipped": 1
+      },
+      "failures": [
+        "FAIL  source/cli-tool-rows.e2e.test.ts > the terminal UI shows a later turn tool call that reuses an earlier call id",
+        "FAIL  source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > preserves a healthy cwd for a real built worker",
+        "FAIL  source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > preserves a healthy cwd for a real built index worker",
+        "FAIL  source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built index worker after cwd deletion",
+        "FAIL  source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built worker after a cached cwd is deleted",
+        "FAIL  source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built index worker after a cached cwd is deleted",
+        "FAIL  source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built worker from an actual child module after cwd deletion"
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Checker changed during provider tier; production unchanged from 6075a3cf throughout. Initial lint formatting failure is attributable to new cli-contract.json, not pre-existing. Initial e2e lacked built worker artifacts; final explicit-build e2e passed.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/baseline-tier-4.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-baseline-5",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "0f40efc8a475487874488312640b8c252cd13550",
+      "revision_kind": "committed_production_with_checker_and_evidence_edits",
+      "suite": "pnpm test:provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 102.71133083384484,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": 221,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 25,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Checker changed during provider tier; production unchanged from 6075a3cf throughout. Initial lint formatting failure is attributable to new cli-contract.json, not pre-existing. Initial e2e lacked built worker artifacts; final explicit-build e2e passed.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/baseline-tier-5.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-final-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+      "revision_kind": "dirty_product_snapshot",
+      "suite": "pnpm typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 3.167646219022572,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Dirty product snapshot reconstructible using queue repair commit 4de1cebf. Checker/launcher later portability fixes are separately verified. Four integration failures exactly reproduced on unchanged base.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-tier-0.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-final-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+      "revision_kind": "dirty_product_snapshot",
+      "suite": "pnpm test",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 3.12339274212718,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Dirty product snapshot reconstructible using queue repair commit 4de1cebf. Checker/launcher later portability fixes are separately verified. Four integration failures exactly reproduced on unchanged base.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-tier-1.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-final-2",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+      "revision_kind": "dirty_product_snapshot",
+      "suite": "pnpm test:integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "exit_code": 1,
+      "duration_seconds": 65.13903949130327,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 4,
+        "skipped": 1,
+        "files_passed": 23,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        "FAIL  source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        "FAIL  source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+        "FAIL  source/cli.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly",
+        "FAIL  source/cli.integration.test.ts > bare permits explicit sandbox scratch writes without approval"
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Dirty product snapshot reconstructible using queue repair commit 4de1cebf. Checker/launcher later portability fixes are separately verified. Four integration failures exactly reproduced on unchanged base.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-tier-2.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-final-3",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+      "revision_kind": "dirty_product_snapshot",
+      "suite": "pnpm build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 3.535251366905868,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Dirty product snapshot reconstructible using queue repair commit 4de1cebf. Checker/launcher later portability fixes are separately verified. Four integration failures exactly reproduced on unchanged base.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-tier-3.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-final-4",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+      "revision_kind": "dirty_product_snapshot",
+      "suite": "pnpm test:e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 7.927721511572599,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 4,
+        "files_passed": 5,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Dirty product snapshot reconstructible using queue repair commit 4de1cebf. Checker/launcher later portability fixes are separately verified. Four integration failures exactly reproduced on unchanged base.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-tier-4.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-final-5",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+      "revision_kind": "dirty_product_snapshot",
+      "suite": "pnpm test:provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 95.71554053062573,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated generated-verification worktree with own frozen install; inherited host environment."
+      },
+      "result": {
+        "passed": 221,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 25,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Dirty product snapshot reconstructible using queue repair commit 4de1cebf. Checker/launcher later portability fixes are separately verified. Four integration failures exactly reproduced on unchanged base.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-tier-5.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-base-cli",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6075a3cf1507a050baf690240b89fc776cd2aedc",
+      "revision_kind": "unchanged_base_isolated_worktree",
+      "suite": "focused-integration",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Separate detached worktree, own successful pnpm install --frozen-lockfile; same inherited host environment."
+      },
+      "result": {
+        "passed": 51,
+        "failed": 4,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        "FAIL  source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        "FAIL  source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+        "FAIL  source/cli.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly",
+        "FAIL  source/cli.integration.test.ts > bare permits explicit sandbox scratch writes without approval"
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "All four final/baseline integration failures reproduced: bare flag/config result.txt ENOENT; outside edit expected /exit [1-9]/ received headless approval denial; explicit scratch write wrongly requires shell approval. Not repaired in unrelated generated-checker scope.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/base-cli-integration.log"
+        },
+        {
+          "path": "docs/experiments/generated-verification/checks/base-install.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-committed-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_documentation_evidence_edits",
+      "suite": "pnpm typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 2.8489849478937685,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree, default concurrency, simultaneous independent verification agents."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Committed product/checker with documentation/evidence edits only. Integration retains exact four base-reproduced failures.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/committed-tier-0.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-committed-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_documentation_evidence_edits",
+      "suite": "pnpm test",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 3.073476448189467,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree, default concurrency, simultaneous independent verification agents."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Committed product/checker with documentation/evidence edits only. Integration retains exact four base-reproduced failures.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/committed-tier-1.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-committed-2",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_documentation_evidence_edits",
+      "suite": "pnpm test:integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "exit_code": 1,
+      "duration_seconds": 62.12575840763748,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree, default concurrency, simultaneous independent verification agents."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 4,
+        "skipped": 1,
+        "files_passed": 23,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        "FAIL  source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        "FAIL  source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+        "FAIL  source/cli.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly",
+        "FAIL  source/cli.integration.test.ts > bare permits explicit sandbox scratch writes without approval"
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Committed product/checker with documentation/evidence edits only. Integration retains exact four base-reproduced failures.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/committed-tier-2.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-committed-3",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_documentation_evidence_edits",
+      "suite": "pnpm build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 3.6030983300879598,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree, default concurrency, simultaneous independent verification agents."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Committed product/checker with documentation/evidence edits only. Integration retains exact four base-reproduced failures.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/committed-tier-3.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-committed-4",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_documentation_evidence_edits",
+      "suite": "pnpm test:e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "exit_code": 0,
+      "duration_seconds": 7.887263840995729,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree, default concurrency, simultaneous independent verification agents."
+      },
+      "result": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 4,
+        "files_passed": 5,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Committed product/checker with documentation/evidence edits only. Integration retains exact four base-reproduced failures.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/committed-tier-4.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-committed-5",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_documentation_evidence_edits",
+      "suite": "pnpm test:provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "exit_code": 1,
+      "duration_seconds": 116.2916294070892,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree, default concurrency, simultaneous independent verification agents."
+      },
+      "result": {
+        "passed": 220,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 24,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        "FAIL  scripts/provider-black-box/turn-decisions.blackbox.ts > resumes repeated questions once per decision and settles cancellation before the next turn"
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Committed product/checker with documentation/evidence edits only. Integration retains exact four base-reproduced failures. Late 40s repeated-question PTY timeout; prior repaired-source full suite passed, focused same-commit scenario subsequently passed. CI-bounded follow-up retained separately; no claim of baseline cause without reproduction.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/committed-tier-5.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-interim-lint",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_temporary_review_probe_sources",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 9,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 4,
+        "files_skipped": null
+      },
+      "failures": [
+        "Independent reviewer temporary .mjs probe sources under checks/real-use: undefined URL, structuredClone, console, process; one unused args parameter. 9 errors, 31 warnings."
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Own temporary evidence caused lint failure; archive as non-executable text after review, then rerun. No source-lint exemption added.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-lint.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-provider-followup-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_documentation_evidence_changes",
+      "suite": "provider-followup",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/turn-decisions.blackbox.ts",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Follow-up preserves earlier failures; does not establish the cause of prior PTY timeout. Runtime seconds: 7.10612765699625",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/provider-focused.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-provider-followup-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+      "revision_kind": "committed_product_with_documentation_evidence_changes",
+      "suite": "provider-followup",
+      "command": "CI=1 pnpm test:provider-black-box",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 221,
+        "failed": 0,
+        "skipped": 1
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Follow-up preserves earlier failures; does not establish the cause of prior PTY timeout. Runtime seconds: 119.53598025906831",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/provider-ci.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-async-final-static-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "29d154543c31e9682499de4ecfefaee2c1786ddd",
+      "revision_kind": "committed_product_with_documentation_evidence_changes",
+      "suite": "async-final-static",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Follow-up preserves earlier failures; does not establish the cause of prior PTY timeout. Runtime seconds: 2.9342459230683744",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/async-typecheck.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-async-final-static-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "29d154543c31e9682499de4ecfefaee2c1786ddd",
+      "revision_kind": "committed_product_with_documentation_evidence_changes",
+      "suite": "async-final-static",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Follow-up preserves earlier failures; does not establish the cause of prior PTY timeout. Runtime seconds: 3.049207591917366",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/async-static.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-async-final-static-2",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "29d154543c31e9682499de4ecfefaee2c1786ddd",
+      "revision_kind": "committed_product_with_documentation_evidence_changes",
+      "suite": "async-final-static",
+      "command": "node --check scripts/generated-verification/run.mjs && node --check scripts/generated-verification/queue.mjs && node --check scripts/generated-verification/history.mjs",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Follow-up preserves earlier failures; does not establish the cause of prior PTY timeout. Runtime seconds: 0.05994753306731582",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/async-syntax.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-final-fresh-use",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "29d154543c31e9682499de4ecfefaee2c1786ddd",
+      "revision_kind": "committed_product_with_documentation_evidence_changes",
+      "suite": "independent-real-use",
+      "command": "Fresh agent chose installed command workflow; see commands.json",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "os": "Linux"
+      },
+      "result": {
+        "passed": 9222,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "ACCEPT. Expected invalid invocations exit2 are successful safety observations, not failed checks. First fresh invocation interrupted after checks; report-only resume completed. Raw identities retained; no source changes. No inference of exhaustive coverage.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-fresh-use/REPORT.md"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-parent-final",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "29d154543c31e9682499de4ecfefaee2c1786ddd",
+      "revision_kind": "committed_product_with_documentation_evidence_changes",
+      "suite": "generated-replays-output-safety",
+      "command": "Installed seed424242, exact retained serial/restore replays, new/existing output",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "os": "Linux"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "ACCEPT. Expected invalid invocations exit2 are successful safety observations, not failed checks. First fresh invocation interrupted after checks; report-only resume completed. Raw identities retained; no source changes. No inference of exhaustive coverage.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/parent-final/commands.json"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-ledger-format-lint",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "29d154543c31e9682499de4ecfefaee2c1786ddd",
+      "revision_kind": "documentation_evidence_dirty",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null
+      },
+      "failures": [
+        "Prettier docs/test-results.json after parent appended final-review rows while lint was running; ESLint0errors31warnings."
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-lint-ledger-format-failure.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-final-lint",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "29d154543c31e9682499de4ecfefaee2c1786ddd",
+      "revision_kind": "documentation_evidence_dirty",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-24-generated-verification-ledger-format-lint",
+          "2026-10-24-generated-verification-interim-lint"
+        ]
+      },
+      "notes": "ESLint0errors31warnings; full prettier check passed. Executable independent probes archived as text; no source-lint exemptions.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/final-lint-pass.log"
+        }
+      ]
     }
   ]
 }

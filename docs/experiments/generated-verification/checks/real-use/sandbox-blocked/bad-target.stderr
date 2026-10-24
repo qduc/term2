@@ -1,0 +1,6 @@
+Error: unknown target
+    at file:///home/qduc/term2/.worktrees/generated-verification/scripts/generated-verification/run.mjs:35:69
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:643:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+{"networkGuard":true,"attempts":0,"localIpcConnections":4,"pid":60}

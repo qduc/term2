@@ -1,0 +1,71 @@
+// Independent supporting boundary evidence, not an installed-command substitute.
+import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+const here = new URL('.', import.meta.url);
+const { QueueController: Current } = await import(pathToFileURL(`${process.cwd()}/source/services/queue/queue-controller.ts`));
+const { QueueController: Base } = await import(new URL('base-queue.ts', here));
+const results = [];
+function make(Controller, { record = null, cancel = () => true } = {}) {
+  const starts = [], writes = [];
+  const controller = new Controller({
+    driver: { start: (e) => starts.push({ id: e.item.id, text: e.item.text }), cancel },
+    snapshotFactory: (item) => ({ text: item.text }),
+    persistence: { load: () => record, replace: (r) => writes.push(structuredClone(r)) },
+  });
+  return { controller, starts, writes };
+}
+for (const [label, Controller] of [['base', Base], ['current', Current]]) {
+  const { controller: q, starts, writes } = make(Controller);
+  await q.command({ kind: 'submit', text: 'first', id: 'first' });
+  await q.command({ kind: 'submit', text: 'retained', id: 'retained' });
+  await q.event({ kind: 'failed', executionId: q.state().active.executionId, failure: 'observed failure' });
+  assert.equal(q.state().kind, 'paused');
+  await q.command({ kind: 'remove_queued', itemId: 'retained' });
+  const afterRemoval = q.state().kind;
+  assert.equal(afterRemoval, label === 'base' ? 'paused' : 'idle');
+  const disk = new URL(`${label}-saved-record.json`, here);
+  writeFileSync(disk, JSON.stringify(writes.at(-1), null, 2) + '\n');
+  const restarted = make(Controller, { record: JSON.parse(readFileSync(disk, 'utf8')) });
+  await restarted.controller.command({ kind: 'submit', text: 'after restart' });
+  await q.command({ kind: 'submit', text: 'fresh', id: 'fresh' });
+  assert.deepEqual(starts.map((s) => s.text), label === 'base' ? ['first'] : ['first', 'fresh']);
+  assert.deepEqual(restarted.starts.map((s) => s.text), label === 'base' ? [] : ['after restart']);
+  results.push({ label, afterRemoval, started: starts, restartedStarted: restarted.starts });
+}
+for (const reason of ['failure', 'manual', 'recovered_interrupted']) {
+  for (const count of [0, 1, 2]) {
+    const items = Array.from({ length: count }, (_, i) => ({ id: `saved-${i}`, text: `text-${i}`, sequence: i + 1, submittedAt: '2026-01-01T00:00:00.000Z' }));
+    const { controller: q, starts, writes } = make(Current, { record: { version: 1, nextSequence: count + 1, queue: items, pause: { reason } } });
+    assert.deepEqual(q.state().queue.map(({ id, text }) => ({ id, text })), items.map(({ id, text }) => ({ id, text })));
+    assert.deepEqual(starts, []);
+    if (count) {
+      assert.equal(q.state().reason, reason);
+      await q.command({ kind: 'submit', id: 'fresh', text: 'fresh' });
+      assert.deepEqual(starts, []);
+      for (const item of items) await q.command({ kind: 'remove_queued', itemId: item.id });
+      assert.equal(q.state().reason, reason); // Fresh retained work still needs resume.
+      await q.command({ kind: 'resume_queue' });
+    } else await q.command({ kind: 'submit', id: 'fresh', text: 'fresh' });
+    assert.deepEqual(starts, [{ id: 'fresh', text: 'fresh' }]);
+    assert.equal(writes.at(-1).pause, undefined);
+    results.push({ reason, count, preservedAndResumed: true });
+  }
+}
+for (const removal of ['remove_queued', 'discard_queue']) {
+  const { controller: q, starts } = make(Current, { cancel: () => false });
+  await q.command({ kind: 'submit', id: 'active', text: 'active' });
+  await q.command({ kind: 'submit', id: 'retained', text: 'retained' });
+  const executionId = q.state().active.executionId;
+  assert.equal((await q.command({ kind: 'cancel' })).reason, 'cancellation_unproven');
+  await q.command({ kind: removal, itemId: 'retained' });
+  assert.equal(q.state().kind, 'cancelling');
+  await q.command({ kind: 'submit', id: 'fresh', text: 'fresh' });
+  await q.command({ kind: 'cancellation_settled', executionId: 'stale' });
+  assert.equal(q.state().kind, 'cancelling');
+  assert.deepEqual(starts, [{ id: 'active', text: 'active' }]);
+  await q.command({ kind: 'cancellation_settled', executionId });
+  assert.deepEqual(starts, [{ id: 'active', text: 'active' }, { id: 'fresh', text: 'fresh' }]);
+  results.push({ removal, unprovenCancellationRetainedOwnership: true, matchingSettlementStartedFresh: true });
+}
+console.log(JSON.stringify({ passed: true, results }, null, 2));

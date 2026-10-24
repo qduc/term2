@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "checks": [
+    "unproven cancellation retains active after remove",
+    "stale proof cannot release",
+    "matching proof dispatches fresh input",
+    "nonempty failure pause preserved",
+    "last removal persists no pause",
+    "all valid empty saved pause reasons normalize"
+  ],
+  "starts": ["active", "fresh"],
+  "normalized": ["failure", "manual", "recovered_interrupted"]
+}

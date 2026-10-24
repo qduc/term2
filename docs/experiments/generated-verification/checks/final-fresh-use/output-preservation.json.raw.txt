@@ -1,0 +1,5 @@
+{
+  "sha256Before": "9cccda89cd922fa9c6bc8867e329353c29cb251f44cc16e36a540bb3b9371902",
+  "sha256After": "9cccda89cd922fa9c6bc8867e329353c29cb251f44cc16e36a540bb3b9371902",
+  "stdoutEqualsSavedJson": true
+}

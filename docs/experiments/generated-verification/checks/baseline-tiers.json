@@ -1,0 +1,50 @@
+[
+  {
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "runtimeSeconds": 3.1282416307367384,
+    "log": "docs/experiments/generated-verification/checks/baseline-tier-0.log",
+    "revision": "0f40efc8a475487874488312640b8c252cd13550",
+    "snapshot": "checker committed, source unchanged; untracked evidence"
+  },
+  {
+    "command": "pnpm lint",
+    "exit": 1,
+    "runtimeSeconds": 35.26836970727891,
+    "log": "docs/experiments/generated-verification/checks/baseline-tier-1.log",
+    "revision": "0f40efc8a475487874488312640b8c252cd13550",
+    "snapshot": "checker committed, source unchanged; untracked evidence"
+  },
+  {
+    "command": "pnpm test",
+    "exit": 0,
+    "runtimeSeconds": 3.0612289598211646,
+    "log": "docs/experiments/generated-verification/checks/baseline-tier-2.log",
+    "revision": "0f40efc8a475487874488312640b8c252cd13550",
+    "snapshot": "checker committed, source unchanged; untracked evidence"
+  },
+  {
+    "command": "pnpm test:integration",
+    "exit": 1,
+    "runtimeSeconds": 66.45603903802112,
+    "log": "docs/experiments/generated-verification/checks/baseline-tier-3.log",
+    "revision": "0f40efc8a475487874488312640b8c252cd13550",
+    "snapshot": "checker committed, source unchanged; untracked evidence"
+  },
+  {
+    "command": "pnpm test:e2e",
+    "exit": 1,
+    "runtimeSeconds": 61.48998520988971,
+    "log": "docs/experiments/generated-verification/checks/baseline-tier-4.log",
+    "revision": "0f40efc8a475487874488312640b8c252cd13550",
+    "snapshot": "checker committed, source unchanged; untracked evidence"
+  },
+  {
+    "command": "pnpm test:provider-black-box",
+    "exit": 0,
+    "runtimeSeconds": 102.71133083384484,
+    "log": "docs/experiments/generated-verification/checks/baseline-tier-5.log",
+    "revision": "0f40efc8a475487874488312640b8c252cd13550",
+    "snapshot": "checker committed, source unchanged; untracked evidence"
+  }
+]

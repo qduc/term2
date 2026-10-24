@@ -1,0 +1,273 @@
+[
+  {
+    "name": "installed-default",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "424242"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.529279843904078
+  },
+  {
+    "name": "history-separate",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "history",
+      "--runs",
+      "1000",
+      "--seed",
+      "123456"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.6346843801438808
+  },
+  {
+    "name": "queue-additional",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "queue",
+      "--runs",
+      "10000",
+      "--seed",
+      "8675309"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.4442006559111178
+  },
+  {
+    "name": "help",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--help"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.477144556120038
+  },
+  {
+    "name": "bad-target",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "typo"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.4476218428462744
+  },
+  {
+    "name": "bad-runs",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--runs",
+      "0"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.4425082420930266
+  },
+  {
+    "name": "bad-seed",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "2147483648"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.4582664808258414
+  },
+  {
+    "name": "bad-property",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "missing"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.505412352271378
+  },
+  {
+    "name": "path-without-property",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.6045410549268126
+  },
+  {
+    "name": "serial-replay-green",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.4044054471887648
+  },
+  {
+    "name": "restore-replay-green",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.restore-pause",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0",
+      "--runs",
+      "1000"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.3990979599766433
+  },
+  {
+    "name": "base-generated",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "queue",
+      "--seed",
+      "424242"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/base-loader.mjs",
+    "baseControllerOnly": true,
+    "exit": 1,
+    "wallSeconds": 1.5305835050530732
+  },
+  {
+    "name": "base-serial-replay",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/base-loader.mjs",
+    "baseControllerOnly": true,
+    "exit": 1,
+    "wallSeconds": 1.2856502570211887
+  },
+  {
+    "name": "base-restore-replay",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.restore-pause",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0",
+      "--runs",
+      "1000"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs --import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/base-loader.mjs",
+    "baseControllerOnly": true,
+    "exit": 1,
+    "wallSeconds": 1.2698524435982108
+  },
+  {
+    "name": "output-write",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "history",
+      "--runs",
+      "20",
+      "--seed",
+      "424242",
+      "--output",
+      "/home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/output-report.json"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.305074482690543
+  },
+  {
+    "name": "output-refuse-overwrite",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "history",
+      "--runs",
+      "20",
+      "--seed",
+      "424242",
+      "--output",
+      "/home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/output-report.json"
+    ],
+    "cwd": "/home/qduc/term2/.worktrees/generated-verification",
+    "NODE_OPTIONS": "--import file:///home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/real-use/network-deny.mjs",
+    "baseControllerOnly": false,
+    "exit": 1,
+    "wallSeconds": 1.260229563806206
+  }
+]

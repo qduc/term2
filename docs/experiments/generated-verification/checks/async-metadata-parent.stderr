@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --seed 424242 --output docs/experiments/generated-verification/checks/async-metadata-parent.json

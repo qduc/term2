@@ -1,0 +1,3 @@
+**ACCEPT** for the scoped independent readiness check at `29d15454`. No must-fix findings; installed execution, retained red replays, queue repair, CLI errors and output preservation passed.
+
+[Report and evidence](/home/qduc/term2/.worktrees/generated-verification/docs/experiments/generated-verification/checks/final-fresh-use/REPORT.md) record the interruption, parent intervention and limits. Probes are archived as `.txt`. No checks were repeated or source changed. Full tiers and merge remain parent-owned.

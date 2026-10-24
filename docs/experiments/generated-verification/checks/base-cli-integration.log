@@ -1,0 +1,133 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/generated-verification-base[39m
+
+ [31m❯[39m source/cli.integration.test.ts [2m([22m[2m55 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[33m 69527[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs [33m 6327[2mms[22m[39m
+   [33m[2m✓[22m[39m finishes a provider turn when file logging hits ENOSPC [33m 1543[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --help documents the available command-line options [33m 1200[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI validates goal flags before startup [33m 2350[2mms[22m[39m
+   [33m[2m✓[22m[39m interactive launch persists the goal before requiring a terminal [33m 1361[2mms[22m[39m
+   [33m[2m✓[22m[39m positional launch durably records its goal before the first provider request [33m 1461[2mms[22m[39m
+   [33m[2m✓[22m[39m positional launch closes the goal after a recorded achieved goal_check and reports it [33m 1524[2mms[22m[39m
+   [33m[2m✓[22m[39m the shipped CLI verifies a durable goal with verifier.model= [33m 1801[2mms[22m[39m
+   [33m[2m✓[22m[39m the shipped CLI verifies a durable goal with verifier.model=mock-verifier [33m 1850[2mms[22m[39m
+   [33m[2m✓[22m[39m resume preserves the replayed goal without flags and replaces it before startup when flags are explicit [33m 2294[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI supports the advertised -h and -v aliases [33m 2121[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI rejects unknown flags with a clear error [33m 854[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors [33m 1091[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --resume ls prints list of conversations and exits [33m 2078[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --resume list also works [33m 1121[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --resume prints message and exits when no conversation is found [33m 1101[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --resume does not suggest --fork for a conversation from another project [33m 1144[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --list-models combined with --resume errors instead of misreading the resume id as a search term [33m 1201[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --list-models combined with --resume --fork errors [33m 1258[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error [33m 1237[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --refresh without --list-models errors clearly instead of being silently ignored [33m 860[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --list-models --refresh runs the listing errand, not the flag-conflict error [33m 983[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI prompts before starting in non-lite mode from home directory [33m 1034[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI prompts before starting in non-lite mode from root directory [33m 1147[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI accepts a custom provider from settings.json in non-interactive mode [33m 1176[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --model reports error and exits 1 when no models match pattern [33m 999[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog [33m 976[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --json auto-selects an ambiguous model without asking for input [33m 921[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing [33m 1333[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI resolves --model <value> as the last argument to the model, not a prompt [33m 904[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt [33m 866[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous [33m 1055[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI "term2 <prompt>" with no --model is unchanged [33m 995[2mms[22m[39m
+   [33m[2m✓[22m[39m CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt [33m 982[2mms[22m[39m
+   [33m[2m✓[22m[39m an approved shell call does not approve a later call that reuses its id when the provider repeats call_0 [33m 1039[2mms[22m[39m
+   [33m[2m✓[22m[39m an approved shell call does not approve a later call that reuses its id when the provider repeats its own id [33m 1052[2mms[22m[39m
+   [33m[2m✓[22m[39m an approved shell call does not approve a later call when the chat-completions provider omits tool call ids [33m 1022[2mms[22m[39m
+   [33m[2m✓[22m[39m an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids [33m 1029[2mms[22m[39m
+   [33m[2m✓[22m[39m every executed shell call is shown on stderr when the provider repeats its id [33m 1030[2mms[22m[39m
+   [33m[2m✓[22m[39m one approved shell execution prints exactly one [tool] line [33m 987[2mms[22m[39m
+   [33m[2m✓[22m[39m a call that reuses a refused call id runs and is saved as run, not as refused [33m 1038[2mms[22m[39m
+[31m   [31m×[31m bare profile via flag keeps a small tool surface, project guidance, and versioned session identity[39m[33m 1002[2mms[22m[39m
+[31m   [31m×[31m bare profile via config keeps a small tool surface, project guidance, and versioned session identity[39m[33m 979[2mms[22m[39m
+   [33m[2m✓[22m[39m headless full completion in an unsupported workspace reports missing verification [33m 1000[2mms[22m[39m
+   [33m[2m✓[22m[39m headless bare completion in an unsupported workspace reports missing verification [33m 938[2mms[22m[39m
+   [33m[2m✓[22m[39m headless full has unattended instructions and no ask_user capability [33m 892[2mms[22m[39m
+   [33m[2m✓[22m[39m headless bare has unattended instructions and no ask_user capability [33m 878[2mms[22m[39m
+   [33m[2m✓[22m[39m headless lite has unattended instructions and no ask_user capability [33m 884[2mms[22m[39m
+   [33m[2m✓[22m[39m headless pair has unattended instructions and no ask_user capability [33m 936[2mms[22m[39m
+   [33m[2m✓[22m[39m headless plan has unattended instructions and no ask_user capability [33m 912[2mms[22m[39m
+   [33m[2m✓[22m[39m headless mentor has unattended instructions and no ask_user capability [33m 938[2mms[22m[39m
+   [33m[2m✓[22m[39m headless orchestrator has unattended instructions and no ask_user capability [33m 921[2mms[22m[39m
+[31m   [31m×[31m bare retains the outside-workspace edit approval boundary without asking headlessly[39m[33m 968[2mms[22m[39m
+[31m   [31m×[31m bare permits explicit sandbox scratch writes without approval[39m[33m 1097[2mms[22m[39m
+   [33m[2m✓[22m[39m headless auto-approve at home refuses without printing or waiting for a question [33m 834[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via flag keeps a small tool surface, project guidance, and versioned session identity
+[31m[1mError[22m: ENOENT: no such file or directory, open '/tmp/qduc/term2-nodejs/term2-bare-E42JuF/result.txt'[39m
+[36m [2m❯[22m source/cli.integration.test.ts:[2m1840:17[22m[39m
+    [90m1838|[39m       [34mexpect[39m(result[33m.[39mstatus[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m1839|[39m       [34mexpect[39m(result[33m.[39mstderr)[33m.[39m[34mtoContain[39m([32m'Profile: bare'[39m)[33m;[39m
+    [90m1840|[39m       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).t…
+    [90m   |[39m                 [31m^[39m
+    [90m1841|[39m       [35mconst[39m request [33m=[39m mock[33m.[39m[34mcapturedRequests[39m()[[34m0[39m][33m;[39m
+    [90m1842|[39m       const names = (request.tools as { function: { name: string } }[]…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via config keeps a small tool surface, project guidance, and versioned session identity
+[31m[1mError[22m: ENOENT: no such file or directory, open '/tmp/qduc/term2-nodejs/term2-bare-OWhDVx/result.txt'[39m
+[36m [2m❯[22m source/cli.integration.test.ts:[2m1840:17[22m[39m
+    [90m1838|[39m       [34mexpect[39m(result[33m.[39mstatus[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m1839|[39m       [34mexpect[39m(result[33m.[39mstderr)[33m.[39m[34mtoContain[39m([32m'Profile: bare'[39m)[33m;[39m
+    [90m1840|[39m       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).t…
+    [90m   |[39m                 [31m^[39m
+    [90m1841|[39m       [35mconst[39m request [33m=[39m mock[33m.[39m[34mcapturedRequests[39m()[[34m0[39m][33m;[39m
+    [90m1842|[39m       const names = (request.tools as { function: { name: string } }[]…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare retains the outside-workspace edit approval boundary without asking headlessly
+[31m[1mAssertionError[22m: expected '"Tool execution was not approved. Use…' to match /exit [1-9]/[39m
+
+[32m- Expected:[39m
+/exit [1-9]/
+
+[31m+ Received:[39m
+"\"Tool execution was not approved. User's reason: Non-interactive mode: use --auto-approve to allow tool execution\""
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m2051:48[22m[39m
+    [90m2049|[39m     } [35melse[39m {
+    [90m2050|[39m       // The sandbox's denial text is platform-specific; the failed ex…
+    [90m2051|[39m       [34mexpect[39m(toolExchange[33m.[39mresults[[34m0[39m][33m?.[39mcontent)[33m.[39m[34mtoMatch[39m([36m/exit [1-9]/[39m)[33m;[39m
+    [90m   |[39m                                                [31m^[39m
+    [90m2052|[39m     }
+    [90m2053|[39m   } [35mfinally[39m {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare permits explicit sandbox scratch writes without approval
+[31m[1mAssertionError[22m: Profile: bare
+[tool] shell: printf '%s\n' "fixture edit" > "/tmp/qduc/term2-nodejs/term2-cli-test-i4SH7M/scr…
+[approval required] shell
+: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m2040:50[22m[39m
+    [90m2038|[39m     )[33m;[39m
+    [90m2039|[39m     [34mexpect[39m(result[33m.[39mstatus[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m2040|[39m     [34mexpect[39m(fs[33m.[39m[34mexistsSync[39m(target)[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m(scratch)[33m;[39m
+    [90m   |[39m                                                  [31m^[39m
+    [90m2041|[39m     [34mexpect[39m(result[33m.[39mstdout)[33m.[39m[34mtoContain[39m(reply)[33m;[39m
+    [90m2042|[39m     [35mconst[39m toolExchange [33m=[39m [34mlastWireToolExchange[39m(mock[33m.[39m[34mcapturedRequests[39m())[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m51 passed[39m[22m[90m (55)[39m
+[2m   Start at [22m 16:24:44
+[2m   Duration [22m 69.86s[2m (transform 110ms, setup 24ms, import 145ms, tests 69.53s, environment 0ms)[22m
+

@@ -1,0 +1,16 @@
+[
+  {
+    "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/turn-decisions.blackbox.ts",
+    "exit": 0,
+    "runtimeSeconds": 7.10612765699625,
+    "log": "docs/experiments/generated-verification/checks/provider-focused.log",
+    "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac"
+  },
+  {
+    "command": "CI=1 pnpm test:provider-black-box",
+    "exit": 0,
+    "runtimeSeconds": 119.53598025906831,
+    "log": "docs/experiments/generated-verification/checks/provider-ci.log",
+    "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac"
+  }
+]

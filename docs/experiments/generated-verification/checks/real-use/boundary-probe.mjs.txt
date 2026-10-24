@@ -1,0 +1,85 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { QueueController } from '../../../../../source/services/queue/queue-controller.ts';
+const results=[];
+const check=async(name,fn)=>{try{await fn();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:String(e.stack)});}};
+function setup({record=null,cancel=()=>true,disk=false}={}){
+ let item=0,execution=0;
+ const starts=[],writes=[];
+ const directory=disk?mkdtempSync(join(tmpdir(),'queue-independent-')):null;
+ const file=directory&&join(directory,'queue.json');
+ if(file&&record)writeFileSync(file,JSON.stringify(record));
+ const persistence={load:()=>file?(()=>{try{return JSON.parse(readFileSync(file,'utf8'));}catch{return null;}})():record,
+ replace:r=>{writes.push(structuredClone(r));if(file)writeFileSync(file,JSON.stringify(r));}};
+ const snapshots=[];
+ const controller=new QueueController({driver:{start:e=>starts.push(e),cancel},
+ snapshotFactory:item=>{const s={text:item.text,nested:{text:item.text}};snapshots.push(s);return s;},
+ persistence,ids:{item:()=>`item-${++item}`,execution:()=>`exec-${++execution}`}});
+ return {controller,starts,writes,persistence,snapshots,cleanup:()=>directory&&rmSync(directory,{recursive:true,force:true})};
+}
+const submit=(c,text)=>c.command({kind:'submit',text});
+for(const reason of ['failure','manual','recovered_interrupted']){
+ for(const n of [0,1,3]) await check(`restore-${reason}-${n}`,async()=>{
+ const queue=Array.from({length:n},(_,i)=>({id:`saved-${i}`,text:`payload-${i} Ω`,sequence:i+1,submittedAt:'2026-01-01T00:00:00Z',preflight:undefined}));
+ const s=setup({record:{version:1,nextSequence:n+1,queue,pause:{reason}},disk:true});
+ try{
+ const c=s.controller;
+ assert.equal(c.state().kind,n?'paused':'idle');assert.deepEqual(c.state().queue,queue);assert.equal(s.starts.length,0);
+ await submit(c,'fresh');
+ if(n){assert.equal(c.state().reason,reason);assert.deepEqual(c.state().queue.slice(0,n),queue);assert.equal(s.starts.length,0);
+ await c.command({kind:'remove_queued',itemId:queue[0].id});
+ if(n===1)assert.equal(c.state().reason,reason); // fresh still retained
+ await c.command({kind:'resume_queue'});
+ assert.equal(s.starts[0].item.text,n===1?'fresh':'payload-1 Ω');
+ }else{assert.equal(c.state().kind,'running');assert.equal(s.starts[0].item.text,'fresh');}
+ }finally{s.cleanup();}
+ });
+}
+await check('failure-remove-last-persists-idle-and-fresh-dispatch',async()=>{
+ const s=setup({disk:true});try{
+ const c=s.controller;await submit(c,'active');await submit(c,'retained');
+ await c.event({kind:'failed',executionId:c.state().active.executionId,failure:'fixture'});
+ assert.equal(c.state().reason,'failure');
+ await c.command({kind:'remove_queued',itemId:c.state().queue[0].id});
+ assert.equal(c.state().kind,'idle');assert.equal(s.writes.at(-1).pause,undefined);
+ const recovered=new QueueController({driver:{start:e=>s.starts.push(e),cancel:()=>true},snapshotFactory:i=>({text:i.text}),persistence:s.persistence});
+ assert.equal(recovered.state().kind,'idle');await submit(recovered,'fresh');assert.equal(s.starts.at(-1).item.text,'fresh');
+ }finally{s.cleanup();}
+});
+await check('failure-remove-partial-preserves-payload-and-reason',async()=>{
+ const s=setup();const c=s.controller;await submit(c,'active');await submit(c,'first');await submit(c,'last');
+ await c.event({kind:'failed',executionId:c.state().active.executionId,failure:'fixture'});
+ const last=c.state().queue[1];await c.command({kind:'remove_queued',itemId:c.state().queue[0].id});
+ assert.equal(c.state().reason,'failure');assert.deepEqual(c.state().queue,[last]);assert.equal(s.starts.length,1);
+ await c.command({kind:'resume_queue'});assert.equal(s.starts.at(-1).item.text,'last');
+});
+for(const retain of [0,1,3])for(const mutation of ['none','remove-all','discard'])await check(`unproven-cancel-retain-${retain}-${mutation}`,async()=>{
+ const s=setup({cancel:()=>false});const c=s.controller;
+ await submit(c,'active');for(let i=0;i<retain;i++)await submit(c,`retained-${i}`);
+ const active=c.state().active;assert.deepEqual(await c.command({kind:'cancel'}),{kind:'rejected',reason:'cancellation_unproven'});
+ if(mutation==='remove-all')for(const item of c.state().queue)await c.command({kind:'remove_queued',itemId:item.id});
+ if(mutation==='discard')await c.command({kind:'discard_queue'});
+ await submit(c,'fresh');
+ await c.command({kind:'resume_queue'});
+ await c.command({kind:'cancellation_settled',executionId:'wrong'});
+ await c.event({kind:'completed',executionId:active.executionId,terminal:{}});
+ await c.event({kind:'failed',executionId:active.executionId,failure:'late'});
+ assert.equal(c.state().kind,'cancelling');assert.equal(c.state().active.executionId,active.executionId);assert.equal(s.starts.length,1);
+ assert.deepEqual(await c.command({kind:'cancellation_settled',executionId:active.executionId}),{kind:'accepted'});
+ if(retain&&mutation==='none'){assert.equal(c.state().reason,'manual');assert.equal(s.starts.length,1);await c.command({kind:'resume_queue'});assert.equal(s.starts.at(-1).item.text,'retained-0');}
+ else{assert.equal(c.state().kind,'running');assert.equal(s.starts.at(-1).item.text,'fresh');}
+ const state=c.state();await c.command({kind:'cancellation_settled',executionId:active.executionId});assert.deepEqual(c.state(),state);
+});
+await check('edited-dispatch-snapshot-isolated-and-issued-id-stale-events-ignored',async()=>{
+ const s=setup();const c=s.controller;await submit(c,'first');const first=c.state().active;
+ s.snapshots[0].nested.text='external mutation';assert.equal(first.snapshot.nested.text,'first');
+ await submit(c,'original');await c.command({kind:'edit_queued',itemId:c.state().queue[0].id,text:'edited'});
+ await c.event({kind:'completed',executionId:first.executionId,terminal:{}});
+ const second=c.state().active;assert.notEqual(first.executionId,second.executionId);assert.equal(second.item.text,'edited');assert.equal(second.snapshot.text,'edited');
+ await c.event({kind:'completed',executionId:first.executionId,terminal:{}});await c.event({kind:'failed',executionId:first.executionId,failure:'late'});
+ assert.equal(c.state().active.executionId,second.executionId);assert.equal(s.starts.length,2);
+});
+console.log(JSON.stringify({checks:results.length,passed:results.filter(r=>r.passed).length,results},null,2));
+if(results.some(r=>!r.passed))process.exitCode=1;

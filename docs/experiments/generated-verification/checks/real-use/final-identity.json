@@ -1,0 +1,14 @@
+{
+  "capturedUTC": "2026-10-24T09:32:42.587782+00:00",
+  "head": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+  "files": {
+    "docs/experiments/generated-verification/README.md": "5845c6bf41631c048b675c2209bd02846edd25301e7450f587231264b8812f3f",
+    "docs/experiments/generated-verification/PLAN.md": "43561ee9f176c343cb686d85d06e8cc419862ede28280b86f572c6b880f4bec5",
+    "scripts/generated-verification/run.mjs": "3e43906067fb5920969f8580bab64cef20ea932c2a93bb718c5b85b43954b151",
+    "scripts/generated-verification/queue.mjs": "5a67e2ffe91006a5bdb92d4a3bda215a46ca4af09a7c056c46456da843beec71",
+    "scripts/generated-verification/history.mjs": "105aa5c60502c50eeb6f1a38147759aa7bde6e389c253283f8634e7e8d4c3f14",
+    "source/services/queue/queue-controller.ts": "4080f03c7f8317e96ec425a5254766c7fbb5bf66defcb1ead41058735b9ef5f1",
+    "pnpm-lock.yaml": "f9b0e87783a46e0c66aed30a35c79073e8b3d915331ffef8d1f289331c02fd6f",
+    "package.json": "a126cd0b31a62213f7af24a5f4ee711b3e709ae7f5404bb32cf1ddef09358576"
+  }
+}

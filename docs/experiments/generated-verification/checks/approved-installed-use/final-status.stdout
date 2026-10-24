@@ -1,0 +1,15 @@
+ M docs/experiments/generated-verification/PLAN.md
+ M docs/test-results.json
+?? docs/experiments/generated-verification/approved-installed-use.stderr
+?? docs/experiments/generated-verification/approved-installed-use.trace.jsonl
+?? docs/experiments/generated-verification/checks/
+?? docs/experiments/generated-verification/final-independent-review.md
+?? docs/experiments/generated-verification/final-independent-review.stderr
+?? docs/experiments/generated-verification/final-independent-review.trace.jsonl
+?? docs/experiments/generated-verification/fresh-installed-use.md
+?? docs/experiments/generated-verification/fresh-installed-use.stderr
+?? docs/experiments/generated-verification/fresh-installed-use.trace.jsonl
+?? docs/experiments/generated-verification/independent-discovery.md
+?? docs/experiments/generated-verification/independent-discovery.stderr
+?? docs/experiments/generated-verification/independent-discovery.trace.jsonl
+?? docs/experiments/generated-verification/review-brief.md

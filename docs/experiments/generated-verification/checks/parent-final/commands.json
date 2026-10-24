@@ -1,0 +1,79 @@
+[
+  {
+    "name": "installed",
+    "command": ["pnpm", "verify:generated", "--seed", "424242"],
+    "exit": 0,
+    "expected": 0,
+    "wallSeconds": 1.4328678250312805
+  },
+  {
+    "name": "replay-discovery.json",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "exit": 0,
+    "expected": 0,
+    "wallSeconds": 0.998418403789401
+  },
+  {
+    "name": "replay-restore-red.json",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.restore-pause",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0",
+      "--runs",
+      "1000"
+    ],
+    "exit": 0,
+    "expected": 0,
+    "wallSeconds": 0.9935922608710825
+  },
+  {
+    "name": "output-new",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--target",
+      "queue",
+      "--seed",
+      "42",
+      "--runs",
+      "100",
+      "--output",
+      "docs/experiments/generated-verification/checks/parent-final/explicit-output.json"
+    ],
+    "exit": 0,
+    "expected": 0,
+    "wallSeconds": 1.023906101938337
+  },
+  {
+    "name": "output-existing",
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--seed",
+      "43",
+      "--runs",
+      "1",
+      "--output",
+      "docs/experiments/generated-verification/checks/parent-final/explicit-output.json"
+    ],
+    "exit": 2,
+    "expected": 2,
+    "wallSeconds": 1.0343027850612998
+  }
+]

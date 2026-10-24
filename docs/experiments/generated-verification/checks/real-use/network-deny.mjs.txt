@@ -1,0 +1,28 @@
+import net from 'node:net';
+import tls from 'node:tls';
+import http from 'node:http';
+import https from 'node:https';
+import dns from 'node:dns';
+import dgram from 'node:dgram';
+import { syncBuiltinESMExports } from 'node:module';
+let attempts=0;
+const deny=(api)=>(...args)=>{ attempts++; throw new Error(`NETWORK_FORBIDDEN: ${api}`); };
+let localIpcConnections=0;
+const connectGuard=(original,api)=>function(...args){
+ const target=Array.isArray(args[0])?args[0][0]:args[0];
+ if ((typeof target==='string' && target.startsWith('/')) || (target && typeof target==='object' && target.port===undefined && (target.path!==undefined || target.fd!==undefined))) {
+  localIpcConnections++; return Reflect.apply(original,this,args);
+ }
+ return deny(api)(...args);
+};
+net.Socket.prototype.connect=connectGuard(net.Socket.prototype.connect,'Socket.connect');
+net.connect=connectGuard(net.connect,'net.connect');
+net.createConnection=connectGuard(net.createConnection,'net.createConnection');
+tls.connect=deny('tls.connect');
+for(const m of [http,https]) {m.request=deny('http.request');m.get=deny('http.get');}
+for(const name of ['lookup','resolve','resolve4','resolve6']) {dns[name]=deny(`dns.${name}`);dns.promises[name]=deny(`dns.promises.${name}`);}
+dgram.createSocket=deny('dgram.createSocket');
+globalThis.fetch=deny('fetch');
+globalThis.WebSocket=deny('WebSocket');
+syncBuiltinESMExports();
+process.on('exit',()=>console.error(JSON.stringify({networkGuard:true,attempts,localIpcConnections,pid:process.pid})));

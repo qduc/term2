@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "revision": "db1c1f884d663cb14cc90da9487683fc1afab6ac",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 17.48411999999996,
+  "results": [
+    {
+      "property": "queue.serial-actions",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 7,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 17.46033600000004,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

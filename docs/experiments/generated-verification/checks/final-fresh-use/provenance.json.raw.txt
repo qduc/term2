@@ -1,0 +1,37 @@
+{
+  "utcEnd": "2026-10-24T09:41:25Z",
+  "files": {
+    "AGENTS.md": "84cffaea7841a52836abee19739dc9173f17d45983cdbc0454226b74d5c7c248",
+    "docs/experiments/generated-verification/README.md": "5845c6bf41631c048b675c2209bd02846edd25301e7450f587231264b8812f3f",
+    ".agents/skills/testing/SKILL.md": "67038d4d32a25e3c93b5b5a50070cf76d442a4819ccd25fe90dcdde65f724047",
+    ".agents/skills/verification/SKILL.md": "2550c73e32ff33a468439bafdeb713a58fa1f8add822e1ea7efc9da5db208891",
+    "/home/qduc/.codex/AGENTS.md": "fcbd5fb6f02f7ecc824e27c24fc7b19304b845faefe2690ffdc95ec6cd03c2fb",
+    "/home/qduc/term2/AGENTS.md": "aa44fd3a451b79718c1a9e35488e9a5f78cab5fba683bb0843c3cb2eee51da5e",
+    "/home/qduc/.agents/skills/coordinator/references/real-use-verification.md": "40dfe2fa925fd8e61c7938449f2826f6d4e292bf8ce51fbee16e3660be8efa6d",
+    "/home/qduc/qduc-skills/skills/code-review/SKILL.md": "f39a6e128844663a5338ac8d3efb48f49b1a9dc24fd290588524ce6dd317ea40",
+    "source/services/conversation/conversation-state-projector.ts": "01fa7aed68aba8e347aee045620f936a9ae9c41e315a4c7e558c9785ceab72bf",
+    "source/services/tool-execution-ledger.ts": "426f07f40a127dd0f4262c2332c4a462c49ba74b22da3668351779585af59b36",
+    "source/services/conversation/run-item-normalizer.ts": "33f2aad3a53ea33f3f17ae8cf6c41dd3280da0188053c414c828fffe1898dca1",
+    "source/contracts/provider-input.ts": "5c0c609dfe3e1a9456627c70f341f90235fe310503094626dc70d56561f71907",
+    "node_modules/fast-check/package.json": "3df7a54da656099e4f63c1577fc10aac90cb0078212067c856fa99970dcccdbb",
+    "node_modules/tsx/package.json": "1712340c8942ca0af1efaf2b42fd0cd608fb023f6a4fae427399ed08c61cf0f4"
+  },
+  "executables": {
+    "pnpm": {
+      "path": "/home/qduc/.nvm/versions/node/v24.19.0/bin/pnpm",
+      "resolved": "/home/qduc/.nvm/versions/node/v24.19.0/lib/node_modules/pnpm/bin/pnpm.mjs",
+      "sha256": "ff3224d46b47fbb24a7e9fe15fededef7e00892d07d4e376b6762d4899906bfd"
+    },
+    "node": {
+      "path": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node",
+      "resolved": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node",
+      "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12"
+    }
+  },
+  "baseline": {
+    "6075a3cf": "6075a3cf1507a050baf690240b89fc776cd2aedc",
+    "9288a02c": "9288a02c39a2b86a928fc331a04b1bcd961d48fc",
+    "HEAD": "29d154543c31e9682499de4ecfefaee2c1786ddd"
+  },
+  "statusEnd": " M docs/experiments/generated-verification/PLAN.md\n M docs/test-results.json\n?? docs/experiments/generated-verification/approved-installed-use.md\n?? docs/experiments/generated-verification/approved-installed-use.stderr\n?? docs/experiments/generated-verification/approved-installed-use.trace.jsonl\n?? docs/experiments/generated-verification/checks/\n?? docs/experiments/generated-verification/final-fresh-use.stderr\n?? docs/experiments/generated-verification/final-fresh-use.trace.jsonl\n?? docs/experiments/generated-verification/final-independent-review.md\n?? docs/experiments/generated-verification/final-independent-review.stderr\n?? docs/experiments/generated-verification/final-independent-review.trace.jsonl\n?? docs/experiments/generated-verification/fresh-installed-use.md\n?? docs/experiments/generated-verification/fresh-installed-use.stderr\n?? docs/experiments/generated-verification/fresh-installed-use.trace.jsonl\n?? docs/experiments/generated-verification/independent-discovery.md\n?? docs/experiments/generated-verification/independent-discovery.stderr\n?? docs/experiments/generated-verification/independent-discovery.trace.jsonl\n?? docs/experiments/generated-verification/review-brief.md\n"
+}

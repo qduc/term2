@@ -1,0 +1,27 @@
+[
+  {
+    "seed": 1,
+    "exit": 0,
+    "wallSeconds": 6.442998941987753,
+    "report": "docs/experiments/generated-verification/checks/generated-1.json"
+  },
+  {
+    "seed": 20261024,
+    "exit": 0,
+    "wallSeconds": 4.825652147177607,
+    "report": "docs/experiments/generated-verification/checks/generated-20261024.json"
+  },
+  {
+    "seed": -2147483648,
+    "exit": 2,
+    "wallSeconds": 1.3002365808933973,
+    "report": "docs/experiments/generated-verification/checks/generated-negative-rejected.stdout",
+    "notes": "Node parseArgs requires equals syntax for negative values; corrected run passed, timing not separately recorded"
+  },
+  {
+    "seed": 2147483647,
+    "exit": 0,
+    "wallSeconds": 4.608464610297233,
+    "report": "docs/experiments/generated-verification/checks/generated-2147483647.json"
+  }
+]

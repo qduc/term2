@@ -1,0 +1,11 @@
+{
+  "command": [
+    "pnpm",
+    "verify:generated",
+    "--seed",
+    "424242"
+  ],
+  "NODE_OPTIONS": null,
+  "exit": 2,
+  "wallSeconds": 1.0430603800341487
+}

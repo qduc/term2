@@ -1,0 +1,84 @@
+$ cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/generated-verification[39m
+
+[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l [31m❯[39m source/cli.integration.test.ts [2m([22m[2m55 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[33m 64838[2mms[22m[39m
+[31m   [31m×[31m bare profile via flag keeps a small tool surface, project guidance, and versioned session identity[39m[33m 996[2mms[22m[39m
+[31m   [31m×[31m bare profile via config keeps a small tool surface, project guidance, and versioned session identity[39m[33m 991[2mms[22m[39m
+[31m   [31m×[31m bare retains the outside-workspace edit approval boundary without asking headlessly[39m[33m 979[2mms[22m[39m
+[31m   [31m×[31m bare permits explicit sandbox scratch writes without approval[39m[33m 951[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via flag keeps a small tool surface, project guidance, and versioned session identity
+[31m[1mError[22m: ENOENT: no such file or directory, open '/tmp/qduc/term2-nodejs/term2-bare-Ez08Lt/result.txt'[39m
+[36m [2m❯[22m source/cli.integration.test.ts:[2m1840:17[22m[39m
+    [90m1838|[39m       [34mexpect[39m(result[33m.[39mstatus[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m1839|[39m       [34mexpect[39m(result[33m.[39mstderr)[33m.[39m[34mtoContain[39m([32m'Profile: bare'[39m)[33m;[39m
+    [90m1840|[39m       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).t…
+    [90m   |[39m                 [31m^[39m
+    [90m1841|[39m       [35mconst[39m request [33m=[39m mock[33m.[39m[34mcapturedRequests[39m()[[34m0[39m][33m;[39m
+    [90m1842|[39m       const names = (request.tools as { function: { name: string } }[]…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via config keeps a small tool surface, project guidance, and versioned session identity
+[31m[1mError[22m: ENOENT: no such file or directory, open '/tmp/qduc/term2-nodejs/term2-bare-wudTO6/result.txt'[39m
+[36m [2m❯[22m source/cli.integration.test.ts:[2m1840:17[22m[39m
+    [90m1838|[39m       [34mexpect[39m(result[33m.[39mstatus[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m1839|[39m       [34mexpect[39m(result[33m.[39mstderr)[33m.[39m[34mtoContain[39m([32m'Profile: bare'[39m)[33m;[39m
+    [90m1840|[39m       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).t…
+    [90m   |[39m                 [31m^[39m
+    [90m1841|[39m       [35mconst[39m request [33m=[39m mock[33m.[39m[34mcapturedRequests[39m()[[34m0[39m][33m;[39m
+    [90m1842|[39m       const names = (request.tools as { function: { name: string } }[]…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare retains the outside-workspace edit approval boundary without asking headlessly
+[31m[1mAssertionError[22m: expected '"Tool execution was not approved. Use…' to match /exit [1-9]/[39m
+
+[32m- Expected:[39m
+/exit [1-9]/
+
+[31m+ Received:[39m
+"\"Tool execution was not approved. User's reason: Non-interactive mode: use --auto-approve to allow tool execution\""
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m2051:48[22m[39m
+    [90m2049|[39m     } [35melse[39m {
+    [90m2050|[39m       // The sandbox's denial text is platform-specific; the failed ex…
+    [90m2051|[39m       [34mexpect[39m(toolExchange[33m.[39mresults[[34m0[39m][33m?.[39mcontent)[33m.[39m[34mtoMatch[39m([36m/exit [1-9]/[39m)[33m;[39m
+    [90m   |[39m                                                [31m^[39m
+    [90m2052|[39m     }
+    [90m2053|[39m   } [35mfinally[39m {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare permits explicit sandbox scratch writes without approval
+[31m[1mAssertionError[22m: Profile: bare
+[tool] shell: printf '%s\n' "fixture edit" > "/tmp/qduc/term2-nodejs/term2-cli-test-22XdCC/scr…
+[approval required] shell
+: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m2040:50[22m[39m
+    [90m2038|[39m     )[33m;[39m
+    [90m2039|[39m     [34mexpect[39m(result[33m.[39mstatus[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m2040|[39m     [34mexpect[39m(fs[33m.[39m[34mexistsSync[39m(target)[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m(scratch)[33m;[39m
+    [90m   |[39m                                                  [31m^[39m
+    [90m2041|[39m     [34mexpect[39m(result[33m.[39mstdout)[33m.[39m[34mtoContain[39m(reply)[33m;[39m
+    [90m2042|[39m     [35mconst[39m toolExchange [33m=[39m [34mlastWireToolExchange[39m(mock[33m.[39m[34mcapturedRequests[39m())[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m23 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (25)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m222 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (227)[39m
+[2m   Start at [22m 16:21:45
+[2m   Duration [22m 65.24s[2m (transform 7.70s, setup 340ms, import 21.86s, tests 127.21s, environment 3ms)[22m
+
+[ELIFECYCLE] Command failed with exit code 1.

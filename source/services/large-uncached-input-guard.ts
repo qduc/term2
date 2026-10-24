@@ -11,9 +11,7 @@ export type LargeUncachedInputWarningReason =
   | 'model_changed'
   | 'reasoning_effort_changed'
   | 'mode_changed'
-  | 'resumed_session_stale'
   | 'resumed_session_unknown_age'
-  | 'idle_timeout'
   | 'undo_rewind';
 
 export interface LargeUncachedInputContext {
@@ -230,14 +228,9 @@ export class LargeUncachedInputGuard {
       ) {
         reasons.push('mode_changed');
       }
-      if (context.now - this.#lastSuccessful.completedAt > this.#config.idleMs) {
-        reasons.push('idle_timeout');
-      }
     } else if (this.#resumedUpdatedAtMs !== undefined) {
       if (this.#resumedUpdatedAtMs === null) {
         reasons.push('resumed_session_unknown_age');
-      } else if (context.now - this.#resumedUpdatedAtMs > this.#config.idleMs) {
-        reasons.push('resumed_session_stale');
       }
     }
 

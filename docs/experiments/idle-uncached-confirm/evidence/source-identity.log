@@ -1,0 +1,34 @@
+Base: 4731459c44584c6e49854dac4a1d50cb849687dd
+Dirty working-tree snapshot; not a commit.
+Restored reviewed patch SHA256: a16f7fa6dd51e4de7113304f1072f027049d0370e8443b6d3e60da58c38bcf1f
+Production SHA256: 7940878d710a5c1c920486da3998d46aead4ac8770e91418e4b44bf0d7e58f3a
+Probe SHA256: d0e1e3a09dd43000250c467523b320967dce45fcee5fb4c19ac7eff6a7365304
+diff --git a/source/services/large-uncached-input-guard.ts b/source/services/large-uncached-input-guard.ts
+index 6048d02e..c05a0335 100644
+--- a/source/services/large-uncached-input-guard.ts
++++ b/source/services/large-uncached-input-guard.ts
+@@ -11,9 +11,7 @@ export type LargeUncachedInputWarningReason =
+   | 'model_changed'
+   | 'reasoning_effort_changed'
+   | 'mode_changed'
+-  | 'resumed_session_stale'
+   | 'resumed_session_unknown_age'
+-  | 'idle_timeout'
+   | 'undo_rewind';
+ 
+ export interface LargeUncachedInputContext {
+@@ -230,14 +228,9 @@ export class LargeUncachedInputGuard {
+       ) {
+         reasons.push('mode_changed');
+       }
+-      if (context.now - this.#lastSuccessful.completedAt > this.#config.idleMs) {
+-        reasons.push('idle_timeout');
+-      }
+     } else if (this.#resumedUpdatedAtMs !== undefined) {
+       if (this.#resumedUpdatedAtMs === null) {
+         reasons.push('resumed_session_unknown_age');
+-      } else if (context.now - this.#resumedUpdatedAtMs > this.#config.idleMs) {
+-        reasons.push('resumed_session_stale');
+       }
+     }
+ 

@@ -1,3 +1,18 @@
+## [0.37.0] - 2026-10-24
+
+### Features
+- Local context compaction prefers a one-shot summary request over the live conversation prefix when the full request fits the model input window, preserving prompt-cache and transport affinity on Codex, Grok, and OpenCode while falling back to the bounded chunk reducer for larger histories.
+- The Bare profile presents a foreground-only `shell` tool schema and batching guidance while keeping the full canonical schema for runtime parameter normalization and approval checks.
+
+### Improvements
+- `/resume` and `term2 --resume` sort conversation files by modification time before reading and bound full log parsing to the requested limit.
+
+### Bug Fixes
+- Local context compaction caps the verbatim hot tail at 16,000 tokens, applies that budget to whole-turn retention, and falls back to the newest settled round when a single round exceeds the budget.
+- Local context compaction renders up to 40 recent tool receipts as a one-line digest outside `<summary>` (with full paths extracted before argument truncation) instead of re-feeding raw JSON receipts into later summaries, and anchors legacy receipt stripping so summary prose mentioning the tag is preserved.
+- Native Codex freeform `apply_patch` tool calls return `{ patch }` matching the canonical tool schema instead of failing schema validation with `{ operations }` before any file write.
+- The interactive banner and status bar resolve profile labels (`Bare`, `Pair`, etc.) directly from the built-in profile registry instead of falling back to `Standard`.
+
 ## [0.36.0] - 2026-10-23
 
 ### Features

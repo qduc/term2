@@ -16,8 +16,9 @@ Usage:
 | `--model <model>` | `-m` | String | Configured | Model pattern or ID. Supports `provider/id` and optional `:<thinking>` (e.g. `o3-mini:high`). Bare `-m`/`--model` opens the interactive picker in a TTY. |
 | `--provider <provider>` | `-p` | String | Configured | Override the configured provider (e.g. `openai`, `openrouter`, `grok`, `codex`). |
 | `--reasoning <effort>` | `-r` | String | Configured | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`). |
-| `--lite` | `-l` | Boolean | `false` | Start in lite mode (minimal prompt, session-only context, no codebase indexing). |
-| `--auto-approve` | — | Boolean | `false` | Opt out of implicit Lite mode and enable tools in non-interactive mode. This uses GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell commands remain refused. |
+| `--profile <name>` | — | String | Configured | Select `full`, `bare`, `plan`, `pair`, `mentor`, or `orchestrator`; `lite` is an alias for `bare`. |
+| `--lite` | `-l` | Boolean | `false` | Compatibility alias for `--profile bare` (minimal prompt, project instructions read on demand). |
+| `--auto-approve` | — | Boolean | `false` | Opt out of implicit Bare selection and enable tools in non-interactive mode. This uses GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell commands remain refused. |
 | `--quiet` | `-q` | Boolean | `false` | Suppress non-error diagnostics on stderr in non-interactive mode. |
 | `--show-reasoning` | — | Boolean | `false` | Stream reasoning/thinking deltas to stderr in non-interactive mode. |
 | `--json` | — | Boolean | `false` | Emit newline-delimited JSON (NDJSON) events on stdout in non-interactive mode. |
@@ -28,7 +29,7 @@ Usage:
 | `--codex-login` | — | Boolean | `false` | Log in to OpenAI Codex/ChatGPT via browser PKCE OAuth and exit. |
 | `--list-models [search]` | — | Boolean / String | `false` | Print available models grouped by provider, filtered by an optional search term. |
 | `--refresh` | — | Boolean | `false` | With `--list-models`, bypass the model catalog cache and re-fetch from provider APIs. |
-| `--resume [id\|ls]` | `-R` | Boolean / String | `false` | Resume the last conversation, a specific ID, or list recent conversations (`ls`). |
+| `--resume [id\|ls]` | `-R` | Boolean / String | `false` | Resume the last conversation, a specific ID, or list recent conversations (`ls`). Add a prompt after an explicit ID (or `last`) for a headless continuation. |
 | `--goal <text>` | — | String | — | Set a durable session outcome (up to 2,000 characters). |
 | `--goal-criteria <text>` | — | String | — | Optional success criteria (up to 2,000 characters); requires `--goal`. |
 | `--profile <name>` | — | String | Configured | Select an operating profile (`full`, `bare`, `lite`, `plan`, `pair`, `mentor`, `orchestrator`). |

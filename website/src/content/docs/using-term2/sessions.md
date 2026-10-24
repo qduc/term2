@@ -67,3 +67,15 @@ While a goal is active, the agent reports a `goal_check` before ending a turn. A
 
 To pass the assistant's final response into a new session or switch to another model:
 - Run `/handoff` to capture and pass the latest assistant response directly to the handoff flow.
+
+## Continue Without the Terminal UI
+
+Add a follow-up prompt after a session ID, or use `last` for the most recent session:
+
+```bash
+term2 --resume <conversation-id> "Summarize our progress"
+term2 --resume last --json "What should we do next?"
+term2 --resume <conversation-id> --fork "Explore an alternative"
+```
+
+These commands restore the saved history and append a new headless turn. Resuming preserves the session ID; `--fork` writes to a new session instead. Tool execution remains disabled unless you pass `--auto-approve`. A missing session exits with an error rather than silently starting a new conversation.

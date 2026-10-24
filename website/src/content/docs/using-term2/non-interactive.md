@@ -17,7 +17,7 @@ Execute one-off queries with stdout output:
 term2 "Explain the purpose of package.json in this project"
 ```
 
-A positional prompt without `--auto-approve` uses `builtin:lite` by default (unless `--profile` is specified or a persisted Bare, Mentor, or Orchestrator profile takes precedence), so tools are unavailable. `--auto-approve` opts out of that implicit Lite selection and enables tools. It applies GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
+A new positional-prompt session without `--auto-approve` uses `builtin:bare` by default (unless `--profile` is specified or a persisted Mentor or Orchestrator profile takes precedence). Tool execution is disabled without `--auto-approve`, independently of the selected profile. `--auto-approve` opts out of that implicit Bare selection and enables tools. It applies GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
 
 The output streams directly to standard output. Non-error diagnostic logs are printed to standard error.
 
@@ -57,9 +57,9 @@ Stream thinking/reasoning deltas from reasoning-capable models (e.g. o1, o3, Gro
 term2 --show-reasoning "Solve this mathematical recurrence relation"
 ```
 
-### Lightweight Non-Interactive Execution (`--lite`)
+### Minimal-Prompt Execution (`--lite`)
 
-Run in lite mode without indexing the workspace codebase. Lite mode does not provide filesystem or shell tools, so include any data to analyze in the prompt:
+`--lite` (or `-l`) is a compatibility alias for `--profile bare`. Bare uses a minimal prompt and reads project instructions on demand; it retains codebase tools and exposes selected capabilities through `run_code`. Tools still require `--auto-approve` in non-interactive mode:
 
 ```bash
 term2 --lite "Explain the difference between disk usage and apparent file size"

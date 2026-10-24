@@ -9273,6 +9273,26 @@
       ],
       "evidence": ["/tmp/term2-resume-provider.log"],
       "notes": "Author rebuilt dist concurrently with this run; invalidated run, not classified as a baseline product failure. Subsequent non-overlapping full final run passes 222 with 1 skipped."
+    },
+    {
+      "id": "2026-10-24-release-038-docs",
+      "recorded_on": "2026-10-24",
+      "commit": "829cf5ee50df9c067fd214cdf1e6cfa432889f98",
+      "revision_kind": "dirty_release_documentation_snapshot",
+      "suite": "website",
+      "command": "pnpm --dir website build",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "evidence": "Generated settings validated against 136 defaults; 26 pages built; all internal links verified. Non-fatal existing /404 route conflict warning."
     }
   ]
 }

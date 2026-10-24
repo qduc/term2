@@ -128,7 +128,7 @@ term2 settings can be configured via:
 | `tools.enableEditHealing` | `boolean` | `true` | No | — | Use AI to automatically correct failed search_replace operations |
 | `tools.shell.enabled` | `boolean` | `true` | ✓ Yes | — | Enable shell tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.web.enabled` | `boolean` | `true` | ✓ Yes | — | Enable web_search and web_fetch tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
-| `tools.fileRead.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file read tools for the main agent (true\|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request. |
+| `tools.fileRead.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file read tools for the main agent (true\|false); applies on the next model request. |
 | `tools.fileWrite.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file edit tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.memory.enabled` | `boolean` | `true` | ✓ Yes | — | Enable memory tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.sessions.enabled` | `boolean` | `true` | ✓ Yes | — | Enable prior-session tools for the main agent (true\|false). Applies on the next model request. |
@@ -151,7 +151,7 @@ term2 settings can be configured via:
 | `app.shellPath` | `string` | — | No | `SHELL, COMSPEC` | Path to shell executable |
 | `app.activeProfileId` | `string` | `"builtin:standard"` | ✓ Yes | — | Active profile identifier (builtin:standard, builtin:plan, etc.) |
 | `app.mentorMode` | `boolean` | `false` | ✓ Yes | — | Legacy mentor mode flag (mapped to active profile) |
-| `app.liteMode` | `boolean` | `false` | ✓ Yes | — | Legacy lite mode flag (mapped to active profile) |
+| `app.liteMode` | `boolean` | `false` | ✓ Yes | — | Legacy lite mode flag (selects the Bare profile) |
 | `app.planMode` | `boolean` | `false` | ✓ Yes | — | Plan mode: read-only research and implementation planning (true\|false) |
 | `app.orchestratorMode` | `boolean` | `false` | ✓ Yes | — | Delegate tool-backed work through subagents (true\|false) |
 | `app.notifications` | `boolean` | `true` | ✓ Yes | — | Enable desktop notifications when the terminal is unfocused (true\|false) |

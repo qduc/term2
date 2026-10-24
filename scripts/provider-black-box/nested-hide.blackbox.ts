@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getAgentDefinition } from '../../source/agent.js';
@@ -44,8 +44,8 @@ afterEach(() => {
 describe('P1 nested hide result chain', () => {
   it('approves a hidden nested editor through the scripted adapter and preserves result-chain identity', async () => {
     const providerId = 'm4-hide-p1-provider';
-    const workspace = mkdtempSync(join(tmpdir(), 'term2-m4-hide-p1-workspace-'));
-    const outsideDir = mkdtempSync(join('/tmp', 'term2-m4-hide-p1-outside-'));
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'term2-m4-hide-p1-workspace-')));
+    const outsideDir = realpathSync(mkdtempSync(join('/tmp', 'term2-m4-hide-p1-outside-')));
     const approvedPath = join(outsideDir, 'approved.txt');
     const settings = createMockSettingsService({
       'shell.autoApproveMode': 'off',

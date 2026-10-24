@@ -1,10 +1,5 @@
 import React from 'react';
-import { render } from 'ink';
-import { SettingsThemeProvider } from '../../theme/ThemeContext.js';
-import { SettingsSkinProvider } from '../../skins/SkinContext.js';
-import StandaloneModelPickerApp, {
-  type StandaloneModelPickerOutcome,
-} from '../../components/menu/StandaloneModelPickerApp.js';
+import type { StandaloneModelPickerOutcome } from '../../components/menu/StandaloneModelPickerApp.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SettingsService } from '../settings/settings-service.js';
 import type { ModelFetcher } from './model-catalog-session.js';
@@ -94,6 +89,16 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
   if (!isModelPickerHostSupported({ stdin, stdout })) {
     return { status: 'cancelled' };
   }
+
+  // Eligibility checks also run for headless CLI prompts. Load the terminal
+  // renderer only after the TTY guard, keeping Yoga initialization out of them.
+  const [{ render }, { SettingsThemeProvider }, { SettingsSkinProvider }, { default: StandaloneModelPickerApp }] =
+    await Promise.all([
+      import('ink'),
+      import('../../theme/ThemeContext.js'),
+      import('../../skins/SkinContext.js'),
+      import('../../components/menu/StandaloneModelPickerApp.js'),
+    ]);
 
   let outcome: StandaloneModelPickerOutcome = { status: 'cancelled' };
 

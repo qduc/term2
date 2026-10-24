@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
@@ -99,9 +99,9 @@ afterEach(() => {
 describe('ACP v2 production backend integration', () => {
   it('runs, cancels, and fail-closed-denies a real RuntimeFactory session', async () => {
     registerProvider(provider);
-    const workspace = mkdtempSync('/tmp/acp-m1-workspace-');
-    const settingsDir = mkdtempSync('/tmp/acp-m1-settings-');
-    const dataDir = mkdtempSync('/tmp/acp-m1-data-');
+    const workspace = realpathSync(mkdtempSync('/tmp/acp-m1-workspace-'));
+    const settingsDir = realpathSync(mkdtempSync('/tmp/acp-m1-settings-'));
+    const dataDir = realpathSync(mkdtempSync('/tmp/acp-m1-data-'));
     roots.push(workspace, settingsDir, dataDir);
     writeFileSync(path.join(workspace, 'readme.txt'), 'hello');
     process.env.ACP_M1_WORKSPACE = workspace;
@@ -251,10 +251,10 @@ const withBridgeSession = async (
   },
   body: (session: BridgeSession) => Promise<void>,
 ): Promise<void> => {
-  const workspace = mkdtempSync('/tmp/acp-m3-workspace-');
-  const escapeDir = mkdtempSync('/tmp/acp-m3-escape-');
-  const settingsDir = mkdtempSync('/tmp/acp-m3-settings-');
-  const dataDir = mkdtempSync('/tmp/acp-m3-data-');
+  const workspace = realpathSync(mkdtempSync('/tmp/acp-m3-workspace-'));
+  const escapeDir = realpathSync(mkdtempSync('/tmp/acp-m3-escape-'));
+  const settingsDir = realpathSync(mkdtempSync('/tmp/acp-m3-settings-'));
+  const dataDir = realpathSync(mkdtempSync('/tmp/acp-m3-data-'));
   roots.push(workspace, escapeDir, settingsDir, dataDir);
   const workspaceFile = path.join(workspace, 'probe.txt');
   const escapeFile = path.join(escapeDir, 'escaped.txt');

@@ -1,0 +1,110 @@
+[
+  {
+    "name": "primary-install",
+    "command": "pnpm install --frozen-lockfile",
+    "exit": 0,
+    "wallSeconds": 0.818773714825511,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-install.log"
+  },
+  {
+    "name": "primary-default",
+    "command": "pnpm verify:generated",
+    "exit": 0,
+    "wallSeconds": 3.875759223010391,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-default.log"
+  },
+  {
+    "name": "primary-compaction-users-replay",
+    "command": "pnpm verify:generated --property compaction.plan-cut --seed=424242 --path 0:1:0:1:1:1:1:1:1:1:1:1:1:1:1 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.09377009421587,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-compaction-users-replay.log"
+  },
+  {
+    "name": "primary-continuity-debt-replay",
+    "command": "pnpm verify:generated --property continuity.debt-filter --seed=424242 --path 0:1:1:1:1:1:1:1:1:0:0:0 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.145512533839792,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-continuity-debt-replay.log"
+  },
+  {
+    "name": "primary-opaque-lanes-replay",
+    "command": "pnpm verify:generated --property opaque.lane-isolation --seed=424242 --path 0:1:0:2:2:2 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.0967091051861644,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-opaque-lanes-replay.log"
+  },
+  {
+    "name": "primary-final-J1-call-lookup-across-turns-replay",
+    "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path 0:1:1:1:1:1:1:1:1:3:3:3:3 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.084639879874885,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-final-J1-call-lookup-across-turns-replay.log"
+  },
+  {
+    "name": "primary-final-J2-reasoning-shared-across-turns-replay",
+    "command": "pnpm verify:generated --property journal.reconstruction --seed=424242 --path 0:1:1:2:1:1:1:1:1:1 --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.1948173511773348,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-final-J2-reasoning-shared-across-turns-replay.log"
+  },
+  {
+    "name": "primary-types",
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "wallSeconds": 3.0719590089283884,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-types.log"
+  },
+  {
+    "name": "primary-static",
+    "command": "pnpm test",
+    "exit": 0,
+    "wallSeconds": 3.016390078701079,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-static.log"
+  },
+  {
+    "name": "primary-build",
+    "command": "pnpm build",
+    "exit": 0,
+    "wallSeconds": 3.9220642261207104,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-build.log"
+  },
+  {
+    "name": "primary-unfiltered-lint",
+    "command": "pnpm lint",
+    "exit": 1,
+    "wallSeconds": 32.08793786494061,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "primary plus untracked evidence",
+    "log": "docs/experiments/generated-verification/checks/hotspots/primary-unfiltered-lint.log"
+  },
+  {
+    "name": "exact-merge-isolated-lint",
+    "command": "pnpm lint",
+    "exit": 0,
+    "wallSeconds": 41.04088376974687,
+    "commit": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+    "cwd": "exact clean merged artifact",
+    "log": "docs/experiments/generated-verification/checks/hotspots/exact-merge-isolated-lint.log"
+  }
+]

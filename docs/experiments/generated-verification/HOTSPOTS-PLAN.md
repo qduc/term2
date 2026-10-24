@@ -1,5 +1,7 @@
 # Remaining high-value generated verification rollout
 
+Merge commit: `f366e4e3aea453dbc8d7843aebd6f2df242420c6`.
+
 ## Contract and authority
 
 User authorized all four remaining candidates after the ledger slice. Exact
@@ -83,7 +85,7 @@ identify both tsx IPC paths. Refined probe still denies ALL socket connections,
 counts IPC separately and passes all10,000 cases with zero external attempts.
 No network exemption or production change was made; both failed probes retained.
 
-Independent fresh Opus5.5 review and full clean isolated lint still pending.
+Independent review and isolated lint outcomes are recorded in subsequent sections.
 No production/package/dependency diff. No new whole integration/e2e/provider-tier
 claim: checker/docs-only rollout. Actual supported production defect not found.
 
@@ -125,6 +127,21 @@ passes with zero external attempts (all sockets still denied). Initial in-memory
 hook failed to apply an uncompiled text edit; retained as infrastructure failure,
 then corrected to the verifier's compiled-module edits. No production change.
 
-Integration and task acceptance records follow after primary checks. Policy
+Integration and task acceptance records follow below. Policy
 question about legacy Grok compatibility remains excluded/unchanged; no settings,
 approval or broad filesystem/crash coverage has been added by implication.
+
+## Merged-artifact acceptance
+
+Primary frozen install, default10,000cases, all five exact fault-derived replays,
+types,28static checks and build pass. Full lint on clean exact merge passes
+(31warnings); primary unfiltered lint retains9,318errors in untracked .cache,
+.coord,.term2,packages, zero tracked errors. No exclusions/deletion of others’
+artifacts. Full logs and per-file diagnostic classification retained. Test/task
+ledgers record exact source revisions, failed harnesses and acceptance limits.
+
+All four candidates covered within the bounded contract. No supported product
+bug found. Legacy shared-tag -> Grok compatibility still needs an owner decision;
+it is explicitly excluded rather than encoded as policy. Author effort remains
+unknown; independent cumulative list-price estimate USD2.110373. Opt-in retention,
+not automatic CI or proof of whole-subsystem correctness.

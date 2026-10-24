@@ -1,0 +1,25 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property journal.reconstruction --seed=424242 --path 0:1:1:2:1:1:1:1:1:1 --runs 1000
+{
+  "schemaVersion": 1,
+  "revision": "f366e4e3aea453dbc8d7843aebd6f2df242420c6",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 105.99155200000001,
+  "results": [
+    {
+      "property": "journal.reconstruction",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 769,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 105.96738700000003,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

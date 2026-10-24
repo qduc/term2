@@ -3794,3 +3794,41 @@ opaque reasoning item without its `reasoning` twin makes the estimate
 non-monotonic, so a mixed-provider history can be refused where main planned a
 cut. That is a refusal only. Rollback is the `planLocalCompaction` cut selection
 and the constant together.
+
+
+## Empty retained-work pause release (generated verification pilot)
+
+Harm prevented: new foreground input accepted but never dispatched after removal
+of the last failure-retained item, including the saved empty pause on restart.
+Class: existing lifecycle/admission pause; enforcement and recovery remain with
+`QueueController`. Signal: exactly `paused` and zero retained queue items, direct
+state evidence. No new capacity, timeout, configuration source, default, clamp,
+setting migration, replay or provider request is introduced. Nonempty pauses
+retain their reason and work. `cancelling` never qualifies: removal/discard cannot
+release an active execution before its matching cancellation proof.
+
+The private `#releaseEmptyPause` owner operation is shared by removal, discard
+and saved-pause restoration. Interrupted-active restoration already avoids an
+empty pause and still drops the interrupted item without replay. Restoration
+normalizes valid legacy empty pauses in memory; the next ordinary persistence
+write saves the normalized state. Custom nonempty saved pauses are unchanged.
+State kind, queue contents, pause reason and existing recovery diagnostics expose
+the result without new content logging. Rollback: the queue repair commit,
+independently from the generated checker commits.
+
+Red proof at unchanged production base: `queue.serial-actions`, seed 424242,
+case 314, 22 shrinks, submit/submit/fail/remove. An independent public-API probe
+confirmed fresh input stays blocked until explicit resume. `queue.restore-pause`
+then failed case 7, one shrink to saved failure pause with zero items. Red
+artifacts and checker reconstruction: commits `0f40efc8` and `9288a02c` under
+`docs/experiments/generated-verification/`. Same shrunk replay commands pass
+after the owner repair; seed 424242 passes 1,000 cases for each of history,
+serial queue and saved-pause properties. Broader gates and independent final
+acceptance are recorded in that experiment's PLAN and checks, not inferred here.
+
+Prevention/retro: pause phase and queue length are independently representable;
+previous empty-pause normalization was distributed across transitions. Removal
+and saved-pause loading omitted it. A small shared operation plus generated
+transition/valid-record contracts protect this category without a second queue
+manager or replacing the state machine. The cancellation-retention path remains
+separately identity-fenced; no weaker cancellation proxy was introduced.

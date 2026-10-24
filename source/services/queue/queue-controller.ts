@@ -468,10 +468,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
           // effective retention decision, but never releases active ownership.
           this.#cancelRetainedItemIds.clear();
         }
-        if (this.#phase === 'paused' && this.#queue.length === 0) {
-          this.#phase = 'idle';
-          this.#pauseReason = undefined;
-        }
+        this.#releaseEmptyPause();
         await this.#persist();
         return { kind: 'accepted' };
       case 'edit_queued': {
@@ -485,6 +482,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
         const index = this.#queue.findIndex((item) => item.id === cmd.itemId);
         if (index < 0) return { kind: 'rejected', reason: 'not_queued' };
         this.#queue.splice(index, 1);
+        this.#releaseEmptyPause();
         if (this.#phase === 'cancelling') {
           this.#cancelRetainedItemIds.delete(cmd.itemId);
         }
@@ -755,12 +753,20 @@ export class QueueController<Snapshot, Terminal = unknown> {
     if (record.pause) {
       this.#phase = 'paused';
       this.#pauseReason = record.pause.reason;
+      this.#releaseEmptyPause();
       return;
     }
     if (this.#queue.length > 0) {
       this.#phase = 'paused';
       this.#pauseReason = 'recovered_interrupted';
     }
+  }
+
+  /** A pause retains queued work, never active cancellation ownership. */
+  #releaseEmptyPause(): void {
+    if (this.#phase !== 'paused' || this.#queue.length > 0) return;
+    this.#phase = 'idle';
+    this.#pauseReason = undefined;
   }
 
   async #persist(): Promise<void> {

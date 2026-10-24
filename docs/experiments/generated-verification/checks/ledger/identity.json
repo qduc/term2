@@ -1,0 +1,14 @@
+{
+  "base": "6a25ecc70d773a1c888df27d7d9bddf64ea6d231",
+  "checkerCommit": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+  "files": {
+    "scripts/generated-verification/ledger.mjs": "7e0cea8352d31b5321e936560954c50a0efb6593e95fc7812980d4ed79aa5114",
+    "scripts/generated-verification/history.mjs": "85c32fd252ab8cbf62fbda5d6efbe3b3ef57f1e21212747aa0fb3292904c64d5",
+    "scripts/generated-verification/run.mjs": "92b2c5989b46915a819784b56d84f70a5f04aeabc3a05df5ca0bc3716cd32c13",
+    "source/services/tool-execution-ledger.ts": "426f07f40a127dd0f4262c2332c4a462c49ba74b22da3668351779585af59b36",
+    "source/services/conversation/conversation-state-projector.ts": "01fa7aed68aba8e347aee045620f936a9ae9c41e315a4c7e558c9785ceab72bf",
+    "pnpm-lock.yaml": "f9b0e87783a46e0c66aed30a35c79073e8b3d915331ffef8d1f289331c02fd6f"
+  },
+  "seedRuns": "Dirty snapshot with identical checker/production bytes to checkerCommit; documentation/evidence differed. Mutation source hashes and minimal substitutions retained separately.",
+  "initialOracleRed": "Not a product defect or final-version replay; wire arguments are JSON text, not native JSON."
+}

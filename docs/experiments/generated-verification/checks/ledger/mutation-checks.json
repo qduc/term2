@@ -1,0 +1,22 @@
+[
+  {
+    "mutation": "settlement",
+    "source": "source/services/tool-execution-ledger.ts",
+    "originalSha256": "426f07f40a127dd0f4262c2332c4a462c49ba74b22da3668351779585af59b36",
+    "mutantSha256": "fad1d0be3ebd5c4cddeb5377f3da4f452347c5aa06eca03f2ae2708ad2bc48ee",
+    "replay": "pnpm verify:generated --property history.ledger-settlement --seed=424242 --path '45:4:3:3:4:4:6:6:6:7:8:8:8:8' --runs 1000",
+    "redExit": 1,
+    "redReplayExit": 1,
+    "restoredReplayExit": 0
+  },
+  {
+    "mutation": "replacement-boundary",
+    "source": "source/services/conversation/conversation-state-projector.ts",
+    "originalSha256": "01fa7aed68aba8e347aee045620f936a9ae9c41e315a4c7e558c9785ceab72bf",
+    "mutantSha256": "876b1216808ce5e4dab1154516ab37e5c7016331ef05d3450fd1576f3197aac8",
+    "replay": "pnpm verify:generated --property history.ledger-reconciliation --seed=424242 --path '0:1:0:1:1:1' --runs 1000",
+    "redExit": 1,
+    "redReplayExit": 1,
+    "restoredReplayExit": 0
+  }
+]

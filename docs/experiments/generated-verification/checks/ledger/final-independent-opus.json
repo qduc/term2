@@ -1,0 +1,76 @@
+{
+  "duration_api_ms": 241009,
+  "stop_reason": "end_turn",
+  "session_id": "8d752a0d-fa66-47e8-9a7d-faa35d2a3de1",
+  "total_cost_usd": 1.1182691999999999,
+  "usage": {
+    "input_tokens": 10,
+    "cache_creation_input_tokens": 8682,
+    "cache_read_input_tokens": 321144,
+    "output_tokens": 5161,
+    "output_tokens_details": { "thinking_tokens": 845 },
+    "server_tool_use": { "web_search_requests": 0, "web_fetch_requests": 0 },
+    "service_tier": "standard",
+    "cache_creation": { "ephemeral_1h_input_tokens": 8682, "ephemeral_5m_input_tokens": 0 },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1458,
+        "cache_read_input_tokens": 68089,
+        "cache_creation_input_tokens": 421,
+        "cache_creation": { "ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 421 },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-opus-5-5": {
+      "inputTokens": 42,
+      "outputTokens": 18949,
+      "thinkingTokens": 7811,
+      "cacheReadInputTokens": 955206,
+      "cacheCreationInputTokens": 68510,
+      "webSearchRequests": 0,
+      "costUSD": 1.1182691999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "canonicalModel": "claude-opus-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": { "background": 0, "foreground": 0, "unset": 0 },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": { "parent": 0, "user": 0, "system": 0 },
+    "refused": { "depth_limit": 0, "concurrency_limit": 0, "budget": 0 },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 6,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "**Verdict: ACCEPT** for `d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645`. The fix to nit 4 does what it should. The new check still catches a real turn collision and now lets valid gaps through. No new must-fix findings.\n\n## Actual diff (`28a20727..d5e6fb0a`, one commit)\n- **No production change.** `git diff --name-only` over `source`, `package.json` and `pnpm-lock.yaml` is empty, and the working tree matches HEAD apart from the untracked `checks/ledger/` folder.\n- **`ledger.mjs`** (sha256 `89764f67…`): a new `nextTurn` helper checks that a new turn ID looks like `turn-N` and that N is strictly greater than the previous turn. It replaces both old exact `max+1` assertions, the ordinary-turn one and the post-import one. The model now adopts whatever turn number the ledger actually returns, so later entries' turn IDs are still checked exactly against it.\n- **README:** now says \"at most 30 generated actions or entries per case; an entry can invoke several ledger methods\". That's accurate, since a reconciliation entry can call `beginTurn` up to 4 times plus record, dispatch and settle.\n- **LEDGER-PLAN:** adds a triage section. It describes the remaining nits as coverage limits and doesn't expand any claims. That's an accurate summary.\n\n## What I ran\n| Command | Exit | Result |\n|---|---|---|\n| `pnpm -s verify:generated --target history --seed 880011` | 0 | 3 history properties × 1,000 cases, all green; reports revision `d5e6fb0a`, `dirty: true` (only the untracked folder) |\n| `pnpm -s verify:generated --seed 5150 --runs 3000` | 0 | all 5 properties × 3,000 cases, green |\n| Retained settlement replay (`--seed=424242 --path '45:4:3:3:4:4:6:6:6:7:8:8:8:8' --runs 1000`) | 0 | 1,146 cases, green |\n| `prettier --check` on the 3 changed files | 0 | formatted |\n\n## Import-collision challenge\nI ran in-memory Node probes against the settlement property at seed 4242 with 1,000 runs. No files were written.\n\n| Probe | Expected | Result |\n|---|---|---|\n| Entries intact, but the first turn after import reuses the imported maximum | red | **RED** in 16 cases, from the new check: \"new turn collided with an existing ledger turn\" |\n| Turn counter stalls every 7th call | red | **RED** in 4 cases, same collision message |\n| Turn ID in the wrong format | red | **RED** in 2 cases, from the format check |\n| Import skips ahead 3 turns (a valid gap) | green | green, 1,000 cases |\n| Every turn skips a number (a valid gap) | green | green, 1,000 cases |\n| Restored original methods | green | green |\n\nTwo cruder mutants that rewrote or reset entries on import also went red, but via the older \"import changed saved entries\" check. That's why I added the isolated collision probe above.\n\n## Limits\n- Coverage limits from my first pass still stand, and the plan now discloses them: `unknown` settlements are sparsely sampled, about 75% of reconciliation cases go down the replacement-boundary path, and there's no coverage of post-boundary ledger entries, user messages newer than the latest entry, or reused-call policy.\n- **Bookkeeping, not a blocker:** LEDGER-PLAN says the evidence is \"retained in checks/ledger/…\". Those files exist locally (`independent-opus.md`/`.json`, `final-independent-opus.*`, mutation diffs and replays), but none of `checks/ledger/` is committed at `d5e6fb0a`. Make sure the documentation commit picks them up, or that sentence points at nothing.\n- I didn't re-run the 11 earlier mutants or any full tiers (typecheck, build, full lint), as agreed. Those stay with the parent.",
+  "ttft_ms": 4805,
+  "type": "result",
+  "duration_ms": 63518,
+  "uuid": "9f755d4d-59fc-475e-b96f-bb182495839e",
+  "ttft_stream_ms": 3235,
+  "time_to_request_ms": 82,
+  "first_content_frame_ms": 3236,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

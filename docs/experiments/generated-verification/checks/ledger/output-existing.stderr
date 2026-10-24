@@ -1,0 +1,6 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property history.ledger-reconciliation --runs 1 --output docs/experiments/generated-verification/checks/ledger/cli-output.stdout
+Error: EEXIST: file already exists, open 'docs/experiments/generated-verification/checks/ledger/cli-output.stdout'
+    at Object.openSync (node:fs:622:18)
+    at writeFileSync (node:fs:2497:35)
+    at file:///home/qduc/term2/.worktrees/generated-ledger/scripts/generated-verification/run.mjs:87:24
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

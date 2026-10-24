@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "revision": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 94.980494,
+  "results": [
+    {
+      "property": "history.ledger-settlement",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 1146,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 94.95559700000001,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "revision": "6a25ecc70d773a1c888df27d7d9bddf64ea6d231",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 10.093986999999998,
+  "results": [
+    {
+      "property": "history.ledger-settlement",
+      "failed": true,
+      "seed": 424242,
+      "path": "45:4:3:3:4:4:6:6:6:7:8:8:8:8",
+      "cases": 1,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 10.067816999999991,
+      "counterexample": [
+        [
+          {
+            "action": "call",
+            "slot": 0,
+            "scoped": false,
+            "args": {},
+            "output": ""
+          },
+          {
+            "action": "dispatch",
+            "slot": 0,
+            "scoped": false,
+            "args": [],
+            "output": ""
+          },
+          {
+            "action": "interrupt",
+            "slot": 0,
+            "scoped": false,
+            "args": [],
+            "output": ""
+          }
+        ]
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: effect observation settled incorrectly\n+ actual - expected\n\n+ 'aborted'\n- 'unknown'\n\n    at file:///home/qduc/term2/.worktrees/generated-ledger/scripts/generated-verification/ledger.mjs:83:16\n    at Property.predicate (file:///home/qduc/term2/.worktrees/generated-ledger/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/term2/.worktrees/generated-ledger/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/term2/.worktrees/generated-ledger/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/term2/.worktrees/generated-ledger/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/term2/.worktrees/generated-ledger/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/term2/.worktrees/generated-ledger/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/term2/.worktrees/generated-ledger/scripts/generated-verification/run.mjs:55:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+      "replay": "pnpm verify:generated --property history.ledger-settlement --seed=424242 --path '45:4:3:3:4:4:6:6:6:7:8:8:8:8' --runs 1000"
+    }
+  ]
+}
+[ELIFECYCLE] Command failed with exit code 1.

@@ -1,0 +1,3 @@
+if (lastReplacementBoundaryIndex(input.history) >= 0) {
+=>
+if (false) {

@@ -1,0 +1,2 @@
+$ node scripts/build-with-rollback.mjs
+$ cp -r source/prompts dist/ && mkdir -p dist/providers && cp source/providers/provider-presets.json dist/providers/ && chmod +x dist/cli.js

@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --seed=20261024 --runs 10000

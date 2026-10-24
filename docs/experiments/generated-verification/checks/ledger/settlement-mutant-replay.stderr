@@ -1,0 +1,1 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property history.ledger-settlement --seed=424242 --path 45:4:3:3:4:4:6:6:6:7:8:8:8:8 --runs 1000

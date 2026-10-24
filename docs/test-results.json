@@ -5913,6 +5913,559 @@
           "path": "docs/experiments/generated-verification/checks/primary/merge-clean-lint.log"
         }
       ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-initial-oracle",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6a25ecc70d773a1c888df27d7d9bddf64ea6d231",
+      "revision_kind": "dirty_initial_oracle_before_commit",
+      "suite": "generated-candidate",
+      "command": "pnpm verify:generated --target history --seed 424242",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 2000,
+        "failed": 1,
+        "skipped": null
+      },
+      "failures": [
+        "Oracle expected native JSON but raw Responses arguments are JSON text; scalar0 shrank immediately. Not a product bug; dirty initial oracle snapshot is not claimed replayable at final version."
+      ],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Oracle expected native JSON but raw Responses arguments are JSON text; scalar0 shrank immediately. Not a product bug; dirty initial oracle snapshot is not claimed replayable at final version.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/initial.stdout"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-seed-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6a25ecc70d773a1c888df27d7d9bddf64ea6d231",
+      "revision_kind": "dirty_checker_matching_later_28a20727",
+      "suite": "generated-evaluation",
+      "command": "pnpm verify:generated --seed=424242 --runs 10000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 50000,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Dirty source bytes match checker28a20727; identity.json links snapshot. 10000cases each of5properties; per-run wall seconds 8.065674182027578",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/seed-424242.stdout"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-seed-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6a25ecc70d773a1c888df27d7d9bddf64ea6d231",
+      "revision_kind": "dirty_checker_matching_later_28a20727",
+      "suite": "generated-evaluation",
+      "command": "pnpm verify:generated --seed=1 --runs 10000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 50000,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Dirty source bytes match checker28a20727; identity.json links snapshot. 10000cases each of5properties; per-run wall seconds 8.01488506468013",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/seed-1.stdout"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-seed-2",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6a25ecc70d773a1c888df27d7d9bddf64ea6d231",
+      "revision_kind": "dirty_checker_matching_later_28a20727",
+      "suite": "generated-evaluation",
+      "command": "pnpm verify:generated --seed=20261024 --runs 10000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 50000,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Dirty source bytes match checker28a20727; identity.json links snapshot. 10000cases each of5properties; per-run wall seconds 8.372778983786702",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/seed-20261024.stdout"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-seed-3",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6a25ecc70d773a1c888df27d7d9bddf64ea6d231",
+      "revision_kind": "dirty_checker_matching_later_28a20727",
+      "suite": "generated-evaluation",
+      "command": "pnpm verify:generated --seed=-2147483648 --runs 10000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 50000,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Dirty source bytes match checker28a20727; identity.json links snapshot. 10000cases each of5properties; per-run wall seconds 8.306463764980435",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/seed--2147483648.stdout"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-tier-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "checker-static-validation",
+      "command": "node --check scripts/generated-verification/ledger.mjs",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "No production/package/dependency changes. Full isolated lint includes ignored script caveat: .mjs code checked separately by syntax/prettier/review.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/syntax.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-tier-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "checker-static-validation",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "No production/package/dependency changes. Full isolated lint includes ignored script caveat: .mjs code checked separately by syntax/prettier/review.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/types.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-tier-2",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "checker-static-validation",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "No production/package/dependency changes. Full isolated lint includes ignored script caveat: .mjs code checked separately by syntax/prettier/review.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/static.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-tier-3",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "checker-static-validation",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "No production/package/dependency changes. Full isolated lint includes ignored script caveat: .mjs code checked separately by syntax/prettier/review.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/build.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-tier-4",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "checker-static-validation",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "No production/package/dependency changes. Full isolated lint includes ignored script caveat: .mjs code checked separately by syntax/prettier/review.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/lint.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-mutation",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "intentional-fault-detection",
+      "command": "Two deliberate mutants with shrunk red/red replay and restored green replay",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Raw deliberate mutant exits1 are expected; original sources restored byte-for-byte. One parent parser failed on trailing pnpm lifecycle output; restored by finally, retained red reused then replayed with corrected parser. Not product defects.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/mutation-checks.json"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-final-generated",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "generated-evaluation",
+      "command": "pnpm verify:generated --seed=424242 --runs 10000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 50000,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Final relaxed turn identity property; 50000cases across5properties, including20000new ledger cases.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/final-seed.stdout"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-final-independent",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "independent-real-use",
+      "command": "Fresh Opus5.5 review, installed commands and in-memory mutation probes; final amended review",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "ACCEPT; initial11mutants detected; final isolated collisions/wrong format detected and valid turn gaps accepted. Exact commands/results in report+trace. No permission denials. No production changes. Initial and final review invocations are one resumed session; do not sum cumulative cost counters.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/final-independent-opus.md"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-committed-cli",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "28a207274c2c237ab74b0692825e13ed0fc0fe4c",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "installed-cli-and-output",
+      "command": "Installed default/property selection/wrong target/new and existing output",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "All5expected outcomes; invalid invocation/refusal exit2; byte hashes unchanged. Final amendment only narrows turn checker and clarifies docs.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/committed-cli.json"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-final-tier-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "final-checker-tiers",
+      "command": "node --check scripts/generated-verification/ledger.mjs",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Final checker with dirty evidence/docs; wall seconds 0.020243745762854815. Full isolated checkout lint, not primary untracked artifacts.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/final-syntax.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-final-tier-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "final-checker-tiers",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Final checker with dirty evidence/docs; wall seconds 3.029045852832496. Full isolated checkout lint, not primary untracked artifacts.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/final-types.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-final-tier-2",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "final-checker-tiers",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Final checker with dirty evidence/docs; wall seconds 2.959034088999033. Full isolated checkout lint, not primary untracked artifacts.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/final-static.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-final-tier-3",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "final-checker-tiers",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Final checker with dirty evidence/docs; wall seconds 3.6438772128894925. Full isolated checkout lint, not primary untracked artifacts.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/final-build.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-final-tier-4",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645",
+      "revision_kind": "committed_checker_with_evidence_changes",
+      "suite": "final-checker-tiers",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "Final checker with dirty evidence/docs; wall seconds 37.20338974380866. Full isolated checkout lint, not primary untracked artifacts.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/final-lint.log"
+        }
+      ]
     }
   ]
 }

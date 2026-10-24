@@ -428,10 +428,13 @@ export function loadConversationUnscopedForIndex(id: string, sourceDir?: string)
 /**
  * Enumerates canonical local logs through the same decoder/replay/context path
  * as resume. Unlike the UI list, this reports malformed candidates generically.
+ * With `idPrefix`, only matching filenames are replayed and counted; callers
+ * resolving a reference must retain its entire eight-character collision bucket.
  */
 export function browseConversationsForProject(
   expectedProjectPath: string,
   expectedSshHost?: string,
+  idPrefix?: string,
 ): BrowseConversationsForProjectResult {
   const dir = getConversationsDir();
   const directoryVersionBefore = getConversationsDirectoryVersionReadOnly();
@@ -447,6 +450,7 @@ export function browseConversationsForProject(
   let unavailable = 0;
   for (const file of files) {
     const id = file.slice(0, -'.jsonl'.length);
+    if (idPrefix !== undefined && !id.toLowerCase().startsWith(idPrefix.toLowerCase())) continue;
     if (!SAFE_SESSION_ID.test(id)) {
       // An unsafe filename cannot be context-checked without deriving a path
       // from an untrusted identifier, so it is neither exposed nor counted.

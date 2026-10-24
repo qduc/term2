@@ -375,7 +375,7 @@ export class SessionBrowser {
       ({ conversation, projection, shortRef, revision: currentRevision } = cached);
       resolvedId = conversation.id;
     } else {
-      const browsed = this.conversations();
+      const browsed = this.conversations(input.id);
       const resolution = resolveSessionReference(input.id, browsed.conversations, context.currentSessionId);
       if (resolution.kind === 'ambiguous') {
         return (
@@ -460,7 +460,10 @@ export class SessionBrowser {
   }
 
   async #readIndexed(input: SessionReadInput): Promise<unknown> {
-    if (input.cursor?.startsWith('f')) {
+    // Explicit references need only their filename-prefix collision bucket,
+    // not a refresh of the whole project-wide search index. Keep canonical
+    // replay off the main thread and its cursor state in the same worker.
+    if ((!input.cursor && input.id !== 'previous') || input.cursor?.startsWith('f')) {
       return this.#browseCanonicalInWorker({ operation: 'read', input });
     }
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
@@ -748,9 +751,13 @@ export class SessionBrowser {
     return state?.sessionId === id ? state : null;
   }
 
-  private conversations() {
+  private conversations(reference?: string) {
     const context = this.getContext();
-    const result = browseConversationsForProject(context.projectPath, context.sshHost);
+    // Include the whole minimum-short-ref collision bucket, even for exact
+    // IDs, so short refs and ambiguity match a full scoped catalog.
+    // `previous` still needs all sessions for predecessor/recency selection.
+    const idPrefix = reference && reference !== 'previous' ? reference.slice(0, 8) : undefined;
+    const result = browseConversationsForProject(context.projectPath, context.sshHost, idPrefix);
     return {
       unavailable: result.unavailable,
       scope: context.projectPath,

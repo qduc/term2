@@ -7822,6 +7822,728 @@
           "path": "docs/experiments/generated-verification/checks/hotspots/final-replays-network.json"
         }
       ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-focused-integration",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "focused-integration",
+      "command": "pnpm exec cross-env NODE_ENV=test vitest run --config vitest.integration.config.ts source/services/conversation/session-read-reference.integration.test.ts source/services/conversation/session-index/session-index-recovery.integration.test.ts source/services/conversation/session-index/session-index-concurrency.integration.test.ts",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Final strengthened filesystem-spy regression plus real worker, scope rejection, ambiguity and recovery coverage.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/integration-final.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-static-tests",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "static-tests",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/static-tests.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-typecheck",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/typecheck-final.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-build",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/build.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-lint-initial",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "lint-initial",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": ["Scratch benchmark .cjs: no-require-imports/no-undef (12 errors); 31 existing warnings."],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "12 ESLint errors were in author scratch bench.cjs, not tracked source. Scratch scripts renamed .cjs.txt; no lint configuration changed.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/lint.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-lint-scratch-reviewer",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "lint-scratch-reviewer",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": ["Prettier .cache/session-read-speed/probe-indexed-read.cjs"],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "ESLint 0 errors,31 warnings; Prettier failed on the independent verifier scratch probe-indexed-read.cjs. Pending scratch archival and final resolving run.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/lint-resolved.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-reviewer-full-integration",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "reviewer-full-integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 223,
+        "failed": 4,
+        "skipped": 1
+      },
+      "failures": [
+        "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity: ENOENT result.txt (source/cli.integration.test.ts:1840)",
+        "bare profile via config keeps a small tool surface, project guidance, and versioned session identity: ENOENT result.txt (source/cli.integration.test.ts:1840)",
+        "bare retains the outside-workspace edit approval boundary without asking headlessly: assertion failure (source/cli.integration.test.ts)",
+        "bare permits explicit sandbox scratch writes without approval: expected target exists=true, received false (source/cli.integration.test.ts:2040)"
+      ],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Independent verifier run. Four bare CLI failures reproduced independently on unchanged base and stable candidate; not classified by ancestry alone.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/reviewer-integration-full.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-cli-candidate-comparison",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "cli-candidate-comparison",
+      "command": "pnpm exec cross-env NODE_ENV=test vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t 'bare profile via|bare retains the outside|bare permits explicit'",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 0,
+        "failed": 4,
+        "skipped": 51
+      },
+      "failures": [
+        "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity: ENOENT result.txt (source/cli.integration.test.ts:1840)",
+        "bare profile via config keeps a small tool surface, project guidance, and versioned session identity: ENOENT result.txt (source/cli.integration.test.ts:1840)",
+        "bare retains the outside-workspace edit approval boundary without asking headlessly: assertion failure (source/cli.integration.test.ts)",
+        "bare permits explicit sandbox scratch writes without approval: expected target exists=true, received false (source/cli.integration.test.ts:2040)"
+      ],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Same four signatures as unchanged primary base.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/cli-failure-candidate.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-cli-base-comparison",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "891411393c258db7c6a8bfa957f14d855bc3b67d",
+      "revision_kind": "unchanged_primary_base",
+      "suite": "cli-base-comparison",
+      "command": "pnpm exec cross-env NODE_ENV=test vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t 'bare profile via|bare retains the outside|bare permits explicit'",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 0,
+        "failed": 4,
+        "skipped": 51
+      },
+      "failures": [
+        "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity: ENOENT result.txt (source/cli.integration.test.ts:1840)",
+        "bare profile via config keeps a small tool surface, project guidance, and versioned session identity: ENOENT result.txt (source/cli.integration.test.ts:1840)",
+        "bare retains the outside-workspace edit approval boundary without asking headlessly: assertion failure (source/cli.integration.test.ts)",
+        "bare permits explicit sandbox scratch writes without approval: expected target exists=true, received false (source/cli.integration.test.ts:2040)"
+      ],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Direct base reproduction confirms four CLI failures are present without this repair.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/cli-failure-base.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-regression-before",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "891411393c258db7c6a8bfa957f14d855bc3b67d",
+      "revision_kind": "unchanged_base_with_new_regression_probe",
+      "suite": "regression-before",
+      "command": "Copy only new integration probe to isolated base; run vitest integration config on session-read-reference.integration.test.ts",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "failures": ["Expected red at session-read-reference.integration.test.ts:46: unrelated.jsonl was read."],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Expected red: original canonical read replays unrelated.jsonl. Probe worktree subsequently removed.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/regression-before.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-canonical-performance",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "canonical-performance",
+      "command": "node .cache/session-read-speed/bench.cjs (before rename; reproduction now node - < bench.cjs.txt)",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Before three canonical calls:25100.6557,25252.351848,23917.632065ms; after:70.934639,48.687285,53.384344ms. All equal output hashes/counts. Separate diagnostic JSONL reads1050->1. Baseline raw before.jsonl and instrumented count-{before,after}-final.jsonl retained. Live corpus/host not frozen.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/after.jsonl"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-cold-worker-after",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "cold-worker-after",
+      "command": "node - < .cache/session-read-speed/worker-bench.cjs.txt",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Fresh worker reads711.058214,683.826929,649.478708ms;15items/175total; no DB created. Fresh scratch-index baseline failed20646.520574ms with same10s worker error in worker-before.jsonl. Earlier runner failures from script rename/--input-type flag are retained, not counted as product regressions.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/worker-after-green.jsonl"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-built-tool",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "precommit_snapshot_later_committed",
+      "suite": "built-tool",
+      "command": "node --input-type=module - < .cache/session-read-speed/built-tool.mjs.txt",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Built registered session_read tool returned15items/175total/shortRef63a75839 in1699.106404ms (one cold observation, not a comparative benchmark).",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/built-tool.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-lint-clean-commit",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "exact_source_commit",
+      "suite": "lint-clean-commit",
+      "command": "pnpm lint (isolated exact-commit worktree)",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "ESLint0errors31existingwarnings; Prettier pass. Resolves author/reviewer diagnostic scratch interference without ignore/config changes.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/lint-clean-commit.log"
+        }
+      ],
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-24-session-read-speed-lint-initial",
+          "2026-10-24-session-read-speed-lint-scratch-reviewer"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-24-session-read-speed-review-initial-timeout",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "exact_source_commit",
+      "suite": "review-initial-timeout",
+      "command": "term2 --auto-approve <independent review brief>",
+      "command_complete": false,
+      "exit_code": null,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [
+        "Outer shell deadline600s reached without verdict. Retained independent probes and suite results; no acceptance inferred. Separate bounded review handoff requested."
+      ],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Outer shell deadline600s reached without verdict. Retained independent probes and suite results; no acceptance inferred. Separate bounded review handoff requested.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/review.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-review-resume-unsupported",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "exact_source_commit",
+      "suite": "review-resume-unsupported",
+      "command": "term2 --auto-approve --resume <id> <new prompt>",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [
+        "CLI rejected before model work: --resume accepts at most one conversation id. No review repetition occurred."
+      ],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "CLI rejected before model work: --resume accepts at most one conversation id. No review repetition occurred.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/review-resume.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-independent-verification",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "6d27929d42f263b4b5f0dae586bf3f8bad65c382",
+      "revision_kind": "exact_source_commit",
+      "suite": "independent-verification",
+      "command": "Independent review via configured default term2",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "ACCEPT,no must-fix. Nonblocking not_found diagnostic wording difference accepted: denial code and scope unchanged, no transcript exposure; same wording already existed in canonical mode. Independent parity and33784 bucket/ref comparisons,0mismatches. Legacy c branch inspected/not executed; huge-target and previous/list/search costs out of scope.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/independent-verdict.txt"
+        }
+      ],
+      "reviewer_session": "non-interactive-1829f6c5-c46a-4e3e-8744-24545dda90ec"
+    },
+    {
+      "id": "2026-10-24-session-read-speed-merged-typecheck",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "revision_kind": "merged_source_with_evidence_only_updates",
+      "suite": "merged-typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Passed on merged source. Relevant source files byte-identical to independently accepted6d27929d; concurrent hotspot work preserved. Broader four bare CLI failures remain documented separately.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/merged-typecheck.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-merged-lint",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "revision_kind": "merged_source_with_evidence_only_updates",
+      "suite": "merged-lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Passed on merged source. Relevant source files byte-identical to independently accepted6d27929d; concurrent hotspot work preserved. Broader four bare CLI failures remain documented separately.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/merged-lint.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-merged-static",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "revision_kind": "merged_source_with_evidence_only_updates",
+      "suite": "merged-static",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Passed on merged source. Relevant source files byte-identical to independently accepted6d27929d; concurrent hotspot work preserved. Broader four bare CLI failures remain documented separately.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/merged-static-tests.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-merged-focused-integration",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "revision_kind": "merged_source_with_evidence_only_updates",
+      "suite": "merged-focused-integration",
+      "command": "pnpm exec cross-env NODE_ENV=test vitest run --config vitest.integration.config.ts <three session integration files>",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Passed on merged source. Relevant source files byte-identical to independently accepted6d27929d; concurrent hotspot work preserved. Broader four bare CLI failures remain documented separately.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/merged-integration.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-merged-build",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "revision_kind": "merged_source_with_evidence_only_updates",
+      "suite": "merged-build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Passed on merged source. Relevant source files byte-identical to independently accepted6d27929d; concurrent hotspot work preserved. Broader four bare CLI failures remain documented separately.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/merged-build.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-primary-build",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "revision_kind": "merged_source_with_evidence_only_updates",
+      "suite": "primary-build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Passed on merged source. Relevant source files byte-identical to independently accepted6d27929d; concurrent hotspot work preserved. Broader four bare CLI failures remain documented separately.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/primary-build.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-session-read-speed-primary-built-tool",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "revision_kind": "merged_source_with_evidence_only_updates",
+      "suite": "primary-built-tool",
+      "command": "node --input-type=module - < .cache/session-read-speed-results/built-tool.mjs.txt",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-session-read-speed"],
+      "notes": "Merged source unchanged in the independently accepted files; separate evidence-only ledger updates may be dirty. Lint0errors31warnings,Prettier pass; no all-integration-green claim. Primary built registered tool returned15items/175total in825.741511ms.",
+      "evidence": [
+        {
+          "path": ".cache/session-read-speed-results/primary-built-tool.log"
+        }
+      ]
     }
   ]
 }

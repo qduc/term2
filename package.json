@@ -73,7 +73,7 @@
     "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
     "prepare": "husky",
     "catalog:update": "tsx scripts/update-model-catalog.ts",
-    "verify:generated": "tsx scripts/generated-verification/run.mjs"
+    "verify:generated": "node --import tsx scripts/generated-verification/run.mjs"
   },
   "files": [
     "dist"

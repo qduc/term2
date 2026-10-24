@@ -67,7 +67,7 @@ try {
         counterexample: result.counterexample,
         error: result.errorInstance ? String(result.errorInstance.stack ?? result.errorInstance) : null,
         replay: result.failed
-          ? `pnpm verify:generated --property ${name} --seed ${result.seed} --path '${result.counterexamplePath}' --runs ${runs}`
+          ? `pnpm verify:generated --property ${name} --seed=${result.seed} --path '${result.counterexamplePath}' --runs ${runs}`
           : null,
       });
     }

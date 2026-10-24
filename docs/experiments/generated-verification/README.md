@@ -24,7 +24,10 @@ JSON stdout records revision/dirty state, seed, counts, shrinks, elapsed checker
 time and minimized failures. `--output FILE` also saves JSON, refusing to overwrite
 an existing file. Package-manager diagnostics may appear on stderr. Exit 0 means
 sampled properties passed, 1 means a counterexample, 2 means invalid invocation or
-infrastructure failure. Startup/package-manager time is outside `runtimeMs`.
+infrastructure failure. Startup/package-manager time is outside `runtimeMs`. The launcher uses Node’s
+`tsx` import loader, without the tsx CLI’s IPC-listener requirement. Use equals
+syntax for negative seeds (for example, `--seed=-2147483648`); generated replay
+commands include it automatically.
 
 For failure triage, preserve the JSON, inspect whether the property follows the
 actual production contract, then use its `replay` command at the same source and
@@ -43,8 +46,11 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
 - `queue.serial-actions`: generated public submit, completion, failure, removal,
   edit, resume, discard and stale-completion sequences compared at every step to
   an independent serial FIFO model. The empty-pause invariant is explicit in
-  `QueueController.#cancel` and `#restore`: no retained work means idle, so future
+  `QueueController.#cancel` and interrupted-active restoration: no retained work means idle, so future
   input is not blocked behind an empty pause.
+- `queue.restore-pause`: generated valid saved queue records and pause reasons;
+  empty saved pauses must admit fresh work, while nonempty saved queues retain
+  their payloads and pause reason without replay on construction.
 
 Not covered: parallel command interleavings, persistence failures, approvals,
 steering, provider transports, multi-call chat envelopes, ledger recovery, or

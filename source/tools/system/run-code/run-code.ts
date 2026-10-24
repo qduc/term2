@@ -238,6 +238,8 @@ export interface CreateRunCodeToolOptions {
   nestedApprovalOwner?: NestedApprovalOwner;
   sessionAccess?: import('../../../services/session/session-access-state.js').SessionAccessState;
   nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
+  /** How the catalogue renders non-essential tools; defaults to compact signatures. */
+  catalogOtherTools?: 'signatures' | 'names';
   /** Script-only MCP source; its tools are intentionally absent from the root registry. */
   mcpToolSource?: McpToolSource;
   /** Host-owned root authority for the script AgentSpec adapter. */
@@ -466,6 +468,7 @@ export function createRunCodeToolDefinition(
       const registry = exposedTools(mcpCatalog);
       const header = renderToolsHeader(
         createRuntime(registry.filter((tool) => !isMcpToolDefinition(tool))).discovery(),
+        { otherTools: options.catalogOtherTools },
       );
       const mcpHeader = mcpCatalog ? renderMcpCatalog(mcpCatalog) : '';
       const agentSection =

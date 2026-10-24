@@ -112,7 +112,7 @@ export const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.APP_SHELL_PATH]: 'Shell path',
   [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile',
   [SETTING_KEYS.APP_MENTOR_MODE]: 'Mentor mode',
-  [SETTING_KEYS.APP_LITE_MODE]: 'Lite mode',
+  [SETTING_KEYS.APP_LITE_MODE]: 'Lite mode (Bare)',
   [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode',
   [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Orchestrator mode',
   [SETTING_KEYS.APP_NOTIFICATIONS]: 'Notifications',
@@ -292,7 +292,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.TOOLS_WEB_ENABLED]:
     'Enable web_search and web_fetch tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
   [SETTING_KEYS.TOOLS_FILE_READ_ENABLED]:
-    'Enable file read tools for the main agent (true|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request.',
+    'Enable file read tools for the main agent (true|false); applies on the next model request.',
   [SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED]:
     'Enable file edit tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
   [SETTING_KEYS.TOOLS_MEMORY_ENABLED]:
@@ -320,7 +320,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Delegate tool-backed work through subagents (true|false)',
   [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile identifier (builtin:standard, builtin:plan, etc.)',
   [SETTING_KEYS.APP_MENTOR_MODE]: 'Legacy mentor mode flag (mapped to active profile)',
-  [SETTING_KEYS.APP_LITE_MODE]: 'Legacy lite mode flag (mapped to active profile)',
+  [SETTING_KEYS.APP_LITE_MODE]: 'Legacy lite mode flag (selects the Bare profile)',
   [SETTING_KEYS.APP_SHELL_PATH]: 'Path to shell executable',
   [SETTING_KEYS.APP_NOTIFICATIONS]: 'Enable desktop notifications when the terminal is unfocused (true|false)',
   [SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL]: 'Notify when the agent needs tool-call approval (true|false)',

@@ -40,8 +40,9 @@ export type PromptSpec = {
   inlineSections: string[];
 };
 
-export function isLiteProfile(profile: ResolvedProfile): boolean {
-  return profile.instructions.identity.kind === 'markdown';
+/** Bare owns its whole prompt: no model-family base, fragments, or inline sections. */
+export function isBareProfile(profile: ResolvedProfile): boolean {
+  return profile.identity.id === 'builtin:bare';
 }
 
 export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
@@ -64,36 +65,27 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     editorSurface = 'none',
   } = options;
 
-  if (profile.identity.id === 'builtin:bare') {
+  if (isBareProfile(profile)) {
     return {
       basePromptContent: profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : '',
       fragmentFiles: [],
       inlineSections: [],
     };
   }
-  const liteMode = isLiteProfile(profile);
   // Runtime modes are intentionally absent from model-family profile selection.
   // Their full workflows ride on the next user turn so rebuilding the agent does
   // not invalidate the provider's instruction prefix.
-  const promptProfile = selectPromptProfile({ model, liteMode: false });
-  const fragmentFiles = liteMode ? [] : [...(promptProfile.fragmentFiles ?? [])];
+  const promptProfile = selectPromptProfile({ model });
+  const fragmentFiles = [...(promptProfile.fragmentFiles ?? [])];
   const inlineSections: string[] = [];
 
-  const isRegularMode = !liteMode;
-  // Orchestrators can directly modify the worktree, so every non-lite prompt
-  // receives the shared dirty-state and validation safeguards.
-  const shouldIncludeWorktreeHygiene = !liteMode;
-
-  // Every non-lite prompt states how the approval layer works. Without it a
+  // Every model-family prompt states how the approval layer works. Without it a
   // model has no mechanism for "requires confirmation" other than stopping the
   // turn to ask, which it then does even under auto-approval.
-  if (!liteMode) {
-    fragmentFiles.push('approval-model.md');
-  }
-
-  if (shouldIncludeWorktreeHygiene) {
-    fragmentFiles.push('worktree-hygiene.md');
-  }
+  fragmentFiles.push('approval-model.md');
+  // Orchestrators can directly modify the worktree, so every model-family
+  // prompt receives the shared dirty-state and validation safeguards.
+  fragmentFiles.push('worktree-hygiene.md');
 
   if (sandboxEnabled) {
     inlineSections.push(getShellSandboxAddendum());
@@ -103,11 +95,11 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections.push(getBackgroundShellAddendum());
   }
 
-  if (isRegularMode && searchViaShell) {
+  if (searchViaShell) {
     inlineSections.push(getSearchViaShellAddendum({ executionContext }));
   }
 
-  if (runSubagentEnabled && !liteMode) {
+  if (runSubagentEnabled) {
     inlineSections.push(
       getSubagentDelegationAddendum({
         memoryEnabled,
@@ -120,15 +112,13 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     );
   }
 
-  if (isRegularMode) {
-    // Keep all mode stubs in every non-lite prompt. The full workflows ride on
-    // mode notices so a toggle cannot change the instruction prefix (prompt
-    // cache + chained Responses-Lite HTTP omit developer instructions).
-    fragmentFiles.push('plan-mode-stub.md');
-    fragmentFiles.push('pair-mode-stub.md');
-    fragmentFiles.push('mentor-mode-stub.md');
-    fragmentFiles.push('orchestrator-mode-stub.md');
-  }
+  // Keep all mode stubs in every model-family prompt. The full workflows ride on
+  // mode notices so a toggle cannot change the instruction prefix (prompt
+  // cache + chained Responses-Lite HTTP omit developer instructions).
+  fragmentFiles.push('plan-mode-stub.md');
+  fragmentFiles.push('pair-mode-stub.md');
+  fragmentFiles.push('mentor-mode-stub.md');
+  fragmentFiles.push('orchestrator-mode-stub.md');
 
   if (sessionBrowserEnabled) {
     fragmentFiles.push('session-browser.md');
@@ -137,17 +127,12 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   if (memoryGuidance) {
     inlineSections.push(memoryGuidance);
   }
-  if (memoryContext && isRegularMode && memoryEnabled) inlineSections.push(memoryContext);
+  if (memoryContext && memoryEnabled) inlineSections.push(memoryContext);
 
   inlineSections.push(runCodeEnabled ? getScriptPrimaryToolsAddendum(editorSurface) : getDirectEditorToolsAddendum());
 
   return {
-    ...(liteMode
-      ? {
-          basePromptContent:
-            profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : undefined,
-        }
-      : { basePromptFile: promptProfile.basePromptFile }),
+    basePromptFile: promptProfile.basePromptFile,
     fragmentFiles,
     inlineSections,
   };

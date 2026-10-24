@@ -19,8 +19,7 @@ const CAPABILITY_GROUPS: readonly CapabilityGroup[] = [
   { key: SETTING_KEYS.TOOLS_SHELL_ENABLED, capabilities: ['shell'] },
   { key: SETTING_KEYS.TOOLS_WEB_ENABLED, capabilities: ['web'] },
   // filesystem-read-external has no separate toggle: fileRead masks both read
-  // capabilities. Lite keeps its outside-workspace read authority, which is
-  // keyed on liteMode, not on a capability.
+  // capabilities.
   {
     key: SETTING_KEYS.TOOLS_FILE_READ_ENABLED,
     capabilities: ['filesystem-read-workspace', 'filesystem-read-external'],
@@ -102,14 +101,9 @@ const PROFILE_TOGGLE_CONFLICTS: Record<string, { label: string; toggles: readonl
       SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED,
     ],
   },
-  'builtin:lite': {
-    label: 'Lite',
-    toggles: [
-      SETTING_KEYS.TOOLS_SHELL_ENABLED,
-      SETTING_KEYS.TOOLS_WEB_ENABLED,
-      SETTING_KEYS.TOOLS_FILE_READ_ENABLED,
-      SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
-    ],
+  'builtin:bare': {
+    label: 'Bare',
+    toggles: [SETTING_KEYS.TOOLS_SHELL_ENABLED],
   },
 };
 

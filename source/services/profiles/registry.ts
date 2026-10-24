@@ -58,18 +58,7 @@ const standardContext: ContextBlock = {
     source,
   })),
 };
-const liteContext: ContextBlock = {
-  kind: 'context',
-  sources: standardContext.sources.map((source) =>
-    source.source === 'project-instructions' ? { ...source, enabled: false } : source,
-  ),
-};
 const standardTools: ToolsBlock = { kind: 'tools', include: [...BUILTIN_TOOL_CAPABILITIES] };
-const liteTools: ToolsBlock = {
-  kind: 'tools',
-  include: [...BUILTIN_TOOL_CAPABILITIES],
-  exclude: ['mentor', 'subagents'],
-};
 
 const builtinInstructionBlock = (id: string, entry: InstructionsBlock): RegisteredBlock => ({
   id,
@@ -78,10 +67,6 @@ const builtinInstructionBlock = (id: string, entry: InstructionsBlock): Register
 });
 
 const builtinBlocks: readonly RegisteredBlock[] = [
-  builtinInstructionBlock('builtin:instructions/lite', {
-    kind: 'instructions',
-    identity: { content: prompt('lite.md') },
-  }),
   builtinInstructionBlock('builtin:instructions/plan', {
     kind: 'instructions',
     workflow: { content: prompt('plan-mode-info.md') },
@@ -99,9 +84,7 @@ const builtinBlocks: readonly RegisteredBlock[] = [
     workflow: { content: prompt('orchestrator.md') },
   }),
   { id: 'builtin:context/standard', kind: 'context', definition: standardContext },
-  { id: 'builtin:context/lite', kind: 'context', definition: liteContext },
   { id: 'builtin:tools/standard', kind: 'tools', definition: standardTools },
-  { id: 'builtin:tools/lite', kind: 'tools', definition: liteTools },
 ];
 
 const builtinPolicies: readonly EnforcementPolicyDefinition[] = [
@@ -145,30 +128,31 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
           content: prompt('bare.md'),
         },
       },
+      // Project instructions are read on demand (bare.md says when), not
+      // injected, so Bare also serves as the general terminal profile.
       context: {
         kind: 'context',
         sources: [
-          { id: 'project-instructions', source: 'project-instructions' },
           { id: 'skills-catalog', source: 'skills-catalog' },
           { id: 'environment', source: 'environment' },
         ],
       },
-      tools: { kind: 'tools', include: ['shell', 'filesystem-write', 'skills'] },
+      // Bare carries no tool for what the shell can do: file reads, search,
+      // edits, and skill loading (skills supplies only the catalog) all go
+      // through the shell. web, memory, sessions, and mcp have no shell
+      // equivalent; they are run_code script tools, so they add catalogue
+      // entries rather than direct schemas. background-tasks adds the shell's
+      // background option where a job registry exists; the job get/cancel
+      // tools are script-only too.
+      tools: {
+        kind: 'tools',
+        include: ['shell', 'skills', 'web', 'memory', 'sessions', 'mcp', 'background-tasks'],
+      },
       enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
       presentation: { kind: 'presentation', displayName: 'Bare', label: 'BARE', color: 'cyan' },
     }),
-    version: '1.3.0',
+    version: '2.0.0',
   },
-  builtinProfile(
-    'lite',
-    {
-      instructions: { kind: 'instructions', identity: { use: 'builtin:instructions/lite' } },
-      context: { use: 'builtin:context/lite', kind: 'context' },
-      tools: { use: 'builtin:tools/lite', kind: 'tools' },
-      presentation: { kind: 'presentation', displayName: 'Lite', label: 'LITE', color: 'cyan' },
-    },
-    'builtin:standard',
-  ),
   builtinProfile(
     'plan',
     {

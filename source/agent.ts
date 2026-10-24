@@ -62,7 +62,7 @@ import fs from 'fs';
 import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
-import { buildPromptSpec, isLiteProfile } from './prompts/prompt-constructor.js';
+import { buildPromptSpec } from './prompts/prompt-constructor.js';
 import { ProfileResolutionError, resolveActiveProfile } from './services/profiles/index.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
@@ -94,7 +94,7 @@ const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 export function getEnvInfo(
   settingsService: ISettingsService,
   executionContext?: ExecutionContext,
-  lite = false,
+  minimal = false,
 ): string {
   const isRemote = !!executionContext?.isRemote();
   // This process's own OS/shell are the controller's, not the remote host's —
@@ -118,8 +118,8 @@ export function getEnvInfo(
     ? "Host: remote via SSH — OS/shell are the remote machine's, not this controller's, and are unknown here; use commands (e.g. `uname -a`) if you need them"
     : `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}`;
 
-  if (lite) {
-    // Minimal env info for lite mode
+  if (minimal) {
+    // Bare keeps the environment line short: no top-level tree
     return `${hostLine}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}`;
   }
 
@@ -382,7 +382,6 @@ export const getAgentDefinition = (
     );
   }
   const bareMode = profile.identity.id === 'builtin:bare';
-  const liteMode = isLiteProfile(profile);
   const capabilities = profile.tools.capabilities;
   // Per-group kill switches (tools.<group>.enabled): mask the resolved set so
   // every registration below consults the effective capabilities, and a
@@ -413,7 +412,7 @@ export const getAgentDefinition = (
     { kind: 'main' },
     {
       projectPath: executionContext?.getCwd() ?? process.cwd(),
-      includeContext: memoryContextEnabled && !liteMode && hasCapability('memory'),
+      includeContext: memoryContextEnabled && hasCapability('memory'),
       snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
     },
   );
@@ -433,7 +432,7 @@ export const getAgentDefinition = (
     memoryContext: memoryCapability.context,
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
-    runCodeEnabled: !bareMode && hasCapability('shell'),
+    runCodeEnabled: hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
@@ -451,18 +450,17 @@ export const getAgentDefinition = (
   }
 
   const cwd = executionContext?.getCwd() || process.cwd();
-  const isLiteEnv = liteMode;
   // grep/glob register whenever the surface can read and search has not been
   // routed to the shell; the flag keeps the search-tool descriptions consistent
   // so the model does not call a tool that is not on its allowlist.
   const globAvailable = filesystemReadEnabled && !searchViaShell;
-  const envInfo = environmentEnabled ? getEnvInfo(settingsService, executionContext, isLiteEnv) : '';
+  const envInfo = environmentEnabled ? getEnvInfo(settingsService, executionContext, bareMode) : '';
   const skipAgentsMd = !projectInstructionsEnabled || (executionContext?.isRemote() ?? false);
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
 
   let skillsInstructions = '';
   if (hasCapability('skills') && skillsCatalogEnabled && skillsService) {
-    const catalog = skillsService.getSkillCatalog();
+    const catalog = skillsService.getSkillCatalog(bareMode ? { loadVia: 'shell' } : {});
     if (catalog) {
       skillsInstructions = `\n\n${catalog}`;
     }
@@ -487,10 +485,14 @@ export const getAgentDefinition = (
   });
   const features: FeatureSelection = {
     web: hasCapability('web'),
-    activateSkill: hasCapability('skills') && Boolean(skillsService),
+    // Bare loads skills by reading SKILL.md through the shell.
+    activateSkill: hasCapability('skills') && !bareMode && Boolean(skillsService),
   };
   const tools: RegistryToolDefinition[] = [];
-  if (hasCapability('shell')) tools.push(bareMode ? presentBareShell(shellTool) : shellTool);
+  if (hasCapability('shell'))
+    tools.push(
+      bareMode ? presentBareShell(shellTool, { background: Boolean(rootBackgroundShellRegistry) }) : shellTool,
+    );
   if (features.web) tools.push(...createWebToolDefinitions({ settingsService, loggingService }));
 
   if (
@@ -588,47 +590,11 @@ export const getAgentDefinition = (
     );
   }
 
-  if (liteMode) {
-    // Lite mode keeps lightweight context and delegation policy, but still allows file edits.
-    // Keep workspace scope keyed to lite identity, not filesystem-read eligibility,
-    // so capability resolution cannot widen standard mode's read scope.
-    if (filesystemReadEnabled && !searchViaShell) {
-      tools.push(
-        createGrepToolDefinition({ executionContext, globAvailable, allowOutsideWorkspace: true, settingsService }),
-        createFindFilesToolDefinition({
-          executionContext,
-          allowOutsideWorkspace: true,
-          settingsService,
-        }),
-      );
-    }
-    if (filesystemReadEnabled) {
-      tools.push(
-        createReadFileToolDefinition({
-          executionContext,
-          allowOutsideWorkspace: true,
-          settingsService,
-        }),
-      );
-    }
-    if (filesystemWriteEnabled) {
-      if (usesPatchEditingSurface) {
-        tools.push(
-          createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
-        );
-      } else {
-        tools.push(
-          createCreateFileToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
-          createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
-        );
-      }
-    }
-  } else {
-    // Full mode: all tools based on model
+  {
     if (filesystemReadEnabled) {
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
       // Search is a read capability: it is gated on read plus the setting, never
-      // on write authority or the editing surface (mirrors the lite branch).
+      // on write authority or the editing surface.
       if (!searchViaShell) {
         tools.push(
           createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }),
@@ -711,16 +677,11 @@ export const getAgentDefinition = (
   // Registered last so its bridge exposes every other tool this profile
   // resolved. The registry it actually calls is injected later by
   // bindRunCodeRegistry, once the policy layer has wrapped these definitions.
-  if (!bareMode && hasCapability('shell')) {
-    // Lite intentionally permits outside-workspace reads while its write tools
-    // remain workspace-rooted. The current AgentSpec scope type cannot express
-    // that mixed authority without widening writes, so fail closed for this
-    // root until the scope contract gains independent unrestricted axes.
-    const liteMixedFilesystemAuthority = liteMode && filesystemReadEnabled && filesystemWriteEnabled;
+  if (hasCapability('shell')) {
     const filesystemScope =
-      !liteMixedFilesystemAuthority && (filesystemReadEnabled || filesystemWriteEnabled)
+      filesystemReadEnabled || filesystemWriteEnabled
         ? {
-            read: filesystemReadEnabled && !liteMode ? ['**'] : [],
+            read: filesystemReadEnabled ? ['**'] : [],
             write: filesystemWriteEnabled ? ['**'] : [],
           }
         : undefined;
@@ -740,20 +701,18 @@ export const getAgentDefinition = (
         : undefined);
     const worktreePaths =
       deps.worktreePaths ?? ((worktreeScope as any)?.authorizedPaths as Record<string, string> | undefined);
-    const agentSpecAuthority = liteMixedFilesystemAuthority
-      ? undefined
-      : createRootAgentAuthoritySnapshot({
-          effectiveTools: tools.map((tool) => tool.name),
-          filesystemScope,
-          limits: {
-            ...(maxTurns !== undefined ? { maxTurns } : {}),
-            ...(maxTokens !== undefined ? { maxTokens } : {}),
-          },
-          readOnly,
-          planMode,
-          ...(worktreeScope ? { worktreeScope } : {}),
-          ...(worktreePaths ? { worktreePaths } : {}),
-        });
+    const agentSpecAuthority = createRootAgentAuthoritySnapshot({
+      effectiveTools: tools.map((tool) => tool.name),
+      filesystemScope,
+      limits: {
+        ...(maxTurns !== undefined ? { maxTurns } : {}),
+        ...(maxTokens !== undefined ? { maxTokens } : {}),
+      },
+      readOnly,
+      planMode,
+      ...(worktreeScope ? { worktreeScope } : {}),
+      ...(worktreePaths ? { worktreePaths } : {}),
+    });
     // The script-only agent capability rides on the same root authority
     // snapshot as run_code and additionally requires the subagents capability
     // plus at least one resolved-launch seam. Raw runSubagent callbacks are
@@ -778,6 +737,7 @@ export const getAgentDefinition = (
         getCwd: () => executionContext?.getCwd() || process.cwd(),
         approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
         sessionAccess,
+        ...(bareMode ? { catalogOtherTools: 'names' as const } : {}),
         ...(agentSpecAuthority ? { agentSpecAuthority } : {}),
         ...(agentSpecBridge ? { agentSpecBridge } : {}),
         ...(hasCapability('mcp') && !profile.enforcement.denials.has('mcp') && mcpToolSource ? { mcpToolSource } : {}),

@@ -8,9 +8,9 @@ import { resolveActiveProfile } from '../services/profiles/active-profile.js';
 export { PROFILE_TRIGGER } from '../components/input/triggers.js';
 
 export type ProfileOption = {
-  /** Canonical id, e.g. `builtin:lite`. */
+  /** Canonical id, e.g. `builtin:bare`. */
   id: string;
-  /** Short id accepted by `/profile`, e.g. `lite`. */
+  /** Short id accepted by `/profile`, e.g. `bare`. */
   shortId: string;
   displayName: string;
   detail: string;
@@ -18,8 +18,7 @@ export type ProfileOption = {
 
 const PROFILE_DETAILS: Record<string, string> = {
   standard: 'Default full-context mode',
-  bare: 'Shell and file edits, short prompt, no workflows',
-  lite: 'Minimal prompt, no codebase context',
+  bare: 'Shell-only, short prompt; other tools via run_code',
   plan: 'Read-only research/planning mode',
   pair: 'Human-led coding, one approved step at a time',
   mentor: 'Collaborative mode with mentor model',

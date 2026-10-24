@@ -5,6 +5,9 @@ import { ProfileTransitionService, planProfileTransition } from '../services/pro
 import { PROFILE_TRIGGER } from '../components/input/triggers.js';
 import { resolveActiveProfile } from '../services/profiles/active-profile.js';
 import { ProfileResolutionError } from '../services/profiles/types.js';
+import { BARE_PROFILE_ID } from '../services/profiles/legacy-adapter.js';
+
+export const BARE_ENABLED_DETAIL = ' - minimal prompt; AGENTS.md read on demand; other tools via run_code';
 
 interface ModeHelpersDeps {
   settingsService: SettingsService;
@@ -32,7 +35,7 @@ export function useModeHelpers({
     const currentProfileId = resolveActiveProfile(settingsService).identity.id;
     const targetProfileId = isPlan ? 'builtin:standard' : 'builtin:plan';
     const hasHistory = messages.some((message) => message.sender !== 'system');
-    if (currentProfileId === 'builtin:lite' && hasHistory) {
+    if (currentProfileId === BARE_PROFILE_ID && hasHistory) {
       if (requestModeSwitchConfirm) {
         requestModeSwitchConfirm({ targetProfileId, modeLabel: 'Plan', targetValue: true });
       } else {
@@ -65,11 +68,11 @@ export interface CreateModeToggleCommandDeps {
 }
 
 /**
- * Create a slash command for toggling an exclusive mode (lite, mentor, orchestrator).
- * Lite changes are confirmed or blocked when `messages` contains session history.
+ * Create a slash command for toggling an exclusive mode (bare, mentor, orchestrator).
+ * Bare changes are confirmed or blocked when `messages` contains session history.
  */
 export function createModeToggleCommand(
-  profileId: 'lite' | 'mentor' | 'orchestrator',
+  profileId: 'bare' | 'mentor' | 'orchestrator',
   label: string,
   description: string,
   enabledDetail: string,
@@ -79,15 +82,15 @@ export function createModeToggleCommand(
     name: label,
     description,
     action: () => {
-      const modeLabel = label.charAt(0).toUpperCase() + label.slice(1);
+      const modeLabel = profileId.charAt(0).toUpperCase() + profileId.slice(1);
       const current = resolveActiveProfile(deps.settingsService);
       const targetProfileId =
         current.identity.id === `builtin:${profileId}` ? 'builtin:standard' : `builtin:${profileId}`;
       const targetValue = targetProfileId === `builtin:${profileId}`;
 
-      // Lite changes the prompt/tool shape and must be confirmed when history exists.
+      // Bare changes the prompt/tool shape and must be confirmed when history exists.
       const hasHistory = deps.messages ? deps.messages.some((msg) => msg.sender !== 'system') : false;
-      if (profileId === 'lite' && hasHistory) {
+      if (profileId === 'bare' && hasHistory) {
         if (deps.requestModeSwitchConfirm) {
           deps.requestModeSwitchConfirm({
             targetProfileId,
@@ -141,20 +144,20 @@ export function createProfileCommand({
       try {
         const currentId = resolveActiveProfile(settingsService).identity.id;
         const plannedTargetId = planProfileTransition(settingsService, targetId).targetId;
-        const targetIsLite = plannedTargetId === 'builtin:lite';
-        const currentIsLite = currentId === 'builtin:lite';
+        const targetIsBare = plannedTargetId === BARE_PROFILE_ID;
+        const currentIsBare = currentId === BARE_PROFILE_ID;
         const hasHistory = messages?.some((message) => message.sender !== 'system') ?? false;
-        if (plannedTargetId !== currentId && (targetIsLite || currentIsLite) && hasHistory) {
+        if (plannedTargetId !== currentId && (targetIsBare || currentIsBare) && hasHistory) {
           if (requestModeSwitchConfirm) {
             requestModeSwitchConfirm({
               targetProfileId: plannedTargetId,
-              modeLabel: 'Lite',
-              targetValue: targetIsLite,
-              enabledDetail: ' - using minimal prompt, no codebase context',
+              modeLabel: 'Bare',
+              targetValue: targetIsBare,
+              enabledDetail: BARE_ENABLED_DETAIL,
             });
           } else {
             addSystemMessage(
-              'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then `/profile lite`.',
+              `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then \`/profile ${rawId}\`.`,
             );
           }
           return true;

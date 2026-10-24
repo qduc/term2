@@ -79,7 +79,7 @@ The canonical command is:
 Milestone 1 retains aliases:
 
 ```text
-/lite          builtin:lite ↔ builtin:standard
+/lite, /bare   builtin:bare ↔ builtin:standard   (Lite merged into Bare 2026-10-24)
 /plan          builtin:plan ↔ builtin:standard
 /mentor        builtin:mentor ↔ builtin:standard
 /orchestrator  builtin:orchestrator ↔ builtin:standard

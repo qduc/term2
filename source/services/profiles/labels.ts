@@ -1,3 +1,4 @@
+import { canonicalProfileId } from './legacy-adapter.js';
 import { builtinProfileRegistry } from './registry.js';
 
 /**
@@ -7,5 +8,5 @@ import { builtinProfileRegistry } from './registry.js';
  * while custom Profile presentation metadata is not yet available.
  */
 export function getProfileLabel(profileId: string): string {
-  return (builtinProfileRegistry.profiles.get(profileId)?.name ?? 'Standard').toLowerCase();
+  return (builtinProfileRegistry.profiles.get(canonicalProfileId(profileId))?.name ?? 'Standard').toLowerCase();
 }

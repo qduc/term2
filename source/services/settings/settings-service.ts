@@ -6,6 +6,7 @@ import { getProvider, upsertProvider } from '../../providers/registry.js';
 import { createOpenAICompatibleProviderDefinition } from '../../providers/openai-compatible-lazy.js';
 import { resolveProviderId, resolveProviderName } from './custom-provider-normalization.js';
 import {
+  canonicalProfileId,
   legacyModeFromProfileId,
   profileIdFromLegacyMode,
   profileIdFromLegacyModeSetting,
@@ -270,7 +271,15 @@ export class SettingsService {
         hasOwn((rawFileConfig as any)?.app, 'activeProfileId') ||
         hasOwn((env as any)?.app, 'activeProfileId') ||
         hasOwn((cli as any)?.app, 'activeProfileId');
-      const profileId = hasPersistedProfileId ? app.activeProfileId : profileIdFromLegacyMode(app);
+      const profileId = hasPersistedProfileId
+        ? canonicalProfileId(String(app.activeProfileId))
+        : profileIdFromLegacyMode(app);
+      // Rewrite a retired id (Lite → Bare) in the file once, so the reconcile
+      // after each save cannot reload it.
+      const fileProfileId = (rawFileConfig as any)?.app?.activeProfileId;
+      if (typeof fileProfileId === 'string' && canonicalProfileId(fileProfileId) !== fileProfileId) {
+        this.startupMigrations.push(['app.activeProfileId', canonicalProfileId(fileProfileId)]);
+      }
       this.settings.app = { ...app, activeProfileId: profileId };
       this.normalizeProfileSelection('app.activeProfileId', profileId);
     }
@@ -645,6 +654,7 @@ export class SettingsService {
     value: unknown,
     currentProfileId = String(this.settings.app.activeProfileId),
   ): { key: string; value: unknown } {
+    if (key === 'app.activeProfileId' && typeof value === 'string') return { key, value: canonicalProfileId(value) };
     const profileId = profileIdFromLegacyModeSetting(key, value, currentProfileId);
     return profileId ? { key: 'app.activeProfileId', value: profileId } : { key, value };
   }
@@ -705,6 +715,7 @@ export class SettingsService {
 
     const canonical = this.canonicalizeProfileChange(key, value);
     if (canonical.key !== key) return this.setDynamic(canonical.key, canonical.value, options);
+    value = canonical.value;
 
     const outputIntent = this.outputIntentForChange(key, value);
     this.validateAndApplySetting(key, value);
@@ -1162,6 +1173,8 @@ export class SettingsService {
     for (const [key, value] of this.runtimeOverrides) {
       next = this.applyRuntimeSetting(next, key, value);
     }
+    // env/cli may still name a retired Profile id; keep memory canonical.
+    if (next.app) next.app = { ...next.app, activeProfileId: canonicalProfileId(String(next.app.activeProfileId)) };
     this.settings = next;
     this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli);
     if (implicitOutputDefault)

@@ -170,18 +170,25 @@ function renderCompactEntry(tool: ToolRegistry[number]): string {
  * are explicitly shown as unknown rather than inferred from prose, with any
  * declared prose shape surfaced alongside as guidance.
  */
-export function renderToolsHeader(registry: ToolRegistry): string {
+export function renderToolsHeader(
+  registry: ToolRegistry,
+  options: { otherTools?: 'signatures' | 'names' } = {},
+): string {
   if (registry.length === 0) return '';
   const essential = registry.filter((tool) => RUN_CODE_ESSENTIAL_TOOLS.has(tool.name));
   const other = registry.filter((tool) => !RUN_CODE_ESSENTIAL_TOOLS.has(tool.name));
+  // Names-only keeps the catalogue small for profiles that add many script-only
+  // tools; tools.describe supplies a schema when the script needs one.
+  const otherLines =
+    options.otherTools === 'names'
+      ? [`Other tools (call tools.describe(name) before use): ${other.map((tool) => tool.name).join(', ')}`]
+      : ['Other tools:', ...other.map(renderCompactEntry)];
   const lines = [
     'Available inside the script (parameter shapes are approximate; each call is validated against the tool’s real schema):',
     'Use tools.describe(name) when you need the full schema and description for a tool.',
     'Use only the tools listed here: a name that is not listed is not available inside the script.',
     ...(essential.length > 0 ? ['Essential tools:', ...essential.map(renderDetailedEntry)] : []),
-    ...(other.length > 0
-      ? [...(essential.length > 0 ? [''] : []), 'Other tools:', ...other.map(renderCompactEntry)]
-      : []),
+    ...(other.length > 0 ? [...(essential.length > 0 ? [''] : []), ...otherLines] : []),
   ];
   return lines.join('\n');
 }

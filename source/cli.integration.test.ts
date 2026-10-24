@@ -803,7 +803,8 @@ it('CLI --resume ls prints list of conversations and exits', () => {
   expect(stdout.includes('hello this is a test prompt')).toBe(true);
   expect(stdout.includes('1 message')).toBe(true);
   expect(stdout.includes('model: gpt-4o')).toBe(true);
-  expect(stdout.includes('mode: lite')).toBe(true);
+  // A session saved as legacy Lite resumes as Bare, so the list labels it bare.
+  expect(stdout.includes('mode: bare')).toBe(true);
   expect(stdout.includes(`term2 --resume ${convId}`)).toBe(true);
 });
 
@@ -1602,6 +1603,14 @@ type WireToolCall = { id: string; function: { name: string; arguments: string } 
 type WireMessage = { role: string; tool_calls?: WireToolCall[]; tool_call_id?: string; content?: unknown };
 
 /** The tool calls and tool results the CLI sent back to the provider in its last request. */
+/** Bare has no file editors: it writes files through the shell. */
+function bareShellWriteArguments(target: string, content: string): string {
+  return JSON.stringify({
+    command: `printf '%s\\n' ${JSON.stringify(content)} > ${JSON.stringify(target)}`,
+    description: 'Write the fixture file',
+  });
+}
+
 function lastWireToolExchange(requests: Record<string, unknown>[]) {
   const messages = requests.at(-1)?.messages as WireMessage[];
   const calls = messages.flatMap((message) => (message.role === 'assistant' ? message.tool_calls ?? [] : []));
@@ -1743,7 +1752,8 @@ it('a call that reuses a refused call id runs and is saved as run, not as refuse
 it.each(['flag', 'config'])(
   'bare profile via %s keeps a small tool surface, project guidance, and versioned session identity',
   async (selection) => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-bare-'));
+    // realpath: macOS tmpdir is a /var symlink, and the CLI reports the resolved cwd.
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-bare-')));
     fs.mkdirSync(path.join(testDir, '.agents'), { recursive: true });
     fs.writeFileSync(path.join(testDir, '.agents', 'AGENTS.md'), 'GLOBAL_GUIDANCE_SENTINEL: report observed checks.');
     fs.writeFileSync(
@@ -1769,8 +1779,8 @@ it.each(['flag', 'config'])(
                         id: 'bare-create',
                         type: 'function',
                         function: {
-                          name: 'create_file',
-                          arguments: JSON.stringify({ path: 'result.txt', content: 'bare edit succeeded\n' }),
+                          name: 'shell',
+                          arguments: bareShellWriteArguments('result.txt', 'bare edit succeeded'),
                         },
                       },
                     ],
@@ -1810,17 +1820,32 @@ it.each(['flag', 'config'])(
       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).toBe('bare edit succeeded\n');
       const request = mock.capturedRequests()[0];
       const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
-      expect(names).toEqual(['activate_skill', 'create_file', 'goal_check', 'search_replace', 'shell']);
+      // Bare has no editors or activate_skill: the shell does both.
+      expect(names).toEqual(['goal_check', 'run_code', 'shell']);
+      const runCode = (request.tools as { function: { name: string; description: string } }[]).find(
+        (t) => t.function.name === 'run_code',
+      )!;
+      // Script-only add-backs are listed by name; no editor is reachable.
+      expect(runCode.function.description).not.toContain('create_file');
+      expect(runCode.function.description).not.toContain('activate_skill');
+      expect(runCode.function.description).toMatch(
+        /Other tools \(call tools\.describe\(name\) before use\): .*web_search/,
+      );
+      expect(runCode.function.description).not.toContain('tools.web_search(');
       const system = (request.messages as { role: string; content: string }[])
         .filter((m) => m.role === 'system')
         .map((m) => m.content)
         .join('\n');
       expect(system.length).toBeLessThan(4000);
       expect(system).toContain('Unattended mode: Never ask');
-      expect(system).toContain('PROJECT_GUIDANCE_SENTINEL');
-      expect(system).toContain('GLOBAL_GUIDANCE_SENTINEL');
+      // AGENTS.md is read on demand, not injected.
+      expect(system).not.toContain('PROJECT_GUIDANCE_SENTINEL');
+      expect(system).not.toContain('GLOBAL_GUIDANCE_SENTINEL');
+      expect(system).toContain('They are not preloaded');
       expect(system).toContain('report blocked');
       expect(system).toContain('BARE_SKILL_CATALOG_SENTINEL');
+      expect(system).toContain('read the SKILL.md at its\nlocation with the shell');
+      expect(system).not.toContain('activate_skill');
       expect(system).toContain(`cwd (you're already here, don't \`cd\` to it): ${repo}`);
       expect(system).toContain('Follow required independent review policies');
       expect(system).not.toContain('run_code');
@@ -1832,7 +1857,7 @@ it.each(['flag', 'config'])(
       expect(emitted[0]).toMatchObject({
         type: 'session_start',
         activeProfileId: 'builtin:bare',
-        activeProfileVersion: '1.3.0',
+        activeProfileVersion: '2.0.0',
         activeProfileDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
       const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
@@ -1962,8 +1987,8 @@ it.each<[string, boolean]>([
                       id: 'outside-create',
                       type: 'function',
                       function: {
-                        name: 'create_file',
-                        arguments: JSON.stringify({ path: target, content }),
+                        name: 'shell',
+                        arguments: bareShellWriteArguments(target, content),
                       },
                     },
                   ],
@@ -1996,12 +2021,14 @@ it.each<[string, boolean]>([
     expect(result.stdout).toContain(reply);
     const toolExchange = lastWireToolExchange(mock.capturedRequests());
     expect(toolExchange.results).toHaveLength(1);
+    // Bare edits through the shell, so the sandbox is the write boundary.
     if (scratch) {
-      expect(fs.readFileSync(target, 'utf8')).toBe(content);
-      expect(toolExchange.results[0]?.content).toContain(`Created ${target}`);
+      expect(fs.readFileSync(target, 'utf8')).toBe(`${content}\n`);
+      expect(toolExchange.results[0]?.content).toContain('exit 0');
       expect(result.stderr).not.toContain('[approval required]');
     } else {
-      expect(toolExchange.results[0]?.content).toContain('use --auto-approve');
+      // The sandbox's denial text is platform-specific; the failed exit is not.
+      expect(toolExchange.results[0]?.content).toMatch(/exit [1-9]/);
     }
   } finally {
     await mock.close();

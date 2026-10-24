@@ -51,7 +51,8 @@ import { isModelPickerEligible } from './services/models/model-picker-host.js';
 import { HARNESS_IDLE_ENV } from './lib/harness-input-idle.js';
 import {
   legacyModeFromProfileId,
-  LITE_PROFILE_ID,
+  BARE_PROFILE_ID,
+  canonicalProfileId,
   profileIdFromLegacyMode,
 } from './services/profiles/legacy-adapter.js';
 import { createOwnedSessionClientFactory } from './services/session/session-client-factory.js';
@@ -237,8 +238,8 @@ const cli = meow(
       -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
           --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
           --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
-          --profile <name>                 Select a profile (full, bare, lite, plan, pair, mentor, orchestrator)
-      -l, --lite                           Start in lite mode (minimal context, session-only)
+          --profile <name>                 Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)
+      -l, --lite                           Start in the Bare profile (alias kept from Lite)
           --auto-approve                   Allow tool execution for a non-interactive prompt
       -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
           --show-reasoning                 Stream reasoning deltas to stderr in non-interactive mode
@@ -847,25 +848,27 @@ if (modelFlag) {
   let profileId: string;
   if (cli.flags.profile) {
     const name = cli.flags.profile === 'full' ? 'standard' : cli.flags.profile;
-    profileId = name.includes(':') ? name : `builtin:${name}`;
+    profileId = canonicalProfileId(name.includes(':') ? name : `builtin:${name}`);
     // Validate before building providers or starting a session.
     resolveProfile(profileId);
   } else if (resumedConversation) {
     profileId = cli.flags.lite
-      ? LITE_PROFILE_ID
-      : resumedConversation.activeProfileId ??
-        (resumedConversation.appMode
-          ? profileIdFromLegacyMode(resumedConversation.appMode)
-          : String(settings.get('app.activeProfileId')));
+      ? BARE_PROFILE_ID
+      : canonicalProfileId(
+          resumedConversation.activeProfileId ??
+            (resumedConversation.appMode
+              ? profileIdFromLegacyMode(resumedConversation.appMode)
+              : String(settings.get('app.activeProfileId'))),
+        );
   } else if (cli.flags.lite) {
-    profileId = LITE_PROFILE_ID;
+    profileId = BARE_PROFILE_ID;
   } else {
     const implicitLite = Boolean(hasPositionalPrompt && !cli.flags.autoApprove);
     const persistedProfileId = String(settings.get('app.activeProfileId'));
     // Implicit lite must not override a higher-precedence mode already persisted.
     profileId =
-      implicitLite && !['builtin:bare', 'builtin:orchestrator', 'builtin:mentor'].includes(persistedProfileId)
-        ? LITE_PROFILE_ID
+      implicitLite && !['builtin:orchestrator', 'builtin:mentor'].includes(persistedProfileId)
+        ? BARE_PROFILE_ID
         : persistedProfileId;
   }
   settings.set('app.activeProfileId', profileId, { persist: false });

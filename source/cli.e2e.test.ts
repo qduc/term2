@@ -59,12 +59,12 @@ it.sequential.each(['lite', 'bare'])(
     );
 
     // Idle is application-owned evidence that startup reached the composer.
-    // Bare's identity is checked in the session header below, independently
-    // of the banner's legacy presentation labels.
-    if (profile === 'lite') await session.waitForOutput('LITE', STARTUP_TIMEOUT_MS);
+    // --lite is an alias of Bare, so both start the same Profile; the identity
+    // is checked in the session header below.
+    await session.waitForOutput('BARE', STARTUP_TIMEOUT_MS);
     await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
 
-    if (profile === 'bare') {
+    {
       const headers = fs
         .readdirSync(tempConversationsDir, { recursive: true })
         .filter((file) => String(file).endsWith('.jsonl'))
@@ -79,8 +79,9 @@ it.sequential.each(['lite', 'bare'])(
       expect(headers).toHaveLength(1);
       expect(headers[0]).toMatchObject({
         activeProfileId: 'builtin:bare',
-        activeProfileVersion: '1.3.0',
-        appMode: { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: false },
+        activeProfileVersion: '2.0.0',
+        // The legacy liteMode flag projects from Bare for older readers.
+        appMode: { orchestratorMode: false, liteMode: true, planMode: false, mentorMode: false },
       });
       expect(headers[0].activeProfileDigest).toMatch(/^[a-f0-9]{64}$/);
     }
@@ -91,7 +92,6 @@ it.sequential.each(['lite', 'bare'])(
 
     const exit = await session.waitForExit(EXIT_TIMEOUT_MS);
     expect(exit.exitCode).toBe(0);
-    if (profile === 'lite') expect(session.getVisibleOutput()).toContain('Lite');
     expect(session.getVisibleOutput()).not.toContain('Session:');
     expect(session.getVisibleOutput()).not.toContain('To resume this conversation:');
   },

@@ -224,6 +224,7 @@ const cli = meow(
       $ term2 "explain this function"
       $ term2 --resume
       $ term2 --resume <conversation-id>
+      $ term2 --resume <conversation-id> "Follow-up prompt"
       $ term2 --help
 
     Usage
@@ -304,6 +305,7 @@ const cli = meow(
       $ term2 --json "explain this function"
       $ term2 --resume
       $ term2 --resume <conversation-id>
+      $ term2 --resume <conversation-id> "Follow-up prompt"
       $ term2 --resume <conversation-id> --fork
       $ term2 --resume ls
       $ term2 --grok-login
@@ -527,12 +529,11 @@ const expectedSshHost = cli.flags.ssh
     : cli.flags.ssh
   : undefined;
 
-if (resumeRequested && cli.input.length > 1) {
-  console.error('Error: --resume accepts at most one conversation id.');
-  process.exit(1);
-}
-
 if (resumeRequested && (resumeTarget === 'ls' || resumeTarget === 'list')) {
+  if (cli.input.length > 1) {
+    console.error('Error: --resume ls does not accept a prompt.');
+    process.exit(1);
+  }
   const conversations = await listRecentConversations(resumeProjectPath, expectedSshHost, 10);
   const formatted = formatResumeList(conversations);
   console.log(formatted);
@@ -544,7 +545,7 @@ if (forkRequested && !resumeRequested) {
   process.exit(1);
 }
 
-const positionalPrompt = resumeRequested ? '' : cli.input.join(' ').trim();
+const positionalPrompt = (resumeRequested ? cli.input.slice(1) : cli.input).join(' ').trim();
 const hasPositionalPrompt = positionalPrompt.length > 0;
 let launchGoal: DurableGoal | undefined;
 try {
@@ -675,6 +676,12 @@ if (resumeRequested) {
   }
 }
 
+if (resumeRequested && !resumedConversation) {
+  console.error(`No conversation found to resume (${resumeTarget ?? 'last'}).`);
+  console.error('Run "term2 --resume ls" to list available conversations.');
+  process.exit(1);
+}
+
 // If --fork was requested, copy the source jsonl to a new id and resume from the copy.
 if (forkRequested) {
   if (!resumedSourceId || !resumedConversation) {
@@ -686,7 +693,7 @@ if (forkRequested) {
     console.error(`Error: Could not fork conversation ${resumedSourceId}.`);
     process.exit(1);
   }
-  console.log(`Forked conversation ${resumedSourceId} → ${forkedId}`);
+  console.error(`Forked conversation ${resumedSourceId} → ${forkedId}`);
   resumedConversation = { ...resumedConversation, id: forkedId, forkedFrom: resumedSourceId };
   resumedSourceId = forkedId;
 }
@@ -1162,7 +1169,8 @@ if (hasPositionalPrompt) {
     hookLifecycle: hookService,
     mcpAllowlist: mcpConfig.nonInteractiveAllow,
     mcpToolSource: mcpManager,
-    initialGoal: launchGoal,
+    initialGoal: launchGoal ?? resumedConversation?.goal,
+    resumedConversation: resumedConversation ?? undefined,
     onGoalPersisted: (goal) => {
       currentGoalState.current = goal;
     },

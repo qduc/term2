@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
@@ -11,6 +11,91 @@ afterEach(async () => {
 });
 
 describe('assembled provider CLI black-box', () => {
+  it('resumes headlessly with persisted history and appends to the same conversation', async () => {
+    server = await startFakeProviderHttpServer({ scenario: 'success', protocol: 'chat-completions' });
+    const workspace = await createIsolatedWorkspaceLease({
+      prepare: async (_root, paths) => {
+        await mkdir(paths.logDir, { recursive: true });
+        await writeFile(
+          join(paths.logDir, 'settings.json'),
+          JSON.stringify({
+            agent: { modelSelection: { model: 'fixture', provider: 'fixture-provider' } },
+            app: { liteMode: true },
+            providers: [
+              {
+                id: 'fixture-provider',
+                name: 'fixture-provider',
+                type: 'openai-compatible',
+                baseUrl: server?.baseUrl,
+                apiKey: 'fixture-key',
+              },
+            ],
+          }),
+        );
+      },
+    });
+    try {
+      const first = await workspace.runCli({
+        cwd: process.cwd(),
+        args: ['Remember amber tortoise', '--reasoning', 'high', '--json'],
+        deadlineMs: 15000,
+      });
+      expect(first.exitCode, first.stderr).toBe(0);
+      const dir = workspace.paths.conversationsDir;
+      const logs = (await readdir(dir)).filter((name) => name.endsWith('.jsonl'));
+      expect(logs).toHaveLength(1);
+      const id = logs[0]!.slice(0, -6);
+      const before = await readFile(join(dir, logs[0]!), 'utf8');
+      const resumed = await workspace.runCli({
+        cwd: process.cwd(),
+        args: ['--resume', id, 'Recall the animal', '--json'],
+        deadlineMs: 15000,
+      });
+      expect(resumed.exitCode, resumed.stderr).toBe(0);
+      const wire = JSON.stringify(server.requests.at(-1)?.body);
+      expect(wire).toContain('Remember amber tortoise');
+      expect(wire).toContain('Recall the animal');
+      const after = await readFile(join(dir, logs[0]!), 'utf8');
+      expect(after.startsWith(before)).toBe(true);
+      expect(after).toContain('Recall the animal');
+      const latestInit = (text: string) =>
+        text
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line))
+          .filter((envelope) => envelope.event.type === 'session_init')
+          .at(-1).event;
+      expect(latestInit(after).reasoningEffort).toBe('high');
+      expect((await readdir(dir)).filter((name) => name.endsWith('.jsonl'))).toEqual(logs);
+      for (const line of resumed.stdout.trim().split('\n')) expect(() => JSON.parse(line)).not.toThrow();
+      const forked = await workspace.runCli({
+        cwd: process.cwd(),
+        args: ['--resume', id, '--fork', 'Fork follow-up', '--json'],
+        deadlineMs: 15000,
+      });
+      expect(forked.exitCode, forked.stderr).toBe(0);
+      expect(JSON.stringify(server.requests.at(-1)?.body)).toContain('Recall the animal');
+      expect(await readFile(join(dir, logs[0]!), 'utf8')).toBe(after);
+      const forkLogs = (await readdir(dir)).filter((name) => name.endsWith('.jsonl') && name !== logs[0]);
+      expect(forkLogs).toHaveLength(1);
+      const forkInit = latestInit(await readFile(join(dir, forkLogs[0]!), 'utf8'));
+      expect(forkInit.forkedFrom).toBe(id);
+      expect(forkInit.reasoningEffort).toBe('high');
+      for (const line of forked.stdout.trim().split('\n')) expect(() => JSON.parse(line)).not.toThrow();
+      const requestCount = server.requests.length;
+      const missing = await workspace.runCli({
+        cwd: process.cwd(),
+        args: ['--resume', 'missing-session', 'follow-up'],
+        deadlineMs: 15000,
+      });
+      expect(missing.exitCode).toBe(1);
+      expect(missing.stderr).toContain('No conversation found to resume');
+      expect(server.requests).toHaveLength(requestCount);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
   // The supervisor deliberately fails closed without Linux /proc ownership proof.
   it('enforces platform ownership support through the real supervisor, private pipe, and built CLI', async () => {
     server = await startFakeProviderHttpServer({ scenario: 'success', protocol: 'chat-completions' });
@@ -38,6 +123,7 @@ describe('assembled provider CLI black-box', () => {
     });
     try {
       const result = await workspace.runCli({
+        cwd: process.cwd(),
         cwd: process.cwd(),
         cliPath: join(process.cwd(), 'tools/supervised-term2/launch.mjs'),
         args: [

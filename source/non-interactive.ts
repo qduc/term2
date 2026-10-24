@@ -26,7 +26,7 @@ import { formatBackgroundSubagentNotifications } from './services/conversation/c
 import type { BackgroundSubagentNotificationPort } from './services/subagents/subagent-notification-store.js';
 import { mcpMemberName } from './tools/system/run-code/mcp-script-surface.js';
 import { createConversationLogWriter } from './services/logging/conversation-log-writer.js';
-import { getConversationsDir } from './services/conversation/conversation-persistence.js';
+import { type RestoredState, getConversationsDir } from './services/conversation/conversation-persistence.js';
 import type { DurableGoal } from './services/logging/conversation-log-events.js';
 import { formatGoalClosedByCheck, type GoalAchievedSlot } from './services/conversation/durable-goal.js';
 import {
@@ -56,6 +56,8 @@ export interface NonInteractiveBackgroundWork {
 
 export interface NonInteractiveConfig {
   prompt: string;
+  /** Restore identity and runtime history before appending the next headless turn. */
+  resumedConversation?: RestoredState;
   /** Locator for the retained conversation when a bounded run parks. */
   recoverySessionId?: string;
   initialGoal?: DurableGoal;
@@ -570,7 +572,7 @@ export async function runNonInteractive(
 
   const clientFactory =
     config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient!, config.toolOwnership!);
-  const sessionId = createNonInteractiveSessionId();
+  const sessionId = config.resumedConversation?.id ?? createNonInteractiveSessionId();
   const clientHandle = clientFactory.create(sessionId, { allowBackgroundShell: false, allowAskUser: false });
   const removeBackgroundShellInterceptor = clientHandle.agentClient.addToolInterceptor(async (name, params) => {
     if (
@@ -612,6 +614,7 @@ export async function runNonInteractive(
   try {
     const createdRuntime = createConversationRuntime({
       sessionId,
+      sessionStartedAt: config.resumedConversation?.createdAt,
       enableNestedApproval: false,
       agentClient: clientHandle.agentClient,
       toolOwnership: clientHandle.toolOwnership,
@@ -624,6 +627,23 @@ export async function runNonInteractive(
       hookEvents: config.hookEvents ?? clientHandle.hookEvents,
     });
     runtime = createdRuntime.runtime;
+    if (config.resumedConversation) {
+      const restored = config.resumedConversation;
+      const selection = config.settingsService.get('agent.modelSelection');
+      runtime.state.importState({
+        history: restored.history,
+        previousResponseId:
+          (!restored.provider || restored.provider === selection.provider) &&
+          (!restored.model || restored.model === selection.model)
+            ? restored.previousResponseId
+            : null,
+        toolLedger: restored.toolLedger,
+        updatedAt: restored.updatedAt,
+      });
+      for (const warning of restored.replayWarnings) {
+        (config.stderr ?? process.stderr).write(`Conversation replay: ${warning}\n`);
+      }
+    }
     {
       logWriter = createConversationLogWriter({
         sessionId,
@@ -637,6 +657,11 @@ export async function runNonInteractive(
         ...getProfileMetadata(config.settingsService.get('app.activeProfileId')),
         model: config.settingsService.get('agent.modelSelection').model,
         provider: config.settingsService.get('agent.modelSelection').provider,
+        ...(config.settingsService.get('agent.reasoningEffort')
+          ? { reasoningEffort: config.settingsService.get('agent.reasoningEffort') }
+          : {}),
+        ...(config.resumedConversation?.forkedFrom ? { forkedFrom: config.resumedConversation.forkedFrom } : {}),
+        ...(config.resumedConversation?.rolloverFrom ? { rolloverFrom: config.resumedConversation.rolloverFrom } : {}),
       });
       if (config.initialGoal) {
         logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });

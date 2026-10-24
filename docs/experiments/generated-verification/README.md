@@ -43,6 +43,17 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   arguments, arbitrary result text, missing results and an orphan result.
   `projectProviderHistory` promises non-mutation and idempotence;
   `dropUnpairedFunctionCalls` promises complete-pair retention/orphan removal.
+- `history.ledger-settlement`: generated fresh call identities, dispatch/result
+  observations, scoped/all stream interruption, rejection of never-dispatched
+  calls, turn changes and export/import against an independent per-call model.
+  C2.5 requires unobserved dispatched effects to remain unknown, not aborted;
+  completed outcomes and out-of-scope calls must not change. This checks ledger
+  bookkeeping, not execution or retry of real effects.
+- `history.ledger-reconciliation`: generated partial transcripts and settled/open
+  ledger entries with explicit user anchors and retry-attempt drift. C2.1/C2.2
+  require one correctly ordered pair per settled call, preserved payloads and user
+  ownership, idempotence and non-mutation. OpenAI/local replacement checkpoints
+  prevent old ledger reinjection; model-request history starts at the last one.
 - `queue.serial-actions`: generated public submit, completion, failure, removal,
   edit, resume, discard and stale-completion sequences compared at every step to
   an independent serial FIFO model. The empty-pause invariant is explicit in
@@ -53,7 +64,7 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   their payloads and pause reason without replay on construction.
 
 Not covered: parallel command interleavings, persistence failures, approvals,
-steering, provider transports, multi-call chat envelopes, ledger recovery, or
+steering, provider transports, multi-call chat envelopes, full journal/crash recovery, reused-call reopening policy, or
 arbitrary malformed inputs. Passing does not establish these behaviors.
 
 Add a property only for a named supported contract and a meaningful generated
@@ -61,3 +72,8 @@ space. Keep runtime bounded, shrinks readable and failure output reproducible.
 Use this when changing these boundaries; do not substitute it for required static,
 integration, e2e, provider, or independent checks. Pilot acceptance and evidence
 are tracked in [PLAN.md](PLAN.md).
+
+The ledger rollout evidence and limits are in [LEDGER-PLAN.md](LEDGER-PLAN.md).
+The default now samples five properties (5,000 cases total); `--target history`
+samples the three history properties. A recorded replay can report fewer cases
+because it continues from a shrunk path, not a fresh full seed run.

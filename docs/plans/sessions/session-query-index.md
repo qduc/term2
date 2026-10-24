@@ -333,3 +333,8 @@ No implementation tests or performance measurements were executed to produce the
 original planning document. The [October 5 repair evidence](../../research/session-search-and-codex-reconnect-repair.md)
 records subsequent repetitive-snippet and canonical-fallback defects, worker
 ownership repair, real CLI workflows, corpus measurements, and limitations.
+
+The [October 24 explicit-read repair](../../research/session-read-timeout-optimization.md)
+records a later cold-index timeout: explicit reference reads now resolve through a
+filename-prefix-limited canonical worker instead of requiring whole-corpus index
+reconciliation. `previous`, list, and search retain their full-catalog paths.

@@ -6,6 +6,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import envPaths from 'env-paths';
+vi.mock('env-paths', { spy: true });
 const git = promisify(execFile);
 import { CompletionVerificationOrchestrator, type VerificationOperations } from './orchestrator.js';
 import { VerificationStore } from './store.js';
@@ -69,6 +70,12 @@ async function revised(): Promise<CompletionProposal> {
 
 beforeEach(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), 'completion-verification-'));
+  // env-paths ignores XDG_DATA_HOME on macOS; isolate the external path resolver
+  // as well as the on-disk store so these runs cannot touch a developer's tasks.
+  vi.mocked(envPaths).mockReturnValue({
+    ...envPaths('term2'),
+    data: path.join(root, '.git', 'data'),
+  });
   await git('git', ['init', '--quiet', root]);
   await writeFile(path.join(root, 'README.md'), 'Original\n');
   await git('git', ['-C', root, 'add', 'README.md']);
@@ -97,6 +104,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   store?.close();
   await rm(root, { recursive: true, force: true });
 });
@@ -672,7 +680,13 @@ it('a failed-only filesystem probe cannot authorize the real verifier PASS', asy
 
 it('the built-in administrative entry point inspects and auditably recovers the persisted task', async () => {
   const dataRoot = path.join(root, '.git', 'admin-data');
-  vi.stubEnv('XDG_DATA_HOME', dataRoot);
+  const childEnv = { ...process.env, HOME: dataRoot, XDG_DATA_HOME: dataRoot };
+  const { stdout: nativeDataPath } = await git(
+    process.execPath,
+    ['--input-type=module', '-e', "import envPaths from 'env-paths'; process.stdout.write(envPaths('term2').data);"],
+    { env: childEnv },
+  );
+  vi.mocked(envPaths).mockReturnValue({ ...envPaths('term2'), data: nativeDataPath });
   const adminStore = new VerificationStore(path.join(envPaths('term2').data, 'completion-verification.sqlite'));
   try {
     await new CompletionVerificationOrchestrator(
@@ -690,7 +704,7 @@ it('the built-in administrative entry point inspects and auditably recovers the 
       let code: number | null;
       try {
         const child = spawn(process.execPath, ['--import', 'tsx', adminScript, ...args], {
-          env: { ...process.env, XDG_DATA_HOME: dataRoot },
+          env: childEnv,
           stdio: ['ignore', output.fd, errors.fd],
           timeout: 10_000,
         });
@@ -877,7 +891,6 @@ it.each([
 ])(
   'the root $profileId AgentClient independently verifies $outcome before closing the goal',
   async ({ profileId, outcome }) => {
-    vi.stubEnv('XDG_DATA_HOME', path.join(root, '.git', 'data'));
     const goal: DurableGoal = {
       id: 'root-goal',
       outcome: 'Read README',

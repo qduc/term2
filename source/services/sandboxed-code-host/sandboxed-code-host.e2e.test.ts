@@ -84,7 +84,7 @@ appendFileSync(process.env.TERM2_SANDBOX_DIAGNOSTIC_MARKER, process.execArgv.inc
   await writeFile(
     childPath,
     `(async () => {
-  const { mkdir, mkdtemp, readFile, rm } = await import('node:fs/promises');
+  const { mkdir, mkdtemp, readFile, realpath, rm } = await import('node:fs/promises');
   const { join } = await import('node:path');
   const { tmpdir } = await import('node:os');
   ${workerImport}
@@ -92,7 +92,7 @@ appendFileSync(process.env.TERM2_SANDBOX_DIAGNOSTIC_MARKER, process.execArgv.inc
   let root;
   let validWorkspace;
   try {
-    root = await mkdtemp(join(tmpdir(), 'term2-deleted-cwd-test-'));
+    root = await realpath(await mkdtemp(join(tmpdir(), 'term2-deleted-cwd-test-')));
     const deletedCwd = join(root, 'deleted-cwd');
     validWorkspace = join(root, 'workspace');
     await Promise.all([mkdir(deletedCwd), mkdir(validWorkspace)]);

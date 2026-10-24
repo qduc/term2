@@ -358,7 +358,7 @@ describe('term2 serve (child process)', () => {
   }, 180_000);
 
   it('pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid', async () => {
-    const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'serve-pair-home-')));
+    const tempHome = realpathSync(mkdtempSync(path.join('/tmp', 'serve-pair-')));
     const stateDir = path.join(tempHome, 'gateway-state');
     const workspaceRoot = path.join(tempHome, 'workspace');
     fs.mkdirSync(workspaceRoot, { recursive: true });

@@ -11,7 +11,8 @@ afterEach(async () => {
 });
 
 describe('assembled provider CLI black-box', () => {
-  it('runs a bounded handoff through the real supervisor, private pipe, and built CLI', async () => {
+  // The supervisor deliberately fails closed without Linux /proc ownership proof.
+  it('enforces platform ownership support through the real supervisor, private pipe, and built CLI', async () => {
     server = await startFakeProviderHttpServer({ scenario: 'success', protocol: 'chat-completions' });
     const workspace = await createIsolatedWorkspaceLease({
       prepare: async (root, paths) => {
@@ -53,6 +54,12 @@ describe('assembled provider CLI black-box', () => {
         deadlineMs: 15000,
       });
       expect(result.timedOut).toBe(false);
+      if (process.platform !== 'linux') {
+        expect(result.exitCode, result.stderr).toBe(1);
+        expect(result.stderr).toContain('unsupported_platform');
+        expect(server.requests).toHaveLength(0);
+        return;
+      }
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       expect(result.stdout).toBe('hello\n');
       expect(server.requests).toHaveLength(1);

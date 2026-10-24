@@ -8,7 +8,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
-import { localLogDateKey } from './services/logging/logging-service.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
 const require = createRequire(import.meta.url);
@@ -243,14 +242,25 @@ it('finishes a provider turn when file logging hits ENOSPC', async () => {
   const home = path.join(testDir, 'home');
   const workspace = path.join(testDir, 'workspace');
   const stateHome = path.join(home, '.local', 'state');
-  const logDir = path.join(stateHome, 'term2-nodejs', 'logs');
-  const today = localLogDateKey();
-  if (process.env.TZ === 'Pacific/Kiritimati') {
-    expect(today).not.toBe(new Date().toISOString().slice(0, 10));
-  }
   fs.mkdirSync(workspace, { recursive: true });
-  fs.mkdirSync(logDir, { recursive: true });
-  fs.symlinkSync('/dev/full', path.join(logDir, `term2-${today}.log`));
+  // Inject the disk error at the actual log stream boundary. /dev/full is
+  // Linux-only, and env-paths uses a different log directory on macOS.
+  const preload = path.join(testDir, 'disk-full.cjs');
+  fs.writeFileSync(
+    preload,
+    `
+const fs = require('node:fs');
+const path = require('node:path');
+const createWriteStream = fs.createWriteStream;
+const failWrite = (...args) => queueMicrotask(() => args.at(-1)(Object.assign(new Error('fixture disk full'), { code: 'ENOSPC' })));
+fs.createWriteStream = (filename, options) => {
+  const name = path.basename(String(filename));
+  return createWriteStream(filename, name.startsWith('term2-') && name.endsWith('.log')
+    ? { ...options, fs: { ...fs, write: failWrite, writev: failWrite } }
+    : options);
+};
+`,
+  );
   const mock = await startModelMock(['mock-alpha']);
   const env = createTestChildEnv({
     HOME: home,
@@ -263,6 +273,7 @@ it('finishes a provider turn when file logging hits ENOSPC', async () => {
     TERM2_CONVERSATIONS_DIR: path.join(testDir, 'conversations'),
     TZ: process.env.TZ,
     LOG_LEVEL: 'debug',
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --require=${JSON.stringify(preload)}`,
   });
   writeSettings(home, {
     agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -632,7 +643,16 @@ it.each(['', 'mock-verifier'])(
       expect(verifierBody).not.toContain('Provider returned the reply');
 
       // The gate persisted its decision before the goal was closed.
-      const dbPath = path.join(tempHome, '.local', 'share', 'term2-nodejs', 'completion-verification.sqlite');
+      const dataPath = execFileSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          "import envPaths from 'env-paths'; process.stdout.write(envPaths('term2').data);",
+        ],
+        { cwd: projectRoot, env: createTestChildEnv({ HOME: tempHome }), encoding: 'utf8' },
+      );
+      const dbPath = path.join(dataPath, 'completion-verification.sqlite');
       expect(fs.existsSync(dbPath)).toBe(true);
       const db = new Database(dbPath, { readonly: true });
       try {

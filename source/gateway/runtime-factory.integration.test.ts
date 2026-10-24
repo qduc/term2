@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../services/settings/settings-service.js';
@@ -119,7 +119,7 @@ const provider: ProviderDefinition = {
 };
 
 function tempRoot(prefix: string): string {
-  const root = mkdtempSync(path.join('/tmp', prefix));
+  const root = realpathSync(mkdtempSync(path.join('/tmp', prefix)));
   roots.push(root);
   return root;
 }

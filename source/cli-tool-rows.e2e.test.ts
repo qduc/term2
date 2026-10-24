@@ -154,5 +154,5 @@ it('the terminal UI shows a later turn tool call that reuses an earlier call id'
   expect(fs.readFileSync(path.join(workspace, 'one.txt'), 'utf8')).toBe('one\n');
   expect(fs.readFileSync(path.join(workspace, 'two.txt'), 'utf8')).toBe('two\n');
   // ...so the second turn must render the second call's completed row.
-  expect(secondTurnOutput, secondTurnOutput).toMatch(/✓ echo two > \S+two\.txt/);
+  expect(secondTurnOutput, secondTurnOutput).toMatch(/✓ echo two > [\s\S]*?two\.txt/);
 });

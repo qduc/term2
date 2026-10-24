@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync, rmSync, unlinkSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -225,7 +225,8 @@ export async function createIsolatedWorkspaceLease(
 ): Promise<IsolatedWorkspaceLease> {
   let root: string | undefined;
   try {
-    root = await mkdtemp(join(tmpdir(), options.prefix ?? 'term2-provider-blackbox-'));
+    // Persisted project paths must match the child's physical cwd on macOS too.
+    root = await realpath(await mkdtemp(join(tmpdir(), options.prefix ?? 'term2-provider-blackbox-')));
     openWorkspaceRoots.add(root);
     const paths = createWorkspacePaths(root);
     await mkdir(paths.outputsDir, { recursive: true });

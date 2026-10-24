@@ -1,0 +1,44 @@
+[
+  {
+    "command": "pnpm install --frozen-lockfile",
+    "exit": 0,
+    "runtimeSeconds": 1.295073872897774,
+    "revision": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+    "log": "docs/experiments/generated-verification/checks/primary/0.log"
+  },
+  {
+    "command": "pnpm verify:generated --seed 424242",
+    "exit": 0,
+    "runtimeSeconds": 1.8270487505942583,
+    "revision": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+    "log": "docs/experiments/generated-verification/checks/primary/1.log"
+  },
+  {
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "runtimeSeconds": 3.079435129184276,
+    "revision": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+    "log": "docs/experiments/generated-verification/checks/primary/2.log"
+  },
+  {
+    "command": "pnpm test",
+    "exit": 0,
+    "runtimeSeconds": 3.0655705076642334,
+    "revision": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+    "log": "docs/experiments/generated-verification/checks/primary/3.log"
+  },
+  {
+    "command": "pnpm build",
+    "exit": 0,
+    "runtimeSeconds": 3.875674839131534,
+    "revision": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+    "log": "docs/experiments/generated-verification/checks/primary/4.log"
+  },
+  {
+    "command": "pnpm lint",
+    "exit": 1,
+    "runtimeSeconds": 29.962714022025466,
+    "revision": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+    "log": "docs/experiments/generated-verification/checks/primary/5.log"
+  }
+]

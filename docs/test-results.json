@@ -5701,6 +5701,218 @@
           "path": "docs/experiments/generated-verification/checks/final-lint-pass.log"
         }
       ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-primary-0",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+      "revision_kind": "merged_product_with_new_evidence_only",
+      "suite": "install",
+      "command": "pnpm install --frozen-lockfile",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "checkout": "primary"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Own frozen install; exact merge commit. Runtime seconds 1.295073872897774",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/primary/0.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-primary-1",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+      "revision_kind": "merged_product_with_new_evidence_only",
+      "suite": "generated",
+      "command": "pnpm verify:generated --seed 424242",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "checkout": "primary"
+      },
+      "result": {
+        "passed": 3000,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Own frozen install; exact merge commit. Runtime seconds 1.8270487505942583",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/primary/1.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-primary-2",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+      "revision_kind": "merged_product_with_new_evidence_only",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "checkout": "primary"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Own frozen install; exact merge commit. Runtime seconds 3.079435129184276",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/primary/2.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-primary-3",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+      "revision_kind": "merged_product_with_new_evidence_only",
+      "suite": "static-guards",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "checkout": "primary"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Own frozen install; exact merge commit. Runtime seconds 3.0655705076642334",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/primary/3.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-primary-4",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+      "revision_kind": "merged_product_with_new_evidence_only",
+      "suite": "build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "checkout": "primary"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Own frozen install; exact merge commit. Runtime seconds 3.875674839131534",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/primary/4.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-primary-5",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+      "revision_kind": "merged_product_with_new_evidence_only",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "checkout": "primary"
+      },
+      "result": {
+        "passed": null,
+        "failed": 9318,
+        "skipped": null
+      },
+      "failures": [
+        "Unfiltered primary lint scans untracked .cache/.coord/.term2/packages artifacts: 9318 errors; zero tracked-file errors. See lint-diagnosis.json. No removal or ignore changes."
+      ],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Own frozen install; exact merge commit. Runtime seconds 29.962714022025466",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/primary/5.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-verification-merge-clean-lint",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "7561e1df77cdaa5fc81be9815c25104ee0bb17a7",
+      "revision_kind": "exact_merge_commit_in_owned_isolated_worktree",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "checkout": "owned isolated feature worktree fast-forwarded to merge commit"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-verification"],
+      "notes": "Full lint, no extra ignores: ESLint0errors31warnings and Prettier pass. This verifies the merged artifact; unfiltered primary failure remains separately recorded, not claimed green.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/primary/merge-clean-lint.log"
+        }
+      ]
     }
   ]
 }

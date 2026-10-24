@@ -1,0 +1,34 @@
+[
+  {
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.serial-actions",
+      "--seed",
+      "424242",
+      "--path",
+      "313:1:2:2:2:2:2:2:2:2:2:5:5:5:5:5:5:5:5:8:8:11:11",
+      "--runs",
+      "1000"
+    ],
+    "exit": 0,
+    "runtimeSeconds": 1.287530425004661
+  },
+  {
+    "command": [
+      "pnpm",
+      "verify:generated",
+      "--property",
+      "queue.restore-pause",
+      "--seed",
+      "424242",
+      "--path",
+      "6:0",
+      "--runs",
+      "1000"
+    ],
+    "exit": 0,
+    "runtimeSeconds": 1.3612645962275565
+  }
+]

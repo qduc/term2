@@ -1,0 +1,14 @@
+{
+  "errorsByRoot": {
+    ".cache": 4,
+    ".coord": 8201,
+    ".term2": 362,
+    "packages": 751
+  },
+  "warningsByRoot": {
+    "packages": 3,
+    "source": 31
+  },
+  "trackedFileErrors": [],
+  "note": "Unfiltered primary pnpm lint failure retained; no artifacts removed or exclusions added."
+}

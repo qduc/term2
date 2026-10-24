@@ -1,0 +1,14 @@
+Scope: all 2 workspace projects
+✓ Lockfile passes supply-chain policies (verified 30m ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +2
+++
+Progress: resolved 2, reused 2, downloaded 0, added 2, done
+
+devDependencies:
++ fast-check 4.10.2
+
+. prepare$ husky
+. prepare: Done
+Done in 862ms using pnpm v11.7.0

@@ -1,5 +1,7 @@
 # Generated edge-case verification
 
+Integrated by merge `7561e1df77cdaa5fc81be9815c25104ee0bb17a7`.
+
 ## Goal and authority
 
 Deliver a permanent, inexpensive, LLM-free-at-runtime edge-case discovery command.
@@ -522,3 +524,25 @@ primary integration evidence follow below; historical checkpoint text above is
 retained as chronology, not current live-job state. No verifier writer remains.
 
 Final feature lint passed (0 errors,31 existing warnings; Prettier pass). A parent ledger append overlapped the previous lint and caused only a docs/test-results.json formatting failure; its log and resolving run are retained. No checker/source change.
+
+## Primary integration outcome
+
+Merged with --no-ff as `7561e1df77cdaa5fc81be9815c25104ee0bb17a7`, preserving
+primary parent `298fb429` and its unrelated session-rollover description. Primary
+own frozen install, installed seed424242 (3,000 cases), both exact historical red
+replays, typecheck, static guards and build all pass. Six reviewed source/package/
+lockfile hashes match final independent acceptance. See `checks/primary/`.
+
+Unfiltered primary lint FAILS: 9,318 errors exclusively in untracked local
+.cache/.coord/.term2/packages artifacts; zero tracked-file errors. No artifact
+was deleted, moved, ignored or edited to hide it. Exact merged commit was then
+fast-forwarded into the owned isolated feature worktree, where full unchanged
+`pnpm lint` PASSed with0errors31warnings and Prettier pass. This is an explicit
+artifact/environment distinction, not a claim that unfiltered primary lint passes.
+Diagnostic counts and original failure log are retained. No implementation
+changes followed independent acceptance. Broader feature-tier integration/base
+failure and provider-timeout caveats above still apply; no new whole-tier run is
+inferred from primary smoke checks. All owned background writers have ended.
+
+Outcome: opt-in pilot accepted and integrated, including actual queue repair;
+not an exhaustive proof, automatic CI promotion, or measured total-cost reduction.

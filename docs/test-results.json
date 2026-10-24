@@ -2892,6 +2892,224 @@
       "notes": [
         "Counts refer to static guard suite. Typecheck, lint and no-unit-test commands also exited 0; no fabricated test counts for them."
       ]
+    },
+    {
+      "id": "2026-10-24-bare-schema-integrated-main",
+      "recorded_on": "2026-10-24",
+      "run_at": "2026-10-24T01:08:50.882342+00:00",
+      "commit": "1a992d8be1843fd3d1efa8ec1d0f633457169007",
+      "tree": "9892f648ea8831a1d24cf1b79edeb064fd8f0a02",
+      "base_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+      "source_commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17",
+      "source_documentation_commit": "2f80ac41286583efaf60f92b7f9139bb81fc5fb7",
+      "revision_kind": "committed_source_with_unrelated_dirty_ledger",
+      "suite": "accepted-interface-main-import-focused-verification",
+      "task_ids": ["2026-10-24-bare-token-efficiency-e2e"],
+      "dirty_paths": ["docs/experiments/evidence-driven-development/tasks.jsonl"],
+      "command": "Separate exact-main observations listed below; tracked-file argv retained in evidence JSON. Full pnpm lint failed and is not reported as passed.",
+      "command_complete": true,
+      "command_observations": [
+        {
+          "name": "typecheck",
+          "argv": ["pnpm", "typecheck"],
+          "run_at": "2026-10-24T01:08:50.882342+00:00",
+          "runtime_seconds": 3.129,
+          "exit_code": 0,
+          "log": "/tmp/bare-main-integration-20261024/typecheck.log",
+          "log_sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+          "command": "pnpm typecheck"
+        },
+        {
+          "name": "lint",
+          "argv": ["pnpm", "lint"],
+          "run_at": "2026-10-24T01:08:54.011929+00:00",
+          "runtime_seconds": 31.01,
+          "exit_code": 1,
+          "log": "/tmp/bare-main-integration-20261024/lint.log",
+          "log_sha256": "77c19d478bbd3dee6975438f2058f219e3441a880014def92d45721126d63214",
+          "command": "pnpm lint"
+        },
+        {
+          "name": "tracked-eslint",
+          "run_at": "2026-10-24T01:09:59.870873+00:00",
+          "runtime_seconds": 23.526,
+          "exit_code": 0,
+          "log": "/tmp/bare-main-integration-20261024/tracked-eslint.log",
+          "log_sha256": "560a347b8ddf84a99742c0e52967349ef20dd6826629994e76e977a0e3c6dace",
+          "command_scope": "Explicit tracked-file argv, using unchanged repository configuration; not equivalent to the failed full pnpm lint scan. Exact argv retained in integrated-checks.json.",
+          "argument_count": 1036
+        },
+        {
+          "name": "tracked-prettier",
+          "run_at": "2026-10-24T01:10:23.398225+00:00",
+          "runtime_seconds": 14.272,
+          "exit_code": 0,
+          "log": "/tmp/bare-main-integration-20261024/tracked-prettier.log",
+          "log_sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+          "command_scope": "Explicit tracked-file argv, using unchanged repository configuration; not equivalent to the failed full pnpm lint scan. Exact argv retained in integrated-checks.json.",
+          "argument_count": 1385
+        },
+        {
+          "name": "runtime-build",
+          "argv": ["pnpm", "build"],
+          "run_at": "2026-10-24T01:10:37.671684+00:00",
+          "runtime_seconds": 3.879,
+          "exit_code": 0,
+          "log": "/tmp/bare-main-integration-20261024/runtime-build.log",
+          "log_sha256": "e3bbb2ac1f4221d64cea95bbaa89d22f8f37d14ef7173e04f389cd6bd9b40226",
+          "command": "pnpm build"
+        },
+        {
+          "name": "focused-shell-native",
+          "argv": [
+            "pnpm",
+            "test:integration",
+            "source/tools/system/run-code/shell.integration.test.ts",
+            "source/lib/native-apply-patch.integration.test.ts"
+          ],
+          "run_at": "2026-10-24T01:10:41.551279+00:00",
+          "runtime_seconds": 7.096,
+          "exit_code": 0,
+          "log": "/tmp/bare-main-integration-20261024/focused-shell-native.log",
+          "log_sha256": "38662ac4ac9560f73f7c9b498699a1e39b6415743e0f82366a8222cdb5feafad",
+          "command": "pnpm test:integration source/tools/system/run-code/shell.integration.test.ts source/lib/native-apply-patch.integration.test.ts",
+          "result": {
+            "passed": 16,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 2,
+            "files_failed": 0
+          }
+        },
+        {
+          "name": "installed-version",
+          "argv": ["/home/qduc/.local/share/pnpm/bin/term2", "--version"],
+          "run_at": "2026-10-24T01:10:48.648121+00:00",
+          "runtime_seconds": 0.869,
+          "exit_code": 0,
+          "log": "/tmp/bare-main-integration-20261024/installed-version.log",
+          "log_sha256": "a6d1ce61efa4670be78677c3efc900e08795d0254033dcb0ab6352ecdd3f88d5",
+          "command": "/home/qduc/.local/share/pnpm/bin/term2 --version"
+        }
+      ],
+      "environment": {
+        "os": "Linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "focused_shell_native": {
+            "NODE_ENV": "test"
+          }
+        },
+        "notes": "Primary main checkout; unrelated six raw ledger rows remain unstaged. Full lint traverses unrelated local untracked cache/benchmark/artifact files. No live provider requests, paid experiments, pane restarts or kills."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "verification_status": "focused_runtime_and_tracked_static_passed_full_lint_failed",
+      "failures": [
+        {
+          "command": "pnpm lint",
+          "exit_code": 1,
+          "signature": "9352 problems (9318 errors, 34 warnings); tracked error blocks: 0; prettier not reached",
+          "examples": [
+            ".cache/memory-retrieve-comparison-20261019/compare.mjs: no-undef Buffer/process/console",
+            ".coord/bench-r-ws-mimo-20260928/control/evaluator.test.ts: TS5012 missing packages/core/tsconfig.json"
+          ],
+          "classification": "observed_local_untracked_artifact_scope_failure",
+          "notes": "All reported error blocks are outside tracked files. Not claimed reproduced on base or resolved; local files/config left untouched. Separately scoped tracked eslint and prettier pass.",
+          "evidence": "/tmp/bare-main-integration-20261024/lint-diagnosis.json"
+        }
+      ],
+      "comparison": {
+        "classification": "accepted_source_import_with_exact_product_tree_suite_reuse",
+        "baseline_commit": "b0ea85208337b27e9b22d98ca3e788badf8494aa",
+        "resolves_run_ids": [],
+        "reused_run_ids": [
+          "2026-10-24-bare-integration-60f105ed-resolving",
+          "2026-10-24-bare-provider-60f105ed",
+          "2026-10-24-bare-e2e-60f105ed",
+          "2026-10-24-bare-static-final-documentation-snapshot"
+        ],
+        "source_product_fingerprint_sha256": "1a809540620d947bfd74ef99608a478e89e6676ac9e8116f5f6fa7848b75fabd",
+        "fingerprint_method": "SHA256 of recursive git ls-tree entries excluding docs/, including file modes, object IDs and paths, with final newline",
+        "notes": "Integrated main complete non-doc product/test/config tree exactly matches 60f105ed and docs2f; source broad-suite runs are reused, not represented as fresh main executions. Initial model-listing timeout, focused resolution and unchanged full rerun retained."
+      },
+      "checks": {
+        "accepted_source": "Exact six source/test blobs match independent final source hashes; accepted profile/research docs match 2f80ac41.",
+        "preservation": "35 original main observations plus nine added source observations retained by stable ID/object; 75 committed and 81 working task rows, six original pending rows raw-byte identical and unstaged.",
+        "installed_cli": {
+          "entrypoint": "/home/qduc/.local/share/pnpm/bin/term2",
+          "package_realpath": "/home/qduc/term2",
+          "build_command": "pnpm build",
+          "build_info": {
+            "version": "0.36.0-dev+1a992d8",
+            "commit": "1a992d8be1843fd3d1efa8ec1d0f633457169007",
+            "release": false,
+            "limitation": null
+          },
+          "version_command_passed": true,
+          "built_bare_prompt_matches_source": true,
+          "pane_restarts": false
+        },
+        "archive_manifest_sha256": "0bf8449798df0927c76b59a15725e2979f87966dba3912c6b9242f7e393fc1c3",
+        "independent_report_sha256": "c9250d4e04b904ca65b21b6fbfa51bd0013df35643b3d05fc8198c2b0a17a9dc",
+        "aggregate_efficiency": {
+          "status": "unverified",
+          "completion_claimed": false,
+          "task_status_unchanged": "blocked",
+          "unknown_requests": 3,
+          "attempts_with_unknown_usage": 2,
+          "notes": "Interface acceptance only. Missing usage is not zero; no net token/cost percentage or latency win claimed. Original source annotation preserved, not duplicated as accepted delivery."
+        }
+      },
+      "evidence": [
+        {
+          "kind": "git_commit",
+          "commit": "60f105ed6e5cc5027053f60abbf18f51e3257a17"
+        },
+        {
+          "kind": "git_commit",
+          "commit": "2f80ac41286583efaf60f92b7f9139bb81fc5fb7"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-main-integration-20261024/integrated-checks.json",
+          "sha256": "deac89d2053278578137451d97741880d3e53096f595dcdf13eaab259e75aee8"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-main-integration-20261024/manifest.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-main-integration-20261024/lint-diagnosis.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/bare-efficiency-independent-final-result.md",
+          "sha256": "c9250d4e04b904ca65b21b6fbfa51bd0013df35643b3d05fc8198c2b0a17a9dc"
+        },
+        {
+          "kind": "retained_raw_archive",
+          "path": "/home/qduc/term2/.term2/evidence/bare-efficiency-20261024/manifest.json",
+          "sha256": "0bf8449798df0927c76b59a15725e2979f87966dba3912c6b9242f7e393fc1c3"
+        }
+      ],
+      "notes": [
+        "User authorized independently accepted source60 and corrected docs2f import, skipping intermediate merge. High-risk acceptance reused only after exact independently inspected source parity.",
+        "Focused main shell/native patch integration crosses process/filesystem and approval boundaries: 16/16 in two files. Full source tiers reused: integration 226 pass/1 skip; provider 221/1; e2e 32/4; static guards 28/0.",
+        "Typecheck, tracked eslint/prettier, runtime rebuild and installed CLI version passed. Full pnpm lint remains failed for this local workspace; no ignore/config changes or artifact cleanup to manufacture a pass.",
+        "Installed CLI build commit identifies the tested source import, not the later metadata-only commit. Existing interactive panes were not restarted.",
+        "Smaller provider tools field (1632 to 1106 tokens) is not aggregate efficacy. Sampled 7/8 first-pass and 8/8 after rework each arm do not establish broad noninferiority. Candidate total elapsed is worse (666.39s vs 336.31s).",
+        "Unknown effort/usage/cost stays unknown. No paid experiment or usage recovery rerun. Original EDD acceptance/resolutions and frozen interim artifacts untouched."
+      ]
     }
   ]
 }

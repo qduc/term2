@@ -27,6 +27,7 @@ import type {
   ToolsBlock,
 } from './types.js';
 import { ProfileResolutionError } from './types.js';
+import { canonicalProfileId } from './legacy-adapter.js';
 
 const DEFAULT_MAX_PARENT_DEPTH = 32;
 const DEFAULT_MAX_BLOCKS = 128;
@@ -736,5 +737,5 @@ export function resolveProfile(
 ): ResolvedProfile {
   const registry = 'profiles' in registryOrOptions ? registryOrOptions : builtinProfileRegistry;
   const actualOptions = 'profiles' in registryOrOptions ? options : registryOrOptions;
-  return resolveFrom(profileId, registry, actualOptions, [], 0);
+  return resolveFrom(canonicalProfileId(profileId), registry, actualOptions, [], 0);
 }

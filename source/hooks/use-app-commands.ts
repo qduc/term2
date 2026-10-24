@@ -4,6 +4,7 @@ import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import {
   useModeHelpers,
+  BARE_ENABLED_DETAIL,
   createModeToggleCommand,
   createProfileCommand,
   type PendingModeSwitch,
@@ -186,18 +187,22 @@ export const useAppCommands = ({
       guardBusyTurn(createRetryToolSlashCommand({ retryLastToolOutput, addSystemMessage })),
       guardBusyTurn(createRetryFailedTurnSlashCommand({ retryLastFailedTurn, addSystemMessage, addDividerMessage })),
       guardBusyTurn(createCompactSlashCommand({ compactContext, addSystemMessage })),
-      createModeToggleCommand(
-        'lite',
-        'lite',
-        'Toggle lite mode (minimal context, session-only)',
-        ' - using minimal prompt, no codebase context',
-        {
-          settingsService,
-          transitionService,
-          addSystemMessage,
-          messages,
-          requestModeSwitchConfirm,
-        },
+      ...['bare', 'lite'].map((name) =>
+        createModeToggleCommand(
+          'bare',
+          name,
+          name === 'lite'
+            ? 'Toggle the Bare profile (Lite was merged into Bare)'
+            : 'Toggle the Bare profile (minimal prompt)',
+          BARE_ENABLED_DETAIL,
+          {
+            settingsService,
+            transitionService,
+            addSystemMessage,
+            messages,
+            requestModeSwitchConfirm,
+          },
+        ),
       ),
       createModeToggleCommand(
         'mentor',

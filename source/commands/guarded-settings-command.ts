@@ -1,10 +1,15 @@
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { createSettingsCommand, parseSettingValue } from '../utils/settings-command.js';
-import type { PendingModeSwitch } from './mode-commands.js';
+import { BARE_ENABLED_DETAIL, type PendingModeSwitch } from './mode-commands.js';
 import { planProfileTransition } from '../services/profiles/profile-transition.js';
 import { ProfileResolutionError } from '../services/profiles/types.js';
-import { isLegacyModeSettingKey, profileIdFromLegacyModeSetting } from '../services/profiles/legacy-adapter.js';
+import {
+  BARE_PROFILE_ID,
+  canonicalProfileId,
+  isLegacyModeSettingKey,
+  profileIdFromLegacyModeSetting,
+} from '../services/profiles/legacy-adapter.js';
 
 interface CreateGuardedSettingsCommandDeps {
   settingsService: SettingsService;
@@ -50,24 +55,25 @@ export function createGuardedSettingsCommand({
         const rawValue = settingParts.slice(1).join(' ');
         targetProfileId = rawValue.includes(':') ? rawValue : `builtin:${rawValue}`;
       }
-      const changesLiteShape =
+      if (targetProfileId !== undefined) targetProfileId = canonicalProfileId(targetProfileId);
+      const changesBareShape =
         targetProfileId !== undefined &&
         targetProfileId !== currentProfileId &&
-        (targetProfileId === 'builtin:lite' || currentProfileId === 'builtin:lite');
-      if (changesLiteShape && hasHistory) {
-        const liteTargetProfileId = targetProfileId;
+        (targetProfileId === BARE_PROFILE_ID || currentProfileId === BARE_PROFILE_ID);
+      if (changesBareShape && hasHistory) {
+        const bareTargetProfileId = targetProfileId;
         if (requestModeSwitchConfirm) {
           requestModeSwitchConfirm({
-            targetProfileId: liteTargetProfileId!,
-            modeLabel: 'Lite',
-            targetValue: liteTargetProfileId === 'builtin:lite',
-            enabledDetail: ' - using minimal prompt, no codebase context',
+            targetProfileId: bareTargetProfileId!,
+            modeLabel: 'Bare',
+            targetValue: bareTargetProfileId === BARE_PROFILE_ID,
+            enabledDetail: BARE_ENABLED_DETAIL,
           });
           return true;
         }
 
         addSystemMessage(
-          'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then change lite mode.',
+          'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then change the profile.',
         );
         return true;
       }

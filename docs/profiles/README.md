@@ -71,26 +71,43 @@ back with `/profile standard`. The workflow is restored with the saved profile.
 
 ## Bare profile and unattended runs
 
-`--profile bare` selects an opt-in shell-and-editor surface. Persist it with
+`--profile bare` selects a small shell-first surface. Persist it with
 `app.activeProfileId: "builtin:bare"` in settings.json. `--profile full` selects
 `builtin:standard` for the session. CLI overrides do not persist. The configured
-default remains Standard; the existing implicit Lite selection for positional
-prompts without `--auto-approve` is unchanged, except an explicitly configured Bare
-profile takes precedence.
+default remains Standard. Positional prompts without `--auto-approve` implicitly
+select Bare unless Orchestrator or Mentor is persisted.
 
-Bare uses a short coding prompt with shell and file editors. Local sessions include
-applicable global/project AGENTS.md without clipping them to the prompt budget;
-the prompt directs the model to read scoped instructions before editing. Remote
-sessions do not inject local AGENTS.md: the model must read the remote checkout's
-instructions through shell. Bare includes the skills catalog, `activate_skill`, and
-environment context (OS, shell, cwd, home, date, top-level tree). Memory, delegation, and JavaScript
-workflows remain omitted.
+Lite was merged into Bare on 2026-10-24. Every Lite entry point now selects
+`builtin:bare`: `--lite`, `--profile lite`, `/lite` (alongside `/bare`),
+`app.liteMode: true`, a persisted `app.activeProfileId: "builtin:lite"`, resumed
+sessions recorded as Lite, and gateway mode `lite`. The legacy `app.liteMode` flag
+reads `true` while Bare is active. The [merge notes](./lite-bare-merge.md) record
+the rationale, request-size measurements, and known gaps.
+
+Bare uses a short prompt. AGENTS.md is not injected: the prompt directs the
+model to read the checkout's AGENTS.md and `~/.agents/AGENTS.md` when it starts
+working in a checkout, and scoped instructions before editing. The same applies to
+remote sessions through the remote shell. Bare includes the skills catalog
+(the model loads a skill by reading its SKILL.md through the shell) and a short
+environment line (OS, shell, cwd, home, date; no top-level tree). Delegation
+remains omitted.
 Missing capabilities must be reported, not silently skipped.
 
-The shell advertises foreground options only; runtime normalization and approval
-still use the complete canonical shell schema. Bare's task-neutral guidance
+Bare carries no tool for what the shell can do: file reads, search, edits, and
+skill loading all go through the shell, so the sandbox is Bare's write boundary.
+The model-facing tools are the shell, `goal_check` (root sessions), `run_code`, and,
+in interactive sessions, `session_rollover`, which scripts cannot call. Web, memory,
+sessions, MCP, and background-job tools have no shell equivalent; they are
+script-only `tools.*` members of `run_code`, listed by name, and the model calls
+`tools.describe(name)` for a schema. Script calls keep the same approval prompts
+and enforcement as direct calls.
+
+The shell advertises a compact option set: `background` and `monitor` appear only
+when the session has a background job registry (interactive roots), so headless
+Bare stays foreground-only. Runtime normalization and approval still use the
+complete canonical shell schema. Bare's task-neutral guidance
 encourages batching known steps and filtering output locally without dropping
-checks or failure evidence. `run_code` remains absent. The
+checks or failure evidence. The
 [token-efficiency measurements](../research/bare-token-efficiency-20261024.md)
 record the tested scope, failures, and limits rather than promise a universal gain.
 
@@ -104,7 +121,7 @@ Sandbox authority, approval policy, cancellation, output bounds, request deadlin
 and compaction remain authoritative. `agent.completionVerification=false` remains
 an explicit operator override of the runtime completion gate.
 
-Bare's profile version is `1.3.0`. Its original minimal definition and comparison
+Bare's profile version is `2.0.0` (the Lite merge and `run_code`; `1.3.0` was the last direct-surface version). Its original minimal definition and comparison
 protocol are recorded in
 [the Bare experiment notes (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/bare-profile/README.md). Skills were
 restored after the cheap-additions experiment: on one skill-discovery task, three

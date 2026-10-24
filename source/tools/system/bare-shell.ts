@@ -1,7 +1,7 @@
 import type { AnyScriptedToolDefinition } from '../types.js';
 import { shellParametersSchema, type ShellToolDefinition } from './shell.js';
 
-const bareShellParameters = shellParametersSchema
+const foregroundShellParameters = shellParametersSchema
   .pick({
     command: true,
     description: true,
@@ -22,18 +22,30 @@ const bareShellParameters = shellParametersSchema
     ),
   });
 
+const backgroundShellParameters = foregroundShellParameters.extend({
+  background: shellParametersSchema.shape.background,
+  monitor: shellParametersSchema.shape.monitor,
+});
+
 /**
- * Advertise only foreground options for bare, which has no background-task
- * capability. Keep the canonical schema, executor and approval policy intact.
+ * Advertise a compact option set for bare. Background options appear only when
+ * the session has a background job registry (interactive roots); headless runs
+ * stay foreground-only. Keep the canonical schema, executor and approval policy intact.
  */
-export function presentBareShell(tool: ShellToolDefinition): AnyScriptedToolDefinition {
+export function presentBareShell(
+  tool: ShellToolDefinition,
+  options: { background: boolean } = { background: false },
+): AnyScriptedToolDefinition {
   return {
     ...tool,
     description:
       'Run shell commands for reads, searches and local checks. Combine known dependent steps in one command; ' +
-      'batch independent reads and return only relevant evidence. Use file editors for changes. ' +
-      'Foreground execution only. Respect approvals; unsandboxed execution requires approval.',
-    parameters: bareShellParameters,
+      'batch independent reads and return only relevant evidence. Make file edits with the shell too. ' +
+      (options.background
+        ? 'Set background: true for long-running work; add monitor in the same call and wait for shell_output notifications instead of polling. '
+        : 'Foreground execution only. ') +
+      'Respect approvals; unsandboxed execution requires approval.',
+    parameters: options.background ? backgroundShellParameters : foregroundShellParameters,
     canonicalParameters: shellParametersSchema,
   };
 }

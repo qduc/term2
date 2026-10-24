@@ -881,7 +881,9 @@ export class Term2Gateway {
       const profileId = (
         {
           standard: 'builtin:standard',
-          lite: 'builtin:lite',
+          bare: 'builtin:bare',
+          // Lite was merged into Bare; the wire name stays accepted.
+          lite: 'builtin:bare',
           plan: 'builtin:plan',
           mentor: 'builtin:mentor',
           orchestrator: 'builtin:orchestrator',
@@ -2895,7 +2897,8 @@ function isSessionUpdateBody(
   )
     return false;
   return (
-    value.mode === undefined || ['standard', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(value.mode))
+    value.mode === undefined ||
+    ['standard', 'bare', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(value.mode))
   );
 }
 
@@ -2908,7 +2911,7 @@ export function sessionConfigProjection(session: ServerSession): Record<string, 
   const activeProfileId = get('app.activeProfileId', undefined);
   const modeByProfileId: Record<string, string> = {
     'builtin:standard': 'standard',
-    'builtin:lite': 'lite',
+    'builtin:bare': 'bare',
     'builtin:plan': 'plan',
     'builtin:mentor': 'mentor',
     'builtin:orchestrator': 'orchestrator',

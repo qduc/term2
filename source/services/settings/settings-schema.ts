@@ -393,9 +393,9 @@ export const AppSettingsSchema = z.object({
   shellPath: z.string().optional(),
   // Legacy compatibility fields accepted at boundaries; activeProfileId is the canonical profile selection.
   // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
-  // liteMode: minimal context for general terminal assistance (no codebase tools/prompts)
+  // liteMode: selects the Bare profile (Lite was merged into Bare)
   // planMode: when enabled, forces read-only operation (Plan mode)
-  // orchestratorMode: prompt-guided delegation workflow; standard non-lite tools remain available for cache stability
+  // orchestratorMode: prompt-guided delegation workflow; standard tools remain available for cache stability
   // Standard mode is the default (all flags false): full capabilities with auto-approve for apply_patch
   activeProfileId: z.string().optional().default('builtin:standard'),
   mentorMode: z.boolean().optional().default(false),
@@ -432,8 +432,7 @@ const ToolsSettingsObjectSchema = z.object({
   // removing that group's tools and capability-gated prompt fragments on the
   // next model request. They never restrict subagents, which resolve their own
   // capabilities. tools.fileRead.enabled masks both filesystem read
-  // capabilities; filesystem-read-external has no separate toggle (Lite keeps
-  // its outside-workspace authority, which is liteMode-keyed).
+  // capabilities; filesystem-read-external has no separate toggle.
   shell: z
     .object({ enabled: z.boolean().optional().default(true) })
     .optional()

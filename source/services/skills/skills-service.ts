@@ -218,7 +218,7 @@ export class SkillsService {
   /**
    * Render the available skills catalog XML block.
    */
-  getSkillCatalog(): string {
+  getSkillCatalog(options: { loadVia?: 'tool' | 'shell' } = {}): string {
     const modelSkills = this.getAvailableSkillsForModel();
     if (modelSkills.length === 0) return '';
 
@@ -232,9 +232,15 @@ export class SkillsService {
       )
       .join('\n');
 
+    const loadInstruction =
+      options.loadVia === 'shell'
+        ? `When a task matches a skill's description, read the SKILL.md at its
+location with the shell to load its full instructions.`
+        : `When a task matches a skill's description, call the activate_skill tool
+with the skill's name to load its full instructions.`;
+
     return `The following skills provide specialized instructions for specific tasks.
-When a task matches a skill's description, call the activate_skill tool
-with the skill's name to load its full instructions.
+${loadInstruction}
 
 <available_skills>
 ${skillBlocks}

@@ -48,6 +48,11 @@ Required parity:
 
 ## `builtin:lite`
 
+> **Retired (2026-10-24).** Lite was merged into Bare. `builtin:lite`,
+> `app.liteMode`, `--lite`, `/lite`, and gateway mode `lite` now select
+> `builtin:bare`; see [the Bare section of the README](./README.md#bare-profile-and-unattended-runs).
+> The parity requirements below record Milestone 1 history only.
+
 Lite is a structural prompt/context/tool variant rather than a notice-only
 workflow.
 

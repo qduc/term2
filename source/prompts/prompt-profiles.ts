@@ -4,15 +4,10 @@ export type PromptProfile = {
   id: string;
   basePromptFile: string;
   fragmentFiles?: string[];
-  matches: (options: { normalizedModel: string; liteMode: boolean }) => boolean;
+  matches: (options: { normalizedModel: string }) => boolean;
 };
 
 export const PROMPT_PROFILES: PromptProfile[] = [
-  {
-    id: 'lite',
-    basePromptFile: 'lite.md',
-    matches: ({ liteMode }) => liteMode,
-  },
   {
     id: 'gpt',
     basePromptFile: 'gpt.md',
@@ -35,7 +30,7 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   },
 ];
 
-export function selectPromptProfile({ model, liteMode }: { model: string; liteMode: boolean }): PromptProfile {
+export function selectPromptProfile({ model }: { model: string }): PromptProfile {
   const normalizedModel = model.trim().toLowerCase();
-  return PROMPT_PROFILES.find((profile) => profile.matches({ normalizedModel, liteMode }))!;
+  return PROMPT_PROFILES.find((profile) => profile.matches({ normalizedModel }))!;
 }

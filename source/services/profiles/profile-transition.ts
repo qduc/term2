@@ -1,5 +1,5 @@
 import type { ISettingsService } from '../service-interfaces.js';
-import { isLiteProfile } from '../../prompts/prompt-constructor.js';
+import { isBareProfile } from '../../prompts/prompt-constructor.js';
 import { profileEnterNotice, profileExitNotice } from '../mode-notices.js';
 import { resolveActiveProfile } from './active-profile.js';
 import { BUILTIN_INTEGRATIONS } from './registry.js';
@@ -50,7 +50,7 @@ const isProfile = (profile: ResolvedProfile, id: string): boolean => profile.ide
 export function classifyProfileTransition(current: ResolvedProfile, target: ResolvedProfile): ProfileTransitionClass {
   if (current.identity.id === target.identity.id) return 'noop';
 
-  if (isLiteProfile(current) !== isLiteProfile(target)) return 'structural';
+  if (isBareProfile(current) !== isBareProfile(target)) return 'structural';
 
   const agentWorkflowInvolved =
     isProfile(current, 'builtin:mentor') ||

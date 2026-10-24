@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { parseArgs } from 'node:util';
 import { writeFileSync } from 'node:fs';
 import fc from 'fast-check';
@@ -43,9 +44,10 @@ try {
     if (!properties.length) throw new Error('unknown property for target');
     if (values.path !== undefined && (properties.length !== 1 || seed === undefined))
       throw new Error('replay path requires --property and --seed');
-    const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-    const revision = git('rev-parse', 'HEAD');
-    const dirty = git('status', '--porcelain').length > 0;
+    const exec = promisify(execFile);
+    const git = async (...args) => (await exec('git', args, { encoding: 'utf8' })).stdout.trim();
+    const revision = await git('rev-parse', 'HEAD');
+    const dirty = (await git('status', '--porcelain')).length > 0;
     const started = performance.now();
     const results = [];
     for (const { name, property } of properties) {

@@ -72,3 +72,18 @@ completed red run, then finished both challenges. No checker-output change was
 needed; README already allows package-manager diagnostics. Initial red oracle
 snapshot was dirty and not committed: retained as diagnosis, not advertised as
 an exact replay of the final property version.
+
+
+## Independent review triage
+
+Fresh Opus5.5 accepted28a20727 after installed history/all-target seeds and exact
+replays; all11 independent in-memory mutants went red. No permission denials.
+Report is retained in checks/ledger/independent-opus.md and raw JSON.
+One narrowing accepted: turn identity requires greater than the imported maximum,
+not exactlymax+1. The new nextTurn assertion preserves collision detection while
+allowing valid gaps. README now explicitly distinguishes30 generated entries
+from their multiple API calls. Final amended-artifact review/rerun required.
+Other nits are coverage limits, not confirmed defects: unknown settlement is
+sparsely sampled;75% of reconciliation cases exercise replacement checkpoints;
+post-boundary ledger entries, newer user messages after the latest entry and
+reused-call policy are not covered. No coverage/production claim is expanded.

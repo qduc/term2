@@ -13,6 +13,13 @@ const idOf = (item) => item.call_id ?? item.callId;
 const isCall = (item) => item.type === 'function_call';
 const isResult = (item) => item.type === 'function_call_output';
 const boundedSteps = (step) => fc.array(step, { maxLength: 30 });
+const nextTurn = (ledger, previous) => {
+  const id = ledger.beginTurn();
+  assert.match(id, /^turn-\d+$/);
+  const number = Number(id.slice(5));
+  assert.ok(number > previous, 'new turn collided with an existing ledger turn');
+  return number;
+};
 
 // C2.5: model effect observation, not the implementation's history-building
 // branches. Fresh identities exclude the separate reopened-call policy.
@@ -34,7 +41,7 @@ const settlement = fc.property(
       const entries = [...expected.values()];
       const selected = entries[step.slot % (entries.length || 1)];
       if (step.action === 'turn') {
-        assert.equal(ledger.beginTurn(), `turn-${++turn}`);
+        turn = nextTurn(ledger, turn);
       } else if (step.action === 'call') {
         const id = `call-${index}`;
         ledger.recordFunctionCall(call(id, step.args));
@@ -47,7 +54,7 @@ const settlement = fc.property(
         assert.deepEqual(ledger.export(), before, 'import changed saved entries');
         assert.deepEqual(saved, before, 'import mutated input');
         turn = Math.max(0, ...entries.map((entry) => entry.turn));
-        assert.equal(ledger.beginTurn(), `turn-${++turn}`, 'import reused a logical turn identity');
+        turn = nextTurn(ledger, turn);
       } else if (step.action === 'dispatch' && selected?.status === 'started') {
         ledger.markDispatched(selected.id);
         selected.dispatched = true;

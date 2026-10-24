@@ -15,7 +15,8 @@ pnpm verify:generated --target history --runs 1000
 pnpm verify:generated --help
 ```
 
-The default is 1,000 cases per property, sequences at most 30 actions. These are
+The default is 1,000 cases per property, with at most 30 generated actions or
+entries per case. An entry can invoke several ledger methods. These are
 sampling budgets, not exhaustive coverage or a proof. No credentials, provider,
 model, or network calls are used by the checker. Production code runs in process;
 the queue driver only records dispatches at the external executor boundary.

@@ -9101,6 +9101,178 @@
           "path": ".cache/session-read-speed-results/primary-built-tool.log"
         }
       ]
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce0dc2576eb62cb40bdcb42575602db31a63349a",
+      "revision_kind": "pre-commit_snapshot_identical_to_commit",
+      "base_commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated .worktrees/headless-resume; verified source snapshot subsequently committed without source changes."
+      },
+      "id": "2026-10-24-headless-resume-provider",
+      "suite": "provider",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts --bail=1 --reporter=verbose",
+      "command_complete": true,
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1
+      },
+      "evidence": ["/tmp/term2-resume-provider-verified.log"],
+      "notes": "Headless resume: history, same-session append, JSON fork, reasoning/provenance persistence, missing-ID failure. Independent verifier accepted final metadata repair."
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce0dc2576eb62cb40bdcb42575602db31a63349a",
+      "revision_kind": "pre-commit_snapshot_identical_to_commit",
+      "base_commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated .worktrees/headless-resume; verified source snapshot subsequently committed without source changes."
+      },
+      "id": "2026-10-24-headless-resume-focused",
+      "suite": "focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-cli.blackbox.ts",
+      "command_complete": true,
+      "result": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": ["/tmp/term2-resume-focused-final.log"],
+      "notes": "Headless resume: history, same-session append, JSON fork, reasoning/provenance persistence, missing-ID failure. Independent verifier accepted final metadata repair."
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce0dc2576eb62cb40bdcb42575602db31a63349a",
+      "revision_kind": "pre-commit_snapshot_identical_to_commit",
+      "base_commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated .worktrees/headless-resume; verified source snapshot subsequently committed without source changes."
+      },
+      "id": "2026-10-24-headless-resume-static",
+      "suite": "static",
+      "command": "pnpm test",
+      "command_complete": true,
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": ["/tmp/term2-resume-static-verified.log"],
+      "notes": "Headless resume: history, same-session append, JSON fork, reasoning/provenance persistence, missing-ID failure. Independent verifier accepted final metadata repair."
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce0dc2576eb62cb40bdcb42575602db31a63349a",
+      "revision_kind": "pre-commit_snapshot_identical_to_commit",
+      "base_commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated .worktrees/headless-resume; verified source snapshot subsequently committed without source changes."
+      },
+      "id": "2026-10-24-headless-resume-fake-codex-e2e",
+      "suite": "fake-codex-e2e",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts scripts/fake-codex-server.e2e.test.ts",
+      "command_complete": true,
+      "result": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": ["/tmp/term2-resume-e2e-verified.log"],
+      "notes": "Headless resume: history, same-session append, JSON fork, reasoning/provenance persistence, missing-ID failure. Independent verifier accepted final metadata repair."
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce0dc2576eb62cb40bdcb42575602db31a63349a",
+      "revision_kind": "pre-commit_snapshot_identical_to_commit",
+      "base_commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated .worktrees/headless-resume; verified source snapshot subsequently committed without source changes."
+      },
+      "id": "2026-10-24-headless-resume-types",
+      "suite": "types",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "evidence": [],
+      "notes": "Headless resume: history, same-session append, JSON fork, reasoning/provenance persistence, missing-ID failure. Independent verifier accepted final metadata repair."
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce0dc2576eb62cb40bdcb42575602db31a63349a",
+      "revision_kind": "pre-commit_snapshot_identical_to_commit",
+      "base_commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated .worktrees/headless-resume; verified source snapshot subsequently committed without source changes."
+      },
+      "id": "2026-10-24-headless-resume-lint",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "evidence": ["/tmp/term2-resume-lint-verified.log"],
+      "notes": "Lint: 0 errors, 31 warnings; formatting passes."
+    },
+    {
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "ce0dc2576eb62cb40bdcb42575602db31a63349a",
+      "revision_kind": "intermediate_dirty_snapshot",
+      "base_commit": "bc3ea5a11068ffcf563a22dc358aa4e7ea10275b",
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated .worktrees/headless-resume; verified source snapshot subsequently committed without source changes."
+      },
+      "id": "2026-10-24-headless-resume-initial-overlapping-build",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": false,
+      "result": {
+        "passed": 111,
+        "failed": 2,
+        "skipped": null
+      },
+      "failures": [
+        "codex-websocket.incomplete: no websocket request captured",
+        "codex http approval resume: ERR_MODULE_NOT_FOUND dist/services/retry/provider-failure-classification.js"
+      ],
+      "evidence": ["/tmp/term2-resume-provider.log"],
+      "notes": "Author rebuilt dist concurrently with this run; invalidated run, not classified as a baseline product failure. Subsequent non-overlapping full final run passes 222 with 1 skipped."
     }
   ]
 }

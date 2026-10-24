@@ -1,0 +1,77 @@
+$ node --import tsx scripts/generated-verification/run.mjs
+{
+  "schemaVersion": 1,
+  "revision": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 949.2740729999999,
+  "results": [
+    {
+      "property": "history.ledger-settlement",
+      "failed": false,
+      "seed": 731948126,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 136.38382600000003,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.ledger-reconciliation",
+      "failed": false,
+      "seed": 1796197992,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 407.670773,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.pair-projection",
+      "failed": false,
+      "seed": 1907848943,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 243.09626400000002,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "queue.restore-pause",
+      "failed": false,
+      "seed": -1800305012,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 79.98236300000008,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "queue.serial-actions",
+      "failed": false,
+      "seed": -1503446586,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 82.085734,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

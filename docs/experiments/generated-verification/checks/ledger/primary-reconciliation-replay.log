@@ -1,0 +1,25 @@
+$ node --import tsx scripts/generated-verification/run.mjs --property history.ledger-reconciliation --seed=424242 --path 0:1:0:1:1:1 --runs 1000
+{
+  "schemaVersion": 1,
+  "revision": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 13.593193999999983,
+  "results": [
+    {
+      "property": "history.ledger-reconciliation",
+      "failed": false,
+      "seed": 424242,
+      "path": null,
+      "cases": 57,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 13.575360000000018,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

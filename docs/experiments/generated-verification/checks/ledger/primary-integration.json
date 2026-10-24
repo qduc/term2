@@ -1,0 +1,83 @@
+[
+  {
+    "name": "primary-install",
+    "command": "pnpm install --frozen-lockfile",
+    "exit": 0,
+    "wallSeconds": 0.7927058297209442,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "primary",
+    "log": "docs/experiments/generated-verification/checks/ledger/primary-install.log"
+  },
+  {
+    "name": "primary-default",
+    "command": "pnpm verify:generated",
+    "exit": 0,
+    "wallSeconds": 1.9854724649339914,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "primary",
+    "log": "docs/experiments/generated-verification/checks/ledger/primary-default.log"
+  },
+  {
+    "name": "primary-settlement-replay",
+    "command": "pnpm verify:generated --property history.ledger-settlement --seed=424242 --path '45:4:3:3:4:4:6:6:6:7:8:8:8:8' --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.139192920178175,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "primary",
+    "log": "docs/experiments/generated-verification/checks/ledger/primary-settlement-replay.log"
+  },
+  {
+    "name": "primary-reconciliation-replay",
+    "command": "pnpm verify:generated --property history.ledger-reconciliation --seed=424242 --path '0:1:0:1:1:1' --runs 1000",
+    "exit": 0,
+    "wallSeconds": 1.0351171311922371,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "primary",
+    "log": "docs/experiments/generated-verification/checks/ledger/primary-reconciliation-replay.log"
+  },
+  {
+    "name": "primary-types",
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "wallSeconds": 2.9654710642062128,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "primary",
+    "log": "docs/experiments/generated-verification/checks/ledger/primary-types.log"
+  },
+  {
+    "name": "primary-static",
+    "command": "pnpm test",
+    "exit": 0,
+    "wallSeconds": 2.9870739998295903,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "primary",
+    "log": "docs/experiments/generated-verification/checks/ledger/primary-static.log"
+  },
+  {
+    "name": "primary-build",
+    "command": "pnpm build",
+    "exit": 0,
+    "wallSeconds": 3.861456350889057,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "primary",
+    "log": "docs/experiments/generated-verification/checks/ledger/primary-build.log"
+  },
+  {
+    "name": "primary-lint",
+    "command": "pnpm lint",
+    "exit": 1,
+    "wallSeconds": 30.261433656793088,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "primary",
+    "log": "docs/experiments/generated-verification/checks/ledger/primary-lint.log"
+  },
+  {
+    "name": "merged-isolated-lint",
+    "command": "pnpm lint",
+    "exit": 0,
+    "wallSeconds": 36.3683600849472,
+    "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+    "cwd": "isolated exact merge",
+    "log": "docs/experiments/generated-verification/checks/ledger/merged-isolated-lint.log"
+  }
+]

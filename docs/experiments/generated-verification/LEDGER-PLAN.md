@@ -1,5 +1,7 @@
 # Generated ledger verification slice
 
+Merge commit: `36e641698573b8954a0c0cc96ee8d50027a593a4`.
+
 ## Goal and authority
 
 User approved the first bounded rollout slice after three independent model
@@ -104,61 +106,18 @@ The previous pilot's integration/provider observations remain historical; no new
 whole-tier green claim is made. Syntax, types, static guards, build and isolated
 lint are appropriate checks here. Final hygiene and integration records follow.
 
-## Successor checkpoint (2026-10-24)
+## Integration evidence
 
-Canonical task state is this file. Active task: user said go after recommending
-first two ledger properties; deliver this slice end-to-end, NOT all five hotspots.
-Current feature `feat/generated-ledger` in `.worktrees/generated-ledger` at
-`d5e6fb0aaaa1ebeb1b5a78eaf4701716b30fa645`. Initial implementation28a20727.
-No production/package/dependency changes; only newledger.mjs,2-line history import,
-README and this plan committed. All evidence+docs/test-results.json uncommitted.
+Merged with --no-ff, preserving primary branch and unrelated artifacts. Primary
+frozen install, default generated run, both exact shrunk replays, typecheck,
+28 static checks and build pass. Exact merged artifact full isolated lint passes
+(31 warnings). Primary unfiltered lint fails: 9,318 errors in untracked local
+artifacts, zero errors in tracked files; diagnosis and full logs retained. No
+ignore changes or cleanup of others’ artifacts. All final tiers at the amended
+checker also passed. Test/task ledgers retain exact revisions and dirty labels.
 
-Final independent Opus5.5 ACCEPT and amended recheck COMPLETE, no live reviewer.
-Session8d752a0d-fa66-47e8-9a7d-faa35d2a3de1; raw reports, md and full trace in
-checks/ledger/. Source hashes final-identity.json. First11mutants detected; final
-collision-isolation/wrongformat/stalledcounter red and validgaps green. Reviewer
-read-only under explicit allowed tools, no permission denials. Parent owns checks.
-
-LIVE ONLY shell3a29e717-cf63-42ea-a709-4821227dc665 (unlimited monitor) final
-syntax/types/static/build/fullisolatedlint at finalchecker with evidencechanges.
-Wait completion notification, inspect final-tiers.json and final-lint.log. All
-previous background jobs finished. Earlier28a types/static/build/lint PASS.
-Four seeds10k x5properties=200kcases before narrow assertion; finald5 seed10k
-x5=50k PASS. Parent final exact mutation replays PASS. Scope is bookkeeping, not
-proof of executor retry behavior. No real supported production defect discovered;
-only initial oracle JSON-wire mismatch and assertion narrowing fixed preacceptance.
-Mutation challenges intentionally planted faults, NOT product bug discoveries.
-
-Run ledger rows already appended for initialoraclered, fourseeds, initialtiers,
-mutants, finalseed, finalreview and committedCLI. Append finaltiers and primary
-results after observing. Check recorded command text: two manually assembled rows
-have missing spaces (`--seed424242`, `--runs10000`) despite evidence commands being
-correct; fix these NEW uncommitted rows before commit, don't alter historical runs.
-Need final task tasks.jsonl row (NOT WRITTEN): id2026-10-24-generated-ledger,
-unknown author time/tokens null; final session cost$1.1182692 cumulative list-price
-estimate, don't sum initial$0.8813244. Known command timings in JSON evidence.
-
-Next concrete steps:
-1. Finish finaltier check; fix any genuine hygiene failure. No writer remains
-   after shell done. Preserve final JSON raw reports(.raw.txt already done) before
-   formatting. final-tiers JSON newly written may need prettier. Explicitly stage
-   evidence/docs and commit; do not add example unit tests or broaden lint ignores.
-2. Reread primary status/HEAD/AGENTS before --no-ff integration. Last primary clean
-   at6a25ecc7; preserve concurrent work and branch. User authorized commits/integration.
-3. Primary installed command smoke+exact replays and relevant static/build/types;
-   primary own frozen install. Full primary lint known scans untracked .cache/.coord/
-   .term2/packages yielding9318errors0tracked errors (prior pilot diagnostic retained
-   in checks/primary/). Do not remove others' files or add excludes. Exact merged
-   artifact full lint in ownedisolated worktree previously successful strategy;
-   retain any new primary failure honestly, not report unfilteredprimarylintgreen.
-4. Append task/test ledgers+integration disposition inclmergeSHA in laterdocscommit.
-   Plans status header is mergeSHA only. Validate JSON/JSONL, source/depsunchanged,
-   dirtydiffcheck, preserve otherwork; cleanup only owned clean integrated worktree
-   and branch afterwritersend. Final concise report new2props, final50kpassing,
-   prior200k separately, independentfaultchallenge, no newproductbug, nextcompaction.
-
-Reload applicable skills/instructions as needed; rootAGENTS only scoped. Loaded
-agentic-loop,implementation,testing,verification,writing-docs,debugging,finding-triage,
-bug-retro,code-review,real-useguide. No guards changed; budgets test-only. No full
-integration/e2e/provider reruns warranted for checker-only unchangeddependencies;
-prior pilot caveats are historical, not asserted passing newruns.
+No supported production bug was discovered. Initial oracle and overly strict
+turn-number assertion corrections are described above; deliberate mutations are
+sensitivity evidence, not product defects. Author effort/cost remains unknown;
+reviewer cumulative reported list-price estimate is USD1.1182692. Next candidate
+is compaction verification, outside this two-property slice.

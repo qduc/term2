@@ -6466,6 +6466,267 @@
           "path": "docs/experiments/generated-verification/checks/ledger/final-lint.log"
         }
       ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-primary-install",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "merged_commit_with_untracked_evidence",
+      "suite": "primary-install",
+      "command": "pnpm install --frozen-lockfile",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "primary; wall seconds 0.7927058297209442. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/primary-install.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-primary-default",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "merged_commit_with_untracked_evidence",
+      "suite": "primary-default",
+      "command": "pnpm verify:generated",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "primary; wall seconds 1.9854724649339914. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/primary-default.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-primary-settlement-replay",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "merged_commit_with_untracked_evidence",
+      "suite": "primary-settlement-replay",
+      "command": "pnpm verify:generated --property history.ledger-settlement --seed=424242 --path '45:4:3:3:4:4:6:6:6:7:8:8:8:8' --runs 1000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "primary; wall seconds 1.139192920178175. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/primary-settlement-replay.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-primary-reconciliation-replay",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "merged_commit_with_untracked_evidence",
+      "suite": "primary-reconciliation-replay",
+      "command": "pnpm verify:generated --property history.ledger-reconciliation --seed=424242 --path '0:1:0:1:1:1' --runs 1000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "primary; wall seconds 1.0351171311922371. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/primary-reconciliation-replay.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-primary-types",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "merged_commit_with_untracked_evidence",
+      "suite": "primary-types",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "primary; wall seconds 2.9654710642062128. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/primary-types.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-primary-static",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "merged_commit_with_untracked_evidence",
+      "suite": "primary-static",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "primary; wall seconds 2.9870739998295903. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/primary-static.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-primary-build",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "merged_commit_with_untracked_evidence",
+      "suite": "primary-build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "primary; wall seconds 3.861456350889057. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/primary-build.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-primary-lint",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "merged_commit_with_untracked_evidence",
+      "suite": "primary-lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": ["9318 lint errors in untracked local artifacts; 0 tracked errors; full primary lint NOT green"],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "primary; wall seconds 30.261433656793088. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/primary-lint.log"
+        }
+      ]
+    },
+    {
+      "id": "2026-10-24-generated-ledger-merged-isolated-lint",
+      "recorded_on": "2026-10-24",
+      "run_at": null,
+      "commit": "36e641698573b8954a0c0cc96ee8d50027a593a4",
+      "revision_kind": "exact_merged_commit",
+      "suite": "merged-isolated-lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-24-generated-ledger"],
+      "notes": "isolated exact merge; wall seconds 36.3683600849472. Source unchanged; evidence logs created during run.",
+      "evidence": [
+        {
+          "path": "docs/experiments/generated-verification/checks/ledger/merged-isolated-lint.log"
+        }
+      ]
     }
   ]
 }

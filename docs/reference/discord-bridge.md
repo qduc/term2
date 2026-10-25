@@ -214,6 +214,58 @@ background worker completion notifications and other unsolicited session events 
 **not** an ambient Discord feed. A mobile query still runs in the real current session
 and sees its available context/history; it does not manufacture a separate chatbot.
 
+## Explicit proactive notifications
+
+It does not automatically collect finals from arbitrary terminal turns. For explicit
+proactive notifications, an opted-in interactive root gets `discord_send` when its
+effective profile includes `discord-send`. Read-only and plan profiles suppress it;
+nested/script-launched agents and non-interactive roots do not inherit the root
+callback. The normal registry projection exposes it through `tools.discord_send`
+in `run_code` (including Bare), not a new JavaScript global. No bridge need be
+running when the agent is constructed.
+
+The input is `{action:"send",requestId,text}` or `{action:"status",requestId}`.
+Request IDs contain 1–64 ASCII letters, digits, `_` or `-`; text is nonblank and at
+most 16,384 UTF-16 units, never silently truncated. Use a fresh key for a new
+notification. Reuse the same key only to reconcile that notification. The bridge
+derives `[alias]` attribution and channel from the full pinned socket/session/start
+identity. Text beginning `@worker` is literal notification text, not peer routing.
+Explicit sends and automatic Discord-job finals are separate intentional outputs.
+
+Discovery is a private Unix RPC under `$XDG_RUNTIME_DIR/term2-discord`: directory
+0700, socket and advertisement 0600, no credentials or payloads in advertisements.
+The stable endpoint name hashes the absolute state directory. Discovery requires
+exact session identity and a unique live bridge; ambiguous mappings fail closed.
+The bridge rechecks the current session advertisement before new admission. Status
+and identical replay can still reconcile accepted records after pause or identity
+change, but only with that record's original mapped identity. This is the existing
+same-uid trust model, not cryptographic authentication against another local process.
+
+`queued` means index and all chunks were atomically persisted, **not delivered**.
+`sent` means all chunks were acknowledged by Discord. `uncertain` means an ambiguous
+POST, retained without automatic resend; chunk counts expose partial outcomes.
+`unknown` means the send RPC may have reached the bridge before disconnection:
+inspect status using the **same request ID**, never automatically invent a new ID.
+`unavailable` means no mutation frame was attempted; `missing` is not delivery
+proof. `rejected` means no new admission (invalid input, changed identity, pause,
+key conflict or capacity). Identical send replay returns the existing status;
+changed text with the same key conflicts. Restart never automatically replays tool
+calls, and any durable `sending` chunk becomes `uncertain`.
+
+New proactive admissions are limited to 128 queued requests (the existing inbox
+scale) and a projected 16 MiB serialized journal. There is **no 512-lifetime-send
+ceiling**: accepted indexes and associated sent/uncertain chunks are retained,
+including beyond ordinary settled-output trimming. Capacity reports kind, usage
+and effective limit. It affects only new proactive admission; duplicate/status
+reconciliation, ingress recovery and already-accepted output remain available.
+These conservative local-resource bounds are not measured workload limits. A
+long-lived journal can reach the byte budget: the operator must reconcile and
+archive it before deliberately provisioning fresh state. Never delete uncertainty
+or replay pending records to regain capacity. No automatic eviction, TTL or retry
+is added. Existing journals without the optional proactive index load as empty;
+incompatible new shapes fail closed. Preserve the extended journal on rollback;
+do not run an older bridge executable against it without a compatibility check.
+
 ## Offline evidence and optional authorized live smoke
 
 ```sh

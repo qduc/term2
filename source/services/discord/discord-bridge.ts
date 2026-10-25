@@ -3,6 +3,12 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { connect } from 'node:net';
 import {
+  DiscordOutboundServer,
+  sameDiscordBinding,
+  type DiscordBinding,
+  type DiscordSendResult,
+} from './discord-outbound.js';
+import {
   listControlAdvertisements,
   readProcStartTime,
   CONTROL_MAX_FRAME_BYTES,
@@ -42,7 +48,16 @@ interface Outgoing {
   content: string;
   state: 'queued' | 'sending' | 'sent' | 'uncertain';
 }
+interface Proactive {
+  binding: DiscordBinding;
+  requestId: string;
+  digest: string;
+  alias: string;
+  channelId: string;
+  outputs: string[];
+}
 interface Journal {
+  proactive?: Proactive[];
   v: 1;
   fingerprint: string;
   cursor: string;
@@ -196,6 +211,8 @@ export class DiscordBridge {
   #readFailures = 0;
   #running = false;
   #owned = false;
+  #failed = false;
+  #outbound?: DiscordOutboundServer;
 
   constructor(
     config: DiscordBridgeConfig,
@@ -260,7 +277,23 @@ export class DiscordBridge {
           this.#journal.v !== 1 ||
           this.#journal.fingerprint !== fingerprint ||
           !Array.isArray(this.#journal.jobs) ||
-          !Array.isArray(this.#journal.outbox)
+          !Array.isArray(this.#journal.outbox) ||
+          Object.keys(this.#journal).some(
+            (key) =>
+              ![
+                'v',
+                'fingerprint',
+                'cursor',
+                'paused',
+                'stopPending',
+                'retryAt',
+                'bindings',
+                'jobs',
+                'outbox',
+                'proactive',
+              ].includes(key),
+          ) ||
+          (this.#journal.proactive !== undefined && !Array.isArray(this.#journal.proactive))
         ) {
           throw new Error('Discord journal/config mismatch; reconcile retained inputs before remapping');
         }
@@ -281,6 +314,38 @@ export class DiscordBridge {
         }
         this.#journal = { v: 1, fingerprint, cursor: '', paused: false, bindings, jobs: [], outbox: [] };
       }
+      this.#journal.proactive ??= [];
+      for (const entry of this.#journal.proactive) {
+        if (
+          !entry ||
+          Object.keys(entry).some(
+            (key) => !['binding', 'requestId', 'digest', 'alias', 'channelId', 'outputs'].includes(key),
+          ) ||
+          typeof entry.requestId !== 'string' ||
+          !/^[A-Za-z0-9_-]{1,64}$/.test(entry.requestId) ||
+          typeof entry.digest !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(entry.digest) ||
+          !this.#journal.bindings[entry.alias] ||
+          !sameDiscordBinding(entry.binding, this.#journal.bindings[entry.alias]!) ||
+          entry.channelId !== this.#config.channelId ||
+          !Array.isArray(entry.outputs) ||
+          !entry.outputs.length ||
+          new Set(entry.outputs).size !== entry.outputs.length ||
+          entry.outputs.some(
+            (id) =>
+              !this.#journal.outbox.some(
+                (output) =>
+                  output.id === id &&
+                  typeof output.content === 'string' &&
+                  ['queued', 'sending', 'sent', 'uncertain'].includes(output.state),
+              ),
+          ) ||
+          this.#journal.proactive.filter(
+            (other) => other.requestId === entry.requestId && sameDiscordBinding(other.binding, entry.binding),
+          ).length !== 1
+        )
+          throw new Error('Invalid proactive Discord journal; reconciliation required');
+      }
       this.#retryAt = this.#journal.retryAt ?? 0;
       this.#save();
     } catch (error) {
@@ -291,6 +356,7 @@ export class DiscordBridge {
 
   /** Release only this bridge's ownership; pending work and reconciliation records survive. */
   close(): void {
+    this.#outbound?.close();
     if (this.#owned) {
       fs.unlinkSync(this.#lock);
       this.#owned = false;
@@ -299,7 +365,116 @@ export class DiscordBridge {
 
   #save(): void {
     this.#journal.retryAt = this.#retryAt;
-    atomicSave(this.#file, this.#journal);
+    if (this.#failed) throw new Error('Discord persistence unavailable');
+    try {
+      atomicSave(this.#file, this.#journal);
+    } catch (error) {
+      this.#failed = true;
+      throw error;
+    }
+  }
+
+  /** Advertise only after private durable ownership; credentials never enter the endpoint. */
+  async listenOutbound(): Promise<void> {
+    if (!this.#owned || this.#failed || this.#outbound) throw new Error('Discord bridge unavailable');
+    const server = new DiscordOutboundServer(
+      this.#runtimeDir,
+      this.#config.stateDir,
+      {
+        fingerprint: this.#journal.fingerprint,
+        channelId: this.#config.channelId,
+        bindings: this.#journal.bindings,
+      },
+      (method, params) => this.#send(method, params),
+    );
+    await server.listen();
+    this.#outbound = server;
+  }
+
+  // All mutations and saves are synchronous, including RPC admission. Tick never holds a
+  // detached journal snapshot across an await; no overlapping load/modify/write can occur.
+  #send(method: string, raw: unknown): DiscordSendResult {
+    const params = raw as { binding: DiscordBinding; requestId: string; text?: string };
+    const reject = (reason: string): DiscordSendResult => ({
+      requestId: typeof params?.requestId === 'string' ? params.requestId : '',
+      delivery: 'rejected',
+      reason,
+    });
+    const sending = method === 'discord_send';
+    if (
+      (!sending && method !== 'discord_send_status') ||
+      !params ||
+      typeof params !== 'object' ||
+      Object.keys(params).some(
+        (key) => !(sending ? ['binding', 'requestId', 'text'] : ['binding', 'requestId']).includes(key),
+      ) ||
+      typeof params.requestId !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,64}$/.test(params.requestId) ||
+      !params.binding ||
+      Object.keys(params.binding).some((key) => !['socketPath', 'sessionId', 'startedAt'].includes(key)) ||
+      (sending && (typeof params.text !== 'string' || !params.text.trim() || params.text.length > 16_384))
+    )
+      return reject('invalid_input');
+    const alias = Object.keys(this.#journal.bindings).find((key) =>
+      sameDiscordBinding(params.binding, this.#journal.bindings[key]!),
+    );
+    if (!alias) return reject('identity_changed');
+    if (!this.#owned || this.#failed) throw new Error('Discord persistence unavailable');
+    const records = this.#journal.proactive!;
+    const existing = records.find(
+      (entry) => entry.requestId === params.requestId && sameDiscordBinding(entry.binding, params.binding),
+    );
+    // Hash the JSON payload, not Node's lossy UTF-8 conversion of lone UTF-16 surrogates.
+    const digest = sending ? createHash('sha256').update(JSON.stringify(params.text)).digest('hex') : '';
+    const status = (entry: Proactive): DiscordSendResult => {
+      const outputs = entry.outputs.map((id) => this.#journal.outbox.find((output) => output.id === id)!);
+      const counts = { queued: 0, sent: 0, uncertain: 0 };
+      for (const output of outputs) counts[output.state === 'sending' ? 'queued' : output.state]++;
+      return {
+        requestId: entry.requestId,
+        channelId: entry.channelId,
+        senderAlias: entry.alias,
+        chunks: counts,
+        delivery: counts.uncertain ? 'uncertain' : counts.sent === outputs.length ? 'sent' : 'queued',
+      };
+    };
+    if (existing) return sending && digest !== existing.digest ? reject('request_id_conflict') : status(existing);
+    if (!sending) return { requestId: params.requestId, delivery: 'missing' };
+    try {
+      this.#binding(alias);
+    } catch {
+      return reject('identity_changed');
+    }
+    if (this.#journal.paused) return reject('paused');
+    // Match the existing work-inbox scale, not an artificial lifetime send count.
+    // Retain dedup evidence indefinitely; only new proactive admission is stopped at
+    // a 16 MiB serialized journal budget. Ingress/recovery and status remain usable.
+    const pending = records.filter((entry) => status(entry).delivery === 'queued').length;
+    if (pending >= 128) return { ...reject('capacity'), capacity: { kind: 'pending', used: pending, limit: 128 } };
+    const seed =
+      'proactive_' +
+      createHash('sha256')
+        .update(JSON.stringify([params.binding, params.requestId]))
+        .digest('hex');
+    const before = this.#journal.outbox.length;
+    this.#post(seed, `[${alias}] ${params.text!}`);
+    const entry: Proactive = {
+      binding: { ...params.binding },
+      requestId: params.requestId,
+      digest,
+      alias,
+      channelId: this.#config.channelId,
+      outputs: this.#journal.outbox.slice(before).map((output) => output.id),
+    };
+    records.push(entry);
+    const bytes = Buffer.byteLength(JSON.stringify(this.#journal));
+    if (bytes > 16 * 1024 * 1024) {
+      records.pop();
+      this.#journal.outbox.splice(before);
+      return { ...reject('capacity'), capacity: { kind: 'journal_bytes', used: bytes, limit: 16 * 1024 * 1024 } };
+    }
+    this.#save(); // index and chunks durable together, before acknowledgement or POST
+    return status(entry);
   }
 
   #post(id: string, text: string): void {
@@ -606,7 +781,7 @@ export class DiscordBridge {
 
   /** Perform one bounded poll/admission/result/outbox cycle; call serially after open(). */
   async tick(): Promise<void> {
-    if (!this.#owned || this.#running) throw new Error('Discord bridge not open or already ticking');
+    if (!this.#owned || this.#failed || this.#running) throw new Error('Discord bridge not open or already ticking');
     if (Date.now() < this.#retryAt) return;
     this.#running = true;
     try {
@@ -625,14 +800,15 @@ export class DiscordBridge {
       if (Date.now() >= this.#retryAt) await this.#outputs();
       // Keep pending/uncertain evidence; trim only settled records behind the persisted cursor.
       const done = this.#journal.jobs.filter((job) => job.state === 'done');
-      const sent = this.#journal.outbox.filter((output) => output.state === 'sent');
+      const retained = new Set(this.#journal.proactive!.flatMap((entry) => entry.outputs));
+      const sent = this.#journal.outbox.filter((output) => output.state === 'sent' && !retained.has(output.id));
       if (done.length > 256)
         this.#journal.jobs = this.#journal.jobs.filter(
           (job) => job.state !== 'done' || done.indexOf(job) >= done.length - 256,
         );
       if (sent.length > 512)
         this.#journal.outbox = this.#journal.outbox.filter(
-          (output) => output.state !== 'sent' || sent.indexOf(output) >= sent.length - 512,
+          (output) => retained.has(output.id) || output.state !== 'sent' || sent.indexOf(output) >= sent.length - 512,
         );
       this.#save();
     } finally {

@@ -1,3 +1,4 @@
+import type { DiscordSend } from '../services/discord/discord-outbound.js';
 import { resolveModelContextPolicy, resolveOutputAllocation } from '../services/agent-runtime/model-context-policy.js';
 import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../tools/system/run-code/run-code.js';
 import { z } from 'zod';
@@ -113,6 +114,7 @@ export interface AgentFactoryDeps {
   allowAskUser?: boolean;
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
+  discordSend?: DiscordSend;
   requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
   configureTaskCheckIn?: (params: any) => any;
   setTaskCheckInPolicy?: (
@@ -524,6 +526,7 @@ export function buildAgent(
       allowBackgroundShell: deps.allowBackgroundShell,
       allowAskUser: deps.allowAskUser,
       sessionBrowser: deps.sessionBrowser,
+      discordSend: deps.discordSend,
       ...(deps.requestSessionRollover ? { requestSessionRollover: deps.requestSessionRollover } : {}),
       configureTaskCheckIn: deps.configureTaskCheckIn,
       setTaskCheckInPolicy: deps.setTaskCheckInPolicy,

@@ -27,6 +27,7 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
       warn: (message) => process.stderr.write(`[discord] ${message}\n`),
     });
     bridge.open();
+    await bridge.listenOutbound();
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
     while (!stopping) {

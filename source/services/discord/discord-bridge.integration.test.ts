@@ -4,8 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { createServer, type Server } from 'node:http';
 import { once } from 'node:events';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { DiscordBridge, callDiscordControl, type DiscordBridgeConfig } from './discord-bridge.js';
+import { sendDiscord, type DiscordSendInput } from './discord-outbound.js';
+import { getAgentDefinition } from '../../agent.js';
+import { createDiscordSendToolDefinition } from '../../tools/discord-send.js';
 import { ControlSocketServer } from '../control-socket/control-socket.js';
 import { createControlSessionPort } from '../control-socket/control-session-port.js';
 import { ConversationService } from '../conversation/conversation-service.js';
@@ -18,6 +21,7 @@ import { SessionContextService } from '../session/session-context-service.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
 import { registerProvider, unregisterProvider } from '../../providers/registry.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { StreamedModelTurnRequest } from '../../contracts/streamed-model-turn.js';
 import type { ILoggingService } from '../service-interfaces.js';
 
@@ -42,6 +46,10 @@ async function fixture(
     maxHops?: number;
     respond?: (alias: string, request: StreamedModelTurnRequest) => string | Promise<string>;
     optIn?: boolean;
+    proactive?: boolean;
+    proactiveScripts?: string[];
+    profile?: string;
+    readOnly?: boolean;
   } = {},
 ) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-discord-'));
@@ -67,6 +75,22 @@ async function fixture(
       createStreamedModel: () => ({
         async *stream(request: StreamedModelTurnRequest) {
           received[alias]!.push(request);
+          const proactiveScript = (options.proactiveScripts ?? [
+            'return await tools.discord_send({action:"send",requestId:"terminal_notice",text:"@worker terminal-origin notification"})',
+          ])[(received[alias]!.length - 1) / 2];
+          if (options.proactive && alias === 'coord' && proactiveScript) {
+            yield {
+              type: 'tool_call' as const,
+              id: 'terminal-notify',
+              name: 'run_code',
+              arguments: JSON.stringify({
+                code: proactiveScript,
+                description: 'Notify the human',
+              }),
+            };
+            yield { type: 'completion' as const, responseId: 'tool-turn', output: [] };
+            return;
+          }
           const text = await (options.respond?.(alias, request) ?? `${alias} answer`);
           yield {
             type: 'completion' as const,
@@ -80,21 +104,34 @@ async function fixture(
     const settings = createMockSettingsService({
       'agent.modelSelection': { provider: providerId, model: 'fixture-model' },
       'agent.retryAttempts': 0,
+      ...(options.proactive ? { 'app.activeProfileId': options.profile ?? 'builtin:bare' } : {}),
     });
     const context = new SessionContextService();
     const ownership = new ToolOwnershipRegistry();
     const client = new AgentClient({
       selection: { provider: providerId, model: 'fixture-model' },
-      agentOverride: {
-        name: 'Discord fixture',
-        model: 'fixture-model',
-        instructions: 'Use existing conversation history.',
-        tools: [],
-      },
+      ...(options.proactive
+        ? {}
+        : {
+            agentOverride: {
+              name: 'Discord fixture',
+              model: 'fixture-model',
+              instructions: 'Use existing conversation history.',
+              tools: [],
+            },
+          }),
       toolOwnership: ownership,
       maxTurns: 2,
       retryAttempts: 0,
-      deps: { logger, settings, sessionContextService: context },
+      deps: {
+        logger,
+        settings,
+        sessionContextService: context,
+        readOnly: options.readOnly,
+        ...(options.proactive
+          ? { discordSend: (input: DiscordSendInput) => sendDiscord(root, sessions[alias]!.socket.binding, input) }
+          : {}),
+      },
     });
     const service = new ConversationService({
       agentClient: client,
@@ -151,6 +188,7 @@ async function fixture(
   let reads = 0;
   let posts429 = 0;
   let droppedPost = false;
+  let holdPost = false;
   let wrongChannel = false;
   const http: Server = createServer(async (request, response) => {
     headers.push(String(request.headers.authorization));
@@ -186,6 +224,7 @@ async function fixture(
         content: value.content,
         author: { id: '300', bot: true },
       });
+      if (holdPost) return;
       if (droppedPost) {
         droppedPost = false;
         request.socket.destroy();
@@ -244,11 +283,24 @@ async function fixture(
   };
   const journal = () => JSON.parse(fs.readFileSync(path.join(config.stateDir, 'journal.json'), 'utf8'));
   return {
+    root,
+    apiBase: `http://127.0.0.1:${address.port}`,
+    holdPost: () => {
+      holdPost = true;
+    },
+    releasePosts: () => {
+      holdPost = false;
+    },
+    config,
+    makeBridge: () => {
+      const instance = makeBridge();
+      cleanup.push(() => instance.close());
+      return instance;
+    },
     received,
     sessions,
     posted,
     warnings,
-    config,
     human,
     cycle,
     restart,
@@ -292,7 +344,7 @@ it('attaches to two real existing session histories, attributes human/agent data
   expect(coordInput).toContain('configured Discord human');
   const workerInput = JSON.stringify(f.received.worker![0]!.input);
   expect(workerInput).toContain('agent session coord');
-  expect(workerInput).toContain('NOT a human instruction or approval');
+  expect(workerInput).toContain('not human instruction or approval');
   expect(workerInput).toContain('inspect this');
   expect(JSON.stringify(f.sessions.worker!.service.exportState())).toContain('agent session coord');
   expect(
@@ -656,3 +708,432 @@ it('overflow refusal keeps ambiguous POST quarantine across restart without repl
   expect(f.posted.filter(notice)).toHaveLength(1);
   expect(f.journal().outbox.find(notice).state).toBe('uncertain');
 });
+
+it.each(['builtin:bare', 'builtin:standard'])(
+  'returns usable send and status results from a terminal-origin %s turn through run_code and the private socket',
+  async (profile) => {
+    const f = await fixture({
+      proactive: true,
+      profile,
+      proactiveScripts: [
+        'return await tools.discord_send({action:"send",requestId:"terminal_notice",text:"@worker terminal-origin notification"})',
+        'return await tools.discord_send({action:"status",requestId:"terminal_notice"})',
+      ],
+    });
+    await f.bridge().listenOutbound();
+    const directory = path.join(f.root, 'term2-discord');
+    const advertisement = fs.readdirSync(directory).find((name) => name.endsWith('.json'))!;
+    expect(fs.statSync(path.join(directory, advertisement)).mode & 0o777).toBe(0o600);
+    expect(fs.readFileSync(path.join(directory, advertisement), 'utf8')).not.toContain('OFFLINE_FIXTURE_TOKEN');
+    await f.sessions.coord!.orchestrator.sendUserMessage('Notify the human explicitly from this terminal turn.');
+    expect(f.journal().jobs).toHaveLength(0);
+    expect(f.journal().proactive).toHaveLength(1);
+    expect(f.journal().proactive[0].requestId).toBe('terminal_notice');
+    for (let i = 0; i < 3; i++) await f.bridge().tick();
+    expect(f.posted.filter((p) => p.content.includes('terminal-origin notification'))).toHaveLength(1);
+    const posted = f.posted.find((p) => p.content.includes('terminal-origin notification'))!;
+    expect(posted.content).toBe('[coord] @worker terminal-origin notification');
+    expect(posted.allowed_mentions).toEqual({ parse: [], replied_user: false });
+    expect(f.received.worker).toHaveLength(0);
+    expect(
+      await sendDiscord(f.root, f.sessions.coord!.socket.binding, { action: 'status', requestId: 'terminal_notice' }),
+    ).toMatchObject({
+      delivery: 'sent',
+      senderAlias: 'coord',
+      channelId: '200',
+      chunks: { sent: 1, queued: 0, uncertain: 0 },
+    });
+    await f.sessions.coord!.orchestrator.sendUserMessage('Check delivery of the same notification.');
+    expect(f.received.coord).toHaveLength(4);
+    // Assert the consumer boundary, not just the POST: a send can take effect before
+    // run_code rejects an incorrectly represented tool result.
+    for (const [index, delivery] of [
+      [1, 'queued'],
+      [3, 'sent'],
+    ] as const) {
+      const results = f.received.coord[index]!.input.filter((item) => item.type === 'tool_result');
+      const result = results.at(-1)!;
+      expect((result as ProviderInputItem).runCodeExecution).toEqual({ success: true });
+      expect(String(result.output)).toMatch(/^Result:\n/);
+      expect(JSON.parse(String(result.output).slice('Result:\n'.length).split('\n\n')[0]!)).toMatchObject({
+        requestId: 'terminal_notice',
+        delivery,
+        senderAlias: 'coord',
+        channelId: '200',
+        chunks: delivery === 'sent' ? { sent: 1, queued: 0, uncertain: 0 } : { sent: 0, queued: 1, uncertain: 0 },
+      });
+    }
+    expect(f.journal().proactive).toHaveLength(1);
+    expect(f.posted.filter((p) => p.content.includes('terminal-origin notification'))).toHaveLength(1);
+  },
+);
+
+it('reconciles duplicate sends, conflicts, pause, bounds and unavailable mappings without admitting effects', async () => {
+  const f = await fixture();
+  await f.bridge().listenOutbound();
+  const send = (input: DiscordSendInput) => sendDiscord(f.root, f.sessions.coord!.socket.binding, input);
+  expect(await send({ action: 'status', requestId: 'none' })).toMatchObject({ delivery: 'missing' });
+  expect(await send({ action: 'send', requestId: 'key', text: 'hello' })).toMatchObject({ delivery: 'queued' });
+  expect(await send({ action: 'send', requestId: 'key', text: 'hello' })).toMatchObject({ delivery: 'queued' });
+  expect(f.journal().proactive).toHaveLength(1);
+  expect(await send({ action: 'send', requestId: 'utf16', text: '\uD800' })).toMatchObject({ delivery: 'queued' });
+  expect(await send({ action: 'send', requestId: 'utf16', text: '\uFFFD' })).toMatchObject({
+    delivery: 'rejected',
+    reason: 'request_id_conflict',
+  });
+  expect(await send({ action: 'send', requestId: 'key', text: 'different' })).toMatchObject({
+    delivery: 'rejected',
+    reason: 'request_id_conflict',
+  });
+  for (const text of ['', ' ', 'x'.repeat(16_385)])
+    expect(await send({ action: 'send', requestId: 'invalid', text })).toMatchObject({
+      delivery: 'rejected',
+      reason: 'invalid_input',
+    });
+  expect(await send({ action: 'send', requestId: 'bad key', text: 'valid' })).toMatchObject({
+    delivery: 'rejected',
+    reason: 'invalid_input',
+  });
+  expect(await send({ action: 'send', requestId: 'limit', text: 'x'.repeat(16_384) })).toMatchObject({
+    delivery: 'queued',
+  });
+  await f.bridge().tick();
+  f.human('!bridge pause');
+  await f.bridge().tick();
+  expect(await send({ action: 'send', requestId: 'paused', text: 'not sent' })).toMatchObject({
+    delivery: 'rejected',
+    reason: 'paused',
+  });
+  expect(await send({ action: 'send', requestId: 'key', text: 'hello' })).not.toMatchObject({ delivery: 'rejected' });
+  expect(
+    await sendDiscord(
+      f.root,
+      { ...f.sessions.coord!.socket.binding, sessionId: 'new-id' },
+      { action: 'send', requestId: 'new', text: 'no' },
+    ),
+  ).toMatchObject({ delivery: 'unavailable' });
+  const ad = JSON.parse(fs.readFileSync(f.sessions.coord!.socket.advertisementPath, 'utf8'));
+  fs.writeFileSync(f.sessions.coord!.socket.advertisementPath, JSON.stringify({ ...ad, sessionId: 'replacement' }), {
+    mode: 0o600,
+  });
+  expect(await send({ action: 'send', requestId: 'changed', text: 'no' })).toMatchObject({
+    delivery: 'rejected',
+    reason: 'identity_changed',
+  });
+  expect(await send({ action: 'status', requestId: 'key' })).not.toMatchObject({ delivery: 'rejected' });
+});
+
+it('retains proactive dedup and ambiguous POST evidence across restart without duplicate POST', async () => {
+  const f = await fixture();
+  await f.bridge().tick();
+  await f.bridge().listenOutbound();
+  const binding = f.sessions.coord!.socket.binding;
+  const send = (input: DiscordSendInput) => sendDiscord(f.root, binding, input);
+  await send({ action: 'send', requestId: 'crash', text: 'ambiguous notification' });
+  f.dropPost();
+  await f.bridge().tick();
+  expect(await send({ action: 'status', requestId: 'crash' })).toMatchObject({ delivery: 'uncertain' });
+  f.bridge().close();
+  const restarted = f.makeBridge();
+  restarted.open();
+  await restarted.listenOutbound();
+  expect(await send({ action: 'send', requestId: 'crash', text: 'ambiguous notification' })).toMatchObject({
+    delivery: 'uncertain',
+  });
+  for (let i = 0; i < 3; i++) await restarted.tick();
+  expect(f.posted.filter((p) => p.content.includes('ambiguous notification'))).toHaveLength(1);
+  const journal = f.journal();
+  journal.outbox.find((p: any) => p.content.includes('ambiguous notification')).state = 'sending';
+  restarted.close();
+  fs.writeFileSync(path.join(f.config.stateDir, 'journal.json'), JSON.stringify(journal), { mode: 0o600 });
+  const crashRecovery = f.makeBridge();
+  crashRecovery.open();
+  await crashRecovery.listenOutbound();
+  expect(await send({ action: 'status', requestId: 'crash' })).toMatchObject({ delivery: 'uncertain' });
+  await crashRecovery.tick();
+  expect(f.posted.filter((p) => p.content.includes('ambiguous notification'))).toHaveLength(1);
+});
+
+it('bounds pending proactive admission at the existing 128-work scale, not 512 lifetime sends', async () => {
+  const f = await fixture();
+  await f.bridge().listenOutbound();
+  const binding = f.sessions.coord!.socket.binding;
+  for (let i = 0; i < 128; i++)
+    expect(await sendDiscord(f.root, binding, { action: 'send', requestId: `n_${i}`, text: 'queued' })).toMatchObject({
+      delivery: 'queued',
+    });
+  expect(await sendDiscord(f.root, binding, { action: 'send', requestId: 'overflow', text: 'no' })).toMatchObject({
+    delivery: 'rejected',
+    reason: 'capacity',
+  });
+  expect(f.journal().proactive).toHaveLength(128);
+  expect(await sendDiscord(f.root, binding, { action: 'send', requestId: 'n_0', text: 'queued' })).toMatchObject({
+    delivery: 'queued',
+  });
+});
+
+it('requires a root dependency and suppresses read-only/plan sending before the socket boundary', async () => {
+  const f = await fixture();
+  await f.bridge().listenOutbound();
+  const settings = createMockSettingsService({ 'app.activeProfileId': 'builtin:bare' });
+  const discordSend = (input: DiscordSendInput) => sendDiscord(f.root, f.sessions.coord!.socket.binding, input);
+  const tools = (extra: Record<string, unknown> = {}) =>
+    getAgentDefinition({ settingsService: settings, loggingService: logger, ...extra }, 'fixture').tools!;
+  expect(tools().some((t) => t.name === 'discord_send')).toBe(false);
+  expect(tools({ discordSend }).some((t) => t.name === 'discord_send')).toBe(true);
+  expect(tools({ discordSend, readOnly: true }).some((t) => t.name === 'discord_send')).toBe(false);
+  settings.set('app.activeProfileId', 'builtin:plan');
+  expect(tools({ discordSend }).some((t) => t.name === 'discord_send')).toBe(false);
+  const tool = createDiscordSendToolDefinition(discordSend);
+  const result = await tool.execute({ action: 'send', requestId: 'root', text: 'root only' });
+  expect(result).toMatchObject({ delivery: 'queued' });
+  expect(tool.scriptedReturnSchema!.safeParse(result).success).toBe(true);
+  // The ordinary result boundary owns text presentation; the executor returns data.
+  const messages = await tool.formatCommandMessage(
+    { type: 'function_call_result', output: JSON.stringify(result) },
+    0,
+    new Map(),
+  );
+  expect(messages).toHaveLength(1);
+  expect(messages[0]!.output).toBe(JSON.stringify(result));
+  expect(f.journal().proactive).toHaveLength(1);
+  expect(tool.parameters.safeParse({ action: 'send', requestId: 'x', text: 'hello', channelId: 'evil' }).success).toBe(
+    false,
+  );
+});
+
+it('returns unknown after lost admission acknowledgement and reconciles the same key without another POST', async () => {
+  const f = await fixture();
+  await f.bridge().listenOutbound();
+  const { createServer: createProxy, connect } = await import('node:net');
+  const directory = path.join(f.root, 'term2-discord');
+  const file = path.join(directory, fs.readdirSync(directory).find((name) => name.endsWith('.json'))!);
+  const ad = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const upstreamPath = ad.socketPath + '.upstream';
+  fs.renameSync(ad.socketPath, upstreamPath);
+  const proxy = createProxy((client) => {
+    const upstream = connect(upstreamPath);
+    client.on('error', noop);
+    upstream.on('error', () => client.destroy());
+    client.pipe(upstream);
+    upstream.on('data', (chunk) => {
+      if (chunk.toString().includes('"id":"call"')) {
+        client.destroy();
+        upstream.destroy();
+      } else client.write(chunk);
+    });
+    client.on('close', () => upstream.destroy());
+  });
+  await new Promise<void>((resolve) => proxy.listen(ad.socketPath, resolve));
+  fs.chmodSync(ad.socketPath, 0o600);
+  cleanup.push(() => {
+    proxy.close();
+  });
+  const binding = f.sessions.coord!.socket.binding;
+  expect(
+    await sendDiscord(f.root, binding, { action: 'send', requestId: 'lost_ack', text: 'one notification' }),
+  ).toMatchObject({ delivery: 'unknown' });
+  expect(f.journal().proactive).toHaveLength(1);
+  await new Promise<void>((resolve) => proxy.close(() => resolve()));
+  fs.renameSync(upstreamPath, ad.socketPath);
+  expect(await sendDiscord(f.root, binding, { action: 'status', requestId: 'lost_ack' })).toMatchObject({
+    delivery: 'queued',
+  });
+  expect(
+    await sendDiscord(f.root, binding, { action: 'send', requestId: 'lost_ack', text: 'one notification' }),
+  ).toMatchObject({ delivery: 'queued' });
+  await f.cycle(3);
+  expect(f.posted.filter((p) => p.content.includes('one notification'))).toHaveLength(1);
+});
+
+it('refuses ambiguous discovery, unsafe runtime permissions and unknown RPC parameters', async () => {
+  const f = await fixture();
+  await f.bridge().listenOutbound();
+  const directory = path.join(f.root, 'term2-discord');
+  const file = path.join(directory, fs.readdirSync(directory).find((name) => name.endsWith('.json'))!);
+  const ad = JSON.parse(fs.readFileSync(file, 'utf8'));
+  expect(
+    await callDiscordControl(ad.socketPath, 'discord_send', {
+      binding: f.sessions.coord!.socket.binding,
+      requestId: 'spoof',
+      text: 'no',
+      senderAlias: 'worker',
+    }),
+  ).toMatchObject({ delivery: 'rejected', reason: 'invalid_input' });
+  const second = new DiscordBridge({ ...f.config, stateDir: path.join(f.root, 'second') }, 'SYNTHETIC_TOKEN', {
+    runtimeDir: f.root,
+  });
+  second.open();
+  await second.listenOutbound();
+  cleanup.push(() => second.close());
+  expect(
+    await sendDiscord(f.root, f.sessions.coord!.socket.binding, { action: 'send', requestId: 'ambiguous', text: 'no' }),
+  ).toMatchObject({ delivery: 'unavailable', reason: 'ambiguous' });
+  second.close();
+  fs.chmodSync(directory, 0o755);
+  expect(
+    await sendDiscord(f.root, f.sessions.coord!.socket.binding, { action: 'send', requestId: 'unsafe', text: 'no' }),
+  ).toMatchObject({ delivery: 'unavailable' });
+  fs.chmodSync(directory, 0o700);
+  expect(f.journal().proactive).toHaveLength(0);
+});
+
+it('retains sent idempotency evidence beyond 512 lifetime notifications and restart', async () => {
+  const f = await fixture();
+  await f.bridge().tick();
+  await f.bridge().listenOutbound();
+  const binding = f.sessions.coord!.socket.binding;
+  for (let i = 0; i < 514; i++) {
+    expect(
+      await sendDiscord(f.root, binding, { action: 'send', requestId: `settled_${i}`, text: `notice ${i}` }),
+    ).toMatchObject({ delivery: 'queued' });
+    await f.bridge().tick();
+  }
+  expect(f.journal().proactive).toHaveLength(514);
+  expect(f.journal().outbox.filter((output: any) => output.content.startsWith('[coord] notice'))).toHaveLength(514);
+  f.restart();
+  await f.bridge().listenOutbound();
+  expect(
+    await sendDiscord(f.root, binding, { action: 'send', requestId: 'settled_0', text: 'notice 0' }),
+  ).toMatchObject({ delivery: 'sent' });
+  expect(f.posted.filter((p) => p.content === '[coord] notice 0')).toHaveLength(1);
+}, 60_000);
+
+it('quarantines a proactive POST interrupted by actual bridge process death and reaps its stale endpoint', async () => {
+  const f = await fixture();
+  await f.bridge().tick();
+  f.bridge().close();
+  const child = spawn(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      '--input-type=module',
+      '-e',
+      `
+    import { DiscordBridge } from './source/services/discord/discord-bridge.ts';
+    const bridge=new DiscordBridge(${JSON.stringify(f.config)},'SYNTHETIC_CHILD_TOKEN',${JSON.stringify({
+        runtimeDir: f.root,
+        apiBase: f.apiBase,
+      })});
+    bridge.open(); await bridge.listenOutbound(); process.stdout.write('READY');
+    process.stdin.once('data',async()=>{await bridge.tick();process.stdout.write('DONE')});
+  `,
+    ],
+    { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  cleanup.push(() => {
+    child.kill('SIGKILL');
+  });
+  let errors = '';
+  child.stderr.on('data', (chunk) => {
+    errors += chunk.toString();
+  });
+  expect(String((await once(child.stdout, 'data'))[0]), errors).toContain('READY');
+  const binding = f.sessions.coord!.socket.binding;
+  expect(
+    await sendDiscord(f.root, binding, { action: 'send', requestId: 'killed', text: 'crash notification' }),
+  ).toMatchObject({ delivery: 'queued' });
+  f.holdPost();
+  child.stdin.write('tick');
+  await expect.poll(() => f.posted.filter((p) => p.content.includes('crash notification')).length).toBe(1);
+  expect(f.journal().outbox.find((output: any) => output.content.includes('crash notification')).state).toBe('sending');
+  const exited = once(child, 'exit');
+  child.kill('SIGKILL');
+  await exited;
+  f.releasePosts();
+  f.restart();
+  await f.bridge().listenOutbound();
+  expect(await sendDiscord(f.root, binding, { action: 'status', requestId: 'killed' })).toMatchObject({
+    delivery: 'uncertain',
+  });
+  await f.cycle(3);
+  expect(f.posted.filter((p) => p.content.includes('crash notification'))).toHaveLength(1);
+}, 30_000);
+
+it('does not POST after an admission journal write failure and rejects incompatible index shapes', async () => {
+  const f = await fixture();
+  await f.bridge().listenOutbound();
+  const temporary = path.join(f.config.stateDir, `journal.json.${process.pid}.tmp`);
+  fs.mkdirSync(temporary, { mode: 0o700 });
+  expect(
+    await sendDiscord(f.root, f.sessions.coord!.socket.binding, {
+      action: 'send',
+      requestId: 'write_failure',
+      text: 'must not post',
+    }),
+  ).toMatchObject({ delivery: 'unknown' });
+  expect(f.journal().proactive).toHaveLength(0);
+  await expect(f.bridge().tick()).rejects.toThrow('not open or already ticking');
+  expect(f.posted).toHaveLength(0);
+  fs.rmdirSync(temporary);
+  f.restart();
+  await f.bridge().listenOutbound();
+  expect(
+    await sendDiscord(f.root, f.sessions.coord!.socket.binding, { action: 'status', requestId: 'write_failure' }),
+  ).toMatchObject({ delivery: 'missing' });
+  const journal = f.journal();
+  f.bridge().close();
+  journal.proactive = { version: 2 };
+  fs.writeFileSync(path.join(f.config.stateDir, 'journal.json'), JSON.stringify(journal), { mode: 0o600 });
+  expect(() => f.restart()).toThrow('journal/config mismatch');
+});
+
+it('admits exactly at the retained-journal byte budget and refuses additional work without losing reconciliation', async () => {
+  const f = await fixture();
+  await f.bridge().listenOutbound();
+  const binding = f.sessions.coord!.socket.binding;
+  const send = (requestId: string) => sendDiscord(f.root, binding, { action: 'send', requestId, text: 'x' });
+  await send('a');
+  const journal = f.journal();
+  const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
+  const prospective = structuredClone(journal);
+  prospective.proactive.push({ ...prospective.proactive[0], requestId: 'b' });
+  prospective.outbox.push({ ...prospective.outbox[0] });
+  const growth = bytes(prospective) - bytes(journal);
+  const budget = 16 * 1024 * 1024;
+  while (bytes(journal) < budget - growth - 33_000)
+    journal.jobs.push({
+      id: `padding_${journal.jobs.length}`,
+      alias: 'coord',
+      text: 'x'.repeat(32_000),
+      origin: { kind: 'human', sender: '100' },
+      hops: 0,
+      state: 'done',
+    });
+  journal.jobs.push({
+    id: 'padding_tail',
+    alias: 'coord',
+    text: '',
+    origin: { kind: 'human', sender: '100' },
+    hops: 0,
+    state: 'done',
+  });
+  journal.jobs.at(-1).text = 'x'.repeat(budget - growth - bytes(journal));
+  expect(bytes(journal)).toBe(budget - growth);
+  f.bridge().close();
+  fs.writeFileSync(path.join(f.config.stateDir, 'journal.json'), JSON.stringify(journal), { mode: 0o600 });
+  f.restart();
+  await f.bridge().listenOutbound();
+  expect(await send('b')).toMatchObject({ delivery: 'queued' });
+  expect(bytes(f.journal())).toBe(budget);
+  expect(await send('c')).toMatchObject({
+    delivery: 'rejected',
+    reason: 'capacity',
+    capacity: { kind: 'journal_bytes', limit: budget },
+  });
+  expect(f.journal().proactive).toHaveLength(2);
+  expect(await send('a')).toMatchObject({ delivery: 'queued' });
+}, 30_000);
+
+it.each([{ profile: 'builtin:plan' }, { profile: 'builtin:bare', readOnly: true }])(
+  'does not let a $profile readOnly=$readOnly agent dispatch discord_send through run_code',
+  async (options) => {
+    const f = await fixture({ proactive: true, ...options });
+    await f.bridge().listenOutbound();
+    await f.sessions.coord!.orchestrator.sendUserMessage('Attempt the explicit notification.');
+    expect(f.received.coord).toHaveLength(2);
+    expect(f.journal().proactive).toHaveLength(0);
+    expect(f.posted).toHaveLength(0);
+  },
+);

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import './env-setup.js';
+import { sendDiscord } from './services/discord/discord-outbound.js';
 import type { ReactNode } from 'react';
 import meow from 'meow';
 import { createRequire } from 'node:module';
@@ -251,7 +252,7 @@ const cli = meow(
           --show-reasoning                 Stream reasoning deltas to stderr in non-interactive mode
           --json                           Emit newline-delimited JSON (NDJSON) events in non-interactive mode
           --ssh <user@host>                Enable SSH mode for a remote host
-          --discord-input                 Allow attributed Discord input on this control socket
+          --discord-input                 Allow Discord input and explicit root notifications on this control socket
           --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
           --ssh-port <port>                SSH port (default: 22)
           --control-socket[=<name>]        Enable a local socket for the interactive TUI
@@ -1152,6 +1153,15 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         skillsService,
         requestCapture,
         sessionBrowser: hasPositionalPrompt ? undefined : sessionBrowser,
+        ...(!hasPositionalPrompt && controlSocketRequested && discordInput
+          ? {
+              discordSend: async (input: import('./services/discord/discord-outbound.js').DiscordSendInput) => {
+                const server = activeControlSocketServer;
+                if (!server) return { requestId: input.requestId, delivery: 'unavailable' as const };
+                return sendDiscord(process.env.XDG_RUNTIME_DIR ?? '', server.binding, input);
+              },
+            }
+          : {}),
         mcpToolSource: mcpManager,
       },
       toolOwnership,

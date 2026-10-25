@@ -13673,6 +13673,36 @@
       ],
       "task_ids": ["2026-10-25-discord-send-scripted-result-fix"],
       "notes": "Author evidence only; independent verification not performed. Follow-up reviewer owns acceptance. No live activation, primary edits, secrets, paid APIs or restarts. Prior provider and full-integration intermittent failures are not reclassified or claimed fixed."
+    },
+    {
+      "id": "2026-10-25-discord-empty-final",
+      "recorded_on": "2026-10-25",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_worktree",
+      "base_commit": "feat/discord-usability",
+      "suite": "focused integration + typecheck + build",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts --reporter=dot; pnpm typecheck; pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": null,
+        "pnpm_version": null,
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Dirty worktree pre-commit; final focused integration rerun passed. Initial combined integration invocation failed because the regression assertion selected a nonexistent hardcoded job ID; assertion was corrected and the final run passed."
+      },
+      "result": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0,
+        "typecheck": "passed",
+        "build": "passed",
+        "git_diff_check": "passed"
+      },
+      "task_ids": ["2026-10-25-discord-empty-final-notification-fix"],
+      "notes": "Independent reviewer accepted the patch reasoning; its test command was blocked by tool policy, so independent test execution not performed. No live Discord."
     }
   ]
 }

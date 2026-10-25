@@ -688,7 +688,7 @@ export class DiscordBridge {
         }
         if (result.state === 'final') {
           const text = typeof result.text === 'string' ? result.text : '';
-          this.#post(`${job.id}_final`, `[${job.alias}] ${text || '(completed without text)'}`);
+          if (text.trim()) this.#post(`${job.id}_final`, `[${job.alias}] ${text}`);
           const route = /^@([A-Za-z0-9_-]+)\s+([\s\S]+)$/.exec(text);
           if (route && !job.noRoute && !result.truncated) {
             const alias = route[1]!;

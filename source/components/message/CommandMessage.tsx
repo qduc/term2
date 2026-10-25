@@ -204,6 +204,15 @@ const CommandMessage: FC<Props> = ({
       </>
     );
 
+    // Notification headers are the entire concise view. Reuse the shell argument
+    // preview instead of copying a potentially multiline script into that header.
+    const shellNotificationLabel = (command: unknown) => {
+      const label = asDisplayString(command) || 'job';
+      return displayMode === 'concise'
+        ? formatToolArgs('shell', { command: label.replace(/\s+/g, ' ') }, 'concise')
+        : label;
+    };
+
     switch (toolName) {
       case 'grep':
         return renderAction('Searched');
@@ -291,7 +300,7 @@ const CommandMessage: FC<Props> = ({
         const jobs = Array.isArray(toolArgs?.jobs) ? toolArgs.jobs : [];
         if (jobs.length === 1) {
           const [{ command, status, error }] = jobs;
-          const label = command || 'job';
+          const label = shellNotificationLabel(command);
           if (status === 'failed' || status === 'timed_out' || error) {
             const reason = error ? `: ${error}` : '';
             return renderAction(`Background shell failed: ${label}${reason}`);
@@ -311,7 +320,7 @@ const CommandMessage: FC<Props> = ({
           : [];
         if (firings.length === 1) {
           const [{ command, matchedLines, coalescedCount }] = firings;
-          const label = command || 'job';
+          const label = shellNotificationLabel(command);
           const lineCount =
             typeof coalescedCount === 'number'
               ? coalescedCount
@@ -398,7 +407,17 @@ const CommandMessage: FC<Props> = ({
     }
     // Depend on the whole `toolArgs`, not `toolArgs?.runs`: the React Compiler infers the
     // former and refuses to preserve the memo when the declared deps are narrower.
-  }, [toolName, command, runtime, formattedArgs, toolArgs, isBackgroundSubagentLaunch, success, theme.textSubtle]);
+  }, [
+    toolName,
+    command,
+    runtime,
+    formattedArgs,
+    toolArgs,
+    isBackgroundSubagentLaunch,
+    success,
+    theme.textSubtle,
+    displayMode,
+  ]);
 
   // isApprovalRejection carries no `success` value of its own — it is a distinct
   // outcome from a normal failed run — so it is checked first and maps to the

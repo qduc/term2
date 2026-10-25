@@ -1501,6 +1501,7 @@ const App: FC<AppProps> = ({
         <Box flexDirection="column" flexGrow={1}>
           <MessageList
             key={messageListEpoch}
+            displayMode={displayMode}
             messages={messages}
             bannerItems={startupBannerIds}
             bannerStartsNewSession={bannerStartsNewSession}

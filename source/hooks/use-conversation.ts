@@ -376,11 +376,13 @@ export const useConversation = ({
                 const reason = error instanceof Error ? error.message : String(error);
                 addSystemMessage(
                   `Session rollover was not completed: ${reason}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
+                  'Session rollover was not completed. Brief preserved for manual retry.',
                 );
               });
           } else if (consumption?.status === 'blocked') {
             addSystemMessage(
               `Session rollover was not performed: ${consumption.error}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
+              'Session rollover was not performed. Brief preserved for manual retry.',
             );
           }
         },

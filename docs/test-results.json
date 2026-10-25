@@ -9479,6 +9479,423 @@
       },
       "evidence": "pnpm typecheck passed. pnpm lint failed with 9431 errors/34 warnings, including untracked .cache comparison/probe scripts (Buffer/process no-undef, CJS no-require-imports). Release source-only lint gate passed with 31 warnings. Not classified as clean repository baseline. Focused Bare integration assertions passed 4/4 with socat on PATH.",
       "url": null
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-base-red",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "base_source_with_local_generated_coord_metadata",
+      "suite": "temporary-behavior",
+      "command": "pnpm test source/components/message/concise-notifications.tmp.test.tsx",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated concise-rollover worktree; dependencies copied locally from existing primary installation; no installs or provider calls."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 7,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-notifications/base-expanded-red.log",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": null,
+        "source_sha256": null
+      },
+      "url": null,
+      "notes": "Same 16-case temporary real-hook/replay/Ink check as fixed run; 2 concise rollover, 2 concise watch, 3 concise completion-sibling failures. Standard and neighbor controls passed. Fixture removed from source after verification."
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-fix-green",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "dirty_worktree",
+      "suite": "temporary-behavior",
+      "command": "pnpm test source/components/message/concise-notifications.tmp.test.tsx",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated concise-rollover worktree; dependencies copied locally from existing primary installation; no installs or provider calls."
+      },
+      "result": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-notifications/final-expanded-green.log",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": "c3bb561f6fd8dff7cdeb3f5820981cd57849e5fb372ceba3c1c68189a54be394",
+        "source_sha256": {
+          "source/components/message/ChatMessage.tsx": "cc5a8a5e02cda1832dc94e55bea1922ab819d6d7e2af5056fbece38827f06c56",
+          "source/components/message/CommandMessage.tsx": "7201098fd868c453d854fe786ef8d5f4bbc273223a2ad6abddc4d43e6e3c5518",
+          "source/components/message/MessageList.tsx": "7bc2a35269481214d9b65439a96e2e29a93d0652f77957b71e540e9708ae9579",
+          "source/hooks/use-conversation-messages.ts": "18be349f3582273bd28e656003ce8afca1f912188b48ca0828e79f42f12e9b1f",
+          "source/hooks/use-conversation.ts": "b6c614b2a9769561868e7ca13d6509e1b98400db45360b88dc5f7147cbca3f8e",
+          "source/types/message.ts": "341c4aaeab509925ba465529099f90b1312c97ecf4c3c03c9b213201cfe41b4c"
+        }
+      },
+      "url": null,
+      "comparison": {
+        "baseline_run_ids": ["2026-10-25-concise-rollover-shell-notifications-base-red"],
+        "rendered_controls_byte_identical": 8
+      },
+      "notes": "Failure callback and blocked-admission messages retain full reason and 35-line handoff in state. Callback count and manual retry checked; successful callback control. Both replay and live-batch notification args rendered. No actual provider turn, writer failure or shell process invoked."
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-static-and-routing",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "dirty_worktree",
+      "suite": "source-checks",
+      "command": "pnpm typecheck; pnpm test; pnpm test:integration source/services/session/background-subagent-ui-routing.integration.test.ts; pnpm check:no-unit-tests; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated concise-rollover worktree; dependencies copied locally from existing primary installation; no installs or provider calls."
+      },
+      "result": {
+        "passed": 29,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-notifications/check-exits.json",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": "c3bb561f6fd8dff7cdeb3f5820981cd57849e5fb372ceba3c1c68189a54be394",
+        "source_sha256": {
+          "source/components/message/ChatMessage.tsx": "cc5a8a5e02cda1832dc94e55bea1922ab819d6d7e2af5056fbece38827f06c56",
+          "source/components/message/CommandMessage.tsx": "7201098fd868c453d854fe786ef8d5f4bbc273223a2ad6abddc4d43e6e3c5518",
+          "source/components/message/MessageList.tsx": "7bc2a35269481214d9b65439a96e2e29a93d0652f77957b71e540e9708ae9579",
+          "source/hooks/use-conversation-messages.ts": "18be349f3582273bd28e656003ce8afca1f912188b48ca0828e79f42f12e9b1f",
+          "source/hooks/use-conversation.ts": "b6c614b2a9769561868e7ca13d6509e1b98400db45360b88dc5f7147cbca3f8e",
+          "source/types/message.ts": "341c4aaeab509925ba465529099f90b1312c97ecf4c3c03c9b213201cfe41b4c"
+        }
+      },
+      "url": null,
+      "notes": "Typecheck exit 0; 7 guard files / 28 tests; 1 integration file / 1 test; no-unit guard and diff check exit 0. No full integration/e2e/provider-black-box claim."
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-base-lint",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "base_source_with_local_generated_coord_metadata",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated concise-rollover worktree; dependencies copied locally from existing primary installation; no installs or provider calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": 3,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-notifications/base-lint.log",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": null,
+        "source_sha256": null
+      },
+      "url": null,
+      "notes": "Exit 1: ESLint 0 errors / 31 warnings; Prettier warns on generated .coord/.../assignment.json and unread/a40d7f32802941f3b443c5649c6f50d4.json, plus our newly generated .verification/concise-notifications/check-exits.json. The same two protocol-artifact warnings occur on fixed source. Own evidence JSON was subsequently formatted; protocol artifacts deliberately unchanged."
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-fix-lint",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "dirty_worktree",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated concise-rollover worktree; dependencies copied locally from existing primary installation; no installs or provider calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": 2,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-notifications/lint.log",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": "c3bb561f6fd8dff7cdeb3f5820981cd57849e5fb372ceba3c1c68189a54be394",
+        "source_sha256": {
+          "source/components/message/ChatMessage.tsx": "cc5a8a5e02cda1832dc94e55bea1922ab819d6d7e2af5056fbece38827f06c56",
+          "source/components/message/CommandMessage.tsx": "7201098fd868c453d854fe786ef8d5f4bbc273223a2ad6abddc4d43e6e3c5518",
+          "source/components/message/MessageList.tsx": "7bc2a35269481214d9b65439a96e2e29a93d0652f77957b71e540e9708ae9579",
+          "source/hooks/use-conversation-messages.ts": "18be349f3582273bd28e656003ce8afca1f912188b48ca0828e79f42f12e9b1f",
+          "source/hooks/use-conversation.ts": "b6c614b2a9769561868e7ca13d6509e1b98400db45360b88dc5f7147cbca3f8e",
+          "source/types/message.ts": "341c4aaeab509925ba465529099f90b1312c97ecf4c3c03c9b213201cfe41b4c"
+        }
+      },
+      "url": null,
+      "comparison": {
+        "baseline_run_ids": ["2026-10-25-concise-rollover-shell-notifications-base-lint"]
+      },
+      "notes": "Exit 1: 31 ESLint warnings and two generated protocol JSON formatting warnings, both reproduced on base source; base run additionally saw one newly generated evidence JSON formatting warning. Focused changed-source ESLint and Prettier each exit 0. Repository-wide lint is not green."
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-r1-review-red",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "reviewed_pre_R1_dirty_worktree",
+      "suite": "temporary-behavior",
+      "command": "pnpm test source/components/message/reviewer-rollover-switch-regression.tmp.test.tsx",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": null,
+        "notes": "Existing copied dependencies, no installs; pnpm --version output included 11.7.0 and 11.20.0. Ink non-debug App probe uses in-memory TTY-like streams, no provider request."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 2,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-r1/r1-red.log",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": "c3bb561f6fd8dff7cdeb3f5820981cd57849e5fb372ceba3c1c68189a54be394",
+        "source_sha256": null
+      },
+      "notes": "Independent R1 routed as must-fix; author reproduced unchanged reviewer fixture: both real rollover emissions remain summarized after ordinary commitment and standard-mode switch. Original verification lacked this transition. Review verdict reject; not an accepted/escaped delivery.",
+      "url": null,
+      "review": {
+        "verdict": "reject",
+        "finding": "R1",
+        "artifact": "/home/qduc/coord/term2/tasks/concise-rollover/reviewer/REPORT.md"
+      }
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-r1-render-green",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "dirty_worktree",
+      "suite": "temporary-behavior",
+      "command": "pnpm test source/components/message/reviewer-rollover-switch-regression.tmp.test.tsx; pnpm test source/components/message/concise-notifications.tmp.test.tsx; pnpm test source/components/message/reviewer-mode-switch.tmp.test.tsx",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": null,
+        "notes": "Existing copied dependencies, no installs; pnpm --version output included 11.7.0 and 11.20.0. Ink non-debug App probe uses in-memory TTY-like streams, no provider request."
+      },
+      "result": {
+        "passed": 25,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-r1/behavior-exits.json",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": "ded6d756a177f0e16b26c57066e06b244390f41ce1fd46689a7c5a7de6ae29a3",
+        "source_sha256": {
+          "source/app.tsx": "a98053a55dc6141ba30214d9b9ab64eb4021a89534705e052b150747f104974b",
+          "source/components/message/ChatMessage.tsx": "cc5a8a5e02cda1832dc94e55bea1922ab819d6d7e2af5056fbece38827f06c56",
+          "source/components/message/CommandMessage.tsx": "7201098fd868c453d854fe786ef8d5f4bbc273223a2ad6abddc4d43e6e3c5518",
+          "source/components/message/MessageList.tsx": "320002ed2d59973d5d969f33906bbbaba966b7e99d9335d0b3fe92db3daeec5e",
+          "source/hooks/use-conversation-messages.ts": "18be349f3582273bd28e656003ce8afca1f912188b48ca0828e79f42f12e9b1f",
+          "source/hooks/use-conversation.ts": "b6c614b2a9769561868e7ca13d6509e1b98400db45360b88dc5f7147cbca3f8e",
+          "source/types/message.ts": "341c4aaeab509925ba465529099f90b1312c97ecf4c3c03c9b213201cfe41b4c"
+        }
+      },
+      "notes": "Exact three reviewer fixtures: 2/2 R1, 16/16 original, 7/7 extension checks. Fixtures archived durably as *.tsx.fixture, restored only during runs, removed afterward. Render captures retained. No test-driven remount added to regression fixture.",
+      "url": null,
+      "comparison": {
+        "resolves_run_ids": ["2026-10-25-concise-rollover-shell-notifications-r1-review-red"]
+      },
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        }
+      }
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-r1-app-green",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "dirty_worktree",
+      "suite": "temporary-behavior",
+      "command": "pnpm test source/app-display-mode.tmp.test.tsx",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": null,
+        "notes": "Existing copied dependencies, no installs; pnpm --version output included 11.7.0 and 11.20.0. Ink non-debug App probe uses in-memory TTY-like streams, no provider request."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-r1/app-nondebug-green.log",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": "ded6d756a177f0e16b26c57066e06b244390f41ce1fd46689a7c5a7de6ae29a3",
+        "source_sha256": {
+          "source/app.tsx": "a98053a55dc6141ba30214d9b9ab64eb4021a89534705e052b150747f104974b",
+          "source/components/message/ChatMessage.tsx": "cc5a8a5e02cda1832dc94e55bea1922ab819d6d7e2af5056fbece38827f06c56",
+          "source/components/message/CommandMessage.tsx": "7201098fd868c453d854fe786ef8d5f4bbc273223a2ad6abddc4d43e6e3c5518",
+          "source/components/message/MessageList.tsx": "320002ed2d59973d5d969f33906bbbaba966b7e99d9335d0b3fe92db3daeec5e",
+          "source/hooks/use-conversation-messages.ts": "18be349f3582273bd28e656003ce8afca1f912188b48ca0828e79f42f12e9b1f",
+          "source/hooks/use-conversation.ts": "b6c614b2a9769561868e7ca13d6509e1b98400db45360b88dc5f7147cbca3f8e",
+          "source/types/message.ts": "341c4aaeab509925ba465529099f90b1312c97ecf4c3c03c9b213201cfe41b4c"
+        }
+      },
+      "notes": "Actual App, real useSetting and in-memory SettingsService.set with stable identity, real memoized MessageList and non-debug Ink output. Two failure-message variants switch concise -> standard -> concise. One clear per effective mode change, none for same-value setting write; active output and full payload retained. Conversation/input/unrelated App hooks use inherited fixture scaffolding. No manual remount or key change in the test. Mutation removing only App forwarded prop fails 2/2 (app-nondebug-red.log), establishing probe sensitivity. Earlier scaffold errors and cumulative-debug-output assertion failures retained; no product changes were made for those fixture issues.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-r1-source-checks",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "dirty_worktree",
+      "suite": "source-checks",
+      "command": "pnpm typecheck; pnpm test; pnpm test:integration source/services/session/background-subagent-ui-routing.integration.test.ts; pnpm check:no-unit-tests; pnpm exec eslint source/app.tsx source/components/message/MessageList.tsx; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": null,
+        "notes": "Existing copied dependencies, no installs; pnpm --version output included 11.7.0 and 11.20.0. Ink non-debug App probe uses in-memory TTY-like streams, no provider request."
+      },
+      "result": {
+        "passed": 29,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-r1/source-check-exits.json",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": "ded6d756a177f0e16b26c57066e06b244390f41ce1fd46689a7c5a7de6ae29a3",
+        "source_sha256": {
+          "source/app.tsx": "a98053a55dc6141ba30214d9b9ab64eb4021a89534705e052b150747f104974b",
+          "source/components/message/ChatMessage.tsx": "cc5a8a5e02cda1832dc94e55bea1922ab819d6d7e2af5056fbece38827f06c56",
+          "source/components/message/CommandMessage.tsx": "7201098fd868c453d854fe786ef8d5f4bbc273223a2ad6abddc4d43e6e3c5518",
+          "source/components/message/MessageList.tsx": "320002ed2d59973d5d969f33906bbbaba966b7e99d9335d0b3fe92db3daeec5e",
+          "source/hooks/use-conversation-messages.ts": "18be349f3582273bd28e656003ce8afca1f912188b48ca0828e79f42f12e9b1f",
+          "source/hooks/use-conversation.ts": "b6c614b2a9769561868e7ca13d6509e1b98400db45360b88dc5f7147cbca3f8e",
+          "source/types/message.ts": "341c4aaeab509925ba465529099f90b1312c97ecf4c3c03c9b213201cfe41b4c"
+        }
+      },
+      "notes": "Typecheck exit 0; static guards 7 files/28 tests passed; routing integration 1 file/1 passed; no-unit guard and diff check exit 0. Focused ESLint exit 0 with 3 warnings. Temporary source fixtures absent. No full integration/e2e/provider-black-box claim.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-r1-lint",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "dirty_worktree",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": null,
+        "notes": "Existing copied dependencies, no installs; pnpm --version output included 11.7.0 and 11.20.0. Ink non-debug App probe uses in-memory TTY-like streams, no provider request."
+      },
+      "result": {
+        "passed": null,
+        "failed": 3,
+        "skipped": 0
+      },
+      "evidence": ".verification/concise-r1/lint.log",
+      "source_snapshot": {
+        "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+        "source_patch_sha256": "ded6d756a177f0e16b26c57066e06b244390f41ce1fd46689a7c5a7de6ae29a3",
+        "source_sha256": {
+          "source/app.tsx": "a98053a55dc6141ba30214d9b9ab64eb4021a89534705e052b150747f104974b",
+          "source/components/message/ChatMessage.tsx": "cc5a8a5e02cda1832dc94e55bea1922ab819d6d7e2af5056fbece38827f06c56",
+          "source/components/message/CommandMessage.tsx": "7201098fd868c453d854fe786ef8d5f4bbc273223a2ad6abddc4d43e6e3c5518",
+          "source/components/message/MessageList.tsx": "320002ed2d59973d5d969f33906bbbaba966b7e99d9335d0b3fe92db3daeec5e",
+          "source/hooks/use-conversation-messages.ts": "18be349f3582273bd28e656003ce8afca1f912188b48ca0828e79f42f12e9b1f",
+          "source/hooks/use-conversation.ts": "b6c614b2a9769561868e7ca13d6509e1b98400db45360b88dc5f7147cbca3f8e",
+          "source/types/message.ts": "341c4aaeab509925ba465529099f90b1312c97ecf4c3c03c9b213201cfe41b4c"
+        }
+      },
+      "notes": "Exit 1: 0 ESLint errors/31 warnings; Prettier flags generated .coord assignment.json and unread/a40d7f32802941f3b443c5649c6f50d4.json and unread/dc656f0c10764829803b2cacf91f9535.json. Same exact generated-artifact signature independently reproduced on base by reviewer (reviewer/evidence/lint-comparison.json). Protocol artifacts unchanged; no all-green claim.",
+      "url": null,
+      "comparison": {
+        "baseline_artifact": "/home/qduc/coord/term2/tasks/concise-rollover/reviewer/evidence/lint-comparison.json"
+      }
+    },
+    {
+      "id": "2026-10-25-concise-rollover-shell-notifications-independent-r1-accepted",
+      "recorded_on": "2026-10-25",
+      "task_ids": ["2026-10-25-concise-rollover-shell-notifications"],
+      "commit": null,
+      "base_commit": "dc56ff237f275b680a4a9fc32c8d465a143c5a27",
+      "revision_kind": "independently_reviewed_dirty_source_snapshot",
+      "suite": "independent-r1-recheck",
+      "command": "Independent reviewer: four retained behavior fixtures plus source checks; see R1_RECHECK.md exact commands",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.20.0"
+      },
+      "result": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0
+      },
+      "evidence": "/home/qduc/coord/term2/tasks/concise-rollover/reviewer/R1_RECHECK.md",
+      "source_sha256": {
+        "source/app.tsx": "a98053a55dc6141ba30214d9b9ab64eb4021a89534705e052b150747f104974b",
+        "source/components/message/ChatMessage.tsx": "cc5a8a5e02cda1832dc94e55bea1922ab819d6d7e2af5056fbece38827f06c56",
+        "source/components/message/CommandMessage.tsx": "7201098fd868c453d854fe786ef8d5f4bbc273223a2ad6abddc4d43e6e3c5518",
+        "source/components/message/MessageList.tsx": "320002ed2d59973d5d969f33906bbbaba966b7e99d9335d0b3fe92db3daeec5e",
+        "source/hooks/use-conversation-messages.ts": "18be349f3582273bd28e656003ce8afca1f912188b48ca0828e79f42f12e9b1f",
+        "source/hooks/use-conversation.ts": "b6c614b2a9769561868e7ca13d6509e1b98400db45360b88dc5f7147cbca3f8e",
+        "source/types/message.ts": "341c4aaeab509925ba465529099f90b1312c97ecf4c3c03c9b213201cfe41b4c"
+      },
+      "review": {
+        "verdict": "accept",
+        "scope": "R1 plus unchanged original controls; not combined integration acceptance"
+      },
+      "notes": "Parent reports inspection and successful claimcheck. Reviewer App negative discriminator produced the expected two assertion failures when only forwarded prop was removed. Repository lint remains failing on four generated protocol JSON artifacts; no lint-green claim. Source hashes revalidated before staging.",
+      "comparison": {
+        "resolves_run_ids": ["2026-10-25-concise-rollover-shell-notifications-r1-review-red"]
+      },
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "accepted",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": ["Independent verifier effort and cost", "Actual parent acceptance timestamp"]
+      }
     }
   ]
 }

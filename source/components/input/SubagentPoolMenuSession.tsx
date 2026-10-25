@@ -121,7 +121,7 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
         modelTab={pool.modelTab}
         nicknameLabels={pool.nicknameLabels}
         loading={pool.modelLoading}
-        error={pool.modelError}
+        warning={pool.modelWarning}
         scrollOffset={pool.modelScrollOffset}
         canSwitchProvider={true}
       />

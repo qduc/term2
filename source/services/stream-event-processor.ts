@@ -107,6 +107,10 @@ export async function* processStreamEvents(
       if (emitted) yield emitted;
       continue;
     }
+    if (event.type === 'reasoning_started') {
+      yield { type: 'reasoning_started', ...(event.id !== undefined ? { id: event.id } : {}) };
+      continue;
+    }
     if (event.type === 'reasoning_delta') {
       const emitted = emitReasoning(event.text);
       if (emitted) yield emitted;

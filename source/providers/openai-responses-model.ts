@@ -576,6 +576,9 @@ export function normalizeResponseEvent(
   ) {
     const text = typeof event.part?.text === 'string' ? event.part.text : '';
     const id = typeof event.item_id === 'string' ? event.item_id : undefined;
+    if (!text && event.type === 'response.reasoning_summary_part.added') {
+      return { type: 'reasoning_started', ...(id !== undefined ? { id } : {}) };
+    }
     return reasoningDelta(id, text);
   }
   if (event.type === 'response.reasoning_summary_part.done') {
@@ -594,6 +597,10 @@ export function normalizeResponseEvent(
         state.toolNamesByIndex.set(item.id, item.name);
         state.toolArgumentLengthsByIndex.set(item.id, 0);
       }
+    }
+    if (item?.type === 'reasoning') {
+      const id = typeof item.id === 'string' ? item.id : undefined;
+      return { type: 'reasoning_started', ...(id !== undefined ? { id } : {}) };
     }
     if (item?.type === 'compaction') {
       state.compactionStartedAtByIndex.set(compactionIndex(event, item), Date.now());

@@ -14,6 +14,7 @@ export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../contracts/s
 export type ConversationEvent =
   | MemoryInjectedEvent
   | TextDeltaEvent
+  | ReasoningStartedEvent
   | ReasoningDeltaEvent
   | ToolStartedEvent
   | ToolDispatchedEvent
@@ -132,6 +133,14 @@ export interface TextDeltaEvent {
 /**
  * Transport-friendly reasoning streaming event.
  */
+/**
+ * Emitted when the model begins a reasoning block (even before or without summary text deltas).
+ */
+export interface ReasoningStartedEvent {
+  type: 'reasoning_started';
+  id?: string;
+}
+
 export interface ReasoningDeltaEvent {
   type: 'reasoning_delta';
   delta: string;
@@ -502,6 +511,7 @@ export interface ContextCompactionFailedEvent {
  * request that failed before ever streaming anything.
  */
 const BOOKKEEPING_ONLY_EVENT_TYPES: ReadonlySet<ConversationEvent['type']> = new Set([
+  'reasoning_started',
   'memory_injected',
   'usage_update',
   'subagent_usage_update',

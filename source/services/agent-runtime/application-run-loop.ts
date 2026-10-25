@@ -1388,6 +1388,13 @@ export class ApplicationRunLoop {
               outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
               continue;
             }
+            if (event.type === 'reasoning_started') {
+              outputPush(stream, queue, {
+                type: 'reasoning_started',
+                ...(event.id !== undefined ? { id: event.id } : {}),
+              });
+              continue;
+            }
             if (event.type === 'reasoning_delta') {
               const accepted = generationGuard.observeReasoning(event.text);
               if (!accepted) continue;

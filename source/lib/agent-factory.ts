@@ -582,10 +582,10 @@ export function buildAgent(
   // 'default'). This ensures the API receives the param only when
   // intended.
   if (effectiveReasoningEffort && effectiveReasoningEffort !== 'default') {
-    agent.defaultRunOptions = { reasoning: { effort: effectiveReasoningEffort } };
+    agent.defaultRunOptions = { reasoning: { effort: effectiveReasoningEffort, summary: 'auto' } };
     agent.modelSettings = {
       ...(agent.modelSettings ?? {}),
-      reasoning: { effort: effectiveReasoningEffort },
+      reasoning: { effort: effectiveReasoningEffort, summary: 'auto' },
     };
   }
 

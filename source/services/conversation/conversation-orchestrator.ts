@@ -1607,17 +1607,21 @@ export class ConversationOrchestrator {
             maxRetries: event.maxRetries,
           });
         }
-      } else if (this.clearsThinkingIndicator(eventType) || eventType === 'reasoning_delta') {
+      } else if (
+        this.clearsThinkingIndicator(eventType) ||
+        eventType === 'reasoning_started' ||
+        eventType === 'reasoning_delta'
+      ) {
         this.config.ui.onRetryCountdown?.(null);
       }
 
-      if (eventType === 'reasoning_delta') {
+      if (eventType === 'reasoning_started' || eventType === 'reasoning_delta') {
         this.config.ui.onStreamingThinkingStarted((this.config.now ?? Date.now)());
       } else if (this.clearsThinkingIndicator(eventType)) {
         this.config.ui.onStreamingThinkingCleared();
       }
 
-      if (eventType === 'reasoning_delta') {
+      if (eventType === 'reasoning_started' || eventType === 'reasoning_delta') {
         // A tool call can remain in flight after the provider has finished
         // streaming its arguments. Keep the call indicator visible until the
         // tool result or the next model response arrives; otherwise the

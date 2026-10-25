@@ -108,7 +108,9 @@ export class RetryingModel implements StreamedModelTurn {
           throw new RetryRecoveryBudgetExhaustedError(lastError);
         }
         for await (const event of this.model.stream(request)) {
-          committed = true;
+          if (event.type !== 'reasoning_started') {
+            committed = true;
+          }
           yield event;
         }
         return;

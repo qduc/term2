@@ -57,6 +57,7 @@ function projectProviderItems(items: readonly unknown[]): unknown[] {
     if (event.type === 'item' && event.item && typeof event.item === 'object') return [event.item];
     if (
       event.type === 'text_delta' ||
+      event.type === 'reasoning_started' ||
       event.type === 'reasoning_delta' ||
       event.type === 'model_attempt_rollback' ||
       event.type === 'codex_rate_limits' ||
@@ -98,6 +99,7 @@ function projectProviderItems(items: readonly unknown[]): unknown[] {
  * stream.output/newItems in the first place.
  */
 const BOOKKEEPING_ONLY_RUN_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'reasoning_started',
   'codex_rate_limits',
   'context_compaction_started',
   'context_compaction_completed',

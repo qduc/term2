@@ -135,6 +135,10 @@ export function createAiSdkStreamedModel(
             text: current.text,
             ...(current.providerMetadata ? { providerMetadata: current.providerMetadata } : {}),
           });
+          yield {
+            type: 'reasoning_started',
+            ...(part.id ? { id: part.id } : {}),
+          };
           continue;
         }
         if (part.type === 'reasoning-delta') {

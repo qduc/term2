@@ -217,6 +217,8 @@ export const ASSISTANT_TEXT_PART_SEPARATOR = '\n\n';
 export type StreamedModelTurnEvent =
   | { readonly type: 'text_delta'; readonly text: string; readonly partId?: string }
   | { readonly type: 'codex_rate_limits'; readonly rateLimits: CodexRateLimitInfo }
+  /** Signals that the model has begun a reasoning item before or without summary text deltas. */
+  | { readonly type: 'reasoning_started'; readonly id?: string }
   | {
       readonly type: 'reasoning_delta';
       readonly id?: string;

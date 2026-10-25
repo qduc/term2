@@ -468,7 +468,26 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
           text,
         };
       }
-    } else if (event?.type === 'response.output_item.added' && event.output_item?.type === 'compaction') {
+    } else if (event?.type === 'response.reasoning_summary_part.added') {
+      const text = typeof event.part?.text === 'string' ? event.part.text : '';
+      const id = typeof event.item_id === 'string' ? event.item_id : undefined;
+      if (text) {
+        sawReasoningDelta = true;
+        yield { type: 'reasoning_delta', ...(id !== undefined ? { id } : {}), text };
+      } else {
+        yield { type: 'reasoning_started', ...(id !== undefined ? { id } : {}) };
+      }
+    } else if (
+      event?.type === 'response.output_item.added' &&
+      (event.output_item ?? event.item)?.type === 'reasoning'
+    ) {
+      const item = event.output_item ?? event.item;
+      const id = typeof item?.id === 'string' ? item.id : undefined;
+      yield { type: 'reasoning_started', ...(id !== undefined ? { id } : {}) };
+    } else if (
+      event?.type === 'response.output_item.added' &&
+      (event.output_item ?? event.item)?.type === 'compaction'
+    ) {
       yield { type: 'context_compaction_started', provider: OPENAI_RESPONSES_OPAQUE_TAG };
     } else if (
       event?.type === 'response.output_item.added' &&

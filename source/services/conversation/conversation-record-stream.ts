@@ -34,6 +34,7 @@ const canonicalProviderHistoryItems = (items: readonly unknown[]): unknown[] =>
     if (event.type === 'item' && event.item && typeof event.item === 'object') return [event.item];
     if (
       event.type === 'text_delta' ||
+      event.type === 'reasoning_started' ||
       event.type === 'reasoning_delta' ||
       event.type === 'codex_rate_limits' ||
       event.type === 'tool_call_streaming_delta' ||

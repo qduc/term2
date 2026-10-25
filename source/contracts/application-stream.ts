@@ -10,6 +10,7 @@ import type { RunBudgetEvent } from '../services/agent-runtime/run-budget.js';
  */
 export type ApplicationRunEvent =
   | { readonly type: 'text_delta'; readonly text: string }
+  | { readonly type: 'reasoning_started'; readonly id?: string }
   | { readonly type: 'reasoning_delta'; readonly text: string }
   /** Retracts provisional deltas from a failed provider attempt before retrying the same logical request. */
   | {

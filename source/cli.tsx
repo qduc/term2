@@ -1469,18 +1469,19 @@ const { waitUntilExit } = render(
                 throw new Error('A control socket is already connected or connecting.');
               }
               runtimeControlSocketConnectPending = true;
-              const server = new ControlSocketServer({
-                name,
-                discordInput: true,
-                sessionId: () => effectiveSessionId ?? conversationService.sessionId,
-              });
+              let server: ControlSocketServer | undefined;
               try {
+                server = new ControlSocketServer({
+                  name,
+                  discordInput: true,
+                  sessionId: () => effectiveSessionId ?? conversationService.sessionId,
+                });
                 await server.listen();
                 controlSocket = server;
                 activeControlSocketServer = server;
                 return server;
               } catch (error) {
-                await server.close().catch(() => undefined);
+                if (server) await server.close().catch(() => undefined);
                 throw error;
               } finally {
                 runtimeControlSocketConnectPending = false;

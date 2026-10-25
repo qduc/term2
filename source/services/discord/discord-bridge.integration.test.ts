@@ -608,6 +608,14 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
     socketPath: active!.socketPath,
   });
   expect(messages.pop()).toContain('approvals and questions remain terminal-only');
+  command.action();
+  const bareStatus = messages.pop()!;
+  expect(bareStatus).toContain('Bridge connected: runtime');
+  expect(bareStatus).not.toContain('Usage: /bridge');
+  command.action('   \t  ');
+  const whitespaceStatus = messages.pop()!;
+  expect(whitespaceStatus).toContain('Bridge connected: runtime');
+  expect(whitespaceStatus).not.toContain('Usage: /bridge');
   command.action('status');
   expect(messages.pop()).toContain('session runtime-session; startup socket no');
   const startupCommand = createBridgeCommand({

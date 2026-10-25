@@ -14,7 +14,8 @@ export function createBridgeCommand(input: {
     name: 'bridge',
     description: 'Connect or disconnect remote Discord bridge input',
     action: (args = '') => {
-      const [action = 'status', ...rest] = args.trim().split(/\s+/);
+      const trimmed = args.trim();
+      const [action = 'status', ...rest] = trimmed ? trimmed.split(/\s+/) : [];
       const server = input.getServer();
       if (action === 'connect') {
         const name = rest[0] ?? 'coord';

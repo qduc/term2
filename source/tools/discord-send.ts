@@ -60,7 +60,7 @@ export function createDiscordSendToolDefinition(
       })
       .strict(),
     needsApproval: () => false,
-    execute: async (input) => JSON.stringify(await send(input)),
+    execute: async (input) => send(input),
     formatCommandMessage: (item, index) => [
       createBaseMessage(item, index, 0, false, {
         command: TOOL_NAME_DISCORD_SEND,

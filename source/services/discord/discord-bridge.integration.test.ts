@@ -21,6 +21,7 @@ import { SessionContextService } from '../session/session-context-service.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
 import { registerProvider, unregisterProvider } from '../../providers/registry.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { StreamedModelTurnRequest } from '../../contracts/streamed-model-turn.js';
 import type { ILoggingService } from '../service-interfaces.js';
 
@@ -46,6 +47,7 @@ async function fixture(
     respond?: (alias: string, request: StreamedModelTurnRequest) => string | Promise<string>;
     optIn?: boolean;
     proactive?: boolean;
+    proactiveScripts?: string[];
     profile?: string;
     readOnly?: boolean;
   } = {},
@@ -73,13 +75,16 @@ async function fixture(
       createStreamedModel: () => ({
         async *stream(request: StreamedModelTurnRequest) {
           received[alias]!.push(request);
-          if (options.proactive && alias === 'coord' && received[alias]!.length === 1) {
+          const proactiveScript = (options.proactiveScripts ?? [
+            'return await tools.discord_send({action:"send",requestId:"terminal_notice",text:"@worker terminal-origin notification"})',
+          ])[(received[alias]!.length - 1) / 2];
+          if (options.proactive && alias === 'coord' && proactiveScript) {
             yield {
               type: 'tool_call' as const,
               id: 'terminal-notify',
               name: 'run_code',
               arguments: JSON.stringify({
-                code: 'return await tools.discord_send({action:"send",requestId:"terminal_notice",text:"@worker terminal-origin notification"})',
+                code: proactiveScript,
                 description: 'Notify the human',
               }),
             };
@@ -704,33 +709,64 @@ it('overflow refusal keeps ambiguous POST quarantine across restart without repl
   expect(f.journal().outbox.find(notice).state).toBe('uncertain');
 });
 
-it('sends an explicit notification from a terminal-origin Bare agent turn through run_code and the private socket', async () => {
-  const f = await fixture({ proactive: true });
-  await f.bridge().listenOutbound();
-  const directory = path.join(f.root, 'term2-discord');
-  const advertisement = fs.readdirSync(directory).find((name) => name.endsWith('.json'))!;
-  expect(fs.statSync(path.join(directory, advertisement)).mode & 0o777).toBe(0o600);
-  expect(fs.readFileSync(path.join(directory, advertisement), 'utf8')).not.toContain('OFFLINE_FIXTURE_TOKEN');
-  await f.sessions.coord!.orchestrator.sendUserMessage('Notify the human explicitly from this terminal turn.');
-  expect(f.journal().jobs).toHaveLength(0);
-  expect(f.journal().proactive).toHaveLength(1);
-  expect(f.journal().proactive[0].requestId).toBe('terminal_notice');
-  for (let i = 0; i < 3; i++) await f.bridge().tick();
-  expect(f.posted.filter((p) => p.content.includes('terminal-origin notification'))).toHaveLength(1);
-  const posted = f.posted.find((p) => p.content.includes('terminal-origin notification'))!;
-  expect(posted.content).toBe('[coord] @worker terminal-origin notification');
-  expect(posted.allowed_mentions).toEqual({ parse: [], replied_user: false });
-  expect(f.received.worker).toHaveLength(0);
-  expect(
-    await sendDiscord(f.root, f.sessions.coord!.socket.binding, { action: 'status', requestId: 'terminal_notice' }),
-  ).toMatchObject({
-    delivery: 'sent',
-    senderAlias: 'coord',
-    channelId: '200',
-    chunks: { sent: 1, queued: 0, uncertain: 0 },
-  });
-  expect(JSON.stringify(f.received.coord)).toContain('discord_send');
-});
+it.each(['builtin:bare', 'builtin:standard'])(
+  'returns usable send and status results from a terminal-origin %s turn through run_code and the private socket',
+  async (profile) => {
+    const f = await fixture({
+      proactive: true,
+      profile,
+      proactiveScripts: [
+        'return await tools.discord_send({action:"send",requestId:"terminal_notice",text:"@worker terminal-origin notification"})',
+        'return await tools.discord_send({action:"status",requestId:"terminal_notice"})',
+      ],
+    });
+    await f.bridge().listenOutbound();
+    const directory = path.join(f.root, 'term2-discord');
+    const advertisement = fs.readdirSync(directory).find((name) => name.endsWith('.json'))!;
+    expect(fs.statSync(path.join(directory, advertisement)).mode & 0o777).toBe(0o600);
+    expect(fs.readFileSync(path.join(directory, advertisement), 'utf8')).not.toContain('OFFLINE_FIXTURE_TOKEN');
+    await f.sessions.coord!.orchestrator.sendUserMessage('Notify the human explicitly from this terminal turn.');
+    expect(f.journal().jobs).toHaveLength(0);
+    expect(f.journal().proactive).toHaveLength(1);
+    expect(f.journal().proactive[0].requestId).toBe('terminal_notice');
+    for (let i = 0; i < 3; i++) await f.bridge().tick();
+    expect(f.posted.filter((p) => p.content.includes('terminal-origin notification'))).toHaveLength(1);
+    const posted = f.posted.find((p) => p.content.includes('terminal-origin notification'))!;
+    expect(posted.content).toBe('[coord] @worker terminal-origin notification');
+    expect(posted.allowed_mentions).toEqual({ parse: [], replied_user: false });
+    expect(f.received.worker).toHaveLength(0);
+    expect(
+      await sendDiscord(f.root, f.sessions.coord!.socket.binding, { action: 'status', requestId: 'terminal_notice' }),
+    ).toMatchObject({
+      delivery: 'sent',
+      senderAlias: 'coord',
+      channelId: '200',
+      chunks: { sent: 1, queued: 0, uncertain: 0 },
+    });
+    await f.sessions.coord!.orchestrator.sendUserMessage('Check delivery of the same notification.');
+    expect(f.received.coord).toHaveLength(4);
+    // Assert the consumer boundary, not just the POST: a send can take effect before
+    // run_code rejects an incorrectly represented tool result.
+    for (const [index, delivery] of [
+      [1, 'queued'],
+      [3, 'sent'],
+    ] as const) {
+      const results = f.received.coord[index]!.input.filter((item) => item.type === 'tool_result');
+      const result = results.at(-1)!;
+      expect((result as ProviderInputItem).runCodeExecution).toEqual({ success: true });
+      expect(String(result.output)).toMatch(/^Result:\n/);
+      expect(JSON.parse(String(result.output).slice('Result:\n'.length).split('\n\n')[0]!)).toMatchObject({
+        requestId: 'terminal_notice',
+        delivery,
+        senderAlias: 'coord',
+        channelId: '200',
+        chunks: delivery === 'sent' ? { sent: 1, queued: 0, uncertain: 0 } : { sent: 0, queued: 1, uncertain: 0 },
+      });
+    }
+    expect(f.journal().proactive).toHaveLength(1);
+    expect(f.posted.filter((p) => p.content.includes('terminal-origin notification'))).toHaveLength(1);
+  },
+);
 
 it('reconciles duplicate sends, conflicts, pause, bounds and unavailable mappings without admitting effects', async () => {
   const f = await fixture();
@@ -849,11 +885,17 @@ it('requires a root dependency and suppresses read-only/plan sending before the 
   settings.set('app.activeProfileId', 'builtin:plan');
   expect(tools({ discordSend }).some((t) => t.name === 'discord_send')).toBe(false);
   const tool = createDiscordSendToolDefinition(discordSend);
-  expect(
-    JSON.parse(String(await tool.execute({ action: 'send', requestId: 'root', text: 'root only' }))),
-  ).toMatchObject({
-    delivery: 'queued',
-  });
+  const result = await tool.execute({ action: 'send', requestId: 'root', text: 'root only' });
+  expect(result).toMatchObject({ delivery: 'queued' });
+  expect(tool.scriptedReturnSchema!.safeParse(result).success).toBe(true);
+  // The ordinary result boundary owns text presentation; the executor returns data.
+  const messages = await tool.formatCommandMessage(
+    { type: 'function_call_result', output: JSON.stringify(result) },
+    0,
+    new Map(),
+  );
+  expect(messages).toHaveLength(1);
+  expect(messages[0]!.output).toBe(JSON.stringify(result));
   expect(f.journal().proactive).toHaveLength(1);
   expect(tool.parameters.safeParse({ action: 'send', requestId: 'x', text: 'hello', channelId: 'evil' }).success).toBe(
     false,

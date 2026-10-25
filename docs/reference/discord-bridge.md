@@ -215,7 +215,7 @@ exactly-once guarantee:
   directory. Preserve the old journal; do not copy pending rows into a new session
   blindly. Automated cross-process exactly-once recovery is intentionally absent.
 
-Final-feed limitation: only bridge-submitted turns and their explicit peer chains
+Final-feed limitation: only bridge-submitted or human-steered turns and their explicit peer chains
 are correlated/forwarded. Independent terminal turns, later approval continuations,
 background worker completion notifications and other unsolicited session events are
 **not** an ambient Discord feed. A mobile query still runs in the real current session

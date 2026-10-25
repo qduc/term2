@@ -1,3 +1,4 @@
+export const TOOL_NAME_DISCORD_SEND = 'discord_send';
 export const TOOL_NAME_APPLY_PATCH = 'apply_patch';
 export const TOOL_NAME_SEARCH_REPLACE = 'search_replace';
 export const TOOL_NAME_CREATE_FILE = 'create_file';

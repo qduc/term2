@@ -792,6 +792,7 @@ export class AgentClient {
       skillsService?: SkillsService;
       /** Supplied only by the interactive CLI root composition. */
       sessionBrowser?: import('../services/conversation/session-browser.js').SessionBrowser;
+      discordSend?: import('../services/discord/discord-outbound.js').DiscordSend;
       /** Supplied only by an owned root session client. */
       requestCapture?: ProviderRequestCapture;
       /** Provider definitions scoped to this client/runtime. */
@@ -876,6 +877,7 @@ export class AgentClient {
         allowBackgroundShell,
         allowAskUser,
         sessionBrowser: deps.sessionBrowser,
+        discordSend: deps.discordSend,
         onConfigChanged: (_changedKey?: string) => {
           // Models capture provider/settings at creation time.
           this.#clearStreamedModelCache();

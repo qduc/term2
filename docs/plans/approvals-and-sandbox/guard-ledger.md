@@ -3961,3 +3961,55 @@ Unsettled steers keep their existing admission callback owner. Real writer
 rotation/replay and raw record counts are now in the retained author runner;
 independent recheck remains pending. No authority, retry, capacity or transaction
 policy is added. See `docs/experiments/rollover-queue/evidence/journal-repair/`.
+
+## Explicit Discord notification admission (2026-10-25)
+
+Owner: `DiscordBridge.#send`; recovery belongs to the operator/session. Class:
+input contract and retained-evidence capacity, not an execution watchdog.
+Harm prevented: unbounded proactive payload/backlog/journal growth. Direct signals
+are nonblank text length (16,384 UTF-16 units maximum), queued proactive-request
+count (128, matching the existing work inbox), and projected serialized journal
+bytes (16 MiB). Exact limit is admitted; larger input/new work is rejected before
+persistence or POST. No settings, environment, parent/role override, clamping or
+migration. These are conservative storage bounds, not measured workload limits:
+legitimate large or long-lived notification histories can hit them, while many
+small sends below the bound are not evidence of safe content.
+
+Only new proactive work is refused. Existing index/outbox evidence, duplicate
+replay/status, normal ingress controls and accepted output are retained. There is
+no 512-lifetime-send ceiling, TTL or automatic eviction. Operator recovery is
+explicit reconciliation/archival and deliberate fresh state, never deleting or
+replaying uncertain effects. Capacity diagnostics expose kind, used and limit,
+not payload. A durable write failure poisons this bridge instance: no subsequent
+POST may proceed; disconnect is `unknown` and restart/status owns reconciliation.
+RPC admission and all journal changes are synchronous critical sections on the
+bridge event loop; no detached state is committed across HTTP/control awaits.
+
+RPC transport reuses the control framing ceiling (256 KiB) and 10-second bound,
+with 16 admitted sockets per bridge endpoint. These bound local resource use,
+not work validity. Expiry/disconnection after a mutation frame is `unknown`, not
+cancellation or permission to resend; status is read-only. Unix directory/socket
+permissions and exact pinned mapping are authoritative, not model-supplied alias,
+channel or credentials. Explicit interactive-root launch participation plus the
+`discord-send` capability is required; plan/read-only and missing capability
+suppress the tool before registry projection. Children never inherit the callback.
+
+Evidence: `discord-bridge.integration.test.ts` drives a real terminal-origin Bare
+agent through run_code, private sockets, durable journal and loopback Discord;
+checks 128/129 pending admissions, exact 16 MiB/+one admission, 16,384/+1 text,
+514 settled sends plus restart, lost admission acknowledgement, ambiguous POST,
+actual SIGKILL during POST, stale endpoint recovery, journal write failure,
+identity change, pause, ambiguous discovery and unsafe runtime permissions.
+Commands and exact counts are appended to `docs/test-results.json`. Independent
+verification not performed; separate immutable-checkpoint execution review is
+pending. Rollback the tool/root wiring and outbound endpoint together, preserving
+private extended journals and their reconciliation evidence; no automatic
+activation, credential migration, or live Discord send is authorized here.
+
+Pre-acceptance encoding check: hashing a JavaScript string directly conflates a
+lone surrogate with U+FFFD during Node's UTF-8 conversion. Proactive idempotency
+now hashes JSON-serialized text, preserving the accepted UTF-16 payload contract.
+The same real-socket conflict check fails with direct string hashing and passes
+with canonical JSON hashing. Sibling config/request-identity/control-body digests
+already use JSON; chunk keys contain only host-generated ASCII IDs. The boundary
+regression and owner comment preserve this invariant without a new guard/service.

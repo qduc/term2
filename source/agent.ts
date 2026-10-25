@@ -1,3 +1,5 @@
+import { createDiscordSendToolDefinition } from './tools/discord-send.js';
+import type { DiscordSend } from './services/discord/discord-outbound.js';
 import { createGrepToolDefinition } from './tools/file/grep.js';
 import { presentBareShell } from './tools/system/bare-shell.js';
 import { createReadFileToolDefinition } from './tools/file/read-file.js';
@@ -284,6 +286,8 @@ export const getAgentDefinition = (
     allowAskUser?: boolean;
     /** Explicit interactive-root-only capability; never inferred from memory access. */
     sessionBrowser?: SessionBrowser;
+    /** Explicit interactive-root-only outbound capability; never inherited by subagents. */
+    discordSend?: DiscordSend;
     requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
     configureTaskCheckIn?: (params: ConfigureTaskCheckInParams) => ConfigureTaskCheckInResult;
     setTaskCheckInPolicy?: (
@@ -672,6 +676,16 @@ export const getAgentDefinition = (
         limits: settingsService.getDynamic('agentWorkflow') as WorkflowLimits,
       }),
     );
+  }
+
+  if (
+    deps.discordSend &&
+    !readOnly &&
+    hasCapability('discord-send') &&
+    !profile.enforcement.denials.has('discord-send') &&
+    !profile.enforcement.denials.has('filesystem-mutation')
+  ) {
+    tools.push(createDiscordSendToolDefinition(deps.discordSend));
   }
 
   // Registered last so its bridge exposes every other tool this profile

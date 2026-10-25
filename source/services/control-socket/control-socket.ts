@@ -258,6 +258,11 @@ export class ControlSocketServer {
     this.#server = createServer((socket) => this.#accept(socket));
   }
 
+  /** Current process-bound identity, read at invocation so rollover cannot reuse a stale session ID. */
+  get binding(): { socketPath: string; sessionId: string; startedAt: string } {
+    return { socketPath: this.socketPath, sessionId: this.#options.sessionId(), startedAt: this.#startedAt };
+  }
+
   get startedAt(): string {
     return this.#startedAt;
   }

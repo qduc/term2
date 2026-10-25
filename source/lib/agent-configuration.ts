@@ -1,3 +1,4 @@
+import type { DiscordSend } from '../services/discord/discord-outbound.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
@@ -64,6 +65,7 @@ export interface AgentConfigurationDeps {
   allowAskUser?: boolean;
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
+  discordSend?: DiscordSend;
   requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
   configureTaskCheckIn?: (params: any) => any;
   setTaskCheckInPolicy?: (
@@ -110,6 +112,7 @@ export class AgentConfiguration implements AgentSource {
   #allowBackgroundShell: boolean;
   #allowAskUser: boolean;
   #sessionBrowser?: SessionBrowser;
+  #discordSend?: DiscordSend;
   #requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
   #configureTaskCheckIn?: (params: any) => any;
   #setTaskCheckInPolicy?: (
@@ -159,6 +162,7 @@ export class AgentConfiguration implements AgentSource {
     this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
     this.#allowAskUser = deps.allowAskUser ?? true;
     this.#sessionBrowser = deps.sessionBrowser;
+    this.#discordSend = deps.discordSend;
     this.#requestSessionRollover = deps.requestSessionRollover;
     this.#configureTaskCheckIn = deps.configureTaskCheckIn;
     this.#setTaskCheckInPolicy = deps.setTaskCheckInPolicy;
@@ -301,6 +305,7 @@ export class AgentConfiguration implements AgentSource {
       allowBackgroundShell: this.#allowBackgroundShell,
       allowAskUser: this.#allowAskUser,
       sessionBrowser: this.#sessionBrowser,
+      discordSend: this.#discordSend,
       ...(this.#requestSessionRollover ? { requestSessionRollover: this.#requestSessionRollover } : {}),
       configureTaskCheckIn: this.#configureTaskCheckIn,
       setTaskCheckInPolicy: this.#setTaskCheckInPolicy,

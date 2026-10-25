@@ -13021,6 +13021,353 @@
           "Task-attributed effort/tokens/cost"
         ]
       }
+    },
+    {
+      "id": "2026-10-25-client-scoped-provider-model-lookup-author",
+      "task_ids": [
+        "2026-10-25-client-scoped-provider-model-lookup"
+      ],
+      "commit": "810badcea0188d9ade6cfed85a3eebc081b4ddff",
+      "snapshot": "dirty independent candidate; source identity sha256:30daed8ac4bb1d7b3fba31e48094c7dfbebc952ec2cc96285bd82a7793239581; not a clean-commit run",
+      "timestamp": "2026-10-25T07:09:53.779416+00:00",
+      "environment": "Linux; Node v24.19.0; private Git/dependencies, HUSKY=0, pre-import offline or synthetic numeric-loopback-only containment",
+      "commands": [
+        {
+          "name": "format-write",
+          "argv": [
+            "node",
+            "node_modules/prettier/bin/prettier.cjs",
+            "--write",
+            "source/lib/provider-registry.integration.test.ts"
+          ],
+          "exit": 1,
+          "seconds": 0.032,
+          "containment": "offline"
+        },
+        {
+          "name": "typecheck",
+          "argv": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "exit": 1,
+          "seconds": 0.032,
+          "containment": "offline"
+        },
+        {
+          "name": "eslint",
+          "argv": [
+            "node",
+            "node_modules/eslint/bin/eslint.js",
+            "source/lib/agent-client.ts",
+            "source/lib/provider-registry.integration.test.ts"
+          ],
+          "exit": 0,
+          "seconds": 7.192,
+          "containment": "offline"
+        },
+        {
+          "name": "prettier",
+          "argv": [
+            "node",
+            "node_modules/prettier/bin/prettier.cjs",
+            "--check",
+            "source/lib/agent-client.ts",
+            "source/lib/provider-registry.integration.test.ts"
+          ],
+          "exit": 1,
+          "seconds": 0.036,
+          "containment": "offline"
+        },
+        {
+          "name": "guards",
+          "argv": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--reporter=verbose"
+          ],
+          "exit": 0,
+          "seconds": 2.911,
+          "containment": "offline"
+        },
+        {
+          "name": "no-unit-tests",
+          "argv": [
+            "node",
+            "scripts/check-no-unit-tests.mjs"
+          ],
+          "exit": 0,
+          "seconds": 0.045,
+          "containment": "offline"
+        },
+        {
+          "name": "http-final",
+          "argv": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--config",
+            "vitest.integration.config.ts",
+            "--reporter=verbose",
+            "source/lib/provider-registry.integration.test.ts"
+          ],
+          "exit": 0,
+          "seconds": 3.966,
+          "containment": "loopback-only"
+        },
+        {
+          "name": "build-typescript",
+          "argv": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--project",
+            "tsconfig.build.json"
+          ],
+          "exit": 1,
+          "seconds": 0.034,
+          "containment": "offline"
+        },
+        {
+          "name": "format-write",
+          "argv": [
+            "node",
+            "node_modules/prettier/bin-prettier.js",
+            "--write",
+            "source/lib/provider-registry.integration.test.ts"
+          ],
+          "exit": 0,
+          "seconds": 0.355,
+          "containment": "offline"
+        },
+        {
+          "name": "typecheck",
+          "argv": [
+            "node",
+            "node_modules/typescript-7/bin/tsc",
+            "--noEmit"
+          ],
+          "exit": 0,
+          "seconds": 2.519,
+          "containment": "offline"
+        },
+        {
+          "name": "eslint",
+          "argv": [
+            "node",
+            "node_modules/eslint/bin/eslint.js",
+            "source/lib/agent-client.ts",
+            "source/lib/provider-registry.integration.test.ts"
+          ],
+          "exit": 0,
+          "seconds": 4.535,
+          "containment": "offline"
+        },
+        {
+          "name": "prettier",
+          "argv": [
+            "node",
+            "node_modules/prettier/bin-prettier.js",
+            "--check",
+            "source/lib/agent-client.ts",
+            "source/lib/provider-registry.integration.test.ts"
+          ],
+          "exit": 0,
+          "seconds": 0.525,
+          "containment": "offline"
+        },
+        {
+          "name": "http-final",
+          "argv": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--config",
+            "vitest.integration.config.ts",
+            "--reporter=verbose",
+            "source/lib/provider-registry.integration.test.ts"
+          ],
+          "exit": 0,
+          "seconds": 3.071,
+          "containment": "loopback-only"
+        },
+        {
+          "name": "build-typescript",
+          "argv": [
+            "node",
+            "node_modules/typescript-7/bin/tsc",
+            "--project",
+            "tsconfig.build.json"
+          ],
+          "exit": 0,
+          "seconds": 2.464,
+          "containment": "offline"
+        },
+        {
+          "name": "build-info",
+          "argv": [
+            "node",
+            "scripts/write-build-info.mjs"
+          ],
+          "exit": 0,
+          "seconds": 0.051,
+          "containment": "offline"
+        },
+        {
+          "name": "build-embed",
+          "argv": [
+            "node",
+            "scripts/embed-agent-wire.mjs"
+          ],
+          "exit": 0,
+          "seconds": 0.038,
+          "containment": "offline"
+        },
+        {
+          "name": "provider-black-box",
+          "argv": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--config",
+            "vitest.provider-black-box.config.ts",
+            "--reporter=verbose",
+            "--bail=1"
+          ],
+          "exit": 1,
+          "seconds": 2.594,
+          "containment": "loopback-only"
+        },
+        {
+          "name": "fake-codex-e2e",
+          "argv": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--config",
+            "vitest.e2e.config.ts",
+            "--reporter=verbose",
+            "scripts/fake-codex-server.e2e.test.ts"
+          ],
+          "exit": 0,
+          "seconds": 1.321,
+          "containment": "loopback-only"
+        },
+        {
+          "name": "provider-black-box",
+          "argv": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--config",
+            "vitest.provider-black-box.config.ts",
+            "--reporter=verbose",
+            "--bail=1"
+          ],
+          "exit": 1,
+          "seconds": 37.441,
+          "containment": "loopback-only"
+        },
+        {
+          "argv": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--config",
+            "vitest.provider-black-box.config.ts",
+            "--reporter=verbose",
+            "scripts/provider-black-box/provider-contract.test.ts"
+          ],
+          "exit": 0
+        }
+      ],
+      "results": {
+        "offline_regression": {
+          "red": {
+            "exit_code": 1,
+            "failed": 2,
+            "passed": 1
+          },
+          "green": {
+            "exit_code": 0,
+            "passed": 3
+          }
+        },
+        "http_regression": {
+          "red": {
+            "exit_code": 1,
+            "failed": 3,
+            "passed": 1
+          },
+          "green": {
+            "exit_code": 0,
+            "passed": 4
+          }
+        },
+        "typecheck": {
+          "exit_code": 0
+        },
+        "lint": {
+          "exit_code": 0,
+          "warnings": 0
+        },
+        "prettier": {
+          "exit_code": 0
+        },
+        "guards": {
+          "exit_code": 0,
+          "passed": 28,
+          "files": 7
+        },
+        "no_unit_tests": {
+          "exit_code": 0
+        },
+        "provider_contract_focused": {
+          "exit_code": 0,
+          "passed": 43
+        },
+        "fake_codex_e2e": {
+          "exit_code": 0,
+          "passed": 16
+        },
+        "provider_black_box": {
+          "exit_code": 1,
+          "passed": 44,
+          "failed": 1,
+          "skipped_reported": 23,
+          "complete": false,
+          "failure": "provider-test-harness.test.ts reaps a live PTY child: task containment blocks tsx CLI Unix-socket IPC before reaper fixture starts"
+        }
+      },
+      "failures": [
+        "Initial guessed TypeScript/Prettier binary paths: MODULE_NOT_FOUND; corrected installed local paths passed.",
+        "Initial HTTP oracle expected string content, serializer emits text-part array; corrected oracle re-established 3 red/1 global-control pass on unchanged production.",
+        "Initial loopback numeric bind blocked by DNS preload; resolved literal locally without DNS and re-proved containment.",
+        "Initial broad suite blocked Yoga embedded data fetch; exact non-network data MIME allowed in separate task preload after preflight.",
+        "Final broad suite remains FAIL at tsx Unix-socket IPC, 44 passed/1 failed/23 skipped reported before bail; not waived or called a product failure."
+      ],
+      "uncertain": [
+        "Independent parent source/failure-path verification pending; no acceptance claimed.",
+        "Full provider black-box suite not green under strict task containment; parent must decide safe fixture-only IPC allowance or own this remaining gate.",
+        "No live provider or real customer/tenant-isolation behavior exercised; other registry helpers remain global and out of scope."
+      ],
+      "evidence": "/home/qduc/coord/term2/tasks/provider-recovery/registry-repair",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "author_completed_at": "2026-10-25T07:09:53.779416+00:00",
+          "accepted_at": null,
+          "accepted_commit": null,
+          "evidence_run_ids": [
+            "2026-10-25-client-scoped-provider-model-lookup-author"
+          ]
+        },
+        "unknowns": [
+          "Independent verifier/rework effort, author active minutes, tokens, monetary cost"
+        ]
+      }
     }
   ]
 }

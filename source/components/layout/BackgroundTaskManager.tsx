@@ -1,5 +1,5 @@
 import React, { type FC, useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 import type {
   BackgroundTaskControlDetails,
   BackgroundTaskControlTarget,
@@ -41,6 +41,24 @@ const taskLabel = (details: BackgroundTaskControlDetails): string => {
   if (details.kind === 'shell') return details.command;
   return details.name ?? `${details.role}: ${details.taskPreview}`;
 };
+
+const foregroundTaskLabel = (candidate: ForegroundTransferCandidate): string =>
+  candidate.kind === 'shell' ? candidate.command : candidate.task;
+
+const compactLabel = (value: string, columns: number): string => {
+  const firstLine = value.split(/\r?\n/).find((line) => line.trim().length > 0) ?? '';
+  const collapsed = firstLine.replace(/\s+/g, ' ').trim();
+  // Budget includes marker, identity badge, separators, and status; retain at least
+  // a small identity fragment even in exceptionally narrow terminals.
+  const labelBudget = Math.max(1, Math.min(72, columns - 30));
+  return truncateTerminalText(collapsed, labelBudget);
+};
+
+const isLiveTask = (details: BackgroundTaskControlDetails): boolean =>
+  details.status === 'running' ||
+  details.status === 'awaiting_approval' ||
+  details.status === 'waiting_for_answer' ||
+  details.status === 'cancelling';
 
 const isActive = (details: BackgroundTaskControlDetails): boolean =>
   details.status === 'running' || details.status === 'waiting_for_answer' || details.status === 'awaiting_approval';
@@ -188,6 +206,8 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   onOpenChange,
 }) => {
   const theme = useTheme();
+  const { stdout } = useStdout();
+  const labelColumns = stdout.columns || 80;
   const { MenuFrame } = useSkin();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedOrdinal, setSelectedOrdinal] = useState(0);
@@ -200,7 +220,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   const legacyForeground = getForegroundTransferCandidate?.() ?? null;
   const foregroundSource = listForegroundTransferCandidates?.() ?? (legacyForeground ? [legacyForeground] : []);
   const foreground = foregroundSource.filter((candidate) => !hiddenForeground.has(foregroundKey(candidate)));
-  const tasks = listDetails();
+  const tasks = listDetails().filter(isLiveTask);
   const rows = useMemo(
     () => [
       ...foreground.map((task) => ({ key: foregroundKey(task), kind: 'foreground' as const, task })),
@@ -221,7 +241,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   }, [onOpenChange]);
 
   const openManager = useCallback(() => {
-    const next = listDetails();
+    const next = listDetails().filter(isLiveTask);
     const legacy = getForegroundTransferCandidate?.() ?? null;
     const nextForeground = listForegroundTransferCandidates?.() ?? (legacy ? [legacy] : []);
     if (next.length === 0 && nextForeground.length === 0) return;
@@ -349,7 +369,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
             color={index === selectedIndex ? theme.text : theme.textSubtle}
           >
             {index === selectedIndex ? '❯' : ' '} [{candidate.kind === 'shell' ? 'Shell' : candidate.role} · foreground]{' '}
-            {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
+            {compactLabel(foregroundTaskLabel(candidate), labelColumns)} · running
           </Text>
         ))}
         {tasks.map((task, index) => {
@@ -360,7 +380,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
               color={displayIndex === selectedIndex ? theme.text : theme.textSubtle}
             >
               {displayIndex === selectedIndex ? '❯' : ' '} [{task.kind === 'shell' ? 'Shell' : task.role}]{' '}
-              {taskLabel(task)} · {statusText(task)}
+              {compactLabel(taskLabel(task), labelColumns)} · {statusText(task)}
             </Text>
           );
         })}

@@ -12214,6 +12214,813 @@
           "Active author effort, tokens, monetary cost"
         ]
       }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-typecheck",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/typecheck-final.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Type-only evidence, not behavior.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-lint",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/lint-final.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "31 warnings; 0 errors; full formatting passed.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-static",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "static",
+      "command": "pnpm test",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/static-tests-final.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Seven existing static guard files.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-no-unit-tests",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "no-unit-tests",
+      "command": "pnpm check:no-unit-tests",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/no-unit-tests-final.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Integration fixture crosses HTTP, Unix socket, actual session runtime, provider boundary, state filesystem and child process.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-bridge-integration",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "bridge-integration",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts --reporter=verbose",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/integration-stop-fixed.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Same source after final mutation restoration. Includes actual native cancellation and human versus peer identity in real request/history.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-full-integration",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "full-integration",
+      "command": "pnpm test:integration",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": 235,
+        "failed": 5,
+        "skipped": 1
+      },
+      "failures": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare profile via flag",
+          "classification": "author-reproduced-on-exact-base"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare profile via config",
+          "classification": "author-reproduced-on-exact-base"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare retains outside-workspace edit approval boundary",
+          "classification": "author-reproduced-on-exact-base"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare permits explicit sandbox scratch writes",
+          "classification": "author-reproduced-on-exact-base"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "CLI generic model listing ignores vendor capabilities",
+          "classification": "timeout-unresolved-focused-pass"
+        }
+      ],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/integration-full-final.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Four exact-base-reproduced bare shell/sandbox assertions plus one model-list 10s timeout. Timeout passes focused unchanged-deadline follow-up; cause unresolved, no waiver.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-provider-black-box",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": 121,
+        "failed": 1,
+        "skipped": 28
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/provider-cli.blackbox.ts",
+          "test": "reports provider errors without fabricating successful output",
+          "expected": "timedOut false before original 15000ms deadline",
+          "actual": "timedOut true; focused follow-up passed at 12701ms",
+          "classification": "intermittent-timeout-cause-unresolved"
+        }
+      ],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/provider-black-box-final.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Build succeeded. Bail after provider-error CLI hit 15s deadline. Rest of tier not completed. Earlier pre-admission-fix run passed 222/1 skipped, not final green evidence. Focused final follow-up passes at 12.7s; concurrency only hypothesis. Parent owns serialization/further broad reruns.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-e2e",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 4
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/e2e-final.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Five files pass, one file skipped. Normal packaged CLI and terminal process behavior.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-model-list-timeout-followup",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "model-list-timeout-followup",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts --reporter=verbose -t 'CLI generic model listing ignores vendor capabilities'",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 54
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/model-list-timeout-followup.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Focused unchanged-deadline pass does not explain or erase full-tier timeout.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-provider-error-timeout-followup",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "provider-error-timeout-followup",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-cli.blackbox.ts --reporter=verbose -t 'reports provider errors without fabricating successful output'",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 6
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/provider-error-timeout-followup.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Focused unchanged-deadline pass does not explain or erase full-tier timeout.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-generated-diffcheck",
+      "recorded_at": "2026-10-25T05:38:06.679889+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_candidate_not_independently_accepted",
+      "suite": "generated-diffcheck",
+      "command": "git diff --check",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated task worktree; offline cached dependency install with scripts/Husky disabled. Copied identical-version existing local better-sqlite3 binary. Loopback fixtures only. Concurrent host checks observed; timeout causality unproven."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/generated-verify.log",
+      "source_sha256": {
+        "docs/reference/discord-bridge.md": "0d121c75be52b2a36983b0ec0acbafed557a343ba428cd197db9724c5a4f2808",
+        "source/cli.tsx": "0e89b2028706ce45904108515ac2677adf59f5acbafbdb959c4db829745ea19f",
+        "source/components/message/ChatMessage.tsx": "bafcee10ff4a0d35c1b0722de82771d1b5b79872f5a94dd690fdf8430ede46ac",
+        "source/services/control-socket/control-session-port.ts": "c54c00de54ccfcde9bff909d3d40fae659d005ca2d37879ca435ecb200115449",
+        "source/services/control-socket/control-socket.ts": "6f71d7314ea5886bc381e51bd4a2b749109bd5c0b0cdf2225bccbea86e435a7f",
+        "source/services/conversation/conversation-orchestrator.ts": "ba4358626be1ddcbcaaec1a733114612324df57d88340cb815be10ead3075813",
+        "source/services/discord/discord-bridge.integration.test.ts": "89e76e56a9613ec1250229cc1c2908897e00d0013bb9e57641e2a0f65f6bb5c5",
+        "source/services/discord/discord-bridge.ts": "34f1c797b84a2b0b68d5a1b66ebf778c09da4935437c82ee70b0a7652867ea10",
+        "source/services/discord/discord-command.ts": "5d6ff956e22cdf2405b798c8e1cd4cd30a7c36b2a9eba9464ce9e0a08af5c33e",
+        "source/types/message.ts": "c00aba74c17e433f19a85b41244287f4eb06c70a1b24739da825dcc4cdd8af4a"
+      },
+      "notes": "Actual generated argv run in real source worktree, all new files visible through task-owned intent-to-add. Assignment descriptor unchanged.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent review and live Discord/mobile acceptance not performed",
+          "Host contention contribution to observed timeouts unproven"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-discord-bridge-f1-author-repair",
+      "recorded_at": "2026-10-25T06:19:33.011137+00:00",
+      "task_ids": ["2026-10-25-discord-bridge-candidate"],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "author_dirty_f1_repair_pending_independent_recheck",
+      "suite": "f1-focused-repair",
+      "command": "Exact reviewer fixture replay plus 16 bridge integration cases, typecheck, lint and existing static gates; per-check argv and exits below.",
+      "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Loopback Discord and scripted provider boundary fixtures only; no production services/tokens. No broad integration/provider/E2E reruns."
+      },
+      "result": {
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0,
+        "scope": "Final behavioral cases only: 16 author plus 3 capacity plus 7 reviewer-authored lifecycle cases, all author-rerun; static 28 separate."
+      },
+      "checks": [
+        {
+          "name": "red-capacity",
+          "command": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--config",
+            "vitest.integration.config.ts",
+            "source/services/discord/f1-reviewer-disposable.integration.test.ts",
+            "--reporter=verbose"
+          ],
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 1,
+          "passed": 1,
+          "failed": 2,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/red-capacity.log",
+          "fixture_sha256": "d676675a0e2e4ef71e5f8fe69376b39acfba02a85a4f82ffa404d1f3eccb2939"
+        },
+        {
+          "name": "red-extra",
+          "command": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--config",
+            "vitest.integration.config.ts",
+            "source/services/discord/f1-reviewer-disposable.integration.test.ts",
+            "--reporter=verbose"
+          ],
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 1,
+          "passed": 6,
+          "failed": 1,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/red-extra.log",
+          "fixture_sha256": "15ae01b9c1d7ffd011a2b84a5ed72a14a054ebe4179790a305058a66ee62a67d"
+        },
+        {
+          "name": "green-capacity",
+          "command": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--config",
+            "vitest.integration.config.ts",
+            "source/services/discord/f1-reviewer-disposable.integration.test.ts",
+            "--reporter=verbose"
+          ],
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 0,
+          "passed": 3,
+          "failed": 0,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/green-capacity.log",
+          "fixture_sha256": "d676675a0e2e4ef71e5f8fe69376b39acfba02a85a4f82ffa404d1f3eccb2939"
+        },
+        {
+          "name": "green-extra",
+          "command": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--config",
+            "vitest.integration.config.ts",
+            "source/services/discord/f1-reviewer-disposable.integration.test.ts",
+            "--reporter=verbose"
+          ],
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 0,
+          "passed": 7,
+          "failed": 0,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/green-extra.log",
+          "fixture_sha256": "15ae01b9c1d7ffd011a2b84a5ed72a14a054ebe4179790a305058a66ee62a67d"
+        },
+        {
+          "name": "new-overflow-red",
+          "command": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--config",
+            "vitest.integration.config.ts",
+            "source/services/discord/discord-bridge.integration.test.ts",
+            "--reporter=verbose",
+            "-t",
+            "full paused inbox|overflow refusal"
+          ],
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 1,
+          "passed": 0,
+          "failed": 3,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/new-overflow-tests-red.log"
+        },
+        {
+          "name": "bridge16",
+          "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts --reporter=verbose",
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 0,
+          "passed": 16,
+          "failed": 0,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/bridge16-final.log"
+        },
+        {
+          "name": "typecheck",
+          "command": "pnpm typecheck",
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 0,
+          "passed": null,
+          "failed": 0,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/typecheck.log"
+        },
+        {
+          "name": "static28",
+          "command": "pnpm test",
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 0,
+          "passed": 28,
+          "failed": 0,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/static28.log"
+        },
+        {
+          "name": "no-unit-tests",
+          "command": "pnpm check:no-unit-tests",
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 0,
+          "passed": null,
+          "failed": 0,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/no-unit-tests.log"
+        },
+        {
+          "name": "full-lint",
+          "command": "pnpm lint",
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 1,
+          "passed": null,
+          "failed": null,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/lint.log"
+        },
+        {
+          "name": "changed-eslint",
+          "command": "pnpm exec eslint source/services/discord/discord-bridge.ts source/services/discord/discord-bridge.integration.test.ts",
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 0,
+          "passed": null,
+          "failed": 0,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/changed-eslint.log"
+        },
+        {
+          "name": "changed-format",
+          "command": "pnpm exec prettier --check source/services/discord/discord-bridge.ts source/services/discord/discord-bridge.integration.test.ts docs/reference/discord-bridge.md",
+          "cwd": "/home/qduc/term2/.worktrees/discord-bridge",
+          "exit": 0,
+          "passed": null,
+          "failed": 0,
+          "evidence": "/home/qduc/coord/term2/tasks/discord-bridge/f1-evidence/changed-format.log"
+        }
+      ],
+      "source_sha256": {
+        "source/services/discord/discord-bridge.ts": "2771828865d2ce73eecae12bbc8750b4b717933c96ea5b506946f020a361d5ca",
+        "source/services/discord/discord-bridge.integration.test.ts": "8cd24a9fd28ab84564af5a132a6940909a4bfaadbd6a1a9445ed67072f63e982",
+        "docs/reference/discord-bridge.md": "160639f1d13f413f470d3e67b0b7a9e1ba6a111b009069db808f57e249b5a3f3"
+      },
+      "failures": [
+        {
+          "scope": "full pnpm lint",
+          "signature": "0 eslint errors / 31 warnings; Prettier fails solely on four generated .coord protocol JSON files outside changed manifest",
+          "classification": "foreign generated protocol formatting; retained and not repaired or waived"
+        }
+      ],
+      "notes": "F1 work-capacity liveness defect: narrow ordinary-work admission refusal instead of blocking the shared control cursor. Cap stays 128; no new queue/schema/state. Existing admitted jobs retained on overflow; excess request explicitly NOT accepted. Same outbox/quarantine policy. Original reviewer red bodies unchanged, original reports and evidence immutable. Final broad provider 121/1 fail/28 skip with bail and integration 235/5 fail/1 skip remain unresolved; focused passes do not waive them. Busy presentation omission accepted below bar; no ambient feed expansion.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "author_completed_at": null,
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent F1 recheck and broad serialized regression closure",
+          "Live Discord/mobile acceptance",
+          "Task-attributed effort/tokens/cost"
+        ]
+      }
     }
   ]
 }

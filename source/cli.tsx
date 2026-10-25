@@ -83,10 +83,13 @@ import type { DurableGoal } from './services/logging/conversation-log-events.js'
 
 const controlArgv: string[] = [];
 let controlSocketRequested = false;
+let discordInput = false;
 let controlSocketName: string | undefined;
 let controlSocketNameRejected = false;
 for (const arg of process.argv.slice(2)) {
-  if (arg === '--control-socket') {
+  if (arg === '--discord-input') {
+    discordInput = true;
+  } else if (arg === '--control-socket') {
     controlSocketRequested = true;
     controlSocketName ??= String(process.pid);
   } else if (arg.startsWith('--control-socket=')) {
@@ -226,6 +229,7 @@ const cli = meow(
       $ term2 --resume <conversation-id>
       $ term2 --resume <conversation-id> "Follow-up prompt"
       $ term2 --help
+      $ term2 discord /absolute/path/discord.json
 
     Usage
       $ term2 [options] [prompt...]
@@ -246,6 +250,7 @@ const cli = meow(
           --show-reasoning                 Stream reasoning deltas to stderr in non-interactive mode
           --json                           Emit newline-delimited JSON (NDJSON) events in non-interactive mode
           --ssh <user@host>                Enable SSH mode for a remote host
+          --discord-input                 Allow attributed Discord input on this control socket
           --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
           --ssh-port <port>                SSH port (default: 22)
           --control-socket[=<name>]        Enable a local socket for the interactive TUI
@@ -399,9 +404,19 @@ const cli = meow(
         default: false,
       },
     },
-    allowUnknownFlags: controlArgv[0] === 'control' || process.argv[2] === 'serve' || process.argv[2] === 'acp',
+    allowUnknownFlags:
+      controlArgv[0] === 'discord' ||
+      controlArgv[0] === 'control' ||
+      process.argv[2] === 'serve' ||
+      process.argv[2] === 'acp',
   },
 );
+
+if (cli.input[0] === 'discord') {
+  const { runDiscordBridge } = await import('./services/discord/discord-command.js');
+  await runDiscordBridge(controlArgv.slice(1));
+  process.exit(process.exitCode ?? 0);
+}
 
 if (cli.input[0] === 'control') {
   const exitCode = await runControlCommand(controlArgv.slice(1), process.stdout, process.stderr);
@@ -1386,6 +1401,7 @@ if (controlSocketRequested) {
     try {
       controlSocket = new ControlSocketServer({
         name: controlSocketName,
+        discordInput,
         sessionId: () => effectiveSessionId ?? conversationService.sessionId,
       });
       await controlSocket.listen();

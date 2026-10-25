@@ -1,0 +1,236 @@
+# Discord bridge (candidate)
+
+One bot in one private channel can speak to multiple **existing term2 terminal
+sessions**. Stable aliases select sessions; this does not create a chatbot or a
+new conversation per message. This candidate needs independent auth/session review
+and authorized live Discord validation before acceptance. No live bot setup was
+performed during implementation.
+
+## Attach the actual session, not a blank replacement
+
+Sessions must explicitly opt in **at process launch**. This is intentionally not a
+settings key an agent can change. Each participating session independently opts in;
+no approval/auto-approve settings are copied from the coordinator.
+
+If your existing session was already launched with both flags, keep it running.
+Otherwise, do not kill ongoing work just to attach Discord. Checkpoint/finish its
+active operation, record the exact session ID/resume command printed by term2, and
+exit normally when safe. Then, from its original workspace, resume that **same ID**:
+
+```sh
+term2 --resume YOUR_EXISTING_SESSION_ID --control-socket=coord --discord-input
+# In the worker's own workspace, with ITS existing session ID:
+term2 --resume YOUR_EXISTING_WORKER_ID --control-socket=worker --discord-input
+```
+
+No positional prompt; that would select non-interactive mode instead of listening.
+Do not use `--fork`, which would create different history. Do not start plain
+`term2` as an assumed replacement. Normal persisted-history resume is supported;
+this bridge cannot resurrect a killed in-flight tool or move live process state.
+For this current coordination session, adding the flag requires a deliberately
+planned safe restart/resume unless it was already present at launch. Merely
+installing this candidate cannot attach to an older running executable.
+
+`XDG_RUNTIME_DIR` must be an absolute user-owned directory with mode 0700. Reuse the
+normal runtime directory, not a shared `/tmp` directory. Verify the correct live
+identities without exposing credentials:
+
+```sh
+term2 control list --status
+term2 control get coord session --json
+term2 control get worker session --json
+```
+
+Record the exact `sessionId` values. Aliases map to fixed socket names and session
+IDs. The bridge also pins each process start epoch. Socket reuse, session rollover
+or replacement never silently moves pending work into a new history.
+
+## Discord setup (only after authorization)
+
+Use a dedicated bot, a private channel, and only the required permissions: View
+Channel, Read Message History, Send Messages. Enable Message Content Intent for
+the application if required by Discord; otherwise REST may return empty message
+content. Do not grant Administrator. Configure the numeric human **user ID**, not
+a display name. The bridge itself does not create bots, join guilds, change channel
+permissions or verify that the operator's chosen channel is private.
+
+Keep the token out of JSON, commands saved in history, source, prompts and logs.
+Supply `TERM2_DISCORD_BOT_TOKEN` only to the standalone bridge process through your
+normal secret/environment mechanism. No token is needed for offline fixtures.
+The production transport is fixed to HTTPS `discord.com/api/v10`, rejects redirects,
+and does not include Discord response bodies or credentials in error messages.
+Session processes need no Discord token. Same-uid local access has the existing
+Unix-control threat model; this is not protection from a malicious same-uid agent
+or root. Persisted session permissions and approvals are still meaningful boundaries.
+
+Example `/absolute/private/discord.json` (replace every example ID/path):
+
+```json
+{
+  "channelId": "123456789012345678",
+  "humanUserId": "234567890123456789",
+  "coordinator": "coord",
+  "sessions": {
+    "coord": {"socket": "coord", "sessionId": "YOUR_EXISTING_SESSION_ID"},
+    "worker": {"socket": "worker", "sessionId": "YOUR_EXISTING_WORKER_ID"}
+  },
+  "stateDir": "/home/YOU/.local/state/term2-discord/private-channel",
+  "maxHops": 4
+}
+```
+
+Aliases are lowercase ASCII letters/digits/underscore/hyphen, start with a letter,
+and are at most 32 characters. Every alias must refer to a different socket.
+`maxHops` is 1–8, default 4. `stateDir` must be absolute, owned by this OS user,
+mode 0700. It is created if absent; its journal and ownership file are mode 0600.
+Protect config too, e.g. mode 0600. Do not reuse a state directory for another
+channel/user/mapping. A changed config is refused against the old journal rather
+than silently accepting stale routing state.
+
+```sh
+term2 discord /absolute/private/discord.json
+```
+
+Wait for `[bridge] Ready` in Discord **before sending new work**. First startup
+establishes a current-channel watermark; historical messages deliberately do not
+activate anything. Restart with unchanged config/state preserves the cursor,
+pending input and outbox. Do not delete the journal to “fix” an uncertain delivery.
+Only one bridge owns a state directory. Ctrl-C/SIGTERM stops the bridge loop after
+the current bounded operation; it does **not** stop the terminal sessions.
+
+## Mobile usage and identity
+
+* `What is the current task and recent progress?` → coordinator's existing context.
+* `@worker Inspect the current implementation` → worker's existing context.
+* A session's **final answer** starting `@worker Please inspect this` explicitly
+  targets that peer. The response remains visibly attributed as `[coord] ...`.
+  The recipient receives `agent session coord` in an untrusted server-data envelope,
+  **not** a human instruction or approval. It may reply explicitly `@coord ...`.
+* Ordinary finals are visible but wake nobody. Quoted/code-fenced targets and
+  mentions in the middle of a reply are not routing commands. No broadcast route.
+* All fetched bot and webhook messages—including the bridge's own posts—are ignored.
+  Only the configured human can originate channel input. Unknown/malformed targets
+  never fall back to coordinator. Other users are silently ignored, without leaking
+  session details. Unexpected channel data is rejected without advancing the cursor.
+* Text only; attachments, edits to previously consumed messages and message deletion
+  are not queue-edit commands. Submit a new message or use normal terminal controls.
+
+Human/peer identity is carried in the control request, terminal presentation and
+actual model/history text. The provider's transport role is still `user`, as with
+other server-delivered term2 notifications; the envelope explicitly distinguishes
+agent data from human requests, and does not confer sender permissions. This is not
+a cryptographic isolation boundary against prompt injection. Each receiving session
+retains its own tool/approval posture; do not opt in a session whose autonomous
+capabilities you do not want remotely reachable.
+
+New input uses term2's normal follow-up queue, not stale idle-history heuristics.
+Busy sessions acknowledge `queued` and answer when admitted. Remote input—human or
+peer—never answers an outstanding question/approval. The bridge visibly refuses it;
+resolve or cancel through the terminal, then send a new request if wanted. Existing
+large-input/surge confirmation guards can also refuse bridge input.
+
+## Pause, stop and bounded chains
+
+Only the configured human can issue:
+
+* `!bridge status`: bridge running/paused state and pending count. This is not a
+  real-time dump of session tools/history. Ask the session for contextual progress.
+* `!bridge pause`: prevent **new dispatch**. Already accepted work continues; new
+  human input is retained within the bounded inbox, and retained peer requests can
+  run after resume. Excess ordinary human work is explicitly refused, not queued.
+* `!bridge resume`: permit retained new work again. It grants no tool approvals.
+* `!bridge stop`: persist paused state, discard bridge-owned **not-yet-dispatched**
+  jobs, prohibit peer routing from existing jobs, then call each mapped session's
+  native interrupt. This follows the same cancellation/denial semantics as that
+  session's terminal control; it is not a separate queue-retraction API. Other
+  terminal-origin queued work follows term2's existing interrupt policy. Subsequent
+  human messages remain queued while paused only within the inbox capacity. Inspect
+  each terminal if interrupt
+  could not be confirmed; a crash during stop is retained as uncertain, not replayed
+  as a fresh interrupt against later work. Resume is always explicit.
+
+The work inbox admits at most 128 unsettled bridge jobs. At capacity, additional
+ordinary human requests receive a refusal identifying the Discord message ID and
+explicitly stating **NOT accepted**: no job is queued or sent to a session. Existing
+admitted jobs and their journal evidence are untouched by overflow. The shared
+channel cursor continues, so authorized status/resume/stop commands remain reachable
+even after excess ordinary messages and across bridge restart. Once capacity is
+available, resend wanted refused work as a new human message; it is never silently
+replayed or admitted later. Refusal notifications use the existing durable outbox
+and the same ambiguous-POST quarantine/non-replay policy as other output.
+
+Each human input is one causal root. At most `maxHops` peer deliveries may follow;
+on reaching the limit the bridge posts a notice and waits for a new human request.
+There is no ambient agent subscription and no autonomous cross-session broadcast.
+
+## Delivery, reconnect and explicit uncertainty
+
+REST polling is serial: normally one GET and at most one POST per one-second cycle,
+with bounded ten-second requests. Failures back off exponentially to 60 seconds;
+429 `retry_after` and exhausted-bucket reset hints delay further requests. No tight
+poll/retry loop and no automatic POST retransmission after an ambiguous outcome.
+Final text is capped by the control wire at 16,384 characters, visibly marked if
+truncated, split without breaking UTF-16 surrogate pairs, and attributed on every
+chunk. Truncated finals never route to a peer. `allowed_mentions` is empty on every
+POST; alias syntax is not an actual Discord mention.
+
+The private journal is written atomically and synced before an input mutation or
+Discord POST. Stable request IDs deduplicate admission in a live session (up to 256 retained
+control results; pending results are never evicted). Expired results require
+reconciliation rather than resubmission. Stable
+nonces plus `enforce_nonce` add Discord's bounded duplicate protection. Persisted
+cursor/outbox prevent ordinary replay on restart. Crash ambiguity is **not** an
+exactly-once guarantee:
+
+* Accepted input with a recoverable same-process result is read, not resubmitted.
+* Unknown/expired result or changed session identity is retained with an explicit
+  reconciliation notice. Original undecided input remains in the journal.
+* A POST interrupted before its acknowledgement is `uncertain`, never automatically
+  retried. Inspect channel history and the private outbox before deciding whether a
+  manual resend is appropriate. Discord nonce dedup alone is not permanent proof.
+* Unsent new work waits for its pinned mapping; it does not activate replacement
+  processes/histories. A deliberate session restart/rollover requires inspecting old
+  work, reconciling pending/outbox records, then an explicit fresh mapping/state
+  directory. Preserve the old journal; do not copy pending rows into a new session
+  blindly. Automated cross-process exactly-once recovery is intentionally absent.
+
+Final-feed limitation: only bridge-submitted turns and their explicit peer chains
+are correlated/forwarded. Independent terminal turns, later approval continuations,
+background worker completion notifications and other unsolicited session events are
+**not** an ambient Discord feed. A mobile query still runs in the real current session
+and sees its available context/history; it does not manufacture a separate chatbot.
+
+## Offline evidence and optional authorized live smoke
+
+```sh
+pnpm typecheck
+pnpm test:integration -- source/services/discord/discord-bridge.integration.test.ts
+pnpm test:provider-black-box
+```
+
+The integration fixture uses a loopback fake Discord HTTP API, real Unix sockets,
+real ConversationService/Orchestrator/AgentClient and a provider-boundary fixture.
+No tokens, production provider calls or external Discord traffic.
+
+After independent review and authorized bot/channel access, verify **on mobile**:
+
+1. Record both existing session IDs and a harmless terminal-only context fact in each.
+   Attach/resume explicitly as above, verify the same IDs, then wait for Ready.
+2. Ask an unaddressed question about the coordinator fact; target `@worker` for its
+   different fact. Compare actual persisted history and visible `[alias]` responses.
+3. Ask coordinator to finalize `@worker ...`; worker explicitly targets coordinator
+   back. Observe attribution in both sessions and bounded cycles, not bot echo wakes.
+4. Send an ordinary untargeted reply, unknown alias, unauthorized-user message and
+   message in another channel. Confirm only intended accepted inputs appear.
+5. Exercise busy queue, terminal approval refusal, pause/resume and native stop.
+6. Disconnect/reconnect bridge network and restart bridge against the same live
+   sessions. Check no duplicate accepted requests or duplicate acknowledged outputs.
+   Review uncertain windows rather than inferring success. Deliberate session restart
+   must refuse stale attachment. Inspect chunking/mention suppression on mobile.
+7. Revoke/rotate token only with authorization; confirm safe errors, no raw token in
+   source/log/journal, and correct recovery with the same non-secret config.
+
+Live compatibility, Message Content Intent availability, true Discord pagination and
+rate-limit behavior, actual mobile rendering and actual AI-to-AI reasoning remain
+unverified until this authorized exercise is performed. Offline fixtures do not
+establish them.

@@ -14,7 +14,7 @@ export interface UserMessage {
   consumedForAbort?: boolean;
   skill?: SkillAttachment;
   /** Transcript presentation only; the provider and persistence role remains user. */
-  presentation?: 'session_rollover';
+  presentation?: 'session_rollover' | 'server_message';
 }
 
 export interface BotMessage {

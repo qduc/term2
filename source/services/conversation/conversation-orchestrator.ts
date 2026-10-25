@@ -815,8 +815,11 @@ export class ConversationOrchestrator {
       presentation?: UserMessage['presentation'];
       onAdmitted?: (messageId: string, delivery: 'started' | 'queued' | 'steering') => void;
       onSteerSettled?: (steered: boolean) => void;
+      /** Correlated remote outcome; null means cancelled, discarded or failed. */
+      onCompleted?: (terminal: ConversationTerminal | null) => void;
     },
   ): Promise<void> {
+    let remoteTerminal: ConversationTerminal | null = null;
     const turn = normalizeUserTurn(input);
     if (!hasUserTurnContent(turn)) {
       return;
@@ -916,6 +919,10 @@ export class ConversationOrchestrator {
         this.#activeTurns += 1;
         this.config.ui.onTurnStart();
       });
+    } else if (options?.onAdmitted) {
+      // An idle remote submit must release its admission lock when the real
+      // queue starts it, not after the model finishes (which blocks interrupt).
+      this.#deferredTurnActivators.set(userMessage.id, () => reportAdmission('started'));
     }
 
     try {
@@ -965,6 +972,7 @@ export class ConversationOrchestrator {
       reportAdmission(queueOwnsSubmission ? 'queued' : 'started');
       if (result.kind === 'steered') return;
 
+      remoteTerminal = result.terminal ?? null;
       this.#settleTurn(applyConversationEvent, botResponseUpdater, result.terminal, streamingState);
     } catch (error) {
       this.logError('Error in sendUserMessage', error);
@@ -1040,6 +1048,7 @@ export class ConversationOrchestrator {
       if (turnActivated) {
         this.#endTurn();
       }
+      options?.onCompleted?.(remoteTerminal);
     }
   }
 

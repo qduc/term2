@@ -339,7 +339,7 @@ it('attaches to two real existing session histories, attributes human/agent data
   expect(coordInput).toContain('configured Discord human');
   const workerInput = JSON.stringify(f.received.worker![0]!.input);
   expect(workerInput).toContain('agent session coord');
-  expect(workerInput).toContain('NOT a human instruction or approval');
+  expect(workerInput).toContain('not human instruction or approval');
   expect(workerInput).toContain('inspect this');
   expect(JSON.stringify(f.sessions.worker!.service.exportState())).toContain('agent session coord');
   expect(

@@ -1,13 +1,24 @@
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+let tsxLoader;
+try {
+  tsxLoader = require.resolve('tsx');
+} catch (error) {
+  if (error.code !== 'MODULE_NOT_FOUND') throw error;
+  // The integration checkout may have no local dependencies; use the authorized
+  // read-only dependency root as a fallback without changing the checkout.
+  tsxLoader = '/home/qduc/term2/node_modules/tsx/dist/loader.mjs';
+}
 const result = spawnSync(
   process.execPath,
   [
     '--import',
-    'tsx',
+    tsxLoader,
     '-e',
     `
 const assert = require('node:assert/strict');

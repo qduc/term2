@@ -229,7 +229,8 @@ const cli = meow(
       $ term2 --resume <conversation-id>
       $ term2 --resume <conversation-id> "Follow-up prompt"
       $ term2 --help
-      $ term2 discord /absolute/path/discord.json
+      $ term2 discord [ /absolute/path/discord.json ]
+      $ term2 discord --save-token [ /absolute/path/discord.json ]
 
     Usage
       $ term2 [options] [prompt...]

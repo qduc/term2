@@ -55,8 +55,20 @@ a display name. The bridge itself does not create bots, join guilds, change chan
 permissions or verify that the operator's chosen channel is private.
 
 Keep the token out of JSON, commands saved in history, source, prompts and logs.
-Supply `TERM2_DISCORD_BOT_TOKEN` only to the standalone bridge process through your
-normal secret/environment mechanism. No token is needed for offline fixtures.
+Enroll once with `term2 discord --save-token` on a terminal. Input is hidden;
+setup exits without starting the bridge. Normal `term2 discord` never prompts.
+The default config is `$XDG_CONFIG_HOME/term2/discord.json`, or
+`~/.config/term2/discord.json` if XDG_CONFIG_HOME is unset (XDG must be absolute).
+Both commands also accept one absolute config path; enrollment stores
+`discord.token` beside that config. Explicit enrollment replaces the stored token.
+The selected directory must be user-owned and private (0700); credential files
+must be user-owned regular private files (0600). Symlinks and unsafe existing
+permissions are refused, not repaired. Missing directories are created privately.
+Protect backups too: the stored credential is plaintext under filesystem access control.
+
+`TERM2_DISCORD_BOT_TOKEN` on the standalone bridge process takes precedence over
+the stored credential. An empty/whitespace environment credential fails rather
+than falling back. No token is needed for offline fixtures.
 The production transport is fixed to HTTPS `discord.com/api/v10`, rejects redirects,
 and does not include Discord response bodies or credentials in error messages.
 Session processes need no Discord token. Same-uid local access has the existing
@@ -88,6 +100,8 @@ channel/user/mapping. A changed config is refused against the old journal rather
 than silently accepting stale routing state.
 
 ```sh
+term2 discord
+# Or retain an explicit config:
 term2 discord /absolute/private/discord.json
 ```
 
@@ -234,3 +248,7 @@ Live compatibility, Message Content Intent availability, true Discord pagination
 rate-limit behavior, actual mobile rendering and actual AI-to-AI reasoning remain
 unverified until this authorized exercise is performed. Offline fixtures do not
 establish them.
+
+Routine started/queued receipts are not posted for accepted human or peer jobs.
+Final replies, readiness and meaningful refusals/errors remain. Previously persisted
+receipt outbox entries may drain once; upgrading does not rewrite the journal.

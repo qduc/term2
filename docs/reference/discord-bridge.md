@@ -52,9 +52,10 @@ term2 control get coord session --json
 term2 control get worker session --json
 ```
 
-Record the exact `sessionId` values. Aliases map to fixed socket names and session
-IDs. The bridge also pins each process start epoch. Socket reuse, session rollover
-or replacement never silently moves pending work into a new history.
+Record the exact `sessionId` values. There is no fixed alias-to-socket map: live
+opted-in sessions are the aliases. Each **admitted job** pins the socket, session ID
+and process start epoch it was admitted to. Socket reuse, session rollover or
+replacement never silently moves pending work into a new history.
 
 ## Discord setup (only after authorization)
 
@@ -103,9 +104,8 @@ that explicitly opts in with `/bridge connect NAME` or the startup flags
 `--control-socket NAME --discord-input` becomes addressable as `@NAME` while its
 control advertisement is live and carries the `discordInput` opt-in marker. A
 session that does not opt in is never discovered, even if its socket exists.
-Aliases are lowercase ASCII letters/digits/underscore/hyphen, start with a letter,
-and are at most 32 characters; the alias is the opted-in session's control socket
-name. `coordinator` is only the default alias name for unaddressed human input; it
+An alias is the opted-in session's control socket name: 1–64 ASCII letters,
+digits, `_` or `-` (case-sensitive), the same grammar `/bridge connect` accepts. `coordinator` is only the default alias name for unaddressed human input; it
 does not pin a socket, session ID or process. Unaddressed text is delivered only
 while a live opted-in session with that name is attached; otherwise it is visibly
 refused and no job is created. There is no queue for a future process.

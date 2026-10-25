@@ -9,6 +9,7 @@ import {
   type DiscordSendResult,
 } from './discord-outbound.js';
 import {
+  isControlSocketName,
   listControlAdvertisements,
   readProcStartTime,
   CONTROL_MAX_FRAME_BYTES,
@@ -48,6 +49,19 @@ interface Outgoing {
   content: string;
   state: 'queued' | 'sending' | 'sent' | 'uncertain';
 }
+const outboxStates = ['queued', 'sending', 'sent', 'uncertain'];
+function validOutbox(value: unknown): value is Outgoing {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const output = value as Record<string, unknown>;
+  return (
+    Object.keys(output).length === 3 &&
+    Object.keys(output).every((key) => ['id', 'content', 'state'].includes(key)) &&
+    typeof output.id === 'string' &&
+    /^[a-f0-9]{24}$/.test(output.id) &&
+    typeof output.content === 'string' &&
+    outboxStates.includes(output.state as string)
+  );
+}
 interface Proactive {
   binding: DiscordBinding;
   requestId: string;
@@ -67,7 +81,6 @@ interface Journal {
   jobs: Job[];
   outbox: Outgoing[];
 }
-const aliasPattern = /^[a-z][a-z0-9_-]{0,31}$/;
 const snowflakePattern = /^[0-9]{1,24}$/;
 
 function validBinding(value: unknown): value is Binding {
@@ -96,7 +109,7 @@ function validJob(value: unknown): value is Job {
     typeof job.id === 'string' &&
     /^[A-Za-z0-9_-]{1,128}$/.test(job.id) &&
     typeof job.alias === 'string' &&
-    aliasPattern.test(job.alias) &&
+    isControlSocketName(job.alias) &&
     typeof job.text === 'string' &&
     typeof job.hops === 'number' &&
     Number.isInteger(job.hops) &&
@@ -108,7 +121,7 @@ function validJob(value: unknown): value is Job {
     Object.keys(source).length === 2 &&
     ['human', 'agent'].includes(source.kind as string) &&
     typeof source.sender === 'string' &&
-    (source.kind === 'human' ? snowflakePattern.test(source.sender) : aliasPattern.test(source.sender))
+    (source.kind === 'human' ? snowflakePattern.test(source.sender) : isControlSocketName(source.sender))
   );
 }
 
@@ -128,7 +141,7 @@ export function parseDiscordBridgeConfig(value: unknown): DiscordBridgeConfig {
     typeof config.humanUserId !== 'string' ||
     !snowflakePattern.test(config.humanUserId) ||
     typeof config.coordinator !== 'string' ||
-    !aliasPattern.test(config.coordinator) ||
+    !isControlSocketName(config.coordinator) ||
     typeof config.stateDir !== 'string' ||
     !path.isAbsolute(config.stateDir)
   )
@@ -298,8 +311,15 @@ export class DiscordBridge {
         if (
           this.#journal.v !== 2 ||
           this.#journal.fingerprint !== fingerprint ||
+          typeof this.#journal.cursor !== 'string' ||
+          !/^([0-9]{1,24})?$/.test(this.#journal.cursor) ||
+          typeof this.#journal.paused !== 'boolean' ||
+          (this.#journal.stopPending !== undefined && typeof this.#journal.stopPending !== 'boolean') ||
+          (this.#journal.retryAt !== undefined &&
+            (typeof this.#journal.retryAt !== 'number' || !Number.isFinite(this.#journal.retryAt))) ||
           !Array.isArray(this.#journal.jobs) ||
           !Array.isArray(this.#journal.outbox) ||
+          !this.#journal.outbox.every(validOutbox) ||
           Object.keys(this.#journal).some(
             (key) =>
               ![
@@ -341,7 +361,8 @@ export class DiscordBridge {
           typeof entry.digest !== 'string' ||
           !/^[a-f0-9]{64}$/.test(entry.digest) ||
           !validBinding(entry.binding) ||
-          !aliasPattern.test(entry.alias) ||
+          typeof entry.alias !== 'string' ||
+          !isControlSocketName(entry.alias) ||
           entry.channelId !== this.#config.channelId ||
           !Array.isArray(entry.outputs) ||
           !entry.outputs.length ||
@@ -529,7 +550,7 @@ export class DiscordBridge {
 
   /** Live aliases come only from explicitly opted-in control advertisements; there is no cache. */
   #attached(): Record<string, Binding> {
-    const attached: Record<string, Binding> = {};
+    const attached = Object.create(null) as Record<string, Binding>;
     for (const ad of listControlAdvertisements(this.#runtimeDir)) {
       if (ad.discordInput !== true) continue;
       attached[ad.name] = { socketPath: ad.socketPath, sessionId: ad.sessionId, startedAt: ad.startedAt };
@@ -754,9 +775,8 @@ export class DiscordBridge {
           this.#save();
           continue;
         }
-        try {
-          this.#binding(job.alias);
-        } catch {
+        const live = this.#attached()[job.alias];
+        if (!live || !sameDiscordBinding(live, job.binding)) {
           job.state = 'uncertain';
           this.#post(
             `${job.id}_uncertain`,

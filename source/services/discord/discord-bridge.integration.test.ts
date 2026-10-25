@@ -348,6 +348,146 @@ async function fixture(
   };
 }
 
+it('refuses inherited object names as absent aliases and keeps the journal reopenable', async () => {
+  const f = await fixture({ attach: [] });
+  await f.cycle();
+  const refused = f.human('@constructor inspect status');
+  await f.cycle();
+  expect(f.posted.some((message) => message.content.includes('Target constructor is not attached'))).toBe(true);
+  expect(f.journal().jobs).toHaveLength(0);
+  expect(BigInt(f.journal().cursor) >= BigInt(refused.id)).toBe(true);
+  expect(() => f.restart()).not.toThrow();
+  await f.cycle();
+});
+
+it('accepts any supported control-socket name as an alias and reopens its journal', async () => {
+  const f = await fixture({ attach: [] });
+  await f.cycle();
+  await f.attach('Worker');
+  f.human('@Worker hello');
+  await f.cycle(6);
+  expect(f.received.Worker).toHaveLength(1);
+  expect(f.posted.some((message) => message.content === '[Worker] Worker answer')).toBe(true);
+  expect(f.journal().jobs.at(-1).binding).toEqual(f.binding('Worker'));
+  expect(() => f.restart()).not.toThrow();
+  await f.cycle(3);
+  expect(f.received.Worker).toHaveLength(1);
+});
+
+it('moves an accepted job to uncertainty when its alias is replaced', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const f = await fixture({
+    respond: async (alias) => {
+      if (alias === 'worker') await gate;
+      return 'worker done';
+    },
+  });
+  await f.cycle();
+  f.human('@worker slow work');
+  await f.cycle(2);
+  const job = f.journal().jobs.find((entry: any) => entry.alias === 'worker');
+  expect(job.state).toBe('accepted');
+  await f.detach('worker');
+  await f.attach('worker', { sessionId: 'replacement-session' });
+  await f.cycle(3);
+  expect(f.journal().jobs.find((entry: any) => entry.id === job.id).state).toBe('uncertain');
+  expect(f.posted.some((message) => message.content.includes('Session identity changed or disconnected'))).toBe(true);
+  expect(f.posted.some((message) => message.content.includes('worker done'))).toBe(false);
+  // Only the original process received the admitted turn.
+  expect(f.received.worker).toHaveLength(1);
+  release();
+  await f.cycle(1);
+});
+
+it('refuses malformed v2 journal shapes without rewriting the file', async () => {
+  const f = await fixture({ attach: [] });
+  const binding = { socketPath: path.join(f.root, 'absent.sock'), sessionId: 'absent', startedAt: '1' };
+  const reject = (mutate: (journal: any) => void) => {
+    const stateDir = fs.mkdtempSync(path.join(f.root, 'shape-'));
+    fs.chmodSync(stateDir, 0o700);
+    const config = { ...f.config, stateDir };
+    const bridge = new DiscordBridge(config, 'SYNTHETIC_TOKEN', { runtimeDir: f.root, apiBase: f.apiBase });
+    bridge.open();
+    bridge.close();
+    const file = path.join(stateDir, 'journal.json');
+    const journal = JSON.parse(fs.readFileSync(file, 'utf8'));
+    mutate(journal);
+    const bytes = Buffer.from(JSON.stringify(journal));
+    fs.writeFileSync(file, bytes, { mode: 0o600 });
+    expect(() =>
+      new DiscordBridge(config, 'SYNTHETIC_TOKEN', { runtimeDir: f.root, apiBase: f.apiBase }).open(),
+    ).toThrow();
+    expect(fs.readFileSync(file).equals(bytes)).toBe(true);
+  };
+  reject((journal) => {
+    journal.paused = 'false';
+  });
+  reject((journal) => {
+    delete journal.cursor;
+  });
+  reject((journal) => {
+    journal.outbox.push({ id: 42, content: 7, state: 'oops', extra: true });
+  });
+  reject((journal) => {
+    journal.proactive.push({
+      binding,
+      requestId: 'missing_alias',
+      digest: 'a'.repeat(64),
+      channelId: '200',
+      outputs: [],
+    });
+  });
+});
+
+it('prints migration instructions from the CLI for an old config or v1 journal without rewriting state', async () => {
+  const f = await fixture({ attach: [] });
+  const runtime = path.join(f.root, 'runtime');
+  fs.mkdirSync(runtime, { mode: 0o700 });
+  const run = (configPath: string) => {
+    const code =
+      'import {runDiscordBridge} from "./source/services/discord/discord-command.ts"; await runDiscordBridge(process.argv.slice(1));';
+    return spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code, configPath], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      timeout: 20_000,
+      env: {
+        PATH: process.env.PATH,
+        NODE_ENV: 'test',
+        XDG_RUNTIME_DIR: runtime,
+        TERM2_DISCORD_BOT_TOKEN: 'FAKE_SECRET_MUST_NOT_PRINT',
+      },
+    });
+  };
+  const oldConfig = path.join(f.root, 'old-config.json');
+  fs.writeFileSync(
+    oldConfig,
+    JSON.stringify({ ...f.config, sessions: { coord: { socket: 'coord', sessionId: 'legacy' } } }),
+  );
+  const pinned = run(oldConfig);
+  expect(pinned.status, pinned.stderr).toBe(1);
+  expect(pinned.stderr).toContain('pinned-session config schema was replaced');
+  expect(pinned.stderr).toContain('archive the old state directory unchanged');
+  expect(pinned.stdout + pinned.stderr).not.toContain('FAKE_SECRET_MUST_NOT_PRINT');
+
+  const stateDir = path.join(f.root, 'legacy-cli');
+  fs.mkdirSync(stateDir, { mode: 0o700 });
+  const journalFile = path.join(stateDir, 'journal.json');
+  const legacy = Buffer.from(
+    JSON.stringify({ v: 1, fingerprint: 'x', cursor: '1', paused: false, bindings: {}, jobs: [], outbox: [] }),
+  );
+  fs.writeFileSync(journalFile, legacy, { mode: 0o600 });
+  const configPath = path.join(f.root, 'fresh-config.json');
+  fs.writeFileSync(configPath, JSON.stringify({ ...f.config, stateDir }));
+  const oldJournal = run(configPath);
+  expect(oldJournal.status, oldJournal.stderr).toBe(1);
+  expect(oldJournal.stderr).toContain('journal version, shape or config fingerprint mismatch');
+  expect(oldJournal.stderr).toContain('archive the existing state directory unchanged');
+  expect(fs.readFileSync(journalFile).equals(legacy)).toBe(true);
+}, 40_000);
+
 it('opens without an attached session, refuses unaddressed input and attaches a live session later', async () => {
   const f = await fixture({ attach: [] });
   await f.cycle();
@@ -449,8 +589,8 @@ it('delivers a late-attached session discord_send with attribution and consisten
       'return await tools.discord_send({action:"status",requestId:"late_send"})',
     ],
   });
-  await f.attach('coord');
   await f.bridge().listenOutbound();
+  await f.attach('coord');
   await f.sessions.coord!.orchestrator.sendUserMessage('Notify the human from the late session.');
   expect(f.journal().proactive).toHaveLength(1);
   expect(f.journal().proactive[0].alias).toBe('coord');

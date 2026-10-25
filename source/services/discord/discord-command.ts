@@ -34,10 +34,15 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
       await bridge.tick();
       if (!stopping) await setTimeout(1000);
     }
-  } catch {
-    process.stderr.write(
-      '[discord] Bridge stopped: check config, private state directory, credentials and attached sessions. Enroll on a TTY with term2 discord --save-token [absolute-config-path]. Credentials and payloads redacted.\n',
-    );
+  } catch (error) {
+    // Fixed guidance only: never echo config values, credentials or arbitrary error text.
+    const message = error instanceof Error ? error.message : '';
+    const guidance = message.includes('Pinned-session schema')
+      ? 'the pinned-session config schema was replaced; remove "sessions" from config, archive the old state directory unchanged and use a fresh stateDir'
+      : message.includes('journal')
+      ? 'journal version, shape or config fingerprint mismatch; archive the existing state directory unchanged and use a fresh stateDir'
+      : 'check config, private state directory, credentials and attached sessions. Enroll on a TTY with term2 discord --save-token [absolute-config-path]';
+    process.stderr.write(`[discord] Bridge stopped: ${guidance}. Credentials and payloads redacted.\n`);
     process.exitCode = 1;
   } finally {
     process.off('SIGINT', stop);

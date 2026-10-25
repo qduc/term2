@@ -137,8 +137,8 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
           { id: 'environment', source: 'environment' },
         ],
       },
-      // Bare carries no tool for what the shell can do: file reads, search,
-      // edits, and skill loading (skills supplies only the catalog) all go
+      // Bare exposes read_file for visual image inspection; other file reads,
+      // search, edits, and skill loading (skills supplies only the catalog) go
       // through the shell. web, memory, sessions, and mcp have no shell
       // equivalent; they are run_code script tools, so they add catalogue
       // entries rather than direct schemas. background-tasks adds the shell's

@@ -591,11 +591,11 @@ export const getAgentDefinition = (
   }
 
   {
-    if (filesystemReadEnabled) {
+    if (filesystemReadEnabled || bareMode) {
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
       // Search is a read capability: it is gated on read plus the setting, never
       // on write authority or the editing surface.
-      if (!searchViaShell) {
+      if (filesystemReadEnabled && !searchViaShell) {
         tools.push(
           createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }),
           createFindFilesToolDefinition({ executionContext, sessionAccess, settingsService }),

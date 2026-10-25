@@ -13552,6 +13552,127 @@
       "comparison": {
         "resolves_run_ids": ["2026-10-25-discord-send-provider-pty-timeout"]
       }
+    },
+    {
+      "id": "2026-10-25-discord-send-scripted-result-fix",
+      "recorded_on": "2026-10-25",
+      "run_at": "2026-10-25T12:42:03.490133+00:00",
+      "commit": "aa106537bb8c13085ef01dc49d5dd90b41f5a210",
+      "revision_kind": "committed_fix_with_explicit_dirty_precursors",
+      "base_commit": "9dc1993b15d2ea773af39105438128b688232b96",
+      "suite": "discord-scripted-result-fix",
+      "command": "See checks for exact commands and snapshots",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "network": "offline model fixture, private Unix socket, loopback HTTP only"
+      },
+      "checks": [
+        {
+          "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t 'returns usable send and status'",
+          "snapshot": "dirty base 9dc1993b with new acceptance tests, before executor fix",
+          "exit_code": 1,
+          "passed": 0,
+          "failed": 2,
+          "skipped": 28,
+          "evidence": "send-fix-evidence/red.log",
+          "failure": "Bare and Standard: success false, diagnosticCode invalid_tool_output after successful admission/POST"
+        },
+        {
+          "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts",
+          "snapshot": "dirty after executor fix, before assertion-envelope correction",
+          "exit_code": 1,
+          "passed": 28,
+          "failed": 2,
+          "skipped": 0,
+          "evidence": "send-fix-evidence/discord.log",
+          "failure": "Fixture assertion attempted JSON.parse on existing Result:\\n prefix; corrected test parser, not product output"
+        },
+        {
+          "command": "pnpm typecheck",
+          "snapshot": "dirty before test typing correction",
+          "exit_code": 1,
+          "evidence": "send-fix-evidence/typecheck.log",
+          "failure": "TS2339 missing runCodeExecution in streamed input union; TS2554 formatter requires third argument. Corrected test-only metadata projection and Map argument."
+        },
+        {
+          "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t 'returns usable send and status|requires a root dependency'",
+          "snapshot": "dirty before typing-only correction",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "skipped": 27,
+          "evidence": "send-fix-evidence/focused.log"
+        },
+        {
+          "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts",
+          "snapshot": "dirty before typing-only correction",
+          "exit_code": 0,
+          "passed": 30,
+          "failed": 0,
+          "skipped": 0,
+          "evidence": "send-fix-evidence/discord-green.log"
+        },
+        {
+          "command": "pnpm test",
+          "snapshot": "dirty before typing-only correction",
+          "exit_code": 0,
+          "files": 7,
+          "passed": 28,
+          "failed": 0,
+          "skipped": 0,
+          "evidence": "send-fix-evidence/static.log"
+        },
+        {
+          "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/tools/system/run-code/shell.integration.test.ts",
+          "snapshot": "final dirty source before commit",
+          "exit_code": 0,
+          "files": 2,
+          "passed": 42,
+          "failed": 0,
+          "skipped": 0,
+          "evidence": "send-fix-evidence/regression-final.log"
+        },
+        {
+          "command": "pnpm typecheck",
+          "snapshot": "final dirty source before commit",
+          "exit_code": 0,
+          "evidence": "send-fix-evidence/typecheck-final.log"
+        },
+        {
+          "command": "pnpm build",
+          "snapshot": "final dirty source before commit",
+          "exit_code": 0,
+          "evidence": "send-fix-evidence/build-final.log"
+        },
+        {
+          "command": "pnpm lint",
+          "snapshot": "final dirty source before commit",
+          "exit_code": 0,
+          "warnings": 31,
+          "errors": 0,
+          "evidence": "send-fix-evidence/lint-final.log"
+        },
+        {
+          "command": "git diff --check",
+          "snapshot": "final dirty source before commit",
+          "exit_code": 0
+        },
+        {
+          "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/tools/system/run-code/shell.integration.test.ts",
+          "snapshot": "clean committed source aa106537bb8c13085ef01dc49d5dd90b41f5a210",
+          "exit_code": 0,
+          "files": 2,
+          "passed": 42,
+          "failed": 0,
+          "skipped": 0,
+          "evidence": "send-fix-evidence/committed-regression.log"
+        }
+      ],
+      "task_ids": ["2026-10-25-discord-send-scripted-result-fix"],
+      "notes": "Author evidence only; independent verification not performed. Follow-up reviewer owns acceptance. No live activation, primary edits, secrets, paid APIs or restarts. Prior provider and full-integration intermittent failures are not reclassified or claimed fixed."
     }
   ]
 }

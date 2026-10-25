@@ -20,12 +20,10 @@ function isLiveRolloverTask(task: SessionRolloverTaskInventoryEntry): boolean {
 
 export function composeSessionRolloverBrief({
   previousSessionId,
-  successorSessionId,
   request,
   taskInventory = [],
 }: {
   previousSessionId: string;
-  successorSessionId: string;
   request: SessionRolloverRequest;
   taskInventory?: readonly SessionRolloverTaskInventoryEntry[];
 }): string {
@@ -33,12 +31,15 @@ export function composeSessionRolloverBrief({
   const inventory =
     liveTasks.length === 0
       ? ['- none observed at cutover']
-      : liveTasks.map((task) => `- ${task.kind} \`${task.id}\` status: ${task.status}`);
+      : [
+          ...liveTasks.map((task) => `- ${task.kind} \`${task.id}\` status: ${task.status}`),
+          '',
+          'These handles survived the rollover; inspect or control them through the background-task tools.',
+        ];
   return [
     '# Continuation briefing',
     '',
     `Previous session: \`${previousSessionId}\``,
-    `Outcome: completed into successor session \`${successorSessionId}\``,
     `Reason: ${reasonLabel(request.reason)}`,
     '',
     '## Harness-observed live work at cutover',
@@ -51,13 +52,8 @@ export function composeSessionRolloverBrief({
     '',
     '## Continuation protocol',
     '',
-    '- Treat a self-contained handoff as the primary authority. If it explicitly names one canonical durable artifact, treat the handoff as a delta and that artifact as authoritative; do not duplicate the full state in both places.',
-    '- If predecessor detail is missing, read `session_read({ id: "previous", ... })` directly with bounded limits.',
-    '- Use `session_search` only when the relevant session or location is unknown.',
-    '- Do not replay the entire previous transcript.',
-    '- Live job and subagent handles remain session-owned and are retained across this rollover; inspect or control them through the background-task tools when needed. Use durable artifacts, paths, and commits for completed results rather than copying transient output into the handoff.',
-    '- User constraints and preferences stated in the handoff still apply.',
-    '- Before building on state the handoff marks unverified, or that the workspace may have changed since cutover, check it cheaply first.',
-    '- Continue from the next open step rather than redoing completed work.',
+    '- The handoff is authoritative. If it names a canonical durable artifact, that artifact holds the state and the handoff is a delta.',
+    '- For missing detail, read `session_read({ id: "previous", ... })` with bounded limits; use `session_search` only when the location is unknown. Do not replay the whole transcript.',
+    '- Check state the handoff marks unverified, or that may have changed since cutover, before building on it.',
   ].join('\n');
 }

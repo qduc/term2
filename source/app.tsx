@@ -554,7 +554,6 @@ const App: FC<AppProps> = ({
     });
     const briefing = composeSessionRolloverBrief({
       previousSessionId: sourceSessionId,
-      successorSessionId,
       request,
       taskInventory,
     });

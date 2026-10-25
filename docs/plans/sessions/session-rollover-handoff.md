@@ -51,6 +51,15 @@ did the real work; the successor protocol correspondingly carries constraints
 forward and checks unverified state before building on it. No real-run
 comparison has yet measured this wording against the earlier one.
 
+On 2026-10-25 the successor-side continuation protocol was condensed from eight
+bullets to three, cutting the wrapper from roughly 1,280 to 630 characters. It
+keeps the handoff/artifact authority rule, the read-`previous`-first retrieval
+order (the one bullet the retrieval study supports), and the unverified-state
+check. "Constraints still apply", "continue from the next open step", and the
+separate no-replay bullet were dropped as restating what a good brief already
+carries. The live-handle guidance now appears only when the inventory lists
+live tasks. Like the 09-25 wording, this version is unmeasured.
+
 The implementation slice is complete. The session-tool retrieval study is also
 complete: `e8015e7a` captured the seven-session/79-call naturalistic baseline,
 and the later controlled phase ran six serial interactive cells across three

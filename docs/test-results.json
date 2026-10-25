@@ -9918,6 +9918,42 @@
         },
         "unknowns": ["Independent verifier effort and cost", "Actual parent acceptance timestamp"]
       }
+    },
+    {
+      "id": "2026-10-25-condense-rollover-continuation-protocol-author",
+      "task_ids": ["2026-10-25-condense-rollover-continuation-protocol"],
+      "commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "snapshot": "dirty working tree in primary checkout; also contains unrelated uncommitted registry.ts change",
+      "timestamp": "2026-10-25T06:41:50+00:00",
+      "environment": "Linux, Node v24.19.0; primary checkout",
+      "commands": [
+        "pnpm exec tsc --noEmit -p .",
+        "pnpm exec eslint source/services/session-rollover/session-rollover-brief.ts source/app.tsx",
+        "vitest integration: source/lib/context-compaction.integration.test.ts source/services/conversation/session-index/session-index-recovery.integration.test.ts",
+        "temporary tsx render of composeSessionRolloverBrief with and without live tasks"
+      ],
+      "results": {
+        "typecheck": {
+          "exit_code": 0
+        },
+        "lint": {
+          "exit_code": 0,
+          "warnings": 3,
+          "errors": 0
+        },
+        "integration": {
+          "files": 2,
+          "passed": 27,
+          "failed": 0
+        },
+        "temporary_script": {
+          "exit_code": 0,
+          "assertions": "Wrapper overhead 628 chars without live tasks (was 1278); completed task filtered out; handle note shown only with live tasks"
+        }
+      },
+      "failures": [],
+      "uncertain": ["No real rollover run exercised the new wording"],
+      "evidence": "Lint warnings are pre-existing react-hooks deps in app.tsx; temporary render script under /tmp/rb."
     }
   ]
 }

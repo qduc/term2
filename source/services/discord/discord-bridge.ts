@@ -125,11 +125,27 @@ function validJob(value: unknown): value is Job {
   );
 }
 
+export type DiscordStateErrorCode = 'pinned_session_schema' | 'journal_state';
+
+/** Tag state/schema failures so callers map fixed guidance without parsing error text. */
+function stateError(code: DiscordStateErrorCode, message: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+/** Explicit discriminator for bridge schema/journal failures; everything else stays generic. */
+export function discordStateErrorCode(error: unknown): DiscordStateErrorCode | undefined {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return code === 'pinned_session_schema' || code === 'journal_state' ? code : undefined;
+}
+
 /** Validate a private single-channel bridge configuration; no token belongs in this file. */
 export function parseDiscordBridgeConfig(value: unknown): DiscordBridgeConfig {
   const config = value as DiscordBridgeConfig;
   if (config && typeof config === 'object' && Object.hasOwn(config, 'sessions'))
-    throw new Error('Pinned-session schema has been replaced; archive old state and use a fresh stateDir/config');
+    throw stateError(
+      'pinned_session_schema',
+      'Pinned-session schema has been replaced; archive old state and use a fresh stateDir/config',
+    );
   if (
     !config ||
     typeof config !== 'object' ||
@@ -336,9 +352,13 @@ export class DiscordBridge {
           ) ||
           (this.#journal.proactive !== undefined && !Array.isArray(this.#journal.proactive))
         )
-          throw new Error('Discord journal/config mismatch; archive old state and use a fresh stateDir');
+          throw stateError(
+            'journal_state',
+            'Discord journal/config mismatch; archive old state and use a fresh stateDir',
+          );
         for (const job of this.#journal.jobs)
-          if (!validJob(job)) throw new Error('Invalid v2 Discord journal; archive old state and use a fresh stateDir');
+          if (!validJob(job))
+            throw stateError('journal_state', 'Invalid v2 Discord journal; archive old state and use a fresh stateDir');
         if (this.#journal.stopPending)
           this.#warn('Previous stop outcome uncertain; routing remains paused. Check each terminal before resume.');
         for (const output of this.#journal.outbox)
@@ -380,7 +400,7 @@ export class DiscordBridge {
             (other) => other.requestId === entry.requestId && sameDiscordBinding(other.binding, entry.binding),
           ).length !== 1
         )
-          throw new Error('Invalid proactive Discord journal; reconciliation required');
+          throw stateError('journal_state', 'Invalid proactive Discord journal; reconciliation required');
       }
       this.#retryAt = this.#journal.retryAt ?? 0;
       this.#save();
@@ -695,11 +715,27 @@ export class DiscordBridge {
           if (this.#journal.paused) continue;
           job.state = 'dispatching';
           this.#save();
-          const receipt = await callDiscordControl(binding.socketPath, 'bridge_submit', {
-            ...params,
-            text: job.text,
-            origin: job.origin,
-          });
+          let receipt: any;
+          try {
+            receipt = await callDiscordControl(binding.socketPath, 'bridge_submit', {
+              ...params,
+              text: job.text,
+              origin: job.origin,
+            });
+          } catch (error) {
+            // Only the admission mutation may settle a job as denied. A rejected read-only
+            // result query below keeps the retained/uncertain recovery path instead.
+            if ((error as { code?: string }).code) {
+              job.state = 'done';
+              this.#post(
+                `${job.id}_denied`,
+                `[bridge → ${job.alias}] Control rejected admission; check session opt-in. Original input retained in journal, not retried.`,
+              );
+              this.#save();
+              continue;
+            }
+            throw error;
+          }
           if (!['started', 'queued', 'steering'].includes(receipt.delivery)) {
             job.state = 'done';
             this.#post(
@@ -755,16 +791,9 @@ export class DiscordBridge {
         job.state = 'done';
         job.text = '';
         this.#save();
-      } catch (error) {
-        if ((error as { code?: string }).code && job.state === 'dispatching') {
-          job.state = 'done';
-          this.#post(
-            `${job.id}_denied`,
-            `[bridge → ${job.alias}] Control rejected admission; check session opt-in. Original input retained in journal, not retried.`,
-          );
-          this.#save();
-          continue;
-        }
+      } catch {
+        // A coded failure here came from the read-only result query; the admission mutation
+        // classifies its own rejection above, so a dispatching row is never settled as denied.
         // If the session was temporarily unavailable after a dispatch, read-only recovery
         // on the next tick is safe; never send a second mutation automatically.
         if (job.state === 'new') {

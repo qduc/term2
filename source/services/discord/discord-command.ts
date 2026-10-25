@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { discordConfigPath, loadDiscordToken, promptDiscordToken, saveDiscordToken } from './discord-credentials.js';
 import { setTimeout } from 'node:timers/promises';
-import { DiscordBridge, parseDiscordBridgeConfig } from './discord-bridge.js';
+import { DiscordBridge, discordStateErrorCode, parseDiscordBridgeConfig } from './discord-bridge.js';
 
 /** Run the opt-in bridge until SIGINT/SIGTERM; credentials stay at the bridge boundary and are never logged. */
 export async function runDiscordBridge(argv: string[]): Promise<void> {
@@ -36,12 +36,13 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
     }
   } catch (error) {
     // Fixed guidance only: never echo config values, credentials or arbitrary error text.
-    const message = error instanceof Error ? error.message : '';
-    const guidance = message.includes('Pinned-session schema')
-      ? 'the pinned-session config schema was replaced; remove "sessions" from config, archive the old state directory unchanged and use a fresh stateDir'
-      : message.includes('journal')
-      ? 'journal version, shape or config fingerprint mismatch; archive the existing state directory unchanged and use a fresh stateDir'
-      : 'check config, private state directory, credentials and attached sessions. Enroll on a TTY with term2 discord --save-token [absolute-config-path]';
+    const code = discordStateErrorCode(error);
+    const guidance =
+      code === 'pinned_session_schema'
+        ? 'the pinned-session config schema was replaced; remove "sessions" from config, archive the old state directory unchanged and use a fresh stateDir'
+        : code === 'journal_state'
+        ? 'journal version, shape or config fingerprint mismatch; archive the existing state directory unchanged and use a fresh stateDir'
+        : 'check config, private state directory, credentials and attached sessions. Enroll on a TTY with term2 discord --save-token [absolute-config-path]';
     process.stderr.write(`[discord] Bridge stopped: ${guidance}. Credentials and payloads redacted.\n`);
     process.exitCode = 1;
   } finally {

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createServer, type Server } from 'node:http';
+import { createServer as createNetServer } from 'node:net';
 import { once } from 'node:events';
 import { spawn, spawnSync } from 'node:child_process';
 import {
@@ -402,6 +403,87 @@ it('moves an accepted job to uncertainty when its alias is replaced', async () =
   await f.cycle(1);
 });
 
+it('keeps a recovered dispatching job uncertain when its read-only result query is rejected', async () => {
+  const f = await fixture({ attach: ['coord'] });
+  await f.cycle();
+  const startedAt = f.binding('coord').startedAt;
+  const socketPath = path.join(f.root, 'recovered.sock');
+  const methods: string[] = [];
+  const advertisementPath = path.join(f.root, 'term2', 'control', 'recovered.json');
+  const server = createNetServer((socket) => {
+    let buffered = '';
+    socket.on('data', (chunk) => {
+      buffered += chunk.toString('utf8');
+      let newline: number;
+      while ((newline = buffered.indexOf('\n')) >= 0) {
+        const request = JSON.parse(buffered.slice(0, newline));
+        buffered = buffered.slice(newline + 1);
+        methods.push(request.method);
+        if (request.method === 'hello') {
+          socket.write(JSON.stringify({ v: 1, id: 'hello', ok: true, result: { v: 1, capabilities: [] } }) + '\n');
+          continue;
+        }
+        // The replacement identity becomes visible only after the query has been admitted.
+        const advertisement = JSON.parse(fs.readFileSync(advertisementPath, 'utf8'));
+        fs.writeFileSync(advertisementPath, JSON.stringify({ ...advertisement, sessionId: 'replacement-session' }), {
+          mode: 0o600,
+        });
+        socket.write(
+          JSON.stringify({
+            v: 1,
+            id: 'call',
+            ok: false,
+            error: { code: 'conflict', message: 'Session identity changed; remap explicitly' },
+          }) + '\n',
+        );
+      }
+    });
+    socket.on('error', noop);
+  });
+  await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+  cleanup.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const binding = { socketPath, sessionId: 'retired-session', startedAt };
+  f.bridge().close();
+  const journal = f.journal();
+  journal.jobs.push({
+    id: 'discord_recovered',
+    alias: 'recovered',
+    text: 'retained in-flight input',
+    origin: { kind: 'human', sender: '100' },
+    hops: 0,
+    state: 'dispatching',
+    binding,
+  });
+  fs.writeFileSync(path.join(f.config.stateDir, 'journal.json'), JSON.stringify(journal), { mode: 0o600 });
+  fs.writeFileSync(
+    advertisementPath,
+    JSON.stringify({
+      v: 1,
+      name: 'recovered',
+      pid: process.pid,
+      startedAt,
+      sessionId: binding.sessionId,
+      socketPath,
+      cwd: f.root,
+      host: os.hostname(),
+      discordInput: true,
+    }),
+    { mode: 0o600 },
+  );
+  f.restart();
+  await f.cycle(3);
+  expect(f.journal().jobs.find((entry: any) => entry.id === 'discord_recovered').state).toBe('uncertain');
+  expect(f.posted.some((message) => message.content.includes('Session identity changed or disconnected'))).toBe(true);
+  expect(f.posted.some((message) => message.content.includes('Control rejected admission'))).toBe(false);
+  expect(methods).not.toContain('bridge_submit');
+  // Uncertainty is durable: a reload neither delivers nor queries the replacement again.
+  const queried = methods.length;
+  f.restart();
+  await f.cycle(2);
+  expect(f.journal().jobs.find((entry: any) => entry.id === 'discord_recovered').state).toBe('uncertain');
+  expect(methods).toHaveLength(queried);
+});
+
 it('refuses malformed v2 journal shapes without rewriting the file', async () => {
   const f = await fixture({ attach: [] });
   const binding = { socketPath: path.join(f.root, 'absent.sock'), sessionId: 'absent', startedAt: '1' };
@@ -486,6 +568,20 @@ it('prints migration instructions from the CLI for an old config or v1 journal w
   expect(oldJournal.stderr).toContain('journal version, shape or config fingerprint mismatch');
   expect(oldJournal.stderr).toContain('archive the existing state directory unchanged');
   expect(fs.readFileSync(journalFile).equals(legacy)).toBe(true);
+
+  // Unknown failures stay generic even when their own text or filename mentions journals.
+  const missing = run(path.join(f.root, 'journal-missing.json'));
+  expect(missing.status, missing.stderr).toBe(1);
+  expect(missing.stderr).toContain('check config, private state directory, credentials and attached sessions');
+  expect(missing.stderr).not.toContain('archive the existing state directory unchanged');
+
+  const brokenPath = path.join(f.root, 'broken-journal.json');
+  fs.writeFileSync(brokenPath, '{"journal": bad}');
+  const broken = run(brokenPath);
+  expect(broken.status, broken.stderr).toBe(1);
+  expect(broken.stderr).toContain('check config, private state directory, credentials and attached sessions');
+  expect(broken.stderr).not.toContain('archive the existing state directory unchanged');
+  expect(broken.stdout + broken.stderr).not.toContain('FAKE_SECRET_MUST_NOT_PRINT');
 }, 40_000);
 
 it('opens without an attached session, refuses unaddressed input and attaches a live session later', async () => {

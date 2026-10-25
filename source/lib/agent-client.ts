@@ -213,7 +213,7 @@ export class AgentClient {
 
   #resolveStreamedModel(selectedModel: string): StreamedModelTurn | Promise<StreamedModelTurn> {
     const providerId = this.#agentConfig.getProvider();
-    const provider = getProvider(providerId);
+    const provider = getProvider(providerId, this.#providerRegistry);
     if (!provider?.createStreamedModel) {
       throw new Error(`Provider '${providerId}' does not expose an application streamed model.`);
     }

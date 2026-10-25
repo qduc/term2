@@ -391,7 +391,9 @@ The September 6 invalid-chain incident supersedes the historical per-logical-
 turn retry envelope below: the shared budget now bounds consecutive recovery
 episodes. ApplicationRunLoop ends an episode only after accepting a terminal
 model completion; partial output, failed streams, and tool activity do not reset
-it. Limits remain 90,000ms / 3 recovery dispatches / 1 automatic replay. Separate
+it. Ordinary failures retain 90,000ms / 3 recovery dispatches / 1 automatic
+replay. The authorized zero-frame timeout exception below uses configured retry
+counts and excludes measured receive silence, not recovery overhead. Separate
 total-run containment is unchanged. See
 [the incident contract and red proof](../../research/invalid-chain-worker-recovery.md).
 The old lifetime allowed 15 minutes of successful work after a recovered failure
@@ -2113,6 +2115,61 @@ PASS 558 files; 1 skipped. 7135 tests; 3 expected fail, 2 skipped. Emitted the
 existing TimeoutNaNWarning; no test failed.
 ```
 
+
+### Authorized zero-frame ambiguous timeout recovery (2026-10-25)
+
+Class: receive-inactivity watchdog plus bounded recovery admission. Owners:
+`createWebSocketReceiveWatchdog`, `DefaultRetryClassifier`,
+`RetryRecoveryBudget.claimZeroFrameTimeoutRecovery`, and the initial/continuation
+session recovery handlers. The prior ambiguous-timeout refusal implemented the
+old policy; this is an explicit user-authorized exception, not evidence that
+silence proves the provider did no work. No resume/idempotency guarantee exists.
+
+Signal: `AmbiguousModelOutcomeError` with an immediate
+`WebSocketReceiveTimeoutError` cause, `phase: first_frame`, `frameCount: 0`.
+Timeout wording, nested unrelated causes, received frames, non-timeout ambiguity,
+partial output, cancellation, and unsettled/unknown/missing tool pairs do not
+qualify. Settled-tool recovery still requires all completed pairs in reconciled
+history; it does not rerun completed tool bodies. Provider and in-loop retry
+continue refusing this timeout; only session recovery owns the new admission.
+
+Configuration: existing `agent.retryAttempts` (nonnegative integer, session
+fallback 2) remains authoritative, including 0/1/2/custom. No new setting, default,
+persistence migration or counter. For this typed exception only, existing shared
+physical-recovery/replay counters are compared with the configured retry count,
+not fixed 3/1. The classifier also checks its existing transient retry count.
+Only the measured watchdog wait is credited against elapsed recovery time, capped
+by elapsed time already charged. First failure starts the clock lazily; later
+90s receive silence cannot consume another retry's overhead allowance. Backoff,
+acquisition and other overhead still count against 90,000ms. No blanket reset:
+large configured counts can still exhaust that unrelated overhead limit.
+Watchdog defaults remain 90s first-frame / 600s inter-frame. Ordinary failures
+keep the historical fixed limits; total-run budgets are untouched.
+
+Action: `retry_fresh` / full-history reconstruction with chaining disabled, or
+truthful termination on count/overhead refusal. Admission diagnostics retain
+source, retry count, effective maxima, elapsed time and measured wait credit;
+`retry_exhausted.maxAttempts` reports the cap actually used. No new prompt,
+credential or full-frame logging. Rollback: this isolated typed-evidence,
+classifier, budget and handler amendment together; no registry repair dependency.
+
+Evidence: `source/lib/zero-frame-timeout.integration.test.ts` crosses public
+ConversationService, AgentClient, the real Codex adapter/watchdog and disposable
+filesystem effects; only external transport is synthetic. Same final fixture:
+unchanged production 10 fail / 7 pass; candidate 17 pass. Config0/1/2/5 emits
+1/2/3/6 physical requests. Settled effect -> close -> 90s timeout -> healthy
+uses 4 requests / 1 effect; approval-resume also reaches the continuation owner.
+Frame/non-timeout ambiguity, cancellation and extra90s overhead remain terminal;
+close/proven-unsent controls recover. Command: `NODE_ENV=test pnpm exec vitest run
+--config vitest.integration.config.ts source/lib/zero-frame-timeout.integration.test.ts
+--reporter=verbose` (run using equivalent direct private runner with inherited
+numeric-loopback/data-only network containment). Logs/source bindings are in the
+external timeout-retry evidence package; parent independent source and
+failure/recovery acceptance is required before integration.
+
+The following historical inventory explains the original envelope; its fixed
+count/time statements do not override the scoped exception above.
+
 ### Retry/recovery containment budget and never-replay-after-committed-output precondition
 
 **Historical contract below:** the per-logical-turn lifetime was replaced by
@@ -3157,7 +3214,7 @@ Catalogued, no hypothesized failure mode:
 | Turns-left advisory | threshold 5 | no |
 | Session rollover advisory | provider-reported input milestones 200k / 300k / 400k, then 50k reconsideration cadence; advises a safe-boundary choice and never rotates automatically | milestones and enable flag |
 | Terminal result exhaustion | typed `TerminalResultCollectorExhaustionError extends AmbiguousModelOutcomeError`; preserves `unsafeToReplay` and local-vs-provider provenance | no |
-| Codex WebSocket watchdog | 90s to first raw event, 600s between; a first-frame expiry recovers as `retry_fresh`/`full_history` only when the send path recorded the frame as provably `unsent`, otherwise it stays ambiguous and terminates; reports measured latencies and its budgets to the traffic log | `agent.codex.websocketFirstFrameTimeoutMs` / `…InterFrameTimeoutMs` |
+| Codex WebSocket watchdog | 90s to first raw event, 600s between; a provably `unsent` expiry retains ordinary recovery; dispatched typed zero-frame expiry stays ambiguous but may use remaining configured session retries (measured receive silence excluded from recovery overhead); other ambiguity retains existing policy; reports measured latencies and its budgets to the traffic log | `agent.codex.websocketFirstFrameTimeoutMs` / `…InterFrameTimeoutMs` |
 | Queue/background registry capacity | owner-specific | varies |
 
 "Injectable" means a constructor or deps field exists but no settings key feeds

@@ -98,9 +98,13 @@ grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
   ordinary terminal `failed` result (unless the signal was aborted, which is
   `cancelled`), rather than a separately settled retry result.
 - **Ambiguous outcome:** no child-result `unknown`/`ambiguous` terminal state
-  exists. At the shared recovery boundary, `AmbiguousModelOutcomeError` is
-  explicitly non-retryable (`retry-error-classification.ts:336-347`), so it is
-  not replayed. The child runner receives the resulting terminal error and
+  exists. Provider and in-loop retry refuse `AmbiguousModelOutcomeError`. The shared
+  session classifier admits only the authorized immediate typed first-frame,
+  zero-frame watchdog timeout within configured retries
+  (`getZeroFrameAmbiguousTimeout`, `DefaultRetryClassifier`); other outcomes
+  retain their existing recovery/termination classification. This is shared-owner
+  policy, not a separately
+  verified child-runtime journey. The child runner receives the resulting terminal error and
   settles the child as `failed` (or `cancelled` for an abort-like error);
   effect-level `unknown` settlement for dispatched-but-unobserved tool calls
   remains the child session's tool-ledger responsibility, not a child lifecycle

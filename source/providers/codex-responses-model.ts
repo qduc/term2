@@ -1153,7 +1153,8 @@ const isConnectTimeoutError = (error: unknown, seen = new Set<unknown>()): boole
  * failure is the watchdog's own (not a provider error wearing a timeout
  * message), no frame ever arrived (a single frame means the server had the
  * request), and the send path positively recorded `unsent` (an unrecorded
- * request is not evidence). Anything less stays ambiguous and terminates.
+ * request is not evidence). Anything less stays ambiguous; only the session
+ * policy may admit a typed zero-frame timeout under its configured retry budget.
  */
 const asProvablyUnsentTimeout = (
   timeoutError: Error | undefined,
@@ -1186,8 +1187,8 @@ const asAmbiguousModelOutcome = (error: unknown): AmbiguousModelOutcomeError | u
   }
   // Incomplete stream terminals keep transportFallback=false so Codex does not
   // force an HTTP/WS switch — but the request may already have been accepted,
-  // so replaying is unsafe. Wrap them the same way as transport-fallback
-  // failures so RetryingModel and the conversation classifier terminate.
+  // so keep ambiguity explicit. RetryingModel must not replay it; the session
+  // classifier alone may admit the authorized typed zero-frame timeout case.
   if (isIncompleteStreamTerminalError(error) || isRetryableTransportError(error).transportFallback) {
     return new AmbiguousModelOutcomeError(getErrorMessage(error) || 'Codex request outcome is unknown.', {
       cause: error,

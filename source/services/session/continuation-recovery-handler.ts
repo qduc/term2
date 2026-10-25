@@ -134,17 +134,26 @@ export class ContinuationRecoveryHandler {
 
     // Only retry_fresh draws against the automatic-replay budget; replay_turn
     // comes exclusively from model_retry, excluded for the reason above.
-    const recoveryAdmission =
-      plan.kind === 'retry_fresh'
-        ? state.recoveryBudget.describeAdmission({
+    const timeoutAdmission =
+      plan.kind === 'retry_fresh' && classified.kind === 'chain_recovery'
+        ? state.recoveryBudget.claimZeroFrameTimeoutRecovery(error, {
+            maxRetries: maxTransientRetries,
             automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
           })
         : undefined;
+    const recoveryAdmission =
+      timeoutAdmission ??
+      (plan.kind === 'retry_fresh'
+        ? state.recoveryBudget.describeAdmission({
+            automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
+          })
+        : undefined);
     const admitted =
-      plan.kind !== 'retry_fresh' ||
-      ((skipsAutomaticReplayClaim(classified, committedToolContinuation) ||
-        state.recoveryBudget.claimAutomaticReplay()) &&
-        state.recoveryBudget.claimPhysicalAttempt());
+      timeoutAdmission?.admitted ??
+      (plan.kind !== 'retry_fresh' ||
+        ((skipsAutomaticReplayClaim(classified, committedToolContinuation) ||
+          state.recoveryBudget.claimAutomaticReplay()) &&
+          state.recoveryBudget.claimPhysicalAttempt()));
     if (recoveryAdmission) {
       this.deps.logger.warn('Retry recovery admission evaluated', {
         eventType: 'retry.recovery_admission',
@@ -187,7 +196,7 @@ export class ContinuationRecoveryHandler {
         provider: providerName,
         errorKind: classifyProviderFailure(error).errorKind,
         attempts: state.recoveryBudget.physicalAttempts,
-        maxAttempts: state.recoveryBudget.maxPhysicalAttempts,
+        maxAttempts: recoveryAdmission?.maxPhysicalAttempts ?? state.recoveryBudget.maxPhysicalAttempts,
         message: `Could not reach ${providerName} after ${state.recoveryBudget.physicalAttempts} attempts. No model response was received.`,
         canRetry: true,
       };

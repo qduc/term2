@@ -1,3 +1,4 @@
+import { WebSocketReceiveTimeoutError } from '../services/retry/retry-errors.js';
 import type { ProviderTrafficReceiveTiming } from '../services/service-interfaces.js';
 
 export type WebSocketReceiveTimeouts = {
@@ -54,8 +55,13 @@ export function createWebSocketReceiveWatchdog(
     removeExternalAbortListener();
   };
   const expire = () => {
-    expiredError = new Error(firstFramePending ? 'WebSocket first frame timeout' : 'WebSocket idle timeout');
-    waitedMs = waitStartedAtMs === undefined ? undefined : now() - waitStartedAtMs;
+    waitedMs = waitStartedAtMs === undefined ? 0 : Math.max(0, now() - waitStartedAtMs);
+    expiredError = new WebSocketReceiveTimeoutError(
+      firstFramePending ? 'first_frame' : 'inter_frame',
+      frameCount,
+      waitedMs,
+      firstFramePending ? timeouts.firstFrameMs : timeouts.interFrameMs,
+    );
     const rejectPending = pendingReject;
     close();
     controller.abort(expiredError);

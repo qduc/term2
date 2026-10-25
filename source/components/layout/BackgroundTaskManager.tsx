@@ -1,5 +1,5 @@
 import React, { type FC, useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 import type {
   BackgroundTaskControlDetails,
   BackgroundTaskControlTarget,
@@ -41,6 +41,26 @@ const taskLabel = (details: BackgroundTaskControlDetails): string => {
   if (details.kind === 'shell') return details.command;
   return details.name ?? `${details.role}: ${details.taskPreview}`;
 };
+
+const foregroundTaskLabel = (candidate: ForegroundTransferCandidate): string =>
+  candidate.kind === 'shell' ? candidate.command : candidate.task;
+
+const compactLabel = (value: string, columns: number, prefix: string, suffix: string): string => {
+  const firstLine = value.split(/\r?\n/).find((line) => line.trim().length > 0) ?? '';
+  const collapsed = firstLine.replace(/\s+/g, ' ').trim();
+  // The classic frame has two borders and horizontal padding on both sides.
+  // Reserve the actual row decorations so the status stays with its identity.
+  const frameWidth = 4;
+  const overhead = frameWidth + terminalTextWidth(prefix) + terminalTextWidth(suffix);
+  const labelBudget = Math.max(1, Math.min(72, columns - overhead));
+  return truncateTerminalText(collapsed, labelBudget);
+};
+
+const isLiveTask = (details: BackgroundTaskControlDetails): boolean =>
+  details.status === 'running' ||
+  details.status === 'awaiting_approval' ||
+  details.status === 'waiting_for_answer' ||
+  details.status === 'cancelling';
 
 const isActive = (details: BackgroundTaskControlDetails): boolean =>
   details.status === 'running' || details.status === 'waiting_for_answer' || details.status === 'awaiting_approval';
@@ -188,6 +208,8 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   onOpenChange,
 }) => {
   const theme = useTheme();
+  const { stdout } = useStdout();
+  const labelColumns = stdout.columns || 80;
   const { MenuFrame } = useSkin();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedOrdinal, setSelectedOrdinal] = useState(0);
@@ -200,7 +222,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   const legacyForeground = getForegroundTransferCandidate?.() ?? null;
   const foregroundSource = listForegroundTransferCandidates?.() ?? (legacyForeground ? [legacyForeground] : []);
   const foreground = foregroundSource.filter((candidate) => !hiddenForeground.has(foregroundKey(candidate)));
-  const tasks = listDetails();
+  const tasks = listDetails().filter(isLiveTask);
   const rows = useMemo(
     () => [
       ...foreground.map((task) => ({ key: foregroundKey(task), kind: 'foreground' as const, task })),
@@ -221,7 +243,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   }, [onOpenChange]);
 
   const openManager = useCallback(() => {
-    const next = listDetails();
+    const next = listDetails().filter(isLiveTask);
     const legacy = getForegroundTransferCandidate?.() ?? null;
     const nextForeground = listForegroundTransferCandidates?.() ?? (legacy ? [legacy] : []);
     if (next.length === 0 && nextForeground.length === 0) return;
@@ -348,8 +370,18 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
             key={`${candidate.kind}:${candidate.kind === 'shell' ? candidate.callId : candidate.runId}`}
             color={index === selectedIndex ? theme.text : theme.textSubtle}
           >
-            {index === selectedIndex ? '❯' : ' '} [{candidate.kind === 'shell' ? 'Shell' : candidate.role} · foreground]{' '}
-            {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
+            {`${index === selectedIndex ? '❯' : ' '} [${
+              candidate.kind === 'shell' ? 'Shell' : candidate.role
+            } · foreground] `}
+            {compactLabel(
+              foregroundTaskLabel(candidate),
+              labelColumns,
+              `${index === selectedIndex ? '❯' : ' '} [${
+                candidate.kind === 'shell' ? 'Shell' : candidate.role
+              } · foreground] `,
+              ' · running',
+            )}{' '}
+            · running
           </Text>
         ))}
         {tasks.map((task, index) => {
@@ -359,8 +391,14 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
               key={`${task.kind}:${task.id}`}
               color={displayIndex === selectedIndex ? theme.text : theme.textSubtle}
             >
-              {displayIndex === selectedIndex ? '❯' : ' '} [{task.kind === 'shell' ? 'Shell' : task.role}]{' '}
-              {taskLabel(task)} · {statusText(task)}
+              {`${displayIndex === selectedIndex ? '❯' : ' '} [${task.kind === 'shell' ? 'Shell' : task.role}] `}
+              {compactLabel(
+                taskLabel(task),
+                labelColumns,
+                `${displayIndex === selectedIndex ? '❯' : ' '} [${task.kind === 'shell' ? 'Shell' : task.role}] `,
+                ` · ${statusText(task)}`,
+              )}{' '}
+              · {statusText(task)}
             </Text>
           );
         })}

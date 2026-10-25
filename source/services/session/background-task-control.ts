@@ -238,11 +238,10 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
     if (!before || before.callId !== target.callId) {
       return { ok: false, code: this.#client.getForegroundShellTransferCandidate ? 'not_found' : 'unavailable' };
     }
-    const move = this.#client.moveForegroundShellToBackground;
-    if (!move) return { ok: false, code: 'unavailable' };
+    if (!this.#client.moveForegroundShellToBackground) return { ok: false, code: 'unavailable' };
     let adopted: ForegroundShellTransferResult | undefined;
     try {
-      adopted = move(target.callId);
+      adopted = this.#client.moveForegroundShellToBackground?.(target.callId);
     } catch (error) {
       if (error instanceof Error && error.name === 'BackgroundShellRegistryCapacityError') {
         return { ok: false, code: 'capacity' };
@@ -268,11 +267,10 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
     if (!candidate) {
       return { ok: false, code: this.#client.listForegroundSubagentCandidates ? 'not_found' : 'unavailable' };
     }
-    const move = this.#client.moveForegroundSubagent;
-    if (!move) return { ok: false, code: 'unavailable' };
+    if (!this.#client.moveForegroundSubagent) return { ok: false, code: 'unavailable' };
     let adopted: SubagentRunHandle | undefined;
     try {
-      adopted = move(runId);
+      adopted = this.#client.moveForegroundSubagent?.(runId);
     } catch (error) {
       if (error instanceof Error && error.name === 'SubagentRegistryError') return { ok: false, code: 'capacity' };
       return { ok: false, code: 'not_active' };

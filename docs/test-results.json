@@ -13388,6 +13388,31 @@
         "/tmp/discord-build.log"
       ],
       "notes": "First PTY probe had missing node -- separator (fixture error); corrected probe found enrollment flow-state hang and prompt-before-raw echo race; both fixed and same probe passed. Independent static inspection found no blocker but execution was denied by verifier sandbox; independent verification not performed in full. No high-risk acceptance claimed."
+    },
+    {
+      "id": "2026-10-25-discord-checkpoint-committed",
+      "recorded_on": "2026-10-25",
+      "commit": "2bd0eda2ec4d54eae61dc6b6d4b133c6a484167f",
+      "revision_kind": "committed_source",
+      "task_ids": ["2026-10-25-discord-usability-checkpoint"],
+      "command": "pnpm typecheck; pnpm build; node /tmp/discord-check.mjs; python3 /tmp/discord-tty-check.py; pnpm test:integration source/services/discord/discord-bridge.integration.test.ts",
+      "result": {
+        "typecheck": "passed",
+        "build": "passed",
+        "credential_checks": 19,
+        "isolated_command_failures": 4,
+        "pty_paths": 3,
+        "integration_passed": 16,
+        "integration_failed": 0
+      },
+      "notes": "Post-hook source verification. Prior final pnpm lint passed with 31 warnings after evidence JSON formatting normalization. Independent verification not performed: separate reviewer completed static inspection only, runtime execution denied by sandbox. No live Discord access.",
+      "environment": {
+        "os": "linux",
+        "credentials": "synthetic; temp HOME/config only"
+      },
+      "comparison": {
+        "resolves_run_ids": ["2026-10-25-discord-usability-checkpoint"]
+      }
     }
   ]
 }

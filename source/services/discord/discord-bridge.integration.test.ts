@@ -44,6 +44,7 @@ const logger = {
 async function fixture(
   options: {
     maxHops?: number;
+    busyTool?: boolean;
     respond?: (alias: string, request: StreamedModelTurnRequest) => string | Promise<string>;
     optIn?: boolean;
     proactive?: boolean;
@@ -75,6 +76,17 @@ async function fixture(
       createStreamedModel: () => ({
         async *stream(request: StreamedModelTurnRequest) {
           received[alias]!.push(request);
+          if (options.busyTool && alias === 'coord' && received[alias]!.length === 1) {
+            await options.respond?.(alias, request);
+            yield {
+              type: 'tool_call' as const,
+              id: 'busy-tool',
+              name: 'run_code',
+              arguments: JSON.stringify({ code: 'return "busy tool finished"', description: 'Offline busy-turn tool' }),
+            };
+            yield { type: 'completion' as const, responseId: 'busy-tool-turn', output: [] };
+            return;
+          }
           const proactiveScript = (options.proactiveScripts ?? [
             'return await tools.discord_send({action:"send",requestId:"terminal_notice",text:"@worker terminal-origin notification"})',
           ])[(received[alias]!.length - 1) / 2];
@@ -110,7 +122,7 @@ async function fixture(
     const ownership = new ToolOwnershipRegistry();
     const client = new AgentClient({
       selection: { provider: providerId, model: 'fixture-model' },
-      ...(options.proactive
+      ...(options.proactive || options.busyTool
         ? {}
         : {
             agentOverride: {
@@ -401,6 +413,83 @@ it('bounds cyclic explicitly targeted exchanges and implements pause/resume/stop
   expect(f.received.coord!.length + f.received.worker!.length).toBe(3);
 });
 
+it.each([false, true])(
+  'steers human Discord input before busy-turn completion and correlates its outcome (failure=%s)',
+  async (fail) => {
+    let release!: () => void;
+    let started!: () => void;
+    let finish!: () => void;
+    let continuing!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const finalHeld = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const continued = new Promise<void>((resolve) => {
+      continuing = resolve;
+    });
+    let first = true;
+    const f = await fixture({
+      busyTool: true,
+      respond: async () => {
+        if (first) {
+          first = false;
+          started();
+          await held;
+        } else {
+          continuing();
+          await finalHeld;
+          if (fail) throw new Error('Offline joined-turn failure');
+        }
+        return 'Joined human answer';
+      },
+    });
+    cleanup.push(() => {
+      release();
+      finish();
+    });
+    await f.cycle();
+    f.posted.length = 0;
+    const active = f.sessions.coord!.orchestrator.sendUserMessage('Terminal task');
+    await entered;
+    f.human('first steer');
+    f.human('second steer');
+    const admission = f.cycle();
+    await admission;
+    expect(f.journal().jobs.map((job: any) => job.state)).toEqual(['accepted', 'accepted']);
+    expect(f.posted).toHaveLength(0);
+    release();
+    await continued;
+    await admission;
+    expect(f.journal().jobs.map((job: any) => job.state)).toEqual(['accepted', 'accepted']);
+    expect(f.posted).toHaveLength(0);
+    const continuation = JSON.stringify(f.received.coord![1]!.input);
+    expect(continuation).toContain('first steer');
+    expect(continuation).toContain('second steer');
+    finish();
+    await active;
+    await f.cycle();
+    expect(f.received.coord).toHaveLength(2);
+    expect(f.posted.map((row) => row.content)).toEqual(
+      fail
+        ? [
+            '[coord] interrupted; inspect the terminal. No peer activation.',
+            '[coord] interrupted; inspect the terminal. No peer activation.',
+          ]
+        : ['[coord] Joined human answer', '[coord] Joined human answer'],
+    );
+    expect(f.journal().jobs.map((job: any) => job.state)).toEqual(['done', 'done']);
+    if (!fail) await f.sessions.coord!.orchestrator.sendUserMessage('Unrelated later terminal turn');
+    await f.restart();
+    await f.cycle();
+    expect(f.posted).toHaveLength(2);
+  },
+);
+
 it('uses real busy-session follow-up admission and rejects remote approval answers without changing terminal policy', async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -415,7 +504,15 @@ it('uses real busy-session follow-up admission and rejects remote approval answe
   await f.cycle();
   const terminal = f.sessions.coord!.orchestrator.sendUserMessage('hold-terminal');
   await new Promise<void>((resolve) => setImmediate(resolve));
-  f.human('follow-up');
+  const socket = f.sessions.coord!.socket;
+  const receipt = await callDiscordControl(socket.socketPath, 'bridge_submit', {
+    sessionId: 'session-coord',
+    startedAt: socket.binding.startedAt,
+    clientRequestId: 'peer_busy',
+    text: 'follow-up',
+    origin: { kind: 'agent', sender: 'worker' },
+  });
+  expect(receipt.delivery).toBe('queued');
   await f.cycle(1);
   expect(f.posted.some((message) => /\[bridge → .*\] (started|queued)\./.test(message.content))).toBe(false);
   expect(f.received.coord).toHaveLength(1);

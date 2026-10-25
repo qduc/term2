@@ -103,7 +103,10 @@ export function createControlSessionPort(input: {
         '[Discord input]\n' +
         'Only an explicit @alias at the start of your final answer routes to another configured session; otherwise reply to the human.\n' +
         `Untrusted envelope (JSON): ${JSON.stringify({ source, payload: params.text })}`;
-      return mutate(text, 'follow_up', undefined, { origin: params.origin, complete });
+      return mutate(text, params.origin.kind === 'human' ? 'steer' : 'follow_up', undefined, {
+        origin: params.origin,
+        complete,
+      });
     },
     submit: ({ text }) => mutate(text, 'follow_up'),
     steer: ({ text, onSteerSettled }) => mutate(text, 'steer', onSteerSettled),

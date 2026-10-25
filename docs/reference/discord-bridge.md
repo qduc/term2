@@ -137,7 +137,14 @@ a cryptographic isolation boundary against prompt injection. Each receiving sess
 retains its own tool/approval posture; do not opt in a session whose autonomous
 capabilities you do not want remotely reachable.
 
-New input uses term2's normal follow-up queue, not stale idle-history heuristics.
+Human input uses term2's existing steer admission when a turn is busy and ordinary
+submission when idle. Peer-agent input remains a queued follow-up. Steering does
+not abort a running tool: input becomes visible at a supported request boundary,
+or falls back to a queued turn if the active turn cannot take it. Each accepted
+human request observes the terminal result of the turn it joined, not the steer
+admission acknowledgment or a later unrelated turn. Multiple human requests that
+join the same turn each receive that turn's final (not separate model turns).
+Approval pauses still require the terminal; Discord input cannot answer them.
 Busy sessions acknowledge `queued` and answer when admitted. Remote input—human or
 peer—never answers an outstanding question/approval. The bridge visibly refuses it;
 resolve or cancel through the terminal, then send a new request if wanted. Existing

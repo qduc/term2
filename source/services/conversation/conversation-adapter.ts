@@ -191,6 +191,7 @@ export class ConversationAdapter {
   #turnFlow: TurnFlow;
   /** Executable payload and lifecycle; queue/mailbox entries are projections. */
   readonly #submissions = new Map<string, Submission>();
+  readonly #turnCompletionObservers = new Map<string, Set<(terminal: ConversationTerminal | null) => void>>();
   readonly #queue: QueueController<QueuedMessageSnapshot, ConversationTerminal> | null;
   #nextQueuedMessageId = 1;
   #nextActionId = 1;
@@ -526,7 +527,11 @@ export class ConversationAdapter {
     return { kind: 'unknown_id' };
   }
 
-  /** Own steer admission and fallback with the same id and latest payload. */
+  /**
+   * Own steer admission and fallback with the same id and latest payload.
+   * An admitted steer returns immediately; completion observes only the turn
+   * it joined (null on failure/cancellation), never a later queued response.
+   */
   async submitMessage(
     input: string | UserTurn,
     options: SendMessageOptions = {},
@@ -534,7 +539,10 @@ export class ConversationAdapter {
       onSteerSettled(admitted: boolean, input: string | UserTurn): void;
       prepareFollowUp?(input: string | UserTurn): string | UserTurn;
     },
-  ): Promise<{ kind: 'steered' } | { kind: 'turn'; terminal: ConversationTerminal }> {
+  ): Promise<
+    | { kind: 'steered'; completion: Promise<ConversationTerminal | null> }
+    | { kind: 'turn'; terminal: ConversationTerminal }
+  > {
     const id = options.preferredMessageId ?? String(this.#nextQueuedMessageId++);
     if (this.#submissions.has(id)) throw new Error(`A submission already uses request id ${id}`);
     const submission: Submission = {
@@ -560,6 +568,19 @@ export class ConversationAdapter {
     }
     this.#submissions.set(id, submission);
     const epoch = this.#cancellationEpoch;
+    // Capture ownership before awaiting mailbox admission: settlement can race
+    // the admission continuation, and a later queued turn is not our result.
+    const owner = this.#activeRequestId;
+    let complete!: (terminal: ConversationTerminal | null) => void;
+    const completion = new Promise<ConversationTerminal | null>((resolve) => {
+      complete = resolve;
+    });
+    if (owner) {
+      const observers = this.#turnCompletionObservers.get(owner) ?? new Set();
+      observers.add(complete);
+      this.#turnCompletionObservers.set(owner, observers);
+    }
+    let joined = false;
     try {
       const admitted = await this.steerActiveTurn(submission.prepareInput!(submission.input), { id });
       if ((!admitted && epoch !== this.#cancellationEpoch) || this.#submissions.get(id) !== submission) {
@@ -567,8 +588,9 @@ export class ConversationAdapter {
       }
       delivery?.onSteerSettled(admitted, submission.input);
       if (admitted) {
+        joined = true;
         this.#submissions.delete(id);
-        return { kind: 'steered' };
+        return { kind: 'steered', completion: owner ? completion : Promise.resolve(null) };
       }
       submission.input = delivery?.prepareFollowUp?.(submission.input) ?? submission.input;
       return {
@@ -583,6 +605,11 @@ export class ConversationAdapter {
         ),
       };
     } finally {
+      if (!joined && owner) {
+        const observers = this.#turnCompletionObservers.get(owner);
+        observers?.delete(complete);
+        if (observers?.size === 0) this.#turnCompletionObservers.delete(owner);
+      }
       if (this.#submissions.get(id) === submission && submission.stage === 'pending_steer') {
         this.#submissions.delete(id);
       }
@@ -962,7 +989,14 @@ export class ConversationAdapter {
     }
   }
 
+  #notifyTurnCompletion(requestId: string, terminal: ConversationTerminal | null): void {
+    const observers = this.#turnCompletionObservers.get(requestId);
+    this.#turnCompletionObservers.delete(requestId);
+    for (const observer of observers ?? []) observer(terminal);
+  }
+
   #settleSuccess(requestId: string, terminal: ConversationTerminal): void {
+    this.#notifyTurnCompletion(requestId, terminal);
     const message = this.#submissions.get(requestId);
     if (!message) return;
     this.#submissions.delete(requestId);
@@ -970,6 +1004,7 @@ export class ConversationAdapter {
   }
 
   #settleFailure(requestId: string, error: unknown): void {
+    this.#notifyTurnCompletion(requestId, null);
     const message = this.#submissions.get(requestId);
     if (!message) return;
     this.#submissions.delete(requestId);

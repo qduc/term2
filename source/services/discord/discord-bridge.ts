@@ -657,7 +657,7 @@ export class DiscordBridge {
             text: job.text,
             origin: job.origin,
           });
-          if (!['started', 'queued'].includes(receipt.delivery)) {
+          if (!['started', 'queued', 'steering'].includes(receipt.delivery)) {
             job.state = 'done';
             this.#post(
               `${job.id}_rejected`,

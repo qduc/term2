@@ -816,6 +816,7 @@ export class ConversationOrchestrator {
       onAdmitted?: (messageId: string, delivery: 'started' | 'queued' | 'steering') => void;
       onSteerSettled?: (steered: boolean) => void;
       /** Correlated remote outcome; null means cancelled, discarded or failed. */
+      /** For a steer, observes the joined turn's terminal, not mailbox admission. */
       onCompleted?: (terminal: ConversationTerminal | null) => void;
     },
   ): Promise<void> {
@@ -907,6 +908,7 @@ export class ConversationOrchestrator {
     // Streaming callbacks are bound at submit time, but deferred submissions
     // must not count as active turns until the queue starts them. Otherwise
     // remove/discard would need a matching endTurn for work that never ran.
+    let completionDeferred = false;
     let turnActivated = !queueOwnsSubmission;
     const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = queueOwnsSubmission
       ? this.createTurnSession('sendUserMessage')
@@ -970,7 +972,13 @@ export class ConversationOrchestrator {
         },
       );
       reportAdmission(queueOwnsSubmission ? 'queued' : 'started');
-      if (result.kind === 'steered') return;
+      if (result.kind === 'steered') {
+        if (options?.onCompleted) {
+          completionDeferred = true;
+          void result.completion.then(options.onCompleted);
+        }
+        return;
+      }
 
       remoteTerminal = result.terminal ?? null;
       this.#settleTurn(applyConversationEvent, botResponseUpdater, result.terminal, streamingState);
@@ -1048,7 +1056,7 @@ export class ConversationOrchestrator {
       if (turnActivated) {
         this.#endTurn();
       }
-      options?.onCompleted?.(remoteTerminal);
+      if (!completionDeferred) options?.onCompleted?.(remoteTerminal);
     }
   }
 

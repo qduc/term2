@@ -404,7 +404,8 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
           return;
         }
         const event = next.value;
-        if (event?.type === 'error') throw new Error(event.error?.message ?? 'Codex WebSocket provider error');
+        if (event?.type === 'error')
+          throw codexStreamError(event.error?.message ?? 'Codex WebSocket provider error', event.error ?? event);
         if (event?.type === 'close') throw new WebSocketClosedEarlyError(readWebSocketCloseFrame(event));
         terminal =
           event?.type === 'response.completed' ||
@@ -2320,6 +2321,11 @@ async function fetchAndReconstructUnaryResponse(
   return finalResponse;
 }
 
+/** Retain provider-declared fields for the shared retry policy without inferring a status from text. */
+function codexStreamError(message: string, details: unknown): Error {
+  return Object.assign(new Error(message), { error: details });
+}
+
 export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: DiagnosticLogger): AsyncIterable<any> {
   let accumulatedItems: any[] = [];
   // Track call_id values from function_call_arguments events keyed by item_id,
@@ -2335,7 +2341,7 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
         eventType: 'codex.response.stream_error_event',
         error: event.error ?? event,
       });
-      throw new Error(`Codex provider stream error: ${errMsg}`);
+      throw codexStreamError(`Codex provider stream error: ${errMsg}`, event.error);
     }
 
     if (
@@ -2407,7 +2413,7 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
             status: event.response.status,
             error: event.response.error,
           });
-          throw new Error(`Codex provider error: ${errMsg}`);
+          throw codexStreamError(`Codex provider error: ${errMsg}`, event.response.error);
         } else if (event.response.status === 'failed') {
           logger?.error?.(`Codex response terminal event "${type}" has failed status without error details`, {
             eventType: 'codex.response.terminal_failed',

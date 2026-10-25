@@ -559,6 +559,18 @@ it('quarantines missing admission outcomes and changed real session identity wit
   ).toBe(true);
 });
 
+it('silently completes successful empty finals without placeholder or peer routing', async () => {
+  const f = await fixture({ respond: () => '  \n\t  ' });
+  await f.cycle();
+  f.human('finish without a response');
+  await f.cycle(8);
+
+  expect(f.journal().jobs.at(-1).state).toBe('done');
+  expect(f.posted.some((output) => output.content.includes('completed without text'))).toBe(false);
+  expect(f.posted.some((output) => output.content.startsWith('[coord]'))).toBe(false);
+  expect(f.received.worker).toHaveLength(0);
+});
+
 it('does not route a truncated final and keeps attribution and mention suppression on every chunk', async () => {
   const f = await fixture({ respond: () => '@worker ' + 'x'.repeat(20_000) });
   await f.cycle();

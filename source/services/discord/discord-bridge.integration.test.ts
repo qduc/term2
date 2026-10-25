@@ -365,7 +365,7 @@ it('uses real busy-session follow-up admission and rejects remote approval answe
   await new Promise<void>((resolve) => setImmediate(resolve));
   f.human('follow-up');
   await f.cycle(1);
-  expect(f.posted.some((message) => message.content.includes('queued.'))).toBe(true);
+  expect(f.posted.some((message) => /\[bridge → .*\] (started|queued)\./.test(message.content))).toBe(false);
   expect(f.received.coord).toHaveLength(1);
   release();
   await terminal;

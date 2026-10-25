@@ -492,7 +492,6 @@ export class DiscordBridge {
             );
           } else {
             job.state = 'accepted';
-            this.#post(`${job.id}_receipt`, `[bridge → ${job.alias}] ${receipt.delivery}.`);
           }
           this.#save();
         }

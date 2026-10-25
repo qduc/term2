@@ -34,6 +34,8 @@ export interface SystemMessage {
   id: string;
   sender: 'system';
   text: string;
+  /** Optional concise-mode notification summary; text retains the complete diagnostic. */
+  conciseText?: string;
   /** Transcript presentation only; empty text renders as a divider rule. */
   presentation?: 'rule';
   /** Keep the exact receipt in text; render only this count in the terminal. */

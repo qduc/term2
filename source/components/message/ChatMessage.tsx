@@ -9,9 +9,10 @@ import type { Message } from '../../types/message.js';
 type Props = {
   msg: Message;
   maxWidth?: number;
+  displayMode?: 'standard' | 'concise';
 };
 
-const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
+const ChatMessage: FC<Props> = ({ msg, maxWidth, displayMode = 'standard' }) => {
   const theme = useTheme();
   const { UserMessage, AssistantFrame, assistantGutter } = useSkin();
   // The frame may consume columns on the left; markdown wraps against an explicit width.
@@ -32,7 +33,7 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
           Loaded {msg.memoryReceiptCount} {msg.memoryReceiptCount === 1 ? 'memory' : 'memories'}
         </Text>
       ) : msg.sender === 'system' ? (
-        <Text color={theme.reasoning}>{msg.text}</Text>
+        <Text color={theme.reasoning}>{displayMode === 'concise' ? msg.conciseText ?? msg.text : msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (
         <AssistantFrame kind="reasoning">
           <MarkdownRenderer defaultColor={theme.reasoning} maxWidth={answerWidth}>

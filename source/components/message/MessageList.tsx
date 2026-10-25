@@ -1,4 +1,5 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { clearTerminalForRedraw } from '../../app-helpers.js';
 import { Box, Static, useStdout } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import CommandGroupSummary from './CommandGroupSummary.js';
@@ -22,6 +23,8 @@ type Props<T extends MessageLike = Message> = {
   /** Mark the banner as the start of a fresh session after a reset. */
   bannerStartsNewSession?: boolean;
   settingsService?: SettingsService;
+  /** App's subscribed mode crosses the memo boundary even when settings identity is stable. */
+  displayMode?: 'standard' | 'concise';
   restoredStaticMessageIds?: readonly string[];
   /** The turn is held at an approval or check-in prompt, so no tool is executing. */
   turnPaused?: boolean;
@@ -247,18 +250,18 @@ export const shouldCommitMessageToStatic = ({
   return hasPendingCandidateSignature;
 };
 
-const MessageList = <T extends MessageLike = Message>({
+const MessageListContent = <T extends MessageLike = Message>({
   messages,
   bannerItems = [],
   bannerStartsNewSession = false,
   settingsService,
+  displayMode = settingsService?.get('ui.displayMode') ?? 'concise',
   restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS,
   turnPaused = false,
 }: Props<T>) => {
   const { stdout } = useStdout();
   const terminalColumns = stdout.columns || 80;
   const contentWidth = Math.max(1, terminalColumns - MESSAGE_HORIZONTAL_PADDING * 2);
-  const displayMode = settingsService?.get('ui.displayMode') ?? 'concise';
   const restoredStaticMessageIdSet = useMemo(() => new Set(restoredStaticMessageIds), [restoredStaticMessageIds]);
 
   const filteredMessages = useMemo(() => {
@@ -535,7 +538,7 @@ const MessageList = <T extends MessageLike = Message>({
         ) : msg.sender === 'subagent' ? (
           <SubagentActivityMessage msg={msg} />
         ) : (
-          <ChatMessage msg={msg as Message} maxWidth={maxWidth} />
+          <ChatMessage msg={msg as Message} maxWidth={maxWidth} displayMode={displayMode} />
         )}
       </Box>
     );
@@ -579,6 +582,24 @@ const MessageList = <T extends MessageLike = Message>({
       </Box>
     </Box>
   );
+};
+
+/** Repaint write-once history when its presentation changes, without resetting conversation state. */
+const MessageList = <T extends MessageLike = Message>(props: Props<T>) => {
+  const { stdout } = useStdout();
+  const displayMode = props.displayMode ?? props.settingsService?.get('ui.displayMode') ?? 'concise';
+  const [renderedMode, setRenderedMode] = useState(displayMode);
+
+  useEffect(() => {
+    if (displayMode === renderedMode) return;
+    // Clear before remounting, just like App's explicit redraw. A changed prop
+    // alone cannot replace the rows Ink has already committed to <Static>.
+    clearTerminalForRedraw(stdout);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- external presentation changes require a clear-then-remount of write-once terminal history
+    setRenderedMode(displayMode);
+  }, [displayMode, renderedMode, stdout]);
+
+  return <MessageListContent key={renderedMode} {...props} displayMode={renderedMode} />;
 };
 
 export default React.memo(MessageList);

@@ -41,12 +41,13 @@ export function useConversationMessages({
   );
 
   const addSystemMessage = useCallback(
-    (text: string) => {
+    (text: string, conciseText?: string) => {
       appendMessages([
         {
           id: createMessageId(),
           sender: 'system',
           text,
+          ...(conciseText !== undefined ? { conciseText } : {}),
         },
       ]);
     },

@@ -1,0 +1,51 @@
+$ node --import tsx scripts/generated-verification/run.mjs --target history --runs 1000
+{
+  "schemaVersion": 1,
+  "revision": "4731459c44584c6e49854dac4a1d50cb849687dd",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 1077.0968360000002,
+  "results": [
+    {
+      "property": "history.ledger-settlement",
+      "failed": false,
+      "seed": 1200824818,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 143.89765400000005,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.ledger-reconciliation",
+      "failed": false,
+      "seed": 479943411,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 609.472043,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.pair-projection",
+      "failed": false,
+      "seed": -945394009,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 323.6896770000001,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}

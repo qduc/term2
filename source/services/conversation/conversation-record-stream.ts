@@ -1,3 +1,5 @@
+import { toolOccurrenceKey } from './tool-occurrence.js';
+import { alignHistoryToolOccurrences, type SavedToolExecution } from '../tool-execution-ledger.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
@@ -81,7 +83,7 @@ const compactedProviderHistory = (
 const toolItemSignature = (item: unknown): string | null => {
   for (const normalized of normalizeRunItem(item)) {
     if (normalized.type === 'tool_call' || normalized.type === 'tool_result') {
-      return `${normalized.type}:${normalized.callId}`;
+      return `${normalized.type}:${toolOccurrenceKey(normalized)}`;
     }
   }
   return null;
@@ -93,8 +95,8 @@ const toolItemSignature = (item: unknown): string | null => {
  * An interrupted run carries its accumulated generated items forward into every
  * later resume segment, so each `continueRunStream` finalization re-offers the
  * pairs from all earlier segments. Appending them unfiltered grows history
- * quadratically until the input surge guard blocks the turn. A canonical
- * tool-kind/call-id pair is unique within a conversation, so equivalent SDK,
+ * quadratically until the input surge guard blocks the turn. An accepted
+ * tool-kind/turn/call-id/occurrence is unique, so equivalent SDK,
  * provider, and domain representations share an identity. An item already
  * present is a replay, not new output. Non-tool items are never filtered, and
  * kept items retain their original provider representation.
@@ -167,13 +169,15 @@ const warnIfStreamHistoryReplayedTools = ({
 /** Pure selection; ConversationRecord alone applies the resulting history mutation. */
 export function selectAcceptedStreamHistory(input: {
   stream: AgentStream;
+  toolLedger?: SavedToolExecution[];
   history: ProviderInputItem[];
   inputMode: 'delta' | 'full_history';
   source: StreamHistorySource;
   logger: ILoggingService;
   sessionId: SessionIdSource;
 }): { terminal: boolean; history?: ProviderInputItem[]; lastResponseId: string | null } {
-  const { stream, history, inputMode, source, logger, sessionId } = input;
+  const { stream, inputMode, source, logger, sessionId } = input;
+  const history = alignHistoryToolOccurrences(input.history, input.toolLedger ?? []) as ProviderInputItem[];
   const snapshot = extractFinalizationSnapshot(stream);
   const projected = {
     history: canonicalProviderHistoryItems(snapshot.history),
@@ -184,7 +188,7 @@ export function selectAcceptedStreamHistory(input: {
   warnIfStreamHistoryReplayedTools({ logger, sessionId, source, snapshot: extractReplaySnapshot(stream) });
   if (!terminal) return { terminal, lastResponseId: snapshot.lastResponseId };
   const append = (items: unknown[]): ProviderInputItem[] => {
-    const offered = canonicalProviderHistoryItems(items);
+    const offered = alignHistoryToolOccurrences(canonicalProviderHistoryItems(items), input.toolLedger ?? []);
     const { kept, droppedSignatures } = dropAlreadyCommittedToolItems(offered, history);
     if (droppedSignatures.length)
       logger.warn('Dropped replayed tool call/result items before committing stream history', {
@@ -206,15 +210,16 @@ export function selectAcceptedStreamHistory(input: {
   const hasCanonicalItems = [...snapshot.newItems, ...snapshot.output].some(isCanonicalApplicationItemEvent);
   if (stream.historyReplacedByCompaction && projected.history.length) {
     // Acceptance cannot depend on a presentation log sink replaying assistant_turn.
-    accepted = projected.history as ProviderInputItem[];
+    accepted = alignHistoryToolOccurrences(projected.history, input.toolLedger ?? []) as ProviderInputItem[];
   } else if (replacement) accepted = replacement;
   else if (inputMode === 'delta') {
     if (projected.output.length) accepted = append(projected.output);
   } else if (hasCanonicalItems && hasConversationMessageItems(projected.history)) {
-    accepted = projected.history as ProviderInputItem[];
+    accepted = alignHistoryToolOccurrences(projected.history, input.toolLedger ?? []) as ProviderInputItem[];
   } else if (hasConversationMessageItems(projected.newItems)) accepted = append(projected.newItems);
   else if (hasConversationMessageItems(projected.output)) accepted = append(projected.output);
-  else if (hasConversationMessageItems(projected.history)) accepted = projected.history as ProviderInputItem[];
+  else if (hasConversationMessageItems(projected.history))
+    accepted = alignHistoryToolOccurrences(projected.history, input.toolLedger ?? []) as ProviderInputItem[];
   else if (hasToolResultItems(projected.newItems)) accepted = append(projected.newItems);
   else if (hasToolResultItems(projected.output)) accepted = append(projected.output);
   return { terminal, ...(accepted ? { history: accepted } : {}), lastResponseId: snapshot.lastResponseId };

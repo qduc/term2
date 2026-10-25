@@ -30,6 +30,7 @@ const SavedToolExecutionSchema = z
   .object({
     turnId: z.string(),
     callId: z.string(),
+    occurrence: z.number().int().positive().optional(),
     toolName: z.string(),
     arguments: z.unknown().optional(),
     status: MigratingToolExecutionStatusSchema,

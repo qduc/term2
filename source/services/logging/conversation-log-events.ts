@@ -139,6 +139,7 @@ export interface ToolResultLogEvent {
   type: 'tool_result';
   turnId?: string;
   callId: string;
+  occurrence?: number;
   toolName: string;
   status: 'completed' | 'failed' | 'aborted' | 'unknown';
   output?: unknown;

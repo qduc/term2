@@ -1,0 +1,14 @@
+[
+  {
+    "name": "e2e",
+    "command": "pnpm test:e2e",
+    "exit": 0,
+    "seconds": 7.96
+  },
+  {
+    "name": "provider-black-box",
+    "command": "pnpm test:provider-black-box",
+    "exit": 0,
+    "seconds": 93.76
+  }
+]

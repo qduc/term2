@@ -6,6 +6,7 @@ import type {
   ToolCall,
   ToolResult,
 } from '../../contracts/conversation-items.js';
+import { toolOccurrenceMetadata } from './tool-occurrence.js';
 
 const clone = <T>(value: T): T => {
   try {
@@ -181,6 +182,7 @@ const pushToolCallItem = (target: Item[], item: unknown): void => {
   const toolCallItem: ToolCall = {
     type: 'tool_call',
     callId: getCallId(raw, item),
+    ...toolOccurrenceMetadata({ ...raw, ...asRecord(item) }),
     toolName: getString(raw.name) ?? getString(asRecord(item)?.name) ?? 'unknown',
     arguments:
       raw.arguments ??
@@ -204,6 +206,7 @@ const pushToolResultItem = (target: Item[], item: unknown): void => {
   const toolResultItem: ToolResult = {
     type: 'tool_result',
     callId: getCallId(raw, item),
+    ...toolOccurrenceMetadata({ ...raw, ...asRecord(item) }),
     toolName:
       getString(raw.name) ??
       getString(asRecord(item)?.name) ??
@@ -221,6 +224,7 @@ const pushToolResultItem = (target: Item[], item: unknown): void => {
 const isCanonicalItem = (item: unknown): item is Item => {
   const record = asRecord(item);
   return (
+    ((record?.type === 'assistant_text' || record?.type === 'reasoning') && typeof record.text === 'string') ||
     (record?.type === 'tool_call' && typeof record.callId === 'string' && typeof record.toolName === 'string') ||
     (record?.type === 'tool_result' && typeof record.callId === 'string' && typeof record.toolName === 'string')
   );

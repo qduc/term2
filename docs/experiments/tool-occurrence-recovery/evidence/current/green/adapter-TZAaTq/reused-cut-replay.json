@@ -1,0 +1,157 @@
+{
+  "id": "reused-cut",
+  "createdAt": "2026-10-25T02:07:01.805Z",
+  "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/green/adapter-TZAaTq",
+  "previousResponseId": null,
+  "messages": [
+    {
+      "id": "same-0-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake 0",
+      "output": "turn-result-0",
+      "success": true,
+      "isApprovalRejection": false,
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 0
+      },
+      "callId": "same-0"
+    },
+    {
+      "id": "same-0-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake 1",
+      "output": "turn-result-1",
+      "success": true,
+      "isApprovalRejection": false,
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 1
+      },
+      "callId": "same-0"
+    },
+    {
+      "id": "command-same-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake",
+      "output": "turn-result-1",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 0
+      },
+      "callId": "same-0",
+      "success": true
+    },
+    {
+      "id": "command-same-0",
+      "sender": "command",
+      "status": "unknown",
+      "command": "fake",
+      "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+      "failureReason": "Session ended unexpectedly",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 1
+      },
+      "callId": "same-0"
+    }
+  ],
+  "history": [
+    {
+      "type": "function_call",
+      "callId": "same-0",
+      "name": "fake",
+      "arguments": "{\"iteration\":0}",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-0",
+      "name": "fake",
+      "output": "turn-result-0",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call",
+      "callId": "same-0",
+      "name": "fake",
+      "arguments": "{\"iteration\":1}",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-0",
+      "name": "fake",
+      "output": "turn-result-1",
+      "turnId": "turn-1",
+      "occurrence": 2
+    }
+  ],
+  "toolLedger": [
+    {
+      "turnId": "turn-1",
+      "callId": "same-0",
+      "occurrence": 1,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:07:01.813Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      ],
+      "arguments": "{\"iteration\":0}",
+      "output": "turn-result-0",
+      "completedAt": "2026-10-25T02:07:01.813Z"
+    },
+    {
+      "turnId": "turn-1",
+      "callId": "same-0",
+      "occurrence": 2,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:07:01.813Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      ],
+      "arguments": "{\"iteration\":1}",
+      "output": "turn-result-1",
+      "completedAt": "2026-10-25T02:07:01.813Z"
+    }
+  ],
+  "replayWarnings": []
+}

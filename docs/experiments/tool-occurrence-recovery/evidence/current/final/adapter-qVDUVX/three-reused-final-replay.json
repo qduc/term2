@@ -1,0 +1,401 @@
+{
+  "id": "three-reused-final",
+  "createdAt": "2026-10-25T02:16:38.107Z",
+  "projectPath": "/tmp/qduc/term2-nodejs/tool-occurrence-nzxE8c/adapter-qVDUVX",
+  "previousResponseId": null,
+  "messages": [
+    {
+      "id": "command-same-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake",
+      "output": "turn-result-3",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 0
+      },
+      "callId": "same-0",
+      "success": true
+    },
+    {
+      "id": "command-same-1",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake",
+      "output": "turn-result-4",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 1
+      },
+      "callId": "same-1",
+      "success": true
+    },
+    {
+      "id": "command-same-2",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake",
+      "output": "turn-result-5",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 2
+      },
+      "callId": "same-2",
+      "success": true
+    },
+    {
+      "id": "command-same-0",
+      "sender": "command",
+      "status": "running",
+      "command": "fake",
+      "output": "",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 3
+      },
+      "callId": "same-0"
+    },
+    {
+      "id": "command-same-1",
+      "sender": "command",
+      "status": "running",
+      "command": "fake",
+      "output": "",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 4
+      },
+      "callId": "same-1"
+    },
+    {
+      "id": "command-same-2",
+      "sender": "command",
+      "status": "running",
+      "command": "fake",
+      "output": "",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 5
+      },
+      "callId": "same-2"
+    },
+    {
+      "id": "bot-bot-turn-0-2026-10-25T02:16:38.181Z-0",
+      "sender": "bot",
+      "status": "finalized",
+      "text": "done"
+    }
+  ],
+  "history": [
+    {
+      "type": "function_call",
+      "callId": "same-0",
+      "name": "fake",
+      "arguments": "{\"iteration\":0}",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call",
+      "callId": "same-1",
+      "name": "fake",
+      "arguments": "{\"iteration\":1}",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call",
+      "callId": "same-2",
+      "name": "fake",
+      "arguments": "{\"iteration\":2}",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-0",
+      "name": "fake",
+      "output": "turn-result-0",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-1",
+      "name": "fake",
+      "output": "turn-result-1",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-2",
+      "name": "fake",
+      "output": "turn-result-2",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call",
+      "callId": "same-0",
+      "name": "fake",
+      "arguments": "{\"iteration\":3}",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "type": "function_call",
+      "callId": "same-1",
+      "name": "fake",
+      "arguments": "{\"iteration\":4}",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "type": "function_call",
+      "callId": "same-2",
+      "name": "fake",
+      "arguments": "{\"iteration\":5}",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-0",
+      "name": "fake",
+      "output": "turn-result-3",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-1",
+      "name": "fake",
+      "output": "turn-result-4",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-2",
+      "name": "fake",
+      "output": "turn-result-5",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "role": "assistant",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "done"
+        }
+      ]
+    }
+  ],
+  "toolLedger": [
+    {
+      "turnId": "turn-1",
+      "callId": "same-0",
+      "occurrence": 1,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:16:38.181Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      ],
+      "arguments": "{\"iteration\":0}",
+      "output": "turn-result-0",
+      "completedAt": "2026-10-25T02:16:38.181Z"
+    },
+    {
+      "turnId": "turn-1",
+      "callId": "same-1",
+      "occurrence": 1,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:16:38.181Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-1",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-1",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      ],
+      "arguments": "{\"iteration\":1}",
+      "output": "turn-result-1",
+      "completedAt": "2026-10-25T02:16:38.181Z"
+    },
+    {
+      "turnId": "turn-1",
+      "callId": "same-2",
+      "occurrence": 1,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:16:38.181Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-2",
+          "name": "fake",
+          "arguments": "{\"iteration\":2}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-2",
+          "name": "fake",
+          "output": "turn-result-2",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      ],
+      "arguments": "{\"iteration\":2}",
+      "output": "turn-result-2",
+      "completedAt": "2026-10-25T02:16:38.181Z"
+    },
+    {
+      "turnId": "turn-1",
+      "callId": "same-0",
+      "occurrence": 2,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:16:38.181Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":3}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-3",
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      ],
+      "arguments": "{\"iteration\":3}",
+      "output": "turn-result-3",
+      "completedAt": "2026-10-25T02:16:38.181Z"
+    },
+    {
+      "turnId": "turn-1",
+      "callId": "same-1",
+      "occurrence": 2,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:16:38.181Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-1",
+          "name": "fake",
+          "arguments": "{\"iteration\":4}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-1",
+          "name": "fake",
+          "output": "turn-result-4",
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      ],
+      "arguments": "{\"iteration\":4}",
+      "output": "turn-result-4",
+      "completedAt": "2026-10-25T02:16:38.181Z"
+    },
+    {
+      "turnId": "turn-1",
+      "callId": "same-2",
+      "occurrence": 2,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:16:38.181Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-2",
+          "name": "fake",
+          "arguments": "{\"iteration\":5}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-2",
+          "name": "fake",
+          "output": "turn-result-5",
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      ],
+      "arguments": "{\"iteration\":5}",
+      "output": "turn-result-5",
+      "completedAt": "2026-10-25T02:16:38.181Z"
+    }
+  ],
+  "costRecords": [
+    {
+      "requestId": "req-29",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    },
+    {
+      "requestId": "req-30",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    },
+    {
+      "requestId": "req-31",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    }
+  ],
+  "replayWarnings": []
+}

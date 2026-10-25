@@ -188,7 +188,11 @@ const reconciliation = fc.property(
       const results = projected.history.filter((item) => isResult(item) && idOf(item) === id);
       assert.equal(calls.length, 1, 'call membership changed');
       assert.equal(results.length, 1, 'result membership changed');
-      assert.deepEqual(calls[0], model.input, 'call payload changed');
+      // Application-owned admission metadata is not part of the provider payload.
+      const { turnId, occurrence, ...payload } = calls[0];
+      assert.equal(typeof turnId, 'string', 'missing admission turn');
+      assert.ok(Number.isInteger(occurrence) && occurrence > 0, 'missing admission ordinal');
+      assert.deepEqual(payload, model.input, 'call payload changed');
       assert.equal(results[0].output, model.output, 'result payload changed');
       const callIndex = projected.history.indexOf(calls[0]);
       const resultIndex = projected.history.indexOf(results[0]);

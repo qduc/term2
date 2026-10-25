@@ -925,7 +925,7 @@ not a hunch; the characterization results below supersede its initial
 | Conversation log event size | `conversation-log-writer.ts`; `MAX_EVENT_BYTES=256KiB`, strings over 1024 chars truncated, then a stub event | This is persisted replay state, so the logging-only exclusion does not apply. | Replay a session containing a truncated `tool_result`. |
 | Tool ownership claim eviction | `tool-ownership-registry.ts`; `DEFAULT_LIMIT=500`, evicts oldest | The code comment assumes claims are dead weight after approval, but eviction is count-based, not liveness-based. | Can a still-pending approval lose its owner? |
 | Duplicate repetition detectors | shared `GenerationGuard` (100k chars/channel, 4096x3 periodic suffix, typed `unsafeToReplay`) and the foreground session detector (200 repeated chars over 8 repetitions, throws an older untyped error) | Two owners, different thresholds, incompatible recovery. The foreground one trips at a far smaller repetition. | Characterize both together: valid exact-periodic output above 200 and above 4096 chars; threshold minus one / threshold / plus one; genuine runaway. If the foreground guard can reject valid output, prefer deleting it over tuning two detectors. |
-| `InputSurgeGuard` bypass scope | blocks 3 duplicated call/result IDs at 2 copies, or 20 duplicated signatures at 4 copies; pauses dispatch for explicit confirmation with a one-turn bypass | A bypass that leaks across turns is a cross-turn authorization defect. | Legitimate full-history input reaches confirmation; cancel and confirm paths; the bypass cannot attach to replacement or queued input. |
+| `InputSurgeGuard` bypass scope | blocks 3 duplicated call/result occurrence identities at 2 copies (legacy untagged input uses call IDs), or 20 duplicated signatures at 4 copies; pauses dispatch for explicit confirmation with a one-turn bypass | A bypass that leaks across turns is a cross-turn authorization defect. | Legitimate full-history input reaches confirmation; cancel and confirm paths; the bypass cannot attach to replacement or queued input. |
 
 Use fake timers and fake providers/processes. Never place destructive command
 examples in ad-hoc shell probes — keep them as data in fixture files.
@@ -3832,3 +3832,19 @@ and saved-pause loading omitted it. A small shared operation plus generated
 transition/valid-record contracts protect this category without a second queue
 manager or replacing the state machine. The cancellation-retention path remains
 separately identity-fenced; no weaker cancellation proxy was introduced.
+
+
+### Tool occurrence recovery identity correction
+
+`InputSurgeGuard` keeps its existing thresholds, configuration precedence,
+confirmation action, content-bound bypass and retry semantics. Its tool signatures
+now use optional `(turnId, callId, occurrence)` admission evidence. Three provider
+IDs reused across two legitimate rounds are not three replayed pairs; repeated
+representations of the same known admission still count. Untagged legacy input
+retains the prior ID heuristic. No setting, timeout, retention or wire change.
+The signal is still a proxy for replay growth, not proof of abusive work; no
+additional rejection authority is introduced. Partial-work settlement and
+provider continuity are unchanged. Rollback is the source identity migration,
+not a threshold increase. Offline six-occurrence next-request and duplicate
+controls are retained in `docs/experiments/tool-occurrence-recovery/`;
+independent verification is pending with the parent.

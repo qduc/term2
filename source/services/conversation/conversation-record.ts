@@ -1,3 +1,5 @@
+import { toolOccurrenceKey, toolOccurrenceMetadata } from './tool-occurrence.js';
+import { projectPersistedAssistantItemToProviderHistory } from './conversation-turn-items.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ILoggingService } from '../service-interfaces.js';
@@ -133,17 +135,27 @@ export class ConversationRecord {
     return this.#ledger.completedResultCallIdsForCurrentTurn();
   }
   unsettledToolCallIdsForCurrentTurn(): string[] {
-    const completed = new Set(this.completedResultCallIdsForCurrentTurn());
-    return this.activeCallIdsForCurrentTurn().filter((id) => !completed.has(id));
+    return this.#ledger
+      .export()
+      .filter(
+        (entry) =>
+          entry.turnId === this.getCurrentTurnId() &&
+          (entry.status === 'started' || entry.status === 'approval_required'),
+      )
+      .map((entry) => entry.callId);
   }
   inspectCommittedToolContinuation(): CommittedToolContinuation {
     const live = this.#ledger.export().filter((entry) => entry.turnId === this.getCurrentTurnId());
     const completed = live.filter((entry) => entry.status === 'completed');
-    const historyIds = new Set(this.getReconciledHistory().map(callIdOf).filter(Boolean));
+    const historyItems = this.getReconciledHistory().flatMap(normalizeRunItem);
+    const historyCalls = new Set(historyItems.filter((item) => item.type === 'tool_call').map(toolOccurrenceKey));
+    const historyResults = new Set(historyItems.filter((item) => item.type === 'tool_result').map(toolOccurrenceKey));
     return {
       completedToolCount: completed.length,
       allToolsCompleted: live.length > 0 && live.every((entry) => entry.status === 'completed'),
-      completedPairsPresentInHistory: completed.every((entry) => historyIds.has(entry.callId)),
+      completedPairsPresentInHistory: completed.every(
+        (entry) => historyCalls.has(toolOccurrenceKey(entry)) && historyResults.has(toolOccurrenceKey(entry)),
+      ),
     };
   }
 
@@ -190,17 +202,20 @@ export class ConversationRecord {
     this.#lastPersistence = this.#journalSink ? 'not_requested' : 'unconfigured';
     // Journal deduplication is independent of execution occurrence: a real new
     // invocation may reuse a provider call id within this logical turn.
-    for (const normalized of normalizeRunItem(item)) {
+    const acceptedItems = normalizeRunItem(item);
+    for (const normalized of acceptedItems) {
       if (normalized.type === 'tool_call') {
         if (this.#pendingReasoningText) this.#ledger.recordReasoningText(this.#pendingReasoningText);
         this.#pendingReasoningText = '';
-        this.#ledger.recordFunctionCall(item);
+        const entry = this.#ledger.recordFunctionCall(normalized);
+        if (entry) Object.assign(normalized, toolOccurrenceMetadata(entry));
       } else if (normalized.type === 'tool_result') {
-        this.#ledger.recordFunctionResult(item);
+        const entry = this.#ledger.recordFunctionResult(normalized);
+        if (entry) Object.assign(normalized, toolOccurrenceMetadata(entry));
         if (this.#segmentSource !== 'startStream' && this.#journalSink) {
-          const entry = this.#ledger.export().find((candidate) => candidate.callId === normalized.callId);
           this.#deliverJournalEvent({
             type: 'tool_result',
+            ...toolOccurrenceMetadata(normalized),
             callId: normalized.callId,
             toolName: entry?.toolName ?? normalized.toolName,
             status:
@@ -216,8 +231,14 @@ export class ConversationRecord {
     // The transcript is immediately readable by preparation/recovery. Segment
     // selection later reconciles the provider's terminal representation against
     // the baseline, rather than appending these same observations twice.
-    this.#store.appendOutput([item as ProviderInputItem]);
-    this.#journal.recordRunItem(item);
+    const journalItems = this.#journal.recordRunItem(item, acceptedItems);
+    if (journalItems.length)
+      this.#store.appendOutput(
+        journalItems.some((accepted) => accepted.type === 'tool_call' || accepted.type === 'tool_result')
+          ? journalItems.map(projectPersistedAssistantItemToProviderHistory)
+          : [item as ProviderInputItem],
+      );
+    else if (!acceptedItems.length) this.#store.appendOutput([item as ProviderInputItem]);
     return this.#receipt();
   }
 
@@ -229,6 +250,7 @@ export class ConversationRecord {
   ) {
     const selected = selectAcceptedStreamHistory({
       stream,
+      toolLedger: this.#ledger.export(),
       history: this.#segmentBaseline ? [...this.#segmentBaseline.history] : this.#store.getHistory(),
       inputMode,
       source: this.#segmentSource,
@@ -297,13 +319,13 @@ export class ConversationRecord {
 
   #restoreSettledEntries(snapshot: SavedToolExecution[]): void {
     const merged = [...snapshot];
-    const indices = new Map(merged.map((entry, index) => [entry.callId, index]));
+    const indices = new Map(merged.map((entry, index) => [toolOccurrenceKey(entry), index]));
     for (const entry of this.#ledger.export()) {
       if (!['completed', 'aborted', 'unknown'].includes(entry.status)) continue;
-      const index = indices.get(entry.callId);
+      const index = indices.get(toolOccurrenceKey(entry));
       if (index !== undefined) merged[index] = entry;
       else {
-        indices.set(entry.callId, merged.length);
+        indices.set(toolOccurrenceKey(entry), merged.length);
         merged.push(entry);
       }
     }
@@ -327,9 +349,9 @@ export class ConversationRecord {
     updatedAt?: string;
   }) {
     const validated = ImportedConversationStateSchema.parse(state);
-    const projected = projectImportedState(validated);
     this.reset();
     this.#ledger.import(validated.toolLedger);
+    const projected = projectImportedState({ ...validated, toolLedger: this.#ledger.export() });
     for (const item of projected.history) this.#store.addImportedItem(item);
     return { validated, projected };
   }

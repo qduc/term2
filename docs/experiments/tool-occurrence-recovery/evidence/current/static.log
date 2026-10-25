@@ -1,0 +1,10 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix[39m
+
+
+[2m Test Files [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[32m28 passed[39m[22m[90m (28)[39m
+[2m   Start at [22m 09:09:06
+[2m   Duration [22m 1.86s[2m (transform 1.27s, setup 150ms, import 189ms, tests 2.64s, environment 1ms)[22m
+

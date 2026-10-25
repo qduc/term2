@@ -1,0 +1,3060 @@
+[
+  {
+    "name": "no-body-approval-false",
+    "bodies": ["approved"],
+    "starts": ["approved"],
+    "events": [
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 1,
+        "item": {
+          "type": "tool_call",
+          "callId": "invalid",
+          "toolName": "fake",
+          "arguments": "{",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "invalid",
+            "name": "fake",
+            "arguments": "{"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "tool_result",
+          "callId": "invalid",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "invalid",
+            "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "denied",
+          "toolName": "fake",
+          "arguments": "{\"token\":\"new-work\"}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "denied",
+            "name": "fake",
+            "arguments": "{\"token\":\"new-work\"}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 4,
+        "item": {
+          "type": "tool_result",
+          "callId": "denied",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "denied fixture",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "denied",
+            "output": "denied fixture"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 5,
+        "item": {
+          "type": "tool_call",
+          "callId": "approved",
+          "toolName": "fake",
+          "arguments": "{\"token\":\"new-work\"}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "approved",
+            "name": "fake",
+            "arguments": "{\"token\":\"new-work\"}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 6,
+        "item": {
+          "type": "tool_result",
+          "callId": "approved",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-1",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "approved",
+            "output": "ok-1"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "invalid",
+        "toolName": "fake",
+        "arguments": "{",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.600Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "invalid",
+            "name": "fake",
+            "arguments": "{",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "invalid",
+            "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+        "completedAt": "2026-10-25T02:11:51.612Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "denied",
+        "toolName": "fake",
+        "arguments": "{\"token\":\"new-work\"}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.616Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "denied",
+            "name": "fake",
+            "arguments": "{\"token\":\"new-work\"}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "denied",
+            "output": "denied fixture",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "output": "denied fixture",
+        "completedAt": "2026-10-25T02:11:51.620Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "approved",
+        "toolName": "fake",
+        "arguments": "{\"token\":\"new-work\"}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.624Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "approved",
+            "name": "fake",
+            "arguments": "{\"token\":\"new-work\"}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "approved",
+            "output": "ok-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.627Z",
+        "output": "ok-1",
+        "completedAt": "2026-10-25T02:11:51.627Z"
+      }
+    ],
+    "replay": {
+      "id": "no-body-approval-false",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-invalid",
+          "sender": "command",
+          "status": "completed",
+          "command": "{",
+          "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          "toolName": "fake",
+          "toolArgs": "{",
+          "callId": "invalid",
+          "success": true
+        },
+        {
+          "id": "command-denied",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "denied fixture",
+          "toolName": "fake",
+          "toolArgs": {
+            "token": "new-work"
+          },
+          "callId": "denied",
+          "success": true
+        },
+        {
+          "id": "command-approved",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "ok-1",
+          "toolName": "fake",
+          "toolArgs": {
+            "token": "new-work"
+          },
+          "callId": "approved",
+          "success": true
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "call_id": "invalid",
+          "name": "fake",
+          "arguments": "{",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "invalid"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "invalid",
+          "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "invalid",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "denied",
+          "name": "fake",
+          "arguments": "{\"token\":\"new-work\"}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "denied"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "denied",
+          "output": "denied fixture",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "denied",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "approved",
+          "name": "fake",
+          "arguments": "{\"token\":\"new-work\"}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "approved"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "approved",
+          "output": "ok-1",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "approved",
+          "name": "unknown"
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "invalid",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.600Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "invalid",
+              "name": "fake",
+              "arguments": "{",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "invalid"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "invalid",
+              "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "invalid",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{",
+          "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          "completedAt": "2026-10-25T02:11:51.600Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "denied",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.600Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "denied",
+              "name": "fake",
+              "arguments": "{\"token\":\"new-work\"}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "denied"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "denied",
+              "output": "denied fixture",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "denied",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{\"token\":\"new-work\"}",
+          "output": "denied fixture",
+          "completedAt": "2026-10-25T02:11:51.600Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "approved",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.600Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "approved",
+              "name": "fake",
+              "arguments": "{\"token\":\"new-work\"}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "approved"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "approved",
+              "output": "ok-1",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "approved",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{\"token\":\"new-work\"}",
+          "output": "ok-1",
+          "completedAt": "2026-10-25T02:11:51.600Z"
+        }
+      ],
+      "replayWarnings": []
+    }
+  },
+  {
+    "name": "no-body-approval-true",
+    "bodies": ["same"],
+    "starts": ["same"],
+    "events": [
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 1,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{\"token\":\"new-work\"}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{\"token\":\"new-work\"}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 4,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "denied fixture",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "denied fixture"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 5,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{\"token\":\"new-work\"}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{\"token\":\"new-work\"}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 3
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 6,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-1",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1"
+          },
+          "turnId": "turn-1",
+          "occurrence": 3
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.646Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+        "completedAt": "2026-10-25T02:11:51.651Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{\"token\":\"new-work\"}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.654Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{\"token\":\"new-work\"}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "denied fixture",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "output": "denied fixture",
+        "completedAt": "2026-10-25T02:11:51.658Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 3,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{\"token\":\"new-work\"}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.663Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{\"token\":\"new-work\"}",
+            "turnId": "turn-1",
+            "occurrence": 3
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1",
+            "turnId": "turn-1",
+            "occurrence": 3
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.667Z",
+        "output": "ok-1",
+        "completedAt": "2026-10-25T02:11:51.667Z"
+      }
+    ],
+    "replay": {
+      "id": "no-body-approval-true",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "completed",
+          "command": "{",
+          "output": "ok-1",
+          "toolName": "fake",
+          "toolArgs": "{",
+          "callId": "same",
+          "success": true
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {
+            "token": "new-work"
+          },
+          "callId": "same"
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {
+            "token": "new-work"
+          },
+          "callId": "same"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{\"token\":\"new-work\"}",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "denied fixture",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{\"token\":\"new-work\"}",
+          "turnId": "turn-1",
+          "occurrence": 3,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-1",
+          "turnId": "turn-1",
+          "occurrence": 3,
+          "callId": "same",
+          "name": "unknown"
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.646Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{",
+          "output": "Error: Invalid patch: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          "completedAt": "2026-10-25T02:11:51.646Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.646Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{\"token\":\"new-work\"}",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "denied fixture",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{\"token\":\"new-work\"}",
+          "output": "denied fixture",
+          "completedAt": "2026-10-25T02:11:51.646Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 3,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.646Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{\"token\":\"new-work\"}",
+              "turnId": "turn-1",
+              "occurrence": 3,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-1",
+              "turnId": "turn-1",
+              "occurrence": 3,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{\"token\":\"new-work\"}",
+          "output": "ok-1",
+          "completedAt": "2026-10-25T02:11:51.646Z"
+        }
+      ],
+      "replayWarnings": []
+    }
+  },
+  {
+    "name": "unknown-tool-no-body",
+    "bodies": ["same"],
+    "starts": ["same"],
+    "events": [
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 1,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "missing",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "missing",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "Unknown tool: missing",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "Unknown tool: missing"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 4,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-1",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "missing",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.687Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "missing",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "Unknown tool: missing",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "output": "Unknown tool: missing",
+        "completedAt": "2026-10-25T02:11:51.690Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.695Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.698Z",
+        "output": "ok-1",
+        "completedAt": "2026-10-25T02:11:51.698Z"
+      }
+    ],
+    "replay": {
+      "id": "unknown-tool-no-body",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "completed",
+          "command": "missing",
+          "output": "ok-1",
+          "toolName": "missing",
+          "toolArgs": {},
+          "callId": "same",
+          "success": true
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "missing",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "Unknown tool: missing",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-1",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same",
+          "name": "unknown"
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 1,
+          "toolName": "missing",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.687Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "missing",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "Unknown tool: missing",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "Unknown tool: missing",
+          "completedAt": "2026-10-25T02:11:51.687Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.687Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-1",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "ok-1",
+          "completedAt": "2026-10-25T02:11:51.687Z"
+        }
+      ],
+      "replayWarnings": []
+    }
+  },
+  {
+    "name": "admitted-before-result",
+    "bodies": ["same"],
+    "starts": ["same"],
+    "events": [
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 1,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-1",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.718Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.721Z",
+        "output": "ok-1",
+        "completedAt": "2026-10-25T02:11:51.721Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "started",
+        "startedAt": "2026-10-25T02:11:51.725Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ]
+      }
+    ],
+    "replay": {
+      "id": "admitted-before-result",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "ok-1",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same",
+          "success": true
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-1",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same"
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.718Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-1",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "ok-1",
+          "completedAt": "2026-10-25T02:11:51.718Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "unknown",
+          "startedAt": "2026-10-25T02:11:51.718Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "callId": "same",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly."
+            }
+          ],
+          "arguments": "{}",
+          "failureReason": "Session ended unexpectedly",
+          "completedAt": "2026-10-25T02:11:51.725Z"
+        }
+      ],
+      "replayWarnings": []
+    }
+  },
+  {
+    "name": "direct-segment",
+    "bodies": ["same", "same"],
+    "starts": ["same", "same"],
+    "events": [
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 1,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-1",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      },
+      {
+        "type": "tool_result",
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "callId": "same",
+        "toolName": "fake",
+        "status": "completed",
+        "output": "ok-2",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-2",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ]
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 4,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-2",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-2"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.747Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.750Z",
+        "output": "ok-1",
+        "completedAt": "2026-10-25T02:11:51.750Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.755Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-2",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.759Z",
+        "output": "ok-2",
+        "completedAt": "2026-10-25T02:11:51.759Z"
+      }
+    ],
+    "replay": {
+      "id": "direct-segment",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "ok-2",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same",
+          "success": true
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-1",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-2",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same",
+          "name": "unknown"
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.747Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-1",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "ok-1",
+          "completedAt": "2026-10-25T02:11:51.747Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.747Z",
+          "output": "ok-2",
+          "completedAt": "2026-10-25T02:11:51.747Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-2",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}"
+        }
+      ],
+      "replayWarnings": []
+    }
+  },
+  {
+    "name": "same-occurrence-and-accumulated-segments",
+    "bodies": [],
+    "starts": [],
+    "events": [
+      {
+        "type": "assistant_journal_delta",
+        "turnId": "turn-1",
+        "seq": 1,
+        "kind": "reasoning",
+        "delta": "reason owned by first admission"
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "reasoning",
+          "text": "reason owned by first admission",
+          "providerItemId": "reason-1",
+          "providerMetadata": {
+            "signature": "retained"
+          }
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 4,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "equal",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "equal"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 5,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 6,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "equal",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "equal"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.792Z",
+        "historyItems": [
+          {
+            "type": "reasoning",
+            "content": [
+              {
+                "type": "reasoning_text",
+                "text": "reason owned by first admission"
+              }
+            ],
+            "rawContent": [
+              {
+                "type": "reasoning_text",
+                "text": "reason owned by first admission"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "callId": "same",
+            "toolName": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "equal",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "output": "equal",
+        "completedAt": "2026-10-25T02:11:51.796Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.800Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "equal",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "output": "equal",
+        "completedAt": "2026-10-25T02:11:51.803Z"
+      }
+    ],
+    "replay": {
+      "id": "same-occurrence-and-accumulated-segments",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "reasoning-journal-turn-1-2026-10-25T02:11:51.788Z-0",
+          "sender": "reasoning",
+          "status": "finalized",
+          "text": "reason owned by first admission"
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "equal",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same",
+          "success": true
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same"
+        }
+      ],
+      "history": [
+        {
+          "type": "reasoning",
+          "id": "reason-1",
+          "content": [
+            {
+              "type": "reasoning_text",
+              "text": "reason owned by first admission"
+            }
+          ],
+          "rawContent": [
+            {
+              "type": "reasoning_text",
+              "text": "reason owned by first admission"
+            }
+          ],
+          "providerData": {
+            "signature": "retained"
+          }
+        },
+        {
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "type": "function_call",
+          "callId": "same",
+          "name": "fake",
+          "arguments": "{}"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "equal",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "equal",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "reasoning",
+          "content": [
+            {
+              "type": "reasoning_text",
+              "text": "reason owned by first admission"
+            }
+          ],
+          "rawContent": [
+            {
+              "type": "reasoning_text",
+              "text": "reason owned by first admission"
+            }
+          ]
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.788Z",
+          "historyItems": [
+            {
+              "type": "reasoning",
+              "id": "reason-1",
+              "content": [
+                {
+                  "type": "reasoning_text",
+                  "text": "reason owned by first admission"
+                }
+              ],
+              "rawContent": [
+                {
+                  "type": "reasoning_text",
+                  "text": "reason owned by first admission"
+                }
+              ],
+              "providerData": {
+                "signature": "retained"
+              }
+            },
+            {
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "type": "function_call",
+              "callId": "same",
+              "name": "fake",
+              "arguments": "{}"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "equal",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "equal",
+          "completedAt": "2026-10-25T02:11:51.788Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.788Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "equal",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "equal",
+          "completedAt": "2026-10-25T02:11:51.788Z"
+        }
+      ],
+      "replayWarnings": []
+    }
+  },
+  {
+    "name": "parallel-ordinary",
+    "bodies": ["same", "bad", "same"],
+    "starts": ["same", "bad", "same"],
+    "events": [
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 1,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-1",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "bad",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "bad",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 4,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 5,
+        "item": {
+          "type": "tool_result",
+          "callId": "bad",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "Error: ordinary fixture",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "bad",
+            "output": "Error: ordinary fixture"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 6,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "fulfilled sibling",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "fulfilled sibling"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.828Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.832Z",
+        "output": "ok-1",
+        "completedAt": "2026-10-25T02:11:51.832Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "bad",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.836Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "bad",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "bad",
+            "output": "Error: ordinary fixture",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.843Z",
+        "output": "Error: ordinary fixture",
+        "completedAt": "2026-10-25T02:11:51.843Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.839Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "fulfilled sibling",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.843Z",
+        "output": "fulfilled sibling",
+        "completedAt": "2026-10-25T02:11:51.847Z"
+      }
+    ],
+    "replay": {
+      "id": "parallel-ordinary",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "fulfilled sibling",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same",
+          "success": true
+        },
+        {
+          "id": "command-bad",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "Error: ordinary fixture",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "bad",
+          "success": true
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-1",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "bad",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "bad"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "bad",
+          "output": "Error: ordinary fixture",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "bad",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "fulfilled sibling",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same",
+          "name": "unknown"
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.828Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-1",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "ok-1",
+          "completedAt": "2026-10-25T02:11:51.828Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "bad",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.828Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "bad",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "bad"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "bad",
+              "output": "Error: ordinary fixture",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "bad",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "Error: ordinary fixture",
+          "completedAt": "2026-10-25T02:11:51.828Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.828Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "fulfilled sibling",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "fulfilled sibling",
+          "completedAt": "2026-10-25T02:11:51.828Z"
+        }
+      ],
+      "replayWarnings": []
+    }
+  },
+  {
+    "name": "parallel-invariant",
+    "bodies": ["same", "bad", "same"],
+    "starts": ["same", "bad", "same"],
+    "events": [
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 1,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-1",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "bad",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "bad",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 4,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 5,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "fulfilled sibling",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "fulfilled sibling"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.872Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.876Z",
+        "output": "ok-1",
+        "completedAt": "2026-10-25T02:11:51.876Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "bad",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "unknown",
+        "startedAt": "2026-10-25T02:11:51.879Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "bad",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "callId": "bad",
+            "turnId": "turn-1",
+            "occurrence": 1,
+            "output": "Outcome unobserved: this operation was dispatched but the result was lost (for example due to a stream failure). Do not assume it failed or succeeded. Verify the current state before any retry, and do not re-run non-idempotent operations blindly."
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.887Z",
+        "failureReason": "Stream failed",
+        "completedAt": "2026-10-25T02:11:51.890Z",
+        "output": "Outcome unobserved: this operation was dispatched but the result was lost (for example due to a stream failure). Do not assume it failed or succeeded. Verify the current state before any retry, and do not re-run non-idempotent operations blindly."
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.883Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "fulfilled sibling",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.887Z",
+        "output": "fulfilled sibling",
+        "completedAt": "2026-10-25T02:11:51.887Z"
+      }
+    ],
+    "replay": {
+      "id": "parallel-invariant",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "fulfilled sibling",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same",
+          "success": true
+        },
+        {
+          "id": "command-bad",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "bad"
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-1",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "bad",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "bad"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "fulfilled sibling",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same",
+          "name": "unknown"
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.872Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-1",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "ok-1",
+          "completedAt": "2026-10-25T02:11:51.872Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "bad",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "unknown",
+          "startedAt": "2026-10-25T02:11:51.872Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "bad",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "bad"
+            },
+            {
+              "type": "function_call_output",
+              "callId": "bad",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly."
+            }
+          ],
+          "arguments": "{}",
+          "failureReason": "Session ended unexpectedly",
+          "completedAt": "2026-10-25T02:11:51.887Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.872Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "fulfilled sibling",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "fulfilled sibling",
+          "completedAt": "2026-10-25T02:11:51.872Z"
+        }
+      ],
+      "replayWarnings": []
+    }
+  },
+  {
+    "name": "final-legacy-rich-envelope-controls",
+    "bodies": ["same", "same"],
+    "starts": ["same", "same"],
+    "events": [
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 1,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 2,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-1",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1"
+          },
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 3,
+        "item": {
+          "type": "tool_call",
+          "callId": "same",
+          "toolName": "fake",
+          "arguments": "{}",
+          "providerItem": {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      },
+      {
+        "type": "assistant_journal_item",
+        "turnId": "turn-1",
+        "seq": 4,
+        "item": {
+          "type": "tool_result",
+          "callId": "same",
+          "toolName": "unknown",
+          "status": "completed",
+          "output": "ok-2",
+          "providerItem": {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-2"
+          },
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      }
+    ],
+    "live": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.909Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.912Z",
+        "output": "ok-1",
+        "completedAt": "2026-10-25T02:11:51.912Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same",
+        "toolName": "fake",
+        "arguments": "{}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.916Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "call_id": "same",
+            "name": "fake",
+            "arguments": "{}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "same",
+            "output": "ok-2",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.919Z",
+        "output": "ok-2",
+        "completedAt": "2026-10-25T02:11:51.919Z"
+      }
+    ],
+    "replay": {
+      "id": "final-legacy-rich-envelope-controls",
+      "createdAt": "2026-10-25T00:00:00.000Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/controls-0MHVeo",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "ok-2",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same",
+          "success": true
+        },
+        {
+          "id": "command-same",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {},
+          "callId": "same"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-1",
+          "turnId": "turn-1",
+          "occurrence": 1,
+          "callId": "same",
+          "name": "unknown"
+        },
+        {
+          "type": "function_call",
+          "call_id": "same",
+          "name": "fake",
+          "arguments": "{}",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "same",
+          "output": "ok-2",
+          "turnId": "turn-1",
+          "occurrence": 2,
+          "callId": "same",
+          "name": "unknown"
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.909Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-1",
+              "turnId": "turn-1",
+              "occurrence": 1,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "ok-1",
+          "completedAt": "2026-10-25T02:11:51.909Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.909Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "call_id": "same",
+              "name": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "same",
+              "output": "ok-2",
+              "turnId": "turn-1",
+              "occurrence": 2,
+              "callId": "same",
+              "name": "unknown"
+            }
+          ],
+          "arguments": "{}",
+          "output": "ok-2",
+          "completedAt": "2026-10-25T02:11:51.909Z"
+        }
+      ],
+      "replayWarnings": []
+    }
+  }
+]

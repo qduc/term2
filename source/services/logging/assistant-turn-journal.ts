@@ -1,3 +1,4 @@
+import { toolOccurrenceKey } from '../conversation/tool-occurrence.js';
 import type {
   AssistantJournalDeltaLogEvent,
   AssistantJournalItemLogEvent,
@@ -156,11 +157,11 @@ export class AssistantTurnJournal {
    * Returns the normalized persisted item so callers can layer additional
    * recovery logic on top.
    */
-  recordRunItem(item: unknown): PersistedAssistantTurnItem[] {
+  recordRunItem(item: unknown, acceptedItems?: PersistedAssistantTurnItem[]): PersistedAssistantTurnItem[] {
     if (item == null) {
       return [];
     }
-    const items = buildPersistedAssistantItemsFromRaw(item);
+    const items = acceptedItems ?? buildPersistedAssistantItemsFromRaw(item);
     if (items.length === 0) {
       return [];
     }
@@ -219,7 +220,7 @@ export class AssistantTurnJournal {
 function makeItemDedupKey(items: readonly PersistedAssistantTurnItem[]): string | null {
   for (const item of items) {
     if (item.type === 'tool_call' || item.type === 'tool_result') {
-      return `${item.type}:${item.callId}`;
+      return `${item.type}:${toolOccurrenceKey(item)}`;
     }
   }
 

@@ -59,7 +59,8 @@ const isSnapshot = (value: unknown): boolean =>
   isObject(value) &&
   Array.isArray(value['history']) &&
   (typeof value['previousResponseId'] === 'string' || value['previousResponseId'] === null) &&
-  Array.isArray(value['toolLedger']);
+  Array.isArray(value['toolLedger']) &&
+  value['toolLedger'].every((entry) => isObject(entry) && validOccurrence(entry));
 
 const isOneOf = (value: unknown, allowed: readonly string[]): boolean =>
   typeof value === 'string' && allowed.includes(value);
@@ -78,6 +79,9 @@ const isEventReferences = (value: unknown): boolean => {
   return true;
 };
 
+const validOccurrence = (value: UnknownObject): boolean =>
+  value['occurrence'] === undefined || (Number.isSafeInteger(value['occurrence']) && Number(value['occurrence']) > 0);
+
 const isAssistantItem = (value: unknown): boolean => {
   if (!isObject(value) || !hasString(value, 'type')) return false;
   switch (value['type']) {
@@ -85,10 +89,11 @@ const isAssistantItem = (value: unknown): boolean => {
     case 'assistant_text':
       return hasString(value, 'text');
     case 'tool_call':
-      return hasString(value, 'callId') && hasString(value, 'toolName');
+      return hasString(value, 'callId') && hasString(value, 'toolName') && validOccurrence(value);
     case 'tool_result':
       return (
         hasString(value, 'callId') &&
+        validOccurrence(value) &&
         hasString(value, 'toolName') &&
         isOneOf(value['status'], ['completed', 'failed', 'aborted', 'unknown'])
       );
@@ -166,6 +171,7 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
     case 'tool_result':
       return (
         hasString(event, 'callId') &&
+        validOccurrence(event) &&
         hasString(event, 'toolName') &&
         isOneOf(event['status'], ['completed', 'failed', 'aborted', 'unknown'])
       );

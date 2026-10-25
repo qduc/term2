@@ -1,0 +1,69 @@
+[
+  {
+    "name": "retained-runner-final",
+    "argv": ["node", "docs/experiments/rollover-queue/verify.mjs"],
+    "exit": 0,
+    "wall_seconds": 3.026
+  },
+  {
+    "name": "reviewer-unmodified-final",
+    "argv": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--reporter=verbose",
+      "source/hooks/journal-cancel.probe.test.tsx"
+    ],
+    "exit": 0,
+    "wall_seconds": 3.174
+  },
+  {
+    "name": "typecheck-final",
+    "argv": ["pnpm", "typecheck"],
+    "exit": 0,
+    "wall_seconds": 7.306
+  },
+  {
+    "name": "guards-final",
+    "argv": ["pnpm", "test"],
+    "exit": 0,
+    "wall_seconds": 7.36
+  },
+  {
+    "name": "no-unit-final",
+    "argv": ["pnpm", "check:no-unit-tests"],
+    "exit": 0,
+    "wall_seconds": 2.031
+  },
+  {
+    "name": "lint-focused",
+    "argv": [
+      "pnpm",
+      "exec",
+      "eslint",
+      "source/services/conversation/conversation-orchestrator.ts",
+      "docs/experiments/rollover-queue/verify.mjs"
+    ],
+    "exit": 0,
+    "wall_seconds": 9.174
+  },
+  {
+    "name": "format-focused",
+    "argv": [
+      "pnpm",
+      "exec",
+      "prettier",
+      "--check",
+      "source/services/conversation/conversation-orchestrator.ts",
+      "docs/experiments/rollover-queue/verify.mjs"
+    ],
+    "exit": 0,
+    "wall_seconds": 1.887
+  },
+  {
+    "name": "diff-check",
+    "argv": ["git", "diff", "--check"],
+    "exit": 0,
+    "wall_seconds": 0.032
+  }
+]

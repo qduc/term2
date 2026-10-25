@@ -1,0 +1,6 @@
+
+/home/qduc/term2/.worktrees/rollover-queue/source/services/conversation/conversation-service.ts
+  209:11  warning  Unexpected aliasing of 'this' to local variable  @typescript-eslint/no-this-alias
+
+✖ 1 problem (0 errors, 1 warning)
+

@@ -1,0 +1,21 @@
+{
+  "appended_run_ids": [
+    "2026-10-25-rollover-queue-journal-repair-independent-reject",
+    "2026-10-25-rollover-queue-journal-repair-red",
+    "2026-10-25-rollover-queue-journal-repair-first-attempt",
+    "2026-10-25-rollover-queue-journal-repair-incomplete-edits",
+    "2026-10-25-rollover-queue-journal-repair-green-reviewer",
+    "2026-10-25-rollover-queue-journal-repair-green-expanded",
+    "2026-10-25-rollover-queue-journal-repair-typecheck",
+    "2026-10-25-rollover-queue-journal-repair-guards",
+    "2026-10-25-rollover-queue-journal-repair-no-unit",
+    "2026-10-25-rollover-queue-journal-repair-lint",
+    "2026-10-25-rollover-queue-journal-repair-format",
+    "2026-10-25-rollover-queue-journal-repair-diff-check",
+    "2026-10-25-rollover-queue-journal-repair-identity-scope-correction"
+  ],
+  "repair_activity_id": "2026-10-25-rollover-queue-journal-repair",
+  "linked_delivery_id": "2026-10-25-rollover-queue",
+  "escaped_defect_rows_added": 0,
+  "reason": "R1 found before acceptance of original candidate; rejection and resolving evidence recorded as task-linked verification runs."
+}

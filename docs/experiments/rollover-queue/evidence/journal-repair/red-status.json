@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "NODE_ENV=test",
+    "node",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--reporter=verbose",
+    "source/hooks/journal-cancel.probe.test.tsx"
+  ],
+  "exit": 1,
+  "fixture_sha256": "7ebef8b307dc72a1870d4382f4a74ce974c33e3d504dc78f025ad85a22b8009a",
+  "source_identity": "intake.json"
+}

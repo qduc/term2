@@ -1,0 +1,23 @@
+{
+  "recorded_at": "2026-10-25T05:30:32.911658+00:00",
+  "live_owned_verification_processes": [],
+  "child_agents": [],
+  "all_8_final_check_exits": {
+    "retained-runner-final": 0,
+    "reviewer-unmodified-final": 0,
+    "typecheck-final": 0,
+    "guards-final": 0,
+    "no-unit-final": 0,
+    "lint-focused": 0,
+    "format-focused": 0,
+    "diff-check": 0
+  },
+  "prior_task_ledger_bytes_preserved": true,
+  "defect_ledger_unchanged": true,
+  "prior_test_result_records_preserved": true,
+  "prior_test_results_reconstructed_exact_frozen_hash": true,
+  "R1_runs_appended": 13,
+  "FIX_REPORT_unchanged": true,
+  "temporary_probes_removed": true,
+  "reviewer_fixture_copy_matches": true
+}

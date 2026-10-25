@@ -1,0 +1,44 @@
+[
+  {
+    "name": "green-final-exact",
+    "argv": ["node", "docs/experiments/rollover-queue/verify.mjs"],
+    "exit": 0,
+    "wall_seconds": 2.52
+  },
+  {
+    "name": "lint-final",
+    "argv": ["pnpm", "lint"],
+    "exit": 1,
+    "wall_seconds": 41.919
+  },
+  {
+    "name": "typecheck-final",
+    "argv": ["pnpm", "typecheck"],
+    "exit": 0,
+    "wall_seconds": 6.15
+  },
+  {
+    "name": "static-final",
+    "argv": ["pnpm", "test"],
+    "exit": 0,
+    "wall_seconds": 6.216
+  },
+  {
+    "name": "generated-serial-final",
+    "argv": ["pnpm", "verify:generated", "--property", "queue.serial-actions", "--seed=424242", "--runs", "1000"],
+    "exit": 0,
+    "wall_seconds": 1.933
+  },
+  {
+    "name": "generated-restore-final",
+    "argv": ["pnpm", "verify:generated", "--property", "queue.restore-pause", "--seed=424242", "--runs", "1000"],
+    "exit": 0,
+    "wall_seconds": 1.928
+  },
+  {
+    "name": "no-unit-final",
+    "argv": ["pnpm", "check:no-unit-tests"],
+    "exit": 0,
+    "wall_seconds": 1.028
+  }
+]

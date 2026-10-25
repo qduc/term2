@@ -1,0 +1,37 @@
+[
+  {
+    "name": "base-lint",
+    "argv": ["pnpm", "lint"],
+    "exit": 2,
+    "wall_seconds": 19.005,
+    "head": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+    "production_diff": "empty"
+  },
+  {
+    "name": "base-integration-focused",
+    "argv": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "--reporter=verbose",
+      "--config",
+      "vitest.integration.config.ts",
+      "source/cli.integration.test.ts",
+      "-t",
+      "bare profile via|bare retains the outside-workspace|bare permits explicit sandbox"
+    ],
+    "exit": 1,
+    "wall_seconds": 9.329,
+    "head": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+    "production_diff": "empty"
+  },
+  {
+    "name": "base-fixture-runner",
+    "argv": ["node", "docs/experiments/rollover-queue/verify.mjs"],
+    "exit": 1,
+    "wall_seconds": 11.417,
+    "head": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+    "production_diff": "empty"
+  }
+]

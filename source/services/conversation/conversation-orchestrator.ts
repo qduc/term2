@@ -455,7 +455,10 @@ export class ConversationOrchestrator {
    * queued awaits.
    */
   #activeTurns = 0;
-  readonly #outstandingSubmissions = new Map<string, OutstandingSubmission>();
+  readonly #outstandingSubmissions = new Map<
+    string,
+    { message: UserMessage; stage: OutstandingSubmission['stage']; needsJournalRecord?: boolean }
+  >();
   /** Bumped by every presentation reset; pre-reset in-flight submissions are dead. */
   #lifecycleGeneration = 0;
   /** True while {@link stopProcessing} is tearing the conversation down. */
@@ -537,8 +540,9 @@ export class ConversationOrchestrator {
 
   listOutstandingSubmissions(): OutstandingSubmission[] {
     return [...this.#outstandingSubmissions.values()].map((item) => ({
-      ...item,
-      text: item.text.slice(0, 500),
+      id: item.message.id,
+      text: item.message.text.slice(0, 500),
+      stage: item.stage,
     }));
   }
 
@@ -564,12 +568,12 @@ export class ConversationOrchestrator {
   }
 
   /** Reset only the UI projection after an in-place session rollover. */
-  resetPresentation(options: { preserveBackgroundNotificationDedup?: boolean } = {}): void {
-    this.#lifecycleGeneration += 1;
+  resetPresentation(options: { preserveBackgroundNotificationDedup?: boolean; preserveQueued?: boolean } = {}): void {
+    if (!options.preserveQueued) this.#lifecycleGeneration += 1;
     this.config.messages.setMessages(() => []);
     this.config.approvedContext.current = null;
     this.config.conversationService.clearPendingInteraction?.();
-    this.config.ui.onResetAll();
+    this.config.ui.onResetAll({ preserveQueued: options.preserveQueued });
     this.config.usageAccumulator?.reset();
     this.config.subagentUsageAccumulator?.reset();
     this.config.costAccumulator?.reset();
@@ -577,7 +581,18 @@ export class ConversationOrchestrator {
     if (!options.preserveBackgroundNotificationDedup) {
       this.#displayedBackgroundNotificationMessageIds.clear();
     }
-    this.#outstandingSubmissions.clear();
+    if (options.preserveQueued) {
+      // These inputs were journaled before writer rotation. Their executable
+      // ownership survives rollover. Transfer their accepted user records just
+      // after the successor briefing's record, before newer submissions can be
+      // journaled there; ordinary same-session starts must not log them again.
+      for (const submission of this.#outstandingSubmissions.values()) {
+        // Unsettled steers are first journaled by their admission callback.
+        if (submission.stage === 'queued') submission.needsJournalRecord = true;
+      }
+    } else {
+      this.#outstandingSubmissions.clear();
+    }
     this.#reportedStrandedCallIds.clear();
   }
 
@@ -695,7 +710,7 @@ export class ConversationOrchestrator {
       if (outstanding)
         this.#outstandingSubmissions.set(id, {
           ...outstanding,
-          text: formatUserTurnForDisplay(editedTurn),
+          message: { ...outstanding.message, text: formatUserTurnForDisplay(editedTurn), skill: editedTurn.skill },
         });
       this.config.ui.onQueuedMessageEdited?.(id, editedTurn);
     }
@@ -858,8 +873,7 @@ export class ConversationOrchestrator {
     if (queueOwnsSubmission) {
       const delivery: 'steer' | 'follow_up' = options?.busyMode === 'steer' ? 'steer' : 'follow_up';
       this.#outstandingSubmissions.set(userMessage.id, {
-        id: userMessage.id,
-        text: userMessage.text,
+        message: userMessage,
         stage: delivery === 'steer' ? 'pending_steer' : 'queued',
       });
 
@@ -874,6 +888,17 @@ export class ConversationOrchestrator {
     }
     if (!queueOwnsSubmission || !steering) {
       this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
+    }
+
+    if (options?.presentation === 'session_rollover') {
+      // Writer rotation is already committed. Preserve submission-time journal
+      // semantics: retained input follows the briefing, before input accepted
+      // during that briefing. Queue starts still only project the user message.
+      for (const submission of this.#outstandingSubmissions.values()) {
+        if (!submission.needsJournalRecord) continue;
+        this.config.logWriter?.append({ type: 'user_message', message: { ...submission.message } });
+        submission.needsJournalRecord = false;
+      }
     }
 
     // Streaming callbacks are bound at submit time, but deferred submissions
@@ -902,6 +927,7 @@ export class ConversationOrchestrator {
           inputSurgeApproval: options?.inputSurgeApproval,
           busyMode: options?.busyMode,
           preferredMessageId: userMessage.id,
+          rolloverBrief: options?.presentation === 'session_rollover',
         },
         {
           onSteerSettled: (admitted, latestInput) => {
@@ -923,8 +949,7 @@ export class ConversationOrchestrator {
               this.config.messages.appendMessages([userMessage]);
             } else {
               this.#outstandingSubmissions.set(userMessage.id, {
-                id: userMessage.id,
-                text: userMessage.text,
+                message: userMessage,
                 stage: 'queued',
               });
               this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
@@ -943,6 +968,10 @@ export class ConversationOrchestrator {
       this.#settleTurn(applyConversationEvent, botResponseUpdater, result.terminal, streamingState);
     } catch (error) {
       this.logError('Error in sendUserMessage', error);
+      // The rollover owner must observe bootstrap failure, not release retained
+      // input as though the successor had received its handoff. Ordinary sends
+      // retain their existing rendered-error contract.
+      if (options?.presentation === 'session_rollover') throw error;
 
       if (queueOwnsSubmission) {
         this.#outstandingSubmissions.delete(userMessage.id);

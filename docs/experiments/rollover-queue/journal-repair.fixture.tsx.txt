@@ -1,0 +1,372 @@
+import React, { act } from 'react';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createConversationLogWriter } from '../services/logging/conversation-log-writer.js';
+import { rotateSessionLog } from '../services/conversation/session-log-lifecycle.js';
+import { replayEvents } from '../services/conversation/conversation-replay.js';
+import { test, expect } from 'vitest';
+import { renderInAct } from '../test-helpers/ink-testing.js';
+import { useConversation } from './use-conversation.js';
+import { ConversationService } from '../services/conversation/conversation-service.js';
+import { SessionContextService } from '../services/session/session-context-service.js';
+import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
+import { composeSessionRolloverBrief } from '../services/session-rollover/session-rollover-brief.js';
+
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+};
+const logger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error(...args: any[]) {
+    console.log('FIXTURE_ERROR', ...args);
+  },
+  getCorrelationId: () => undefined,
+};
+async function until(predicate: () => boolean) {
+  for (let i = 0; i < 300; i++) {
+    if (predicate()) return;
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+  }
+  throw new Error('fixture condition did not settle');
+}
+async function setup(mode = 'success') {
+  const first = deferred(),
+    rotate = deferred(),
+    brief = deferred();
+  const requests: any[] = [],
+    logs: any[] = [],
+    completions: Promise<void>[] = [];
+  const traffic = new SessionContextService();
+  let pending: any = null,
+    entered = false,
+    completed = false,
+    service!: ConversationService;
+  let conversation!: ReturnType<typeof useConversation>;
+  const agent = {
+    name: 'offline',
+    model: 'fixture',
+    instructions: 'Offline rollover fixture',
+    tools:
+      mode === 'ordinary-steer'
+        ? [
+            {
+              name: 'offline_tool',
+              parameters: { type: 'object', properties: {} },
+              effect: 'read',
+              parallelSafe: false,
+              needsApproval: async () => false,
+              execute: async () => 'offline_result',
+            },
+          ]
+        : [],
+  };
+  const loop = new ApplicationRunLoop({
+    resolveModel: () => ({
+      async *stream(request: any) {
+        const snapshot = JSON.parse(JSON.stringify(request));
+        const label =
+          requests.length === 0
+            ? 'start'
+            : JSON.stringify(snapshot).includes('HANDOFF_FIXTURE') &&
+              requests.length === 1 &&
+              service.sessionId === 'successor'
+            ? 'brief'
+            : 'queued';
+        requests.push({
+          sessionId: traffic.getContext()?.sessionId,
+          runtimeSessionId: service.sessionId,
+          label,
+          request: snapshot,
+        });
+        if (requests.length === 1) {
+          await first.promise;
+          if (!mode.startsWith('ordinary'))
+            pending = {
+              status: 'ready',
+              request: {
+                rolloverId: 'fixture-rollover',
+                requestedAt: Date.now(),
+                brief: 'HANDOFF_FIXTURE',
+                reason: 'task_boundary',
+              },
+            };
+          if (mode === 'blocked')
+            service.presentPendingInteraction({
+              agentName: 'System',
+              toolName: 'check_in',
+              argumentsText: 'fixture check-in',
+              rawInterruption: null,
+              checkIn: 'max_turns',
+            } as any);
+        } else if (label === 'brief') {
+          await brief.promise;
+          if (mode === 'brief-failure') throw new Error('FIXTURE_BRIEF_FAILURE');
+        }
+        yield {
+          type: 'completion',
+          responseId: `fixture-${requests.length}`,
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'text', text: `response-${requests.length}` }] },
+          ],
+        };
+      },
+    }),
+  });
+  const client = {
+    getProvider: () => 'openai',
+    getModel: () => 'fixture',
+    addToolInterceptor: () => () => {},
+    abort: () => loop.abort(),
+    consumeSessionRolloverRequest: () => {
+      const value = pending ?? { status: 'none' };
+      pending = null;
+      return value;
+    },
+    async runTurn(session: any) {
+      await loop.runTurn({
+        ...session,
+        async prepare(signal: any) {
+          const p = await session.prepare(signal);
+          return p
+            ? {
+                ...p,
+                agent,
+                options: {
+                  ...p.options,
+                  maxTurns: mode === 'ordinary-steer' ? 3 : 1,
+                  maxModelRetries: 0,
+                  providerId: 'openai',
+                },
+              }
+            : undefined;
+        },
+      });
+    },
+  };
+  service = new ConversationService({
+    agentClient: client as any,
+    toolOwnership: new ToolOwnershipRegistry(),
+    sessionId: 'predecessor',
+    deps: { logger: logger as any, sessionContextService: traffic },
+  });
+  const journalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-rollover-journal-'));
+  const writer = createConversationLogWriter({ sessionId: 'predecessor', dir: journalDir, logger: logger as any, saveLast: () => {} });
+  writer.init({ id: 'predecessor', createdAt: new Date().toISOString(), projectPath: process.cwd() });
+  service.setLogSink((e) => { logs.push(e); writer.append(e); });
+  function replay(id: string) {
+    return replayEvents(fs.readFileSync(path.join(journalDir, `${id}.jsonl`), 'utf8').trim().split('\n').map(x => JSON.parse(x)));
+  }
+  function userRecords(id: string) {
+    return fs.readFileSync(path.join(journalDir, `${id}.jsonl`), 'utf8').trim().split('\n')
+      .map(line => JSON.parse(line).event).filter(event => event.type === 'user_message').map(event => event.message);
+  }
+  function Harness() {
+    conversation = useConversation({
+      conversationService: service,
+      loggingService: logger as any,
+      historyService: { addMessage() {} },
+      logWriter: writer,
+      onSessionRollover: async (request) => {
+        entered = true;
+        await rotate.promise;
+        if (mode === 'writer-failure') throw new Error('FIXTURE_WRITER_FAILURE');
+        const commit = service.prepareRolloverWithNewId('successor');
+        rotateSessionLog(writer, 'successor', { id: 'successor', createdAt: new Date().toISOString(), rolloverFrom: 'predecessor', projectPath: process.cwd() });
+        commit();
+        conversation.resetConversationPresentation();
+        const briefing = composeSessionRolloverBrief({
+          previousSessionId: 'predecessor',
+          successorSessionId: 'successor',
+          request,
+          taskInventory: [],
+        });
+        await conversation.sendSessionRolloverBrief(briefing);
+        completed = true;
+      },
+    });
+    return null;
+  }
+  const rendered = await renderInAct(<Harness />);
+  async function submit(text: string, busyMode: 'follow_up' | 'steer' = 'follow_up') {
+    await act(async () => {
+      const result = conversation.submitTurnForAdmission({ text }, { busyMode });
+      expect(result.kind).toBe('submitted');
+      if (result.kind === 'submitted') completions.push(result.completion);
+    });
+  }
+  return {
+    first,
+    rotate,
+    brief,
+    requests,
+    logs,
+    writer,
+    replay,
+    userRecords,
+    submit,
+    get service() {
+      return service;
+    },
+    get view() {
+      return conversation;
+    },
+    get entered() {
+      return entered;
+    },
+    get completed() {
+      return completed;
+    },
+    async finish() {
+      first.resolve();
+      rotate.resolve();
+      brief.resolve();
+      await until(() => !service.isQueueActive());
+      await act(async () => {
+        await Promise.all(completions);
+      });
+    },
+    async cleanup() {
+      await act(async () => {
+        first.resolve();
+        rotate.resolve();
+        brief.resolve();
+        service.abort();
+        await service.discardQueue();
+        rendered.unmount();
+        service.dispose();
+        await Promise.allSettled(completions);
+        await writer.close();
+        fs.rmSync(journalDir, { recursive: true, force: true });
+      });
+    },
+  };
+}
+
+
+test('review: successor journal replay retains delivered queued user inputs', async () => {
+  const h = await setup();
+  try {
+    await h.submit('start');
+    await until(() => h.requests.length === 1);
+    await h.submit('queued-before-rotation');
+    await act(async () => { h.first.resolve(); });
+    await until(() => h.entered);
+    await h.submit('queued-during-rotation');
+    await act(async () => { h.rotate.resolve(); });
+    await until(() => h.requests.length === 2);
+    await h.submit('queued-during-briefing');
+    await h.finish();
+    await h.writer.flush();
+    const restored = h.replay('successor');
+    const users = restored.messages.filter((m: any) => m.sender === 'user').map((m: any) => m.text);
+    console.log('REVIEW_JOURNAL', JSON.stringify({ actualSessions: h.requests.map(r => r.sessionId), users, history: restored.history }));
+    expect(h.requests).toHaveLength(5);
+    expect(users.slice(1)).toEqual(['queued-before-rotation', 'queued-during-rotation', 'queued-during-briefing']);
+    const expected = ['queued-before-rotation', 'queued-during-rotation', 'queued-during-briefing'];
+    const raw = h.userRecords('successor');
+    expect(raw.map(m => m.text)).toEqual(users);
+    expect(new Set(raw.map(m => m.id)).size).toBe(raw.length);
+    for (const text of expected) {
+      expect(raw.filter(m => m.text === text)).toHaveLength(1);
+      expect(restored.history.filter((item: any) => item.role === 'user' && item.content === text)).toHaveLength(1);
+    }
+    console.log('R1_RAW_JOURNAL', JSON.stringify(raw));
+  } finally { await h.cleanup(); }
+});
+
+test('review: cancelling active successor briefing retains queued input for successor resume', async () => {
+  const h = await setup();
+  try {
+    await h.submit('start');
+    await until(() => h.requests.length === 1);
+    await h.submit('retained-before-cancel');
+    await act(async () => { h.first.resolve(); });
+    await until(() => h.entered);
+    await act(async () => { h.rotate.resolve(); });
+    await until(() => h.requests.length === 2);
+    await h.submit('retained-during-brief');
+    await act(async () => { h.view.stopProcessing(); h.brief.resolve(); });
+    await until(() => h.service.queueStateKind() === 'paused');
+    expect(h.requests.map(r => r.sessionId)).toEqual(['predecessor', 'successor']);
+    expect(h.view.pendingQueuedMessages.map(m => m.turn.text)).toEqual(['retained-before-cancel', 'retained-during-brief']);
+    await act(async () => { await h.view.resumeQueue(); });
+    await h.finish();
+    expect(h.requests.map(r => r.sessionId)).toEqual(['predecessor', 'successor', 'successor', 'successor']);
+    expect(h.view.pendingQueuedMessages).toEqual([]);
+    await h.writer.flush();
+    const raw = h.userRecords('successor');
+    for (const text of ['retained-before-cancel', 'retained-during-brief']) {
+      expect(raw.filter(m => m.text === text)).toHaveLength(1);
+      expect(JSON.stringify(h.replay('successor').history)).toContain(text);
+    }
+    expect(new Set(raw.map(m => m.id)).size).toBe(raw.length);
+  } finally { await h.cleanup(); }
+});
+
+
+test('review: ordinary queue journal replay control retains all user inputs', async () => {
+  const h = await setup('ordinary');
+  try {
+    await h.submit('start');
+    await until(() => h.requests.length === 1);
+    await h.submit('ordinary-queued-one');
+    await h.submit('ordinary-queued-two');
+    await h.finish();
+    await h.writer.flush();
+    const restored = h.replay('predecessor');
+    expect(restored.messages.filter((m: any) => m.sender === 'user').map((m: any) => m.text)).toEqual(['start', 'ordinary-queued-one', 'ordinary-queued-two']);
+    expect(h.requests).toHaveLength(3);
+    const raw = h.userRecords('predecessor');
+    expect(raw.map(m => m.text)).toEqual(['start', 'ordinary-queued-one', 'ordinary-queued-two']);
+    expect(new Set(raw.map(m => m.id)).size).toBe(3);
+    console.log('REVIEW_ORDINARY_JOURNAL_CONTROL', JSON.stringify({ history: restored.history }));
+  } finally { await h.cleanup(); }
+});
+
+
+test('R1: ordinary released-steer journal records are not duplicated', async () => {
+  const h = await setup('ordinary');
+  try {
+    await h.submit('start'); await until(() => h.requests.length === 1);
+    await h.submit('ordinary-follow-up'); await h.submit('ordinary-released-steer', 'steer');
+    await h.finish(); await h.writer.flush();
+    const raw = h.userRecords('predecessor');
+    expect(raw).toHaveLength(3);
+    for (const text of ['start', 'ordinary-follow-up', 'ordinary-released-steer']) expect(raw.filter(m => m.text === text)).toHaveLength(1);
+    expect(new Set(raw.map(m => m.id)).size).toBe(3);
+    expect(h.requests).toHaveLength(3);
+  } finally { await h.cleanup(); }
+});
+
+test('R1: transferred journal uses current edited pending payload and excludes retracted input', async () => {
+  const h = await setup();
+  try {
+    await h.submit('start'); await until(() => h.requests.length === 1);
+    await h.submit('edit-before-transfer'); await h.submit('retract-before-transfer');
+    await act(async () => { h.first.resolve(); }); await until(() => h.entered);
+    const edited = h.view.pendingQueuedMessages.find(m => m.turn.text === 'edit-before-transfer')!;
+    const removed = h.view.pendingQueuedMessages.find(m => m.turn.text === 'retract-before-transfer')!;
+    const skill = {name: 'r1-skill', path: '/offline/r1-skill', displayName: 'R1 skill', content: 'R1_SKILL_CONTENT'};
+    await act(async () => { await h.view.editPendingSubmission(edited.id, {text: 'edited-transfer', skill}); await h.view.retractPendingSubmission(removed.id); });
+    await h.finish(); await h.writer.flush();
+    const raw = h.userRecords('successor');
+    expect(raw).toHaveLength(2);
+    expect(raw[1].text).toContain('edited-transfer');
+    expect(raw[1].skill).toEqual(skill);
+    expect(JSON.stringify(raw)).not.toContain('retract-before-transfer');
+    expect(new Set(raw.map(m => m.id)).size).toBe(2);
+    expect(h.requests).toHaveLength(3);
+    expect(JSON.stringify(h.replay('successor').history)).toContain('edited-transfer');
+  } finally { await h.cleanup(); }
+});

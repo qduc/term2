@@ -1,0 +1,77 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs source/hooks/rollover-queue.probe.test.tsx
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/rollover-queue[39m
+
+[90mstderr[2m | source/hooks/rollover-queue.probe.test.tsx[2m > [22m[2mqueued before and during rollover reaches successor after briefing exactly once
+[22m[39mYour app (or one of its dependencies) is using an outdated JSX transform. Update to the modern JSX transform for faster performance: https://react.dev/link/new-jsx-transform
+
+[90mstdout[2m | source/hooks/rollover-queue.probe.test.tsx[2m > [22m[2mqueued before and during rollover reaches successor after briefing exactly once
+[22m[39mFIXTURE_ERROR Error in sendUserMessage {
+  error: [32m'this[#sessionContextService].runWithContext is not a function'[39m,
+  stack: [32m'TypeError: this[#sessionContextService].runWithContext is not a function\n'[39m +
+    [32m'    at ConversationAdapter.#withTrafficContext (/home/qduc/term2/.worktrees/rollover-queue/source/services/conversation/conversation-adapter.ts:396:40)\n'[39m +
+    [32m'    at ConversationAdapter.#executeMessage (/home/qduc/term2/.worktrees/rollover-queue/source/services/conversation/conversation-adapter.ts:1001:17)\n'[39m +
+    [32m'    at ConversationAdapter.#runQueuedTurn (/home/qduc/term2/.worktrees/rollover-queue/source/services/conversation/conversation-adapter.ts:889:33)\n'[39m +
+    [32m'    at ConversationAdapter.#startQueuedTurn (/home/qduc/term2/.worktrees/rollover-queue/source/services/conversation/conversation-adapter.ts:864:29)\n'[39m +
+    [32m'    at Object.start (/home/qduc/term2/.worktrees/rollover-queue/source/services/conversation/conversation-adapter.ts:266:36)\n'[39m +
+    [32m'    at QueueController.#dispatch (/home/qduc/term2/.worktrees/rollover-queue/source/services/queue/queue-controller.ts:703:24)\n'[39m +
+    [32m'    at QueueController.#submit (/home/qduc/term2/.worktrees/rollover-queue/source/services/queue/queue-controller.ts:535:5)'[39m
+}
+
+[90mstderr[2m | source/hooks/rollover-queue.probe.test.tsx[2m > [22m[2mqueued before and during rollover reaches successor after briefing exactly once
+[22m[39mAn update to Harness inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Harness inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ [31m❯[39m source/hooks/rollover-queue.probe.test.tsx [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 1704[2mms[22m[39m
+[31m   [31m×[31m queued before and during rollover reaches successor after briefing exactly once[39m[33m 1703[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/hooks/rollover-queue.probe.test.tsx[2m > [22mqueued before and during rollover reaches successor after briefing exactly once
+[31m[1mError[22m: fixture condition did not settle[39m
+[36m [2m❯[22m until source/hooks/rollover-queue.probe.test.tsx:[2m15:9[22m[39m
+    [90m 13|[39m [35masync[39m [35mfunction[39m [34muntil[39m(predicate[33m:[39m () [33m=>[39m boolean) {
+    [90m 14|[39m   for (let i = 0; i < 300; i++) { if (predicate()) return; await new P…
+    [90m 15|[39m   [35mthrow[39m [35mnew[39m [33mError[39m([32m'fixture condition did not settle'[39m)[33m;[39m
+    [90m   |[39m         [31m^[39m
+    [90m 16|[39m }
+    [90m 17|[39m [35masync[39m [35mfunction[39m [34msetup[39m(mode [33m=[39m [32m'success'[39m) {
+[90m [2m❯[22m source/hooks/rollover-queue.probe.test.tsx:[2m75:30[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m   Start at [22m 11:24:39
+[2m   Duration [22m 3.61s[2m (transform 1.13s, setup 20ms, import 1.76s, tests 1.70s, environment 0ms)[22m
+
+[ELIFECYCLE] Test failed. See above for more details.

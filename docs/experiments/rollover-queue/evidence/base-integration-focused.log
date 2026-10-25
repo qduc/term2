@@ -1,0 +1,147 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/rollover-queue[39m
+
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mfinishes a provider turn when file logging hits ENOSPC
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --help documents the available command-line options
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI validates goal flags before startup
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22minteractive launch persists the goal before requiring a terminal
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mpositional launch durably records its goal before the first provider request
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mpositional launch closes the goal after a recorded achieved goal_check and reports it
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mthe shipped CLI verifies a durable goal with verifier.model=
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mthe shipped CLI verifies a durable goal with verifier.model=mock-verifier
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mresume preserves the replayed goal without flags and replaces it before startup when flags are explicit
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI supports the advertised -h and -v aliases
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI rejects unknown flags with a clear error
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --resume ls prints list of conversations and exits
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --resume list also works
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --resume prints message and exits when no conversation is found
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --resume does not suggest --fork for a conversation from another project
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --list-models combined with --resume errors instead of misreading the resume id as a search term
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --list-models combined with --resume --fork errors
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --refresh without --list-models errors clearly instead of being silently ignored
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --list-models --refresh runs the listing errand, not the flag-conflict error
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI prompts before starting in non-lite mode from home directory
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI prompts before starting in non-lite mode from root directory
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI accepts a custom provider from settings.json in non-interactive mode
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --model reports error and exits 1 when no models match pattern
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --model keeps settings.json session-only when resolution passes through an unreachable catalog
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --json auto-selects an ambiguous model without asking for input
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI resolves --model <value> as the last argument to the model, not a prompt
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI "term2 <prompt>" with no --model is unchanged
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mCLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22man approved shell call does not approve a later call that reuses its id when the provider repeats call_0
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22man approved shell call does not approve a later call that reuses its id when the provider repeats its own id
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22man approved shell call does not approve a later call when the chat-completions provider omits tool call ids
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22man approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mevery executed shell call is shown on stderr when the provider repeats its id
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mone approved shell execution prints exactly one [tool] line
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22ma call that reuses a refused call id runs and is saved as run, not as refused
+ [31m×[39m source/cli.integration.test.ts[2m > [22mbare profile via flag keeps a small tool surface, project guidance, and versioned session identity[33m 3067[2mms[22m[39m
+[31m   → {"calls":[{"id":"bare-create","type":"function","function":{"name":"shell","arguments":"{\"command\":\"printf '%s\\\\n' \\\"bare edit succeeded\\\" > \\\"result.txt\\\"\",\"description\":\"Write the fixture file\"}"}}],"results":[{"id":"bare-create","content":"\"Error: Sandbox blocked this command. To request a one-shot escape, call shell again with sandbox=\\\"unsandboxed\\\"; user approval will be required.\""}]}: expected false to be true // Object.is equality[39m
+ [31m×[39m source/cli.integration.test.ts[2m > [22mbare profile via config keeps a small tool surface, project guidance, and versioned session identity[33m 1342[2mms[22m[39m
+[31m   → {"calls":[{"id":"bare-create","type":"function","function":{"name":"shell","arguments":"{\"command\":\"printf '%s\\\\n' \\\"bare edit succeeded\\\" > \\\"result.txt\\\"\",\"description\":\"Write the fixture file\"}"}}],"results":[{"id":"bare-create","content":"\"Error: Sandbox blocked this command. To request a one-shot escape, call shell again with sandbox=\\\"unsandboxed\\\"; user approval will be required.\""}]}: expected false to be true // Object.is equality[39m
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless full completion in an unsupported workspace reports missing verification
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless bare completion in an unsupported workspace reports missing verification
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless full has unattended instructions and no ask_user capability
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless bare has unattended instructions and no ask_user capability
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless lite has unattended instructions and no ask_user capability
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless pair has unattended instructions and no ask_user capability
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless plan has unattended instructions and no ask_user capability
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless mentor has unattended instructions and no ask_user capability
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless orchestrator has unattended instructions and no ask_user capability
+ [31m×[39m source/cli.integration.test.ts[2m > [22mbare retains the outside-workspace edit approval boundary without asking headlessly[33m 1333[2mms[22m[39m
+[31m   → expected '"Tool execution was not approved. Use…' to match /exit [1-9]/[39m
+ [31m×[39m source/cli.integration.test.ts[2m > [22mbare permits explicit sandbox scratch writes without approval[33m 1510[2mms[22m[39m
+[31m   → {"calls":[{"id":"outside-create","type":"function","function":{"name":"shell","arguments":"{\"command\":\"printf '%s\\\\n' \\\"fixture edit\\\" > \\\"/tmp/qduc/term2-nodejs/term2-cli-test-AiyZ5e/scratch/term2-nodejs/outside.txt\\\"\",\"description\":\"Write the fixture file\"}"}}],"results":[{"id":"outside-create","content":"\"Tool execution was not approved. User's reason: Non-interactive mode: use --auto-approve to allow tool execution\""}]}: expected false to be true // Object.is equality[39m
+ [2m[90m↓[39m[22m source/cli.integration.test.ts[2m > [22mheadless auto-approve at home refuses without printing or waiting for a question
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via flag keeps a small tool surface, project guidance, and versioned session identity
+[31m[1mAssertionError[22m: {"calls":[{"id":"bare-create","type":"function","function":{"name":"shell","arguments":"{\"command\":\"printf '%s\\\\n' \\\"bare edit succeeded\\\" > \\\"result.txt\\\"\",\"description\":\"Write the fixture file\"}"}}],"results":[{"id":"bare-create","content":"\"Error: Sandbox blocked this command. To request a one-shot escape, call shell again with sandbox=\\\"unsandboxed\\\"; user approval will be required.\""}]}: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m1843:9[22m[39m
+    [90m1841|[39m         fs[33m.[39m[34mexistsSync[39m(path[33m.[39m[34mjoin[39m(repo[33m,[39m [32m'result.txt'[39m))[33m,[39m
+    [90m1842|[39m         [33mJSON[39m[33m.[39m[34mstringify[39m([34mlastWireToolExchange[39m(mock[33m.[39m[34mcapturedRequests[39m()))[33m,[39m
+    [90m1843|[39m       )[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m         [31m^[39m
+    [90m1844|[39m       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).t…
+    [90m1845|[39m       [35mconst[39m request [33m=[39m mock[33m.[39m[34mcapturedRequests[39m()[[34m0[39m][33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via config keeps a small tool surface, project guidance, and versioned session identity
+[31m[1mAssertionError[22m: {"calls":[{"id":"bare-create","type":"function","function":{"name":"shell","arguments":"{\"command\":\"printf '%s\\\\n' \\\"bare edit succeeded\\\" > \\\"result.txt\\\"\",\"description\":\"Write the fixture file\"}"}}],"results":[{"id":"bare-create","content":"\"Error: Sandbox blocked this command. To request a one-shot escape, call shell again with sandbox=\\\"unsandboxed\\\"; user approval will be required.\""}]}: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m1843:9[22m[39m
+    [90m1841|[39m         fs[33m.[39m[34mexistsSync[39m(path[33m.[39m[34mjoin[39m(repo[33m,[39m [32m'result.txt'[39m))[33m,[39m
+    [90m1842|[39m         [33mJSON[39m[33m.[39m[34mstringify[39m([34mlastWireToolExchange[39m(mock[33m.[39m[34mcapturedRequests[39m()))[33m,[39m
+    [90m1843|[39m       )[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m         [31m^[39m
+    [90m1844|[39m       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).t…
+    [90m1845|[39m       [35mconst[39m request [33m=[39m mock[33m.[39m[34mcapturedRequests[39m()[[34m0[39m][33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare retains the outside-workspace edit approval boundary without asking headlessly
+[31m[1mAssertionError[22m: expected '"Tool execution was not approved. Use…' to match /exit [1-9]/[39m
+
+[32m- Expected:[39m
+/exit [1-9]/
+
+[31m+ Received:[39m
+"\"Tool execution was not approved. User's reason: Non-interactive mode: use --auto-approve to allow tool execution\""
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m2055:48[22m[39m
+    [90m2053|[39m     } [35melse[39m {
+    [90m2054|[39m       // The sandbox's denial text is platform-specific; the failed ex…
+    [90m2055|[39m       [34mexpect[39m(toolExchange[33m.[39mresults[[34m0[39m][33m?.[39mcontent)[33m.[39m[34mtoMatch[39m([36m/exit [1-9]/[39m)[33m;[39m
+    [90m   |[39m                                                [31m^[39m
+    [90m2056|[39m     }
+    [90m2057|[39m   } [35mfinally[39m {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare permits explicit sandbox scratch writes without approval
+[31m[1mAssertionError[22m: {"calls":[{"id":"outside-create","type":"function","function":{"name":"shell","arguments":"{\"command\":\"printf '%s\\\\n' \\\"fixture edit\\\" > \\\"/tmp/qduc/term2-nodejs/term2-cli-test-AiyZ5e/scratch/term2-nodejs/outside.txt\\\"\",\"description\":\"Write the fixture file\"}"}}],"results":[{"id":"outside-create","content":"\"Tool execution was not approved. User's reason: Non-interactive mode: use --auto-approve to allow tool execution\""}]}: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m2044:98[22m[39m
+    [90m2042|[39m     )[33m;[39m
+    [90m2043|[39m     [34mexpect[39m(result[33m.[39mstatus[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m2044|[39m     expect(fs.existsSync(target), JSON.stringify(lastWireToolExchange(…
+    [90m   |[39m                                                                                                  [31m^[39m
+    [90m2045|[39m     [34mexpect[39m(result[33m.[39mstdout)[33m.[39m[34mtoContain[39m(reply)[33m;[39m
+    [90m2046|[39m     [35mconst[39m toolExchange [33m=[39m [34mlastWireToolExchange[39m(mock[33m.[39m[34mcapturedRequests[39m())[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[33m51 skipped[39m[90m (55)[39m
+[2m   Start at [22m 11:36:00
+[2m   Duration [22m 7.67s[2m (transform 150ms, setup 34ms, import 186ms, tests 7.25s, environment 0ms)[22m
+

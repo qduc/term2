@@ -1,0 +1,35 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs source/services/conversation/rollover-queue-persistence.probe.test.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/rollover-queue[39m
+
+ [31m❯[39m source/services/conversation/rollover-queue-persistence.probe.test.ts [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 10[2mms[22m[39m
+[31m   [31m×[31m retained sidecar follows successor identity without stale replay in predecessor[39m[32m 9[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/services/conversation/rollover-queue-persistence.probe.test.ts[2m > [22mretained sidecar follows successor identity without stale replay in predecessor
+[31m[1mAssertionError[22m: successor must own retained input on restart: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/services/conversation/rollover-queue-persistence.probe.test.ts:[2m23:85[22m[39m
+    [90m 21|[39m     identity[33m.[39m[34mreplace[39m([32m'successor'[39m)[33m;[39m
+    [90m 22|[39m     [35mawait[39m queue[33m.[39m[34mcommand[39m({kind[33m:[39m[32m'submit'[39m[33m,[39m text[33m:[39m [32m'during'[39m})[33m;[39m
+    [90m 23|[39m     expect(fs.existsSync(nextFile), 'successor must own retained input…
+    [90m   |[39m                                                                                     [31m^[39m
+    [90m 24|[39m     expect(fs.existsSync(oldFile), 'predecessor must not replay succes…
+    [90m 25|[39m     [35mconst[39m record [33m=[39m [33mJSON[39m[33m.[39m[34mparse[39m(fs[33m.[39m[34mreadFileSync[39m(nextFile[33m,[39m [32m'utf8'[39m))[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m   Start at [22m 11:28:48
+[2m   Duration [22m 486ms[2m (transform 234ms, setup 24ms, import 301ms, tests 10ms, environment 0ms)[22m
+
+[ELIFECYCLE] Test failed. See above for more details.

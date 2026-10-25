@@ -1,0 +1,8 @@
+{
+  "argv": ["pnpm", "lint"],
+  "exit": 1,
+  "wall_seconds": 37.07664203643799,
+  "production_diff": "empty",
+  "head": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+  "prior_attempt": "base-lint.log invalid comparison: temporary fixture disappeared during concurrent ESLint enumeration"
+}

@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "NODE_ENV=test",
+    "node",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--reporter=verbose",
+    "source/hooks/journal-cancel.probe.test.tsx"
+  ],
+  "exit": 1
+}

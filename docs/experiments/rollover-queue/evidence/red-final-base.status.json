@@ -1,0 +1,6 @@
+{
+  "head": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+  "production_diff": "empty",
+  "command": "NODE_ENV=test pnpm exec vitest run --reporter=verbose source/hooks/rollover-queue.probe.test.tsx source/services/conversation/rollover-queue-persistence.probe.test.ts",
+  "exit": 1
+}

@@ -1,0 +1,1101 @@
+diff --git a/docs/experiments/evidence-driven-development/defects.jsonl b/docs/experiments/evidence-driven-development/defects.jsonl
+index 89370e94..a556519d 100644
+--- a/docs/experiments/evidence-driven-development/defects.jsonl
++++ b/docs/experiments/evidence-driven-development/defects.jsonl
+@@ -24,3 +24,4 @@
+ {"id":"2026-10-24-fix-failing-tests-headless-yoga-startup","found_at":"2026-10-24T07:01:16+00:00","found_by":"agent","task":null,"kind":"defect","severity":"medium","summary":"Large positional prompts on macOS exited 13 during eager Yoga initialization before headless CLI startup.","missed_because":"Previously recorded failing macOS tiers remained unresolved; introducing task and original acceptance evidence unknown.","method_that_would_catch":"Run retained integration/e2e/provider scenarios on macOS and require failures resolved.","recorded_at":"2026-10-24T07:12:01+00:00","discovery_phase":"unknown","repair_task":"2026-10-24-fix-failing-tests","evidence_run_ids":["2026-10-24-fix-failing-tests-baseline-integration","2026-10-24-fix-failing-tests-baseline-workers","2026-10-24-fix-failing-tests-interim-provider"],"attribution":{"confidence":"unknown","reason":"Introducing task unknown; product startup defect distinguished from platform fixture failures. First exact failure time varies by scenario; found_at denotes baseline investigation window start.","completion_evidence":null,"observed_through":null}}
+ {"id":"2026-10-24-fix-failing-tests-fixture-portability","found_at":"2026-10-24T07:01:16+00:00","found_by":"agent","task":null,"kind":"defect","severity":"medium","summary":"macOS integration/e2e/provider fixtures assumed canonical tmp paths, Linux data/log paths, /dev/full, unwrapped terminal lines and Linux-only supervisor support; in-process completion fixtures could touch developer task storage.","missed_because":"Previously recorded failing macOS tiers remained unresolved; introducing task and original acceptance evidence unknown.","method_that_would_catch":"Run retained integration/e2e/provider scenarios on macOS and require failures resolved.","recorded_at":"2026-10-24T07:12:01+00:00","discovery_phase":"unknown","repair_task":"2026-10-24-fix-failing-tests","evidence_run_ids":["2026-10-24-fix-failing-tests-baseline-integration","2026-10-24-fix-failing-tests-baseline-workers","2026-10-24-fix-failing-tests-interim-provider"],"attribution":{"confidence":"unknown","reason":"Introducing task unknown; product startup defect distinguished from platform fixture failures. First exact failure time varies by scenario; found_at denotes baseline investigation window start.","completion_evidence":null,"observed_through":null}}
+ {"id":"2026-10-24-session-read-speed-timeout","found_at":"2026-10-24T10:27:54+00:00","found_by":"user","task":null,"kind":"defect","severity":"medium","summary":"Exact session_read on a2.1GiB/1050-log corpus triggers whole-index reconciliation then full canonical replay, timing out after20.36s; narrow request replayed1050JSONL files.","missed_because":"Small persisted-session fixtures did not assert independence from unrelated transcript work; origin/acceptance attribution unknown.","method_that_would_catch":"Real filesystem/worker integration requiring no unrelated reads or search-index creation; repeated real-corpus before/after checks.","recorded_at":"2026-10-24T10:50:07.409729+00:00","discovery_phase":"unknown","repair_task":"2026-10-24-session-read-speed","evidence_run_ids":["2026-10-24-session-read-speed-regression-before","2026-10-24-session-read-speed-canonical-performance","2026-10-24-session-read-speed-cold-worker-after"],"attribution":{"confidence":"unknown","reason":"Observed recent runtime defect; introducing task/commit and original completion evidence not established. No regression origin inferred from ancestry.","completion_evidence":null,"observed_through":null}}
++{"id":"2026-10-25-rollover-queue-veto","found_at":null,"recorded_at":"2026-10-25T04:43:46.893326+00:00","found_by":"user","task":null,"repair_task":"2026-10-25-rollover-queue","kind":"defect","severity":"medium","summary":"Queued user input vetoed session rollover; simply removing the veto races queue dispatch ahead of turn-end identity rotation.","missed_because":"No joint real-hook/queue/session-switch next-request journey covered queued input before and during rollover. Old behavior explicitly documented queue submissions as blockers.","method_that_would_catch":"Real hook/orchestrator/runtime next-model-request capture with before/during arrivals, successor identity/order, and failure/cancel controls.","discovery_phase":"unknown","evidence_run_ids":["2026-10-25-rollover-queue-red","2026-10-25-rollover-queue-green"],"attribution":{"confidence":"high for veto commit, unknown introducing task","reason":"git blame points to 8efb5aaa848db34a50e4feb4ff75600915bf742a (2026-09-06 live-work-preserving rollover feature); no experiment task or old queued-through success inferred. Persistence identity handling is necessary current-change coverage, not a separately escaped shipped defect.","completion_evidence":null,"observed_through":null}}
+diff --git a/docs/experiments/evidence-driven-development/tasks.jsonl b/docs/experiments/evidence-driven-development/tasks.jsonl
+index deb78970..5f87a9c8 100644
+--- a/docs/experiments/evidence-driven-development/tasks.jsonl
++++ b/docs/experiments/evidence-driven-development/tasks.jsonl
+@@ -90,3 +90,4 @@
+ {"id":"2026-10-24-headless-resume","type":"bugfix","risk":"high","started_at":null,"verified_at":"2026-10-24T11:03:57.806673+00:00","commit":"ce0dc2576eb62cb40bdcb42575602db31a63349a","files_changed":3,"lines_changed":141,"agent":"codex","claims":["term2 --resume ID prompt runs headlessly with saved user/assistant history and identity","resume appends without overwriting prior bytes; fork retains source and valid NDJSON","saved reasoning, fork provenance and rollover metadata survive headless resume","missing conversation fails before provider requests; prompt-free interactive resume dispatch retained"],"methods":["typecheck","lint","provider-black-box","e2e-test","before-after-comparison","independent-review","temporary-script"],"verification":{"minutes":null,"tokens":null,"independent":true,"verifier":"codex/gpt-6.1-sol","verdict":"accept","rework_rounds":1},"uncertain":["No live external provider run; deterministic HTTP fixtures and independently authored fetch probe used. Independent interactive PTY rerun blocked by nested sandbox localhost EPERM; author full provider suite including interactive journeys passed."],"human_interventions":0,"notes":"Root cause: resume positional parsing excluded prompts and headless runner always created a new session. Siblings inspected: interactive restore and init metadata, headless fork, listing, missing ID. Hardened by built-CLI persisted-session regression. Design friction: none; reused runtime.state.importState. Reviewer metadata-loss finding routed after reproducing; persisted effective reasoning and resumed provenance. Initial review timed out; resumed same reviewer session, no model/profile switch. Independent review accepted rework: /tmp/term2-resume-review-final.md and /tmp/term2-resume-independent-rework.log. Initial author full-suite failure caused by own overlapping build; retained in test-results. Review acceptance based on final source snapshot; merge source matches tested commit.","measurement":{"status":"accepted","accepted_at":"2026-10-24T11:03:57.806673+00:00","unknowns":["author active effort","reviewer usage and cost","task start timestamp"]}}
+ {"id":"2026-10-24-release-038","type":"release","risk":"low","started_at":null,"verified_at":"2026-10-24T11:33:53.180476+00:00","commit":"808b19d89ca4c93f413ed59a93d23b79817dbeaa","agent":"codex","claims":["Release 0.38.0 committed, tagged and pushed without moving tag","Documentation reflects Bare alias and headless resume","npm accepted publish and registry serves version 0.38.0","Release and main CI checks passed after environment repair and provider PTY retry"],"methods":["release script","website build and link check","GitHub Actions publish and CI","pnpm registry query","sandbox dependency red/green integration comparison"],"verification_cost":null,"independent_verifier":null,"notes":"No product behavior changed during release. CI repair installs Linux sandbox dependencies and pins sandbox-dependent jobs to Ubuntu 22.04; boundary assertions remain enabled. Added tool-result diagnostics to two integration assertions. Preventable environment mismatch: missing socat first, then Ubuntu24 bubblewrap loopback EPERM. Sibling integration/publish setup repaired; real sandbox checks retained as regression gate. Repository-wide lint remains failing on auxiliary/untracked artifacts; shipped-source gate passed. Source tag a72aed2773a738392f3dae51874eb1372597448e remains unchanged. Detailed red/green records in docs/test-results.json."}
+ {"id":"2026-10-25-tool-occurrence-recovery","type":"bugfix","risk":"high","started_at":null,"verified_at":null,"commit":"4731459c44584c6e49854dac4a1d50cb849687dd","agent":"author","claims":["Preserve turn-local per-call admission identity across persistence/recovery consumers","Offline actual-next-request journey covers reused IDs, six occurrences and legacy cross-turn finals"],"methods":["retained red/green full-turn native-prefix probe","offline runtime/filesystem journey","independent-review-supplied cross-turn probe","project static/integration/e2e/provider/generated tiers"],"verification":{"minutes":null,"tokens":null,"independent":false,"verifier":null,"verdict":"pending","rework_rounds":null},"completion":{"status":"verification-pending","accepted_at":null},"uncertain":["independent verification not performed; parent inspection gate pending","Full integration has four base-reproduced sandbox assertion failures","No live provider, process-crash or power-loss proof"],"notes":"Isolated dirty snapshot, not clean HEAD. See docs/experiments/tool-occurrence-recovery/README.md and evidence/current/portable/identity.json. Shared key/ordered pairing derive from ledger-owned admission. Final-item alignment scoped at authoritative-turn caller; accumulated-history callers remain broad. Original dirty registry/ledgers untouched; this append is isolated checkout only.","measurement":{"status":"verification-pending","accepted_at":null,"unknowns":["author active effort","reviewer effort and verdict","task start time"]}}
++{"id":"2026-10-25-rollover-queue","type":"bugfix","risk":"high","started_at":null,"verified_at":null,"commit":"3b611e52aa8f1d5ffb195b0b01abd89d53851419","files_changed":null,"lines_changed":167,"agent":"queue-fixer/author","claims":["Queued input does not veto rollover; successor bootstrap precedes retained ordered input","Messages before/during rollover remain owned exactly once; failures/cancel preserve manual recovery","Ordinary queue controls and real admitted steering remain intact; sidecar follows successor identity"],"methods":["temporary-test","fault-injection","before-after-comparison","trace-inspection","typecheck","lint","static-guards","integration-test","provider-black-box","generated-properties"],"verification":{"minutes":null,"tokens":null,"independent":false,"verifier":null,"verdict":"pending","rework_rounds":null},"uncertain":["Parent independent review and acceptance pending","Full App/writer and real rollover tool not mounted by author probe","No process-crash/power-loss atomicity claim across conversation writer and queue sidecar","Four base-reproduced Bare sandbox integration failures; immutable coordinator JSON prevents global format green"],"human_interventions":0,"notes":"Isolated dirty source: 9 production paths, 137 additions/30 deletions. Exact source.patch/manifests and all numeric statuses retained under docs/experiments/rollover-queue/evidence. No commit/merge/push, child agents or paid/live providers. Initial probe/context and diagnostic API setup failures, generated-argv error, and lint/fixture enumeration race retained; no escaped defects inferred from these pre-acceptance author attempts. Broad suite batch differs from final source only in one API comment; exact prior source hashes reconstructed and checked. Source-line metric excludes docs/evidence; total changed file count unavailable until final report. User intervention count counts no correction/approval after initial delegated request. Parent owns independent review.","measurement":{"activity":"delivery","sessions":[{"id":null,"role":"author","agent":"queue-fixer","locator":null}],"completion":{"status":"verification-pending","author_completed_at":"2026-10-25T04:43:46.893326+00:00","accepted_at":null,"accepted_commit":null,"evidence_run_ids":["2026-10-25-rollover-queue-red","2026-10-25-rollover-queue-green","2026-10-25-rollover-queue-typecheck","2026-10-25-rollover-queue-static","2026-10-25-rollover-queue-no-unit","2026-10-25-rollover-queue-generated-invalid","2026-10-25-rollover-queue-generated-serial","2026-10-25-rollover-queue-generated-restore","2026-10-25-rollover-queue-provider","2026-10-25-rollover-queue-integration","2026-10-25-rollover-queue-integration-base","2026-10-25-rollover-queue-lint-base-invalid","2026-10-25-rollover-queue-lint-base","2026-10-25-rollover-queue-lint-final","2026-10-25-rollover-queue-lint-focused"]},"effort":[{"actor":"author","phase":"verification","metric":"active_minutes","value":null,"basis":"unknown","source":"Command wall_seconds are retained separately; parallel command durations not summed as active effort.","session_id":null}],"observed_through":null,"followup_source":null,"related_task_ids":[],"unknowns":["Task/session start time and task-attributed tokens/cost","Independent review/rework and human effort","Post-acceptance defect follow-up"]}}
+diff --git a/docs/plans/approvals-and-sandbox/guard-ledger.md b/docs/plans/approvals-and-sandbox/guard-ledger.md
+index 2cfbe319..e9b758c2 100644
+--- a/docs/plans/approvals-and-sandbox/guard-ledger.md
++++ b/docs/plans/approvals-and-sandbox/guard-ledger.md
+@@ -3848,3 +3848,45 @@ provider continuity are unchanged. Rollback is the source identity migration,
+ not a threshold increase. Offline six-occurrence next-request and duplicate
+ controls are retained in `docs/experiments/tool-occurrence-recovery/`;
+ independent verification is pending with the parent.
++
++### Rollover queue boundary reservation
++
++Class: lifecycle/admission ordering, not a capacity or duration limit. Harm
++prevented: accepted follow-ups dispatching in the predecessor while its
++interactive turn-end callback prepares rollover, or preceding the successor's
++handoff. Queue length was a proxy for an unsafe interaction and incorrectly
++vetoed legitimate input. `ConversationService.#hasPendingRolloverInteraction`
++now measures actual approval/check-in owners; those authority checks and the
++runtime's active-turn preflight remain in force.
++
++`ConversationAdapter` uses `QueueController`'s existing completion barrier to
++reserve a ready rollover before dispatch. Ordinary holds remain idle-only;
++`afterCompletion` permits that barrier to reserve the next idle boundary.
++`submit_held` admits the successor bootstrap only while held and idle, places it
++before retained input (including released steers), then releases dispatch. No
++new queue, capacity, deadline, default, clamp, retry or setting migration is
++introduced. Ordinary steer priority, cancellation proof and failure pauses stay
++queue-owned. The hook's rollover-only presentation reset preserves queued rows
++and their orchestrator ownership rather than clearing their executable input.
++
++The interactive consumer owns release by rollover ID. Writer/preflight failure,
++missing handler or cancellation retains queued input for manual resume/discard;
++a failed briefing keeps the existing failure pause and reports the handoff for
++manual retry, never automatic replay. Blocked pending-interaction requests keep
++the existing notice and queue behavior. The queue sidecar follows the retained
++`SessionIdentity` on its next save by renaming ownership before atomic record
++replacement, preventing a stale predecessor copy from replaying successor input.
++This is not an atomic transaction with the conversation writer or a power-loss
++claim. Existing persistence-failure recovery still applies.
++
++Red/green reproduction: `node docs/experiments/rollover-queue/verify.mjs` stages
++untracked temporary fixtures, drives real hooks/orchestration/runtime and an
++offline model's actual next requests, exercises failure/cancel/blocked recovery
++and ordinary controls, then removes the fixtures. Source base `3b611e52` fails
++seven of eleven checks; the author patch passes eleven. Filesystem restoration
++also checks successor sidecar ownership and explicit-resume order. Existing
++queue snapshot/blocked-event/manual-retry diagnostics expose settlement without
++new user-content logging. Exact dirty-source identity, broader verification and
++limits are in `docs/experiments/rollover-queue/`. Independent acceptance belongs
++to the parent, not this author evidence. Rollback: the source patch as a unit;
++removing only the queue veto would reintroduce the dispatch race.
+diff --git a/docs/plans/sessions/session-rollover-handoff.md b/docs/plans/sessions/session-rollover-handoff.md
+index 8aaf5b38..a84faa6b 100644
+--- a/docs/plans/sessions/session-rollover-handoff.md
++++ b/docs/plans/sessions/session-rollover-handoff.md
+@@ -14,7 +14,11 @@ The M1-M3 minimal slice is merged in `fa4b371b` (M1/M2 implementation
+ agent-triggered only: context milestones advise the agent, and
+ `session_rollover` requests rotation after the current turn settles. Live
+ background work remains on the retained runtime/client graph; pending
+-interactions or queued user submissions still block at their mutation owner.
++interactions still block at their mutation owner. The interactive queue reserves
++the settled rollover boundary, starts the successor briefing before retained
++input, then drains that input in its existing queue order. Failed or cancelled
++handoffs preserve pending input for manual recovery; blocked interaction
++requests retain their existing delivery and manual-retry notice behavior.
+ The new session starts with a protocol-composed,
+ visually marked rollover briefing. Its `session_init.rolloverFrom` metadata
+ durably identifies the predecessor, so `session_read({ id: "previous" })`
+diff --git a/docs/test-results.json b/docs/test-results.json
+index ccbdd6e9..a7cd6ff6 100644
+--- a/docs/test-results.json
++++ b/docs/test-results.json
+@@ -9501,6 +9501,533 @@
+       "evidence": "docs/experiments/tool-occurrence-recovery/evidence/current/portable/identity.json; portable.log; tiers.json; additional-tiers.json. Goal entrypoint and retained preservation/pairing pass; typecheck/lint/static/runtime integration/generated history/e2e/provider tiers pass. Full integration 223 passed, 4 failed, 1 skipped. Four Bare sandbox failures reproduce on HEAD source with matching signatures (base-cli-confirmed.log). Initial base-cli.log invalid comparison (new module caused build failure); initial lint and generated metadata-oracle failures retained and resolved. Independent verification not performed; parent owns inspection. No clean commit certification.",
+       "task_ids": ["2026-10-25-tool-occurrence-recovery"],
+       "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-red",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "clean_base_production_with_untracked_evidence",
++      "suite": "temporary-hook-runtime-and-filesystem",
++      "command": "node docs/experiments/rollover-queue/verify.mjs",
++      "command_complete": true,
++      "exit_code": 1,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": 4,
++        "failed": 7,
++        "skipped": 0
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/base-fixture-runner.log",
++        "docs/experiments/rollover-queue/evidence/base-status.json"
++      ],
++      "source_identity": "clean HEAD production source",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "Identical fixtures on base; queued-before/during and ownership/retention assertions fail; ordinary and blocked controls pass. Synthetic request source, real hooks/service/runtime/next model requests.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-green",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "temporary-hook-runtime-and-filesystem",
++      "command": "node docs/experiments/rollover-queue/verify.mjs",
++      "command_complete": true,
++      "exit_code": 0,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": 11,
++        "failed": 0,
++        "skipped": 0
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/green-final-exact.log",
++        "docs/experiments/rollover-queue/evidence/final-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "Final exact nine-file source; queued before/during, successor-first bootstrap, order/no duplicate starts, writer/cancel/blocked/brief-failure recovery, edit/retract/follow-up/released and admitted steer, ordinary cancel/resume, filesystem successor restore. Full App and actual rollover tool not mounted.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-typecheck",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "typecheck",
++      "command": "pnpm typecheck",
++      "command_complete": true,
++      "exit_code": 0,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": null,
++        "failed": null,
++        "skipped": null
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/typecheck-final.log",
++        "docs/experiments/rollover-queue/evidence/final-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-static",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "static-repository-guards",
++      "command": "pnpm test",
++      "command_complete": true,
++      "exit_code": 0,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": 28,
++        "failed": 0,
++        "skipped": 0
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/static-final.log",
++        "docs/experiments/rollover-queue/evidence/final-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-no-unit",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "prohibited-unit-test-guard",
++      "command": "pnpm check:no-unit-tests",
++      "command_complete": true,
++      "exit_code": 0,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": null,
++        "failed": null,
++        "skipped": null
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/no-unit-final.log",
++        "docs/experiments/rollover-queue/evidence/final-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "Temporary source tests removed. Retained fixture data and runner are author reproduction evidence, not a permanent test tier.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-generated-invalid",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "generated-queue-invocation",
++      "command": "pnpm verify:generated -- --property queue.serial-actions --property queue.restore-pause --seed=424242 --runs 1000",
++      "command_complete": true,
++      "exit_code": 2,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": null,
++        "failed": null,
++        "skipped": null
++      },
++      "failures": [],
++      "evidence": ["docs/experiments/rollover-queue/evidence/generated-queue.log"],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "Extra -- caused parse_args unexpected positional before any property ran. Not product failure or passing coverage.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-generated-serial",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "generated-queue",
++      "command": "pnpm verify:generated --property queue.serial-actions --seed=424242 --runs 1000",
++      "command_complete": true,
++      "exit_code": 0,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": 1000,
++        "failed": 0,
++        "skipped": 0
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/generated-serial-final.log",
++        "docs/experiments/rollover-queue/evidence/final-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "Cases, not ordinary test count; no shrinks/skips. Existing property does not exercise the new rollover/hook crossover.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-generated-restore",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "generated-queue",
++      "command": "pnpm verify:generated --property queue.restore-pause --seed=424242 --runs 1000",
++      "command_complete": true,
++      "exit_code": 0,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": 1000,
++        "failed": 0,
++        "skipped": 0
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/generated-restore-final.log",
++        "docs/experiments/rollover-queue/evidence/final-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "Cases, not ordinary test count. Earlier repeated --property command tested only its last property and is not counted twice.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-provider",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "provider-black-box",
++      "command": "pnpm test:provider-black-box",
++      "command_complete": true,
++      "exit_code": 0,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": 222,
++        "failed": 0,
++        "skipped": 1
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/provider.log",
++        "docs/experiments/rollover-queue/evidence/suite-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/suite-source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "25 files passed; built local CLI and loopback fixtures only. Final source differs only in QueueController API comment; exact batch hashes retained.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-integration",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "integration",
++      "command": "pnpm test:integration",
++      "command_complete": true,
++      "exit_code": 1,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": 223,
++        "failed": 4,
++        "skipped": 1
++      },
++      "failures": [
++        {
++          "file": "source/cli.integration.test.ts",
++          "test": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
++          "expected": "result.txt created by fixture shell write",
++          "actual": "false; shell result Sandbox blocked this command; requires one-shot unsandboxed approval"
++        },
++        {
++          "file": "source/cli.integration.test.ts",
++          "test": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
++          "expected": "result.txt created by fixture shell write",
++          "actual": "false; shell result Sandbox blocked this command; requires one-shot unsandboxed approval"
++        },
++        {
++          "file": "source/cli.integration.test.ts",
++          "test": "bare retains the outside-workspace edit approval boundary without asking headlessly",
++          "expected": "tool result matches /exit [1-9]/",
++          "actual": "Tool execution was not approved; Non-interactive mode: use --auto-approve to allow tool execution"
++        },
++        {
++          "file": "source/cli.integration.test.ts",
++          "test": "bare permits explicit sandbox scratch writes without approval",
++          "expected": "fixture outside.txt exists",
++          "actual": "false; Tool execution was not approved; Non-interactive mode: use --auto-approve to allow tool execution"
++        }
++      ],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/integration.log",
++        "docs/experiments/rollover-queue/evidence/suite-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/suite-source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "24 files passed, 1 failed, 1 skipped. Same four names/denial signatures reproduced on clean base in this environment, not inferred from historical records. Existing historical signatures were consulted first. No checks weakened.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-integration-base",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "clean_base_production_with_untracked_evidence",
++      "suite": "integration-focused-base",
++      "command": "NODE_ENV=test pnpm exec vitest run --reporter=verbose --config vitest.integration.config.ts source/cli.integration.test.ts -t \"bare profile via|bare retains the outside-workspace|bare permits explicit sandbox\"",
++      "command_complete": true,
++      "exit_code": 1,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": 0,
++        "failed": 4,
++        "skipped": 51
++      },
++      "failures": [
++        {
++          "file": "source/cli.integration.test.ts",
++          "test": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
++          "expected": "result.txt created by fixture shell write",
++          "actual": "false; shell result Sandbox blocked this command; requires one-shot unsandboxed approval"
++        },
++        {
++          "file": "source/cli.integration.test.ts",
++          "test": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
++          "expected": "result.txt created by fixture shell write",
++          "actual": "false; shell result Sandbox blocked this command; requires one-shot unsandboxed approval"
++        },
++        {
++          "file": "source/cli.integration.test.ts",
++          "test": "bare retains the outside-workspace edit approval boundary without asking headlessly",
++          "expected": "tool result matches /exit [1-9]/",
++          "actual": "Tool execution was not approved; Non-interactive mode: use --auto-approve to allow tool execution"
++        },
++        {
++          "file": "source/cli.integration.test.ts",
++          "test": "bare permits explicit sandbox scratch writes without approval",
++          "expected": "fixture outside.txt exists",
++          "actual": "false; Tool execution was not approved; Non-interactive mode: use --auto-approve to allow tool execution"
++        }
++      ],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/base-integration-focused.log",
++        "docs/experiments/rollover-queue/evidence/base-status.json"
++      ],
++      "source_identity": "clean HEAD production source",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "All four exact failure names and denial signatures match full changed-tree run; selected file only, not a claimed full base tier.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-lint-base-invalid",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "clean_base_production_with_untracked_evidence",
++      "suite": "lint-base-invocation",
++      "command": "pnpm lint",
++      "command_complete": true,
++      "exit_code": 2,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": null,
++        "failed": null,
++        "skipped": null
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/base-lint.log",
++        "docs/experiments/rollover-queue/evidence/base-status.json"
++      ],
++      "source_identity": "clean HEAD production source",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "Invalid comparison: concurrently staged temporary fixture was removed during ESLint enumeration (ENOENT). Settled; rerun alone below.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-lint-base",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "clean_base_production_with_untracked_evidence",
++      "suite": "lint-base",
++      "command": "pnpm lint",
++      "command_complete": true,
++      "exit_code": 1,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": null,
++        "failed": null,
++        "skipped": null
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/base-lint-confirmed.log",
++        "docs/experiments/rollover-queue/evidence/base-lint-confirmed.status.json"
++      ],
++      "source_identity": "clean HEAD production source",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "31 ESLint warnings, 0 errors; formatting failed same immutable coordinator assignment/progress JSON plus two owned evidence status JSON files. Owned files formatted separately. Protocol descriptor/reports left unchanged.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-lint-final",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "lint",
++      "command": "pnpm lint",
++      "command_complete": true,
++      "exit_code": 1,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": null,
++        "failed": null,
++        "skipped": null
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/lint-final.log",
++        "docs/experiments/rollover-queue/evidence/final-status.json"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "31 ESLint warnings, 0 errors. Prettier fails only assignment.json and two published unread progress JSON files under .coord. New second progress report explains third immutable warning vs initial/base two; no source/artifact formatting failures. User forbids rewriting those protocol artifacts.",
++      "url": null
++    },
++    {
++      "id": "2026-10-25-rollover-queue-lint-focused",
++      "recorded_on": "2026-10-25",
++      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
++      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
++      "revision_kind": "dirty_isolated_worktree",
++      "suite": "changed-file-lint-format",
++      "command": "pnpm exec eslint <nine changed source paths> docs/experiments/rollover-queue/verify.mjs; pnpm exec prettier --check <same paths and owned evidence JSON>",
++      "command_complete": true,
++      "exit_code": 0,
++      "environment": {
++        "os": "Linux 7.0.14-17-pve",
++        "node_version": "v24.19.0",
++        "pnpm_version": "11.7.0",
++        "platform": "linux-x64",
++        "provider_network": "offline loopback fixtures only"
++      },
++      "result": {
++        "passed": null,
++        "failed": null,
++        "skipped": null
++      },
++      "failures": [],
++      "evidence": [
++        "docs/experiments/rollover-queue/evidence/focused-lint.log",
++        "docs/experiments/rollover-queue/evidence/focused-format.log"
++      ],
++      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
++      "task_ids": ["2026-10-25-rollover-queue"],
++      "notes": "Exact argv source paths in source-manifest.json; 0 errors and existing no-this-alias warning in ConversationService. No full-lint success claim.",
++      "url": null
+     }
+   ]
+ }
+diff --git a/source/hooks/conversation-ui-reducer.ts b/source/hooks/conversation-ui-reducer.ts
+index 37d498d7..160f18a3 100644
+--- a/source/hooks/conversation-ui-reducer.ts
++++ b/source/hooks/conversation-ui-reducer.ts
+@@ -180,7 +180,7 @@ export type ConversationUIAction =
+   /** Reset transient approval/processing/indicator state (used by stop, rewind, etc.). */
+   | { type: 'reset_transient' }
+   /** Full reset including usage (used by clearConversation). */
+-  | { type: 'reset_all' };
++  | { type: 'reset_all'; preserveQueued?: boolean };
+ 
+ // ---------------------------------------------------------------------------
+ // Initial state factory
+@@ -638,6 +638,11 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
+       };
+ 
+     case 'reset_all':
+-      return createInitialUIState(null);
++      return {
++        ...createInitialUIState(null),
++        ...(action.preserveQueued
++          ? { pendingQueuedMessages: state.pendingQueuedMessages, queueSnapshot: state.queueSnapshot }
++          : {}),
++      };
+   }
+ }
+diff --git a/source/hooks/use-conversation.ts b/source/hooks/use-conversation.ts
+index 52dcc6b2..300bf376 100644
+--- a/source/hooks/use-conversation.ts
++++ b/source/hooks/use-conversation.ts
+@@ -345,6 +345,11 @@ export const useConversation = ({
+   const messagesRef = useRef(messages);
+   messagesRef.current = messages;
+ 
++  useEffect(() => {
++    conversationService.setRolloverQueueBoundary?.(true);
++    return () => conversationService.setRolloverQueueBoundary?.(false);
++  }, [conversationService]);
++
+   const orchestratorRef = useRef<ConversationOrchestrator | null>(null);
+   // Queue cancellation publishes a transient `cancelling` snapshot after the
+   // stop handler has already reset the UI. Do not let that late snapshot
+@@ -370,14 +375,24 @@ export const useConversation = ({
+           dispatch({ type: 'turn/completed' });
+           const consumption = conversationService.consumeSessionRolloverRequest?.();
+           if (consumption?.status === 'ready') {
++            let failed = true;
+             void Promise.resolve()
+-              .then(() => onSessionRollover?.(consumption.request))
++              .then(() => {
++                if (!onSessionRollover) throw new Error('No session rollover handler is available.');
++                return onSessionRollover(consumption.request);
++              })
++              .then(() => {
++                failed = false;
++              })
+               .catch((error: unknown) => {
+                 const reason = error instanceof Error ? error.message : String(error);
+                 addSystemMessage(
+                   `Session rollover was not completed: ${reason}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
+                 );
+-              });
++              })
++              .finally(() =>
++                conversationService.finishSessionRollover?.(consumption.request.rolloverId, { pauseIfQueued: failed }),
++              );
+           } else if (consumption?.status === 'blocked') {
+             addSystemMessage(
+               `Session rollover was not performed: ${consumption.error}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
+@@ -392,7 +407,7 @@ export const useConversation = ({
+         onRunBudgetNotice: (event) => dispatch({ type: 'run_budget/noticed', event }),
+         onRateLimitClear: () => dispatch({ type: 'rate_limit/cleared' }),
+         onResetTransient: () => dispatch({ type: 'reset_transient' }),
+-        onResetAll: () => dispatch({ type: 'reset_all' }),
++        onResetAll: (options) => dispatch({ type: 'reset_all', preserveQueued: options?.preserveQueued }),
+         onStreamingThinkingStarted: (timestamp) => dispatch({ type: 'streaming/thinking_started', timestamp }),
+         onStreamingThinkingCleared: () => dispatch({ type: 'streaming/thinking_cleared' }),
+         onStreamingToolInfo: (info) => dispatch({ type: 'streaming/tool_info', info }),
+@@ -519,7 +534,7 @@ export const useConversation = ({
+ 
+   const clearConversation = useCallback(() => orchestrator.clearConversation(), [orchestrator]);
+   const resetConversationPresentation = useCallback(
+-    () => orchestrator.resetPresentation({ preserveBackgroundNotificationDedup: true }),
++    () => orchestrator.resetPresentation({ preserveBackgroundNotificationDedup: true, preserveQueued: true }),
+     [orchestrator],
+   );
+ 
+diff --git a/source/services/conversation/conversation-adapter-factory.ts b/source/services/conversation/conversation-adapter-factory.ts
+index 98103261..6019b75e 100644
+--- a/source/services/conversation/conversation-adapter-factory.ts
++++ b/source/services/conversation/conversation-adapter-factory.ts
+@@ -51,6 +51,8 @@ export function createConversationAdapterForRuntime(
+     activeCancelTimeoutMs,
+     discardOnFailure,
+     queuePersistence:
+-      queueForeground && !isTestEnvironment() ? createSessionQueuePersistence(runtime.sessionId) : undefined,
++      queueForeground && !isTestEnvironment()
++        ? createSessionQueuePersistence(sessionIdentity ?? runtime.sessionId)
++        : undefined,
+   });
+ }
+diff --git a/source/services/conversation/conversation-adapter.ts b/source/services/conversation/conversation-adapter.ts
+index 2a3053f1..63239353 100644
+--- a/source/services/conversation/conversation-adapter.ts
++++ b/source/services/conversation/conversation-adapter.ts
+@@ -42,6 +42,8 @@ export type SendMessageOptions = {
+   suppressUserMessageDisplay?: boolean;
+   /** Busy input joins the next model boundary, or queues if that turn releases it. */
+   busyMode?: 'steer' | 'follow_up';
++  /** Internal successor bootstrap: requires a held, idle queue. */
++  rolloverBrief?: boolean;
+ };
+ 
+ export type HandleApprovalDecisionOptions = {
+@@ -203,6 +205,7 @@ export class ConversationAdapter {
+   #approvalActionId: ActionId | null = null;
+   #postExecuteApproval: PostExecuteApprovalToken | null = null;
+   #queueStateObserver: QueueStateObserver | null = null;
++  #beforeQueueAdvance: (() => void) | null = null;
+   #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
+   #compactionAbort: AbortController | null = null;
+   readonly #activeCancelTimeoutMs: number;
+@@ -283,6 +286,7 @@ export class ConversationAdapter {
+       };
+       this.#queue = new QueueController({
+         driver,
++        completionBarrier: () => this.#beforeQueueAdvance?.(),
+         snapshotFactory: (item) => {
+           const message = this.#submissions.get(item.id);
+           return message ? { requestId: item.id } : { requestId: item.id, recovered: true };
+@@ -295,6 +299,11 @@ export class ConversationAdapter {
+     }
+   }
+ 
++  /** Observe settled turns before retained input can dispatch. */
++  setBeforeQueueAdvance(observer: (() => void) | null): void {
++    this.#beforeQueueAdvance = observer;
++  }
++
+   setEventSink(sink: ConversationEventSink | null): void {
+     this.#eventSink = sink;
+   }
+@@ -336,9 +345,9 @@ export class ConversationAdapter {
+    * Occupy the foreground queue the way an in-flight turn does, so new
+    * submits enqueue instead of starting. False when a turn already owns it.
+    */
+-  holdForegroundQueue(): boolean {
++  holdForegroundQueue(options: { afterCompletion?: boolean } = {}): boolean {
+     if (!this.#queue) return true;
+-    const held = this.#queue.holdDispatch();
++    const held = this.#queue.holdDispatch(options);
+     if (held) this.#notifyQueueState();
+     return held;
+   }
+@@ -597,6 +606,7 @@ export class ConversationAdapter {
+       replayFromHistory,
+       preferredMessageId,
+       busyMode,
++      rolloverBrief,
+       suppressUserMessageDisplay,
+     }: SendMessageOptions = {},
+     existing?: Submission,
+@@ -646,7 +656,11 @@ export class ConversationAdapter {
+       const displayText = normalizeUserTurn(input).text;
+       const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
+       void queue
+-        .command({ kind: busyMode === 'steer' ? 'steer' : 'submit', id: requestId, text: controllerText })
++        .command({
++          kind: rolloverBrief ? 'submit_held' : busyMode === 'steer' ? 'steer' : 'submit',
++          id: requestId,
++          text: controllerText,
++        })
+         .then(async (result) => {
+           if (result.kind !== 'accepted') {
+             const reason = result.kind === 'rejected' ? result.reason : result.kind;
+diff --git a/source/services/conversation/conversation-orchestrator.ts b/source/services/conversation/conversation-orchestrator.ts
+index 124d62b4..a18742e6 100644
+--- a/source/services/conversation/conversation-orchestrator.ts
++++ b/source/services/conversation/conversation-orchestrator.ts
+@@ -564,12 +564,12 @@ export class ConversationOrchestrator {
+   }
+ 
+   /** Reset only the UI projection after an in-place session rollover. */
+-  resetPresentation(options: { preserveBackgroundNotificationDedup?: boolean } = {}): void {
+-    this.#lifecycleGeneration += 1;
++  resetPresentation(options: { preserveBackgroundNotificationDedup?: boolean; preserveQueued?: boolean } = {}): void {
++    if (!options.preserveQueued) this.#lifecycleGeneration += 1;
+     this.config.messages.setMessages(() => []);
+     this.config.approvedContext.current = null;
+     this.config.conversationService.clearPendingInteraction?.();
+-    this.config.ui.onResetAll();
++    this.config.ui.onResetAll({ preserveQueued: options.preserveQueued });
+     this.config.usageAccumulator?.reset();
+     this.config.subagentUsageAccumulator?.reset();
+     this.config.costAccumulator?.reset();
+@@ -577,7 +577,7 @@ export class ConversationOrchestrator {
+     if (!options.preserveBackgroundNotificationDedup) {
+       this.#displayedBackgroundNotificationMessageIds.clear();
+     }
+-    this.#outstandingSubmissions.clear();
++    if (!options.preserveQueued) this.#outstandingSubmissions.clear();
+     this.#reportedStrandedCallIds.clear();
+   }
+ 
+@@ -902,6 +902,7 @@ export class ConversationOrchestrator {
+           inputSurgeApproval: options?.inputSurgeApproval,
+           busyMode: options?.busyMode,
+           preferredMessageId: userMessage.id,
++          rolloverBrief: options?.presentation === 'session_rollover',
+         },
+         {
+           onSteerSettled: (admitted, latestInput) => {
+@@ -943,6 +944,10 @@ export class ConversationOrchestrator {
+       this.#settleTurn(applyConversationEvent, botResponseUpdater, result.terminal, streamingState);
+     } catch (error) {
+       this.logError('Error in sendUserMessage', error);
++      // The rollover owner must observe bootstrap failure, not release retained
++      // input as though the successor had received its handoff. Ordinary sends
++      // retain their existing rendered-error contract.
++      if (options?.presentation === 'session_rollover') throw error;
+ 
+       if (queueOwnsSubmission) {
+         this.#outstandingSubmissions.delete(userMessage.id);
+diff --git a/source/services/conversation/conversation-orchestrator.types.ts b/source/services/conversation/conversation-orchestrator.types.ts
+index 6518cf5c..e6a720de 100644
+--- a/source/services/conversation/conversation-orchestrator.types.ts
++++ b/source/services/conversation/conversation-orchestrator.types.ts
+@@ -39,7 +39,7 @@ export interface UIPort {
+   onRunBudgetNotice?(event: RunBudgetEvent): void;
+   onRateLimitClear(): void;
+   onResetTransient(): void;
+-  onResetAll(): void;
++  onResetAll(options?: { preserveQueued?: boolean }): void;
+   onStreamingThinkingStarted(timestamp: number): void;
+   onStreamingThinkingCleared(): void;
+   /** A retry is backing off until `until`; null once output resumes. */
+diff --git a/source/services/conversation/conversation-service.ts b/source/services/conversation/conversation-service.ts
+index 5c5432b1..ab2ac710 100644
+--- a/source/services/conversation/conversation-service.ts
++++ b/source/services/conversation/conversation-service.ts
+@@ -93,6 +93,9 @@ export type ConversationCompactionOutcome =
+  */
+ export class ConversationService {
+   #runtime: SessionRuntime;
++  #rolloverQueueBoundaryEnabled = false;
++  #reservedRollover: { rolloverId: string; cancelled: boolean } | null = null;
++  #settledRollover: SessionRolloverConsumption | null = null;
+   #adapter: ConversationAdapter;
+   readonly #sessionHandle: SessionHandle;
+   #clientHandle: SessionClientHandle;
+@@ -202,6 +205,7 @@ export class ConversationService {
+     });
+     this.#runtime = runtime;
+     this.#adapter = adapter;
++    this.#attachRolloverQueueBoundary();
+     const service = this;
+     this.#sessionHandle = {
+       sessionId: this.sessionId,
+@@ -354,6 +358,7 @@ export class ConversationService {
+     });
+     this.#runtime = runtime;
+     this.#adapter = adapter;
++    this.#attachRolloverQueueBoundary();
+     if (previousLogSink) {
+       this.#runtime.logs.setLogSink(previousLogSink);
+     }
+@@ -388,6 +393,7 @@ export class ConversationService {
+   /** Validate rollover admission without changing state or external persistence. */
+   prepareRolloverWithNewId(newId: string, sessionStartedAt?: string): () => void {
+     if (!newId) throw new Error('Session rollover requires a session ID.');
++    if (this.#reservedRollover?.cancelled) throw new Error('Session rollover was cancelled.');
+     this.#assertRolloverAdmission();
+     // Runtime admission is part of this preflight too. Its returned callback
+     // performs only the synchronous state transition, with no later rejection
+@@ -401,9 +407,6 @@ export class ConversationService {
+   }
+ 
+   #assertRolloverAdmission(): void {
+-    if (this.#adapter.isQueueOwningSubmissions() || this.#adapter.queuedSubmissionCount() > 0) {
+-      throw new Error('Session rollover is blocked while a queued submission is pending.');
+-    }
+     if (this.#hasPendingRolloverInteraction()) {
+       throw new Error('Session rollover is blocked while a user interaction or approval is pending.');
+     }
+@@ -426,9 +429,7 @@ export class ConversationService {
+       this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
+       this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
+       this.#runtime.nestedApproval.getSnapshot() !== null ||
+-      backgroundWaitingForAnswer ||
+-      this.#adapter.isQueueOwningSubmissions() ||
+-      this.#adapter.queuedSubmissionCount() > 0
++      backgroundWaitingForAnswer
+     );
+   }
+ 
+@@ -518,7 +519,40 @@ export class ConversationService {
+     this.#runtime.state.queueModeNotice(text);
+   }
+ 
++  /** Install the interactive turn-end consumer's queue reservation. Headless callers do not reserve. */
++  setRolloverQueueBoundary(enabled: boolean): void {
++    this.#rolloverQueueBoundaryEnabled = enabled;
++    if (!enabled && this.#reservedRollover) {
++      this.finishSessionRollover(this.#reservedRollover.rolloverId, { pauseIfQueued: true });
++    }
++  }
++
++  #attachRolloverQueueBoundary(): void {
++    this.#adapter.setBeforeQueueAdvance(() => {
++      if (!this.#rolloverQueueBoundaryEnabled) return;
++      const consumption = this.consumeSessionRolloverRequest();
++      if (consumption.status === 'none') return;
++      this.#settledRollover = consumption;
++      if (consumption.status === 'ready' && this.#adapter.holdForegroundQueue({ afterCompletion: true })) {
++        this.#reservedRollover = { rolloverId: consumption.request.rolloverId, cancelled: false };
++      }
++    });
++  }
++
++  /** Settle only this handoff's hold; failed/cancelled handoffs retain input for manual resume. */
++  finishSessionRollover(rolloverId: string, options: { pauseIfQueued?: boolean } = {}): void {
++    if (this.#reservedRollover?.rolloverId !== rolloverId) return;
++    const cancelled = this.#reservedRollover.cancelled;
++    this.#reservedRollover = null;
++    this.#adapter.releaseForegroundQueue({ pauseIfQueued: options.pauseIfQueued || cancelled });
++  }
++
+   consumeSessionRolloverRequest(): SessionRolloverConsumption {
++    if (this.#settledRollover) {
++      const consumption = this.#settledRollover;
++      this.#settledRollover = null;
++      return consumption;
++    }
+     const consumption = this.#clientHandle.agentClient.consumeSessionRolloverRequest?.() ?? { status: 'none' };
+     if (consumption.status === 'blocked') {
+       this.#logBlockedRollover(consumption);
+@@ -528,7 +562,7 @@ export class ConversationService {
+ 
+     if (!this.#hasPendingRolloverInteraction()) return consumption;
+ 
+-    const error = 'Session rollover was not performed because a user interaction or queued submission is pending.';
++    const error = 'Session rollover was not performed because a user interaction is pending.';
+     this.#runtime.state.queueModeNotice(error);
+     const blocked = {
+       status: 'blocked' as const,
+@@ -565,6 +599,7 @@ export class ConversationService {
+    * {@link interruptFromUser}, disposal, or shutdown.
+    */
+   abort(): void {
++    if (this.#reservedRollover) this.#reservedRollover.cancelled = true;
+     this.#adapter.abort();
+   }
+ 
+@@ -573,7 +608,7 @@ export class ConversationService {
+    * subagent runs, because the user explicitly asked everything to stop.
+    */
+   interruptFromUser(): void {
+-    this.#adapter.abort();
++    this.abort();
+     this.#clientHandle.agentClient.cancelBackgroundRuns?.();
+     this.#clientHandle.agentClient.cancelBackgroundShellJobs?.();
+   }
+@@ -617,6 +652,9 @@ export class ConversationService {
+   submitMessage(
+     ...args: Parameters<ConversationAdapter['submitMessage']>
+   ): ReturnType<ConversationAdapter['submitMessage']> {
++    if (args[1]?.rolloverBrief && (!this.#reservedRollover || this.#reservedRollover.cancelled)) {
++      return Promise.reject(new Error('Session rollover briefing has no active queue reservation.'));
++    }
+     return this.#adapter.submitMessage(...args);
+   }
+ 
+diff --git a/source/services/conversation/queue-persistence.ts b/source/services/conversation/queue-persistence.ts
+index 81349bc8..6d6d503f 100644
+--- a/source/services/conversation/queue-persistence.ts
++++ b/source/services/conversation/queue-persistence.ts
+@@ -2,14 +2,16 @@ import fs from 'fs';
+ import path from 'path';
+ import { type PersistedQueueV1, type QueuePersistence } from '../queue/queue-controller.js';
+ import { getConversationsDirForTest } from './conversation-persistence.js';
++import { resolveSessionId, type SessionIdSource } from '../session/session-identity.js';
+ 
+ /**
+  * Session-scoped atomic storage for foreground queue ownership. The queue is
+  * deliberately a sidecar to the append-only conversation journal: replacing
+  * it never risks truncating conversation history.
+  */
+-export function createSessionQueuePersistence<Snapshot>(sessionId: string): QueuePersistence<Snapshot> {
+-  const filePath = path.join(getConversationsDirForTest(), `${sessionId}.queue.json`);
++export function createSessionQueuePersistence<Snapshot>(sessionId: SessionIdSource): QueuePersistence<Snapshot> {
++  const pathForIdentity = () => path.join(getConversationsDirForTest(), `${resolveSessionId(sessionId)}.queue.json`);
++  let filePath = pathForIdentity();
+ 
+   return {
+     load(): unknown {
+@@ -17,6 +19,15 @@ export function createSessionQueuePersistence<Snapshot>(sessionId: string): Queu
+       return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+     },
+     replace(record: PersistedQueueV1<Snapshot>): void {
++      const successorPath = pathForIdentity();
++      if (successorPath !== filePath) {
++        // Move ownership rather than copy: restarting the predecessor must not
++        // replay the successor's pending input. Rename before replacement keeps
++        // the previous complete record recoverable if the next write fails.
++        if (fs.existsSync(successorPath)) throw new Error('Successor queue sidecar already exists.');
++        if (fs.existsSync(filePath)) fs.renameSync(filePath, successorPath);
++        filePath = successorPath;
++      }
+       const directory = path.dirname(filePath);
+       fs.mkdirSync(directory, { recursive: true });
+       const temporaryPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+diff --git a/source/services/queue/queue-controller.ts b/source/services/queue/queue-controller.ts
+index 4f918a57..57f05ba8 100644
+--- a/source/services/queue/queue-controller.ts
++++ b/source/services/queue/queue-controller.ts
+@@ -101,6 +101,8 @@ export type QueueState<Snapshot> =
+ 
+ export type QueueCommand =
+   | { readonly kind: 'submit'; readonly text: string; readonly id?: string }
++  /** Session bootstrap only: start ahead of retained input and release an idle dispatch hold. */
++  | { readonly kind: 'submit_held'; readonly text: string; readonly id?: string }
+   | { readonly kind: 'steer'; readonly text: string; readonly id?: string }
+   | { readonly kind: 'cancel' }
+   | { readonly kind: 'cancellation_settled'; readonly executionId: ExecutionId }
+@@ -327,11 +329,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
+   }
+ 
+   /**
+-   * Prevent `#dispatch` while idle. Submissions still enqueue. Returns false
+-   * when the queue is already occupied (running, paused, or already held).
++   * Prevent `#dispatch` while idle. Submissions still enqueue. The completion
++   * barrier may reserve the next idle boundary with `afterCompletion`; ordinary
++   * callers cannot acquire a hold while a turn or another hold owns the queue.
+    */
+-  holdDispatch(): boolean {
+-    if (this.#dispatchHeld || this.#phase !== 'idle' || this.#active) return false;
++  holdDispatch(options: { afterCompletion?: boolean } = {}): boolean {
++    const completing = options.afterCompletion && this.#phase === 'completing';
++    if (this.#dispatchHeld || (!completing && (this.#phase !== 'idle' || this.#active))) return false;
+     this.#dispatchHeld = true;
+     return true;
+   }
+@@ -386,6 +390,11 @@ export class QueueController<Snapshot, Terminal = unknown> {
+ 
+   async command(cmd: QueueCommand): Promise<QueueCommandResult> {
+     switch (cmd.kind) {
++      case 'submit_held':
++        if (!this.#dispatchHeld || this.#phase !== 'idle' || this.#active) {
++          return { kind: 'rejected', reason: 'invalid' };
++        }
++        return this.#submit(cmd);
+       case 'submit':
+         return this.#submit(cmd);
+       case 'steer':
+@@ -502,7 +511,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+     }
+   }
+ 
+-  async #submit(cmd: Extract<QueueCommand, { kind: 'submit' | 'steer' }>): Promise<QueueCommandResult> {
++  async #submit(cmd: Extract<QueueCommand, { kind: 'submit' | 'steer' | 'submit_held' }>): Promise<QueueCommandResult> {
+     if (!cmd.text.trim()) return { kind: 'rejected', reason: 'invalid' };
+     if (this.#queue.length >= this.#capacity) return { kind: 'rejected', reason: 'capacity' };
+     const id = cmd.id ?? this.#itemId();
+@@ -516,6 +525,14 @@ export class QueueController<Snapshot, Terminal = unknown> {
+       submittedAt: this.#now(),
+       ...(cmd.kind === 'steer' ? { steer: true as const } : {}),
+     });
++    if (cmd.kind === 'submit_held') {
++      // Bootstrap belongs before every retained item (including released steers).
++      this.#queue = [item, ...this.#queue].map((queued) => freeze({ ...queued, sequence: this.#nextSequence++ }));
++      await this.#persist();
++      this.#dispatchHeld = false;
++      await this.#dispatch();
++      return { kind: 'accepted' };
++    }
+     if (cmd.kind === 'steer') {
+       // A steer that reaches the queue could not be delivered into the running
+       // turn, so it runs as its own turn — ahead of the follow-ups queued

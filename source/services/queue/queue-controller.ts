@@ -101,6 +101,8 @@ export type QueueState<Snapshot> =
 
 export type QueueCommand =
   | { readonly kind: 'submit'; readonly text: string; readonly id?: string }
+  /** Session bootstrap only: start ahead of retained input and release an idle dispatch hold. */
+  | { readonly kind: 'submit_held'; readonly text: string; readonly id?: string }
   | { readonly kind: 'steer'; readonly text: string; readonly id?: string }
   | { readonly kind: 'cancel' }
   | { readonly kind: 'cancellation_settled'; readonly executionId: ExecutionId }
@@ -327,11 +329,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
   }
 
   /**
-   * Prevent `#dispatch` while idle. Submissions still enqueue. Returns false
-   * when the queue is already occupied (running, paused, or already held).
+   * Prevent `#dispatch` while idle. Submissions still enqueue. The completion
+   * barrier may reserve the next idle boundary with `afterCompletion`; ordinary
+   * callers cannot acquire a hold while a turn or another hold owns the queue.
    */
-  holdDispatch(): boolean {
-    if (this.#dispatchHeld || this.#phase !== 'idle' || this.#active) return false;
+  holdDispatch(options: { afterCompletion?: boolean } = {}): boolean {
+    const completing = options.afterCompletion && this.#phase === 'completing';
+    if (this.#dispatchHeld || (!completing && (this.#phase !== 'idle' || this.#active))) return false;
     this.#dispatchHeld = true;
     return true;
   }
@@ -386,6 +390,11 @@ export class QueueController<Snapshot, Terminal = unknown> {
 
   async command(cmd: QueueCommand): Promise<QueueCommandResult> {
     switch (cmd.kind) {
+      case 'submit_held':
+        if (!this.#dispatchHeld || this.#phase !== 'idle' || this.#active) {
+          return { kind: 'rejected', reason: 'invalid' };
+        }
+        return this.#submit(cmd);
       case 'submit':
         return this.#submit(cmd);
       case 'steer':
@@ -502,7 +511,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
     }
   }
 
-  async #submit(cmd: Extract<QueueCommand, { kind: 'submit' | 'steer' }>): Promise<QueueCommandResult> {
+  async #submit(cmd: Extract<QueueCommand, { kind: 'submit' | 'steer' | 'submit_held' }>): Promise<QueueCommandResult> {
     if (!cmd.text.trim()) return { kind: 'rejected', reason: 'invalid' };
     if (this.#queue.length >= this.#capacity) return { kind: 'rejected', reason: 'capacity' };
     const id = cmd.id ?? this.#itemId();
@@ -516,6 +525,14 @@ export class QueueController<Snapshot, Terminal = unknown> {
       submittedAt: this.#now(),
       ...(cmd.kind === 'steer' ? { steer: true as const } : {}),
     });
+    if (cmd.kind === 'submit_held') {
+      // Bootstrap belongs before every retained item (including released steers).
+      this.#queue = [item, ...this.#queue].map((queued) => freeze({ ...queued, sequence: this.#nextSequence++ }));
+      await this.#persist();
+      this.#dispatchHeld = false;
+      await this.#dispatch();
+      return { kind: 'accepted' };
+    }
     if (cmd.kind === 'steer') {
       // A steer that reaches the queue could not be delivered into the running
       // turn, so it runs as its own turn — ahead of the follow-ups queued

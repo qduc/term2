@@ -148,6 +148,9 @@ interface AppProps {
   mcpUserConfigPath?: string;
   mcpConfigController?: McpConfigController;
   controlSocket?: ControlSocketServer;
+  controlSocketIsStartup?: boolean;
+  connectControlSocket?: (name: string) => Promise<ControlSocketServer>;
+  disconnectControlSocket?: (server: ControlSocketServer) => Promise<void>;
   controlStartupNotice?: string;
   controlSessionMetadata?: () => ControlSessionMetadata;
   initialGoal?: import('./services/logging/conversation-log-events.js').DurableGoal;
@@ -187,7 +190,10 @@ const App: FC<AppProps> = ({
   mcpStartupNotices,
   mcpUserConfigPath,
   mcpConfigController,
-  controlSocket,
+  controlSocket: initialControlSocket,
+  controlSocketIsStartup = false,
+  connectControlSocket,
+  disconnectControlSocket,
   controlStartupNotice,
   controlSessionMetadata,
   initialGoal,
@@ -196,6 +202,7 @@ const App: FC<AppProps> = ({
   goalAchievedSlot,
 }) => {
   const [goal, setGoalState] = useState(initialGoal);
+  const [controlSocket, setControlSocket] = useState(initialControlSocket);
   const setGoal = useCallback(
     (
       nextGoal: import('./services/logging/conversation-log-events.js').DurableGoal,
@@ -1019,6 +1026,22 @@ const App: FC<AppProps> = ({
     mcpManager,
     mcpOAuthStore,
     mcpUserConfigPath,
+    controlSocket,
+    controlSocketIsStartup,
+    getSessionId: () => sessionId,
+    connectControlSocket: connectControlSocket
+      ? async (name: string) => {
+          const server = await connectControlSocket(name);
+          setControlSocket(server);
+          return server;
+        }
+      : undefined,
+    disconnectControlSocket: disconnectControlSocket
+      ? async (server: ControlSocketServer) => {
+          await disconnectControlSocket(server);
+          setControlSocket(undefined);
+        }
+      : undefined,
   });
 
   useMcpNotices({

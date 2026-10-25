@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useInputContext } from '../context/InputContext.js';
-import type { ModelInfo } from '../services/model-service.js';
+import { useModelCatalog } from './use-model-catalog.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import {
   ModelCatalogSession,
@@ -64,10 +64,6 @@ export const useModelSelection = (deps: {
     [settingsService, loggingService, modelFetcher],
   );
 
-  const [catalogs, setCatalogs] = useState<Map<string, ModelInfo[]>>(() => new Map());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [modelTab, setModelTab] = useState<ModelTab>('all');
   const provider = null;
@@ -182,47 +178,16 @@ export const useModelSelection = (deps: {
 
   useEffect(() => {
     if (isOpen) {
-      catalogSession.begin();
       shouldPreselectRef.current = true;
     }
   }, [isOpen, catalogSession]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    let disposed = false;
-    let remaining = providerIds.length;
-    const failures: string[] = [];
-    setCatalogs(new Map()); // eslint-disable-line react-hooks/set-state-in-effect
-    setSelectedIndex(0);
-    setScrollOffset(0);
-    setError(null);
-    setWarning(null);
-    setLoading(remaining > 0);
-
-    const settle = () => {
-      remaining -= 1;
-      if (!disposed && remaining === 0) {
-        setLoading(false);
-        setWarning(failures.length > 0 ? `Some providers failed: ${failures.join(', ')}` : null);
-      }
-    };
-    for (const providerId of providerIds) {
-      catalogSession
-        .load(providerId)
-        .then((result) => {
-          if (disposed || result.kind === 'stale') return;
-          const models = result.models.map((model) => ({ ...model, provider: model.provider || providerId }));
-          setCatalogs((current) => new Map(current).set(providerId, models));
-        })
-        .catch(() => {
-          failures.push(providerId);
-        })
-        .finally(settle);
-    }
-    return () => {
-      disposed = true;
-    };
-  }, [isOpen, providerIds, catalogSession, refreshKey]);
+  const { catalogs, loading, warning } = useModelCatalog({
+    active: isOpen,
+    session: catalogSession,
+    providerIds,
+    refreshKey,
+  });
 
   const refresh = useCallback(() => {
     if (!isOpen) return;
@@ -454,7 +419,7 @@ export const useModelSelection = (deps: {
     triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
     query,
     loading,
-    error,
+    error: null,
     warning,
     provider,
     modelTab,

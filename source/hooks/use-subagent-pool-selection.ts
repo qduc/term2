@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
+import { useModelCatalog } from './use-model-catalog.js';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { SETTING_KEYS } from '../services/settings/settings-service.js';
@@ -236,9 +237,6 @@ export function useSubagentPoolSelection(
     () => new ModelCatalogSession({ settingsService, loggingService: loggingService ?? noOpLoggingService }),
     [loggingService, settingsService],
   );
-  const [catalogs, setCatalogs] = useState<Map<string, ModelInfo[]>>(new Map());
-  const [modelLoading, setModelLoading] = useState(false);
-  const [modelError, setModelError] = useState<string | null>(null);
   const [modelSelectedIndex, setModelSelectedIndex] = useState(0);
   const [modelScrollOffset, setModelScrollOffset] = useState(0);
   const [modelRefreshKey, setModelRefreshKey] = useState(0);
@@ -256,6 +254,16 @@ export function useSubagentPoolSelection(
     () => orderedProviderIds(settingsService, getProviderIds()),
     [settingsService, modelRefreshKey],
   );
+  const {
+    catalogs,
+    loading: modelLoading,
+    warning: modelWarning,
+  } = useModelCatalog({
+    active: active && phase === 'edit_model',
+    session: catalogSession,
+    providerIds,
+    refreshKey: modelRefreshKey,
+  });
   const favoriteModels = useMemo(() => getFavoriteModelInfos(settingsService), [settingsService, modelRefreshKey]);
   const favoriteKeys = useMemo(
     () => new Set(favoriteModels.map((model) => serializeFavorite(model.provider, model.id))),
@@ -356,46 +364,11 @@ export function useSubagentPoolSelection(
   }, [active, entryShape, roleLabel, settingKey]);
 
   useEffect(() => {
-    if (!active || phase !== 'edit_model' || providerIds.length === 0) return;
-    /* eslint-disable react-hooks/set-state-in-effect */
-    const cached = new Map(providerIds.map((provider) => [provider, catalogSession.getCached(provider) ?? []]));
-    setCatalogs(cached);
+    if (!active || phase !== 'edit_model') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setModelSelectedIndex(0);
     setModelScrollOffset(0);
-    setModelError(null);
-
-    catalogSession.begin();
-    let disposed = false;
-    const load = async () => {
-      setModelLoading(true);
-      try {
-        const results = await Promise.allSettled(
-          providerIds.map(async (provider) => ({ provider, result: await catalogSession.load(provider) })),
-        );
-        if (disposed) return;
-        const next = new Map(cached);
-        const failures: string[] = [];
-        for (const result of results) {
-          if (result.status === 'fulfilled' && result.value.result.kind !== 'stale') {
-            next.set(result.value.provider, result.value.result.models);
-          } else if (result.status === 'rejected') {
-            failures.push(String(result.reason));
-          }
-        }
-        setCatalogs(next);
-        if (failures.length > 0) setModelError('Some providers failed: ' + failures.join(', '));
-      } catch (error) {
-        if (!disposed) setModelError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (!disposed) setModelLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      disposed = true;
-    };
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [active, catalogSession, modelRefreshKey, phase, providerIds]);
+  }, [active, modelRefreshKey, phase, providerIds]);
 
   useEffect(() => {
     // Changing the search text starts a new list navigation session.
@@ -761,7 +734,7 @@ export function useSubagentPoolSelection(
     modelQuery: input,
     filteredModels,
     modelLoading,
-    modelError,
+    modelWarning,
     modelSelectedIndex,
     modelScrollOffset,
     selectItem,

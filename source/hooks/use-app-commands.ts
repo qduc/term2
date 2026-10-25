@@ -36,6 +36,8 @@ import type { Message } from '../types/message.js';
 import type { CopySelection } from '../utils/copy-selections.js';
 import type { RewindItem } from '../utils/conversation/rewind-items.js';
 import { createResumeSlashCommand } from '../commands/resume-command.js';
+import { createBridgeCommand } from '../commands/bridge-command.js';
+import type { ControlSocketServer } from '../services/control-socket/control-socket.js';
 import type { ConversationListEntry } from '../services/conversation/conversation-persistence.js';
 import type { ProfileTransitionService } from '../services/profiles/profile-transition.js';
 
@@ -80,6 +82,11 @@ interface UseAppCommandsProps {
   /** Shown by /mcp when nothing is configured, so the user learns where to look. */
   mcpUserConfigPath?: string;
   openMcpMenu?: () => void;
+  controlSocket?: ControlSocketServer;
+  controlSocketIsStartup?: boolean;
+  connectControlSocket?: (name: string) => Promise<ControlSocketServer>;
+  disconnectControlSocket?: (server: ControlSocketServer) => Promise<void>;
+  getSessionId?: () => string;
 }
 
 export const useAppCommands = ({
@@ -118,6 +125,11 @@ export const useAppCommands = ({
   mcpOAuthStore = null,
   mcpUserConfigPath,
   openMcpMenu,
+  controlSocket,
+  controlSocketIsStartup = false,
+  connectControlSocket,
+  disconnectControlSocket,
+  getSessionId = () => 'unknown',
 }: UseAppCommandsProps) => {
   const { togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
@@ -262,6 +274,16 @@ export const useAppCommands = ({
         openMcpMenu,
       }),
       createMcpLoginCommand({ manager: mcpManager, store: mcpOAuthStore, addSystemMessage }),
+      guardBusyTurn(
+        createBridgeCommand({
+          getServer: () => controlSocket,
+          isStartup: controlSocketIsStartup,
+          connect: connectControlSocket,
+          disconnect: disconnectControlSocket,
+          getSessionId,
+          addSystemMessage,
+        }),
+      ),
       {
         name: 'providers',
         description: 'Manage API providers (list, add, edit, delete)',
@@ -324,6 +346,11 @@ export const useAppCommands = ({
     turnInFlight,
     listConversations,
     resumeConversation,
+    controlSocket,
+    controlSocketIsStartup,
+    connectControlSocket,
+    disconnectControlSocket,
+    getSessionId,
   ]);
 
   return {

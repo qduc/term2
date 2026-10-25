@@ -8,14 +8,24 @@ performed during implementation.
 
 ## Attach the actual session, not a blank replacement
 
-Sessions must explicitly opt in **at process launch**. This is intentionally not a
+Sessions must explicitly opt in to Discord input. This is intentionally not a
 settings key an agent can change. Each participating session independently opts in;
 no approval/auto-approve settings are copied from the coordinator.
 
-If your existing session was already launched with both flags, keep it running.
-Otherwise, do not kill ongoing work just to attach Discord. Checkpoint/finish its
-active operation, record the exact session ID/resume command printed by term2, and
-exit normally when safe. Then, from its original workspace, resume that **same ID**:
+For an already-running interactive root TUI, explicitly run `/bridge connect [name]`
+(default name `coord`). This creates and advertises a control socket for that live
+session; `/bridge status` reports its binding and `/bridge disconnect` removes a
+runtime-created socket. Connecting is a security-sensitive action: remote human
+input can reach the session, but approvals and questions remain terminal-only.
+Do not opt in sessions whose unattended work you do not intend remote users to
+steer. This does not edit the bridge journal or synthesize/rebind an outbound
+Discord advertisement; the bridge must separately discover and bind the session.
+
+Alternatively, opt in at process launch with both flags. If your existing session
+was already launched with both flags, keep it running. Otherwise, do not kill
+ongoing work just to attach Discord. Checkpoint/finish its active operation, record
+the exact session ID/resume command printed by term2, and exit normally when safe.
+Then, from its original workspace, resume that **same ID**:
 
 ```sh
 term2 --resume YOUR_EXISTING_SESSION_ID --control-socket=coord --discord-input
@@ -27,9 +37,9 @@ No positional prompt; that would select non-interactive mode instead of listenin
 Do not use `--fork`, which would create different history. Do not start plain
 `term2` as an assumed replacement. Normal persisted-history resume is supported;
 this bridge cannot resurrect a killed in-flight tool or move live process state.
-For this current coordination session, adding the flag requires a deliberately
-planned safe restart/resume unless it was already present at launch. Merely
-installing this candidate cannot attach to an older running executable.
+The runtime command is available only in an interactive root TUI; non-interactive,
+ACP, web-gateway, and subagent sessions do not inherit this capability. Existing
+startup sockets continue to work unchanged.
 
 `XDG_RUNTIME_DIR` must be an absolute user-owned directory with mode 0700. Reuse the
 normal runtime directory, not a shared `/tmp` directory. Verify the correct live

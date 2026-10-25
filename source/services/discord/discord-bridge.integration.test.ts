@@ -7,9 +7,11 @@ import { once } from 'node:events';
 import { spawn, spawnSync } from 'node:child_process';
 import { DiscordBridge, callDiscordControl, type DiscordBridgeConfig } from './discord-bridge.js';
 import { sendDiscord, type DiscordSendInput } from './discord-outbound.js';
+import { createFailClosedDiscordSend } from './discord-send-capability.js';
 import { getAgentDefinition } from '../../agent.js';
 import { createDiscordSendToolDefinition } from '../../tools/discord-send.js';
 import { ControlSocketServer } from '../control-socket/control-socket.js';
+import { createBridgeCommand } from '../../commands/bridge-command.js';
 import { createControlSessionPort } from '../control-socket/control-session-port.js';
 import { ConversationService } from '../conversation/conversation-service.js';
 import { ConversationOrchestrator } from '../conversation/conversation-orchestrator.js';
@@ -531,6 +533,105 @@ it('uses real busy-session follow-up admission and rejects remote approval answe
   expect(f.sessions.worker!.service.getPendingInteractionSnapshot()).not.toBeNull();
   expect(f.posted.some((message) => message.content.includes('terminal_interaction_required'))).toBe(true);
 }, 20_000);
+
+it('fails closed without an opted-in socket and delegates outbound only with opt-in', async () => {
+  const f = await fixture({ optIn: false });
+  let outboundCalls = 0;
+  const send = createFailClosedDiscordSend(
+    () => f.sessions.coord!.socket,
+    f.root,
+    async (_directory, _binding, input) => {
+      outboundCalls++;
+      return { requestId: input.requestId, delivery: 'queued' };
+    },
+  );
+  const input: DiscordSendInput = { action: 'send', requestId: 'guarded', text: 'safe' };
+  expect(await send(input)).toMatchObject({ requestId: 'guarded', delivery: 'unavailable' });
+  expect(outboundCalls).toBe(0);
+  const optedIn = new ControlSocketServer({
+    name: 'runtime-opted',
+    runtimeDir: f.root,
+    discordInput: true,
+    sessionId: () => 'runtime-session',
+  });
+  await optedIn.listen();
+  cleanup.push(() => optedIn.close());
+  expect(
+    await createFailClosedDiscordSend(
+      () => optedIn,
+      f.root,
+      async (_d, _b, value) => {
+        outboundCalls++;
+        return { requestId: value.requestId, delivery: 'queued' };
+      },
+    )(input),
+  ).toMatchObject({ delivery: 'queued' });
+  expect(outboundCalls).toBe(1);
+});
+
+it('runtime bridge command validates, advertises, refuses duplicates, disconnects and reconnects', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-runtime-bridge-'));
+  fs.chmodSync(root, 0o700);
+  cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
+  let active: ControlSocketServer | undefined;
+  const messages: string[] = [];
+  const command = createBridgeCommand({
+    getServer: () => active,
+    isStartup: false,
+    getSessionId: () => 'runtime-session',
+    addSystemMessage: (message) => messages.push(message),
+    connect: async (name) => {
+      const server = new ControlSocketServer({
+        name,
+        discordInput: true,
+        runtimeDir: root,
+        sessionId: () => 'runtime-session',
+      });
+      await server.listen();
+      active = server;
+      return server;
+    },
+    disconnect: async (server) => {
+      await server.close();
+      active = undefined;
+    },
+  });
+  command.action('connect invalid/name');
+  expect(messages.pop()).toContain('Invalid bridge socket name');
+  command.action('connect runtime');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(active?.discordInputEnabled).toBe(true);
+  expect(fs.existsSync(active!.advertisementPath)).toBe(true);
+  expect(JSON.parse(fs.readFileSync(active!.advertisementPath, 'utf8'))).toMatchObject({
+    name: 'runtime',
+    sessionId: 'runtime-session',
+    socketPath: active!.socketPath,
+  });
+  expect(messages.pop()).toContain('approvals and questions remain terminal-only');
+  command.action('status');
+  expect(messages.pop()).toContain('session runtime-session; startup socket no');
+  const startupCommand = createBridgeCommand({
+    getServer: () => active,
+    isStartup: true,
+    getSessionId: () => 'runtime-session',
+    addSystemMessage: (message) => messages.push(message),
+  });
+  startupCommand.action('disconnect');
+  expect(messages.pop()).toContain('startup control socket cannot be disconnected');
+  expect(active).toBeDefined();
+  command.action('connect second');
+  expect(messages.pop()).toContain('already connected');
+  command.action('disconnect');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(active).toBeUndefined();
+  expect(fs.existsSync(path.join(root, 'term2', 'control', 'runtime.json'))).toBe(false);
+  expect(messages.pop()).toContain('Bridge disconnected');
+  command.action('connect runtime');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(active?.discordInputEnabled).toBe(true);
+  command.action('disconnect');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+});
 
 it('requires process opt-in, pins session identity and preserves the ordinary control peer rejection', async () => {
   const f = await fixture({ optIn: false });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import './env-setup.js';
-import { sendDiscord } from './services/discord/discord-outbound.js';
+import { createFailClosedDiscordSend } from './services/discord/discord-send-capability.js';
 import type { ReactNode } from 'react';
 import meow from 'meow';
 import { createRequire } from 'node:module';
@@ -1153,13 +1153,12 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         skillsService,
         requestCapture,
         sessionBrowser: hasPositionalPrompt ? undefined : sessionBrowser,
-        ...(!hasPositionalPrompt && controlSocketRequested && discordInput
+        ...(!hasPositionalPrompt
           ? {
-              discordSend: async (input: import('./services/discord/discord-outbound.js').DiscordSendInput) => {
-                const server = activeControlSocketServer;
-                if (!server) return { requestId: input.requestId, delivery: 'unavailable' as const };
-                return sendDiscord(process.env.XDG_RUNTIME_DIR ?? '', server.binding, input);
-              },
+              discordSend: createFailClosedDiscordSend(
+                () => activeControlSocketServer,
+                process.env.XDG_RUNTIME_DIR ?? '',
+              ),
             }
           : {}),
         mcpToolSource: mcpManager,
@@ -1405,6 +1404,7 @@ if (!hasPositionalPrompt && (!nodeStdin.isTTY || !nodeStdout.isTTY)) {
 
 let controlStartupNotice: string | undefined;
 let controlSocket: ControlSocketServer | undefined;
+let runtimeControlSocketConnectPending = false;
 if (controlSocketRequested) {
   if (controlSocketNameRejected || !controlSocketName) {
     controlStartupNotice = `Control socket name rejected: ${controlSocketName ?? ''}`;
@@ -1463,6 +1463,34 @@ const { waitUntilExit } = render(
           <App
             conversationService={conversationService}
             controlSocket={controlSocket}
+            controlSocketIsStartup={controlSocket !== undefined}
+            connectControlSocket={async (name) => {
+              if (controlSocket || runtimeControlSocketConnectPending) {
+                throw new Error('A control socket is already connected or connecting.');
+              }
+              runtimeControlSocketConnectPending = true;
+              const server = new ControlSocketServer({
+                name,
+                discordInput: true,
+                sessionId: () => effectiveSessionId ?? conversationService.sessionId,
+              });
+              try {
+                await server.listen();
+                controlSocket = server;
+                activeControlSocketServer = server;
+                return server;
+              } catch (error) {
+                await server.close().catch(() => undefined);
+                throw error;
+              } finally {
+                runtimeControlSocketConnectPending = false;
+              }
+            }}
+            disconnectControlSocket={async (server) => {
+              await server.close();
+              if (activeControlSocketServer === server) activeControlSocketServer = null;
+              if (controlSocket === server) controlSocket = undefined;
+            }}
             controlStartupNotice={controlStartupNotice}
             controlSessionMetadata={() => ({
               workspaceRoot: executionContext?.getHomeWorkspace() ?? null,

@@ -267,6 +267,11 @@ export class ControlSocketServer {
     return this.#startedAt;
   }
 
+  /** Whether this process explicitly opted this socket into human Discord input. */
+  get discordInputEnabled(): boolean {
+    return this.#options.discordInput === true;
+  }
+
   refreshAdvertisement(): void {
     if (!this.#ownsAdvertisement || !this.#startedAt) return;
     const current = readAdvertisement(this.advertisementPath);

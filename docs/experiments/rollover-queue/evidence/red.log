@@ -1,0 +1,70 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs source/hooks/rollover-queue.probe.test.tsx
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/rollover-queue[39m
+
+ [31m❯[39m source/hooks/rollover-queue.probe.test.tsx [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 97[2mms[22m[39m
+[31m   [31m×[31m queued before and during rollover reaches successor after briefing exactly once[39m[32m 96[2mms[22m[39m
+[90mstderr[2m | source/hooks/rollover-queue.probe.test.tsx[2m > [22m[2mqueued before and during rollover reaches successor after briefing exactly once
+[22m[39mYour app (or one of its dependencies) is using an outdated JSX transform. Update to the modern JSX transform for faster performance: https://react.dev/link/new-jsx-transform
+
+[90mstderr[2m | source/hooks/rollover-queue.probe.test.tsx[2m > [22m[2mqueued before and during rollover reaches successor after briefing exactly once
+[22m[39mAn update to Harness inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Harness inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/hooks/rollover-queue.probe.test.tsx[2m > [22mqueued before and during rollover reaches successor after briefing exactly once
+[31m[1mAssertionError[22m: queued input must not veto rollover: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/hooks/rollover-queue.probe.test.tsx:[2m79:62[22m[39m
+    [90m 77|[39m     [35mawait[39m [34mact[39m([35masync[39m () [33m=>[39m { h[33m.[39mfirst[33m.[39m[34mresolve[39m()[33m;[39m })[33m;[39m
+    [90m 78|[39m     [35mawait[39m [34muntil[39m(() [33m=>[39m h[33m.[39mentered [33m||[39m h[33m.[39mrequests[33m.[39mlength [33m>[39m [34m1[39m)[33m;[39m
+    [90m 79|[39m     expect(h.entered, 'queued input must not veto rollover').toBe(true…
+    [90m   |[39m                                                              [31m^[39m
+    [90m 80|[39m     [34mexpect[39m(h[33m.[39mrequests)[33m.[39m[34mtoHaveLength[39m([34m1[39m)[33m;[39m
+    [90m 81|[39m     [35mawait[39m h[33m.[39m[34msubmit[39m([32m'during-rotation'[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m   Start at [22m 11:24:52
+[2m   Duration [22m 2.04s[2m (transform 1.15s, setup 19ms, import 1.79s, tests 97ms, environment 0ms)[22m
+
+[ELIFECYCLE] Test failed. See above for more details.

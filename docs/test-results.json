@@ -9954,6 +9954,956 @@
       "failures": [],
       "uncertain": ["No real rollover run exercised the new wording"],
       "evidence": "Lint warnings are pre-existing react-hooks deps in app.tsx; temporary render script under /tmp/rb."
+    },
+    {
+      "id": "2026-10-25-rollover-queue-red",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "clean_base_production_with_untracked_evidence",
+      "suite": "temporary-hook-runtime-and-filesystem",
+      "command": "node docs/experiments/rollover-queue/verify.mjs",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": 4,
+        "failed": 7,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/base-fixture-runner.log",
+        "docs/experiments/rollover-queue/evidence/base-status.json"
+      ],
+      "source_identity": "clean HEAD production source",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "Identical fixtures on base; queued-before/during and ownership/retention assertions fail; ordinary and blocked controls pass. Synthetic request source, real hooks/service/runtime/next model requests.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-green",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "temporary-hook-runtime-and-filesystem",
+      "command": "node docs/experiments/rollover-queue/verify.mjs",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/green-final-exact.log",
+        "docs/experiments/rollover-queue/evidence/final-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "Final exact nine-file source; queued before/during, successor-first bootstrap, order/no duplicate starts, writer/cancel/blocked/brief-failure recovery, edit/retract/follow-up/released and admitted steer, ordinary cancel/resume, filesystem successor restore. Full App and actual rollover tool not mounted.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-typecheck",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/typecheck-final.log",
+        "docs/experiments/rollover-queue/evidence/final-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-static",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "static-repository-guards",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/static-final.log",
+        "docs/experiments/rollover-queue/evidence/final-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-no-unit",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "prohibited-unit-test-guard",
+      "command": "pnpm check:no-unit-tests",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/no-unit-final.log",
+        "docs/experiments/rollover-queue/evidence/final-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "Temporary source tests removed. Retained fixture data and runner are author reproduction evidence, not a permanent test tier.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-generated-invalid",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "generated-queue-invocation",
+      "command": "pnpm verify:generated -- --property queue.serial-actions --property queue.restore-pause --seed=424242 --runs 1000",
+      "command_complete": true,
+      "exit_code": 2,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "evidence": ["docs/experiments/rollover-queue/evidence/generated-queue.log"],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "Extra -- caused parse_args unexpected positional before any property ran. Not product failure or passing coverage.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-generated-serial",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "generated-queue",
+      "command": "pnpm verify:generated --property queue.serial-actions --seed=424242 --runs 1000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": 1000,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/generated-serial-final.log",
+        "docs/experiments/rollover-queue/evidence/final-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "Cases, not ordinary test count; no shrinks/skips. Existing property does not exercise the new rollover/hook crossover.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-generated-restore",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "generated-queue",
+      "command": "pnpm verify:generated --property queue.restore-pause --seed=424242 --runs 1000",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": 1000,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/generated-restore-final.log",
+        "docs/experiments/rollover-queue/evidence/final-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "Cases, not ordinary test count. Earlier repeated --property command tested only its last property and is not counted twice.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-provider",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/provider.log",
+        "docs/experiments/rollover-queue/evidence/suite-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/suite-source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "25 files passed; built local CLI and loopback fixtures only. Final source differs only in QueueController API comment; exact batch hashes retained.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-integration",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": 223,
+        "failed": 4,
+        "skipped": 1
+      },
+      "failures": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "expected": "result.txt created by fixture shell write",
+          "actual": "false; shell result Sandbox blocked this command; requires one-shot unsandboxed approval"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "expected": "result.txt created by fixture shell write",
+          "actual": "false; shell result Sandbox blocked this command; requires one-shot unsandboxed approval"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+          "expected": "tool result matches /exit [1-9]/",
+          "actual": "Tool execution was not approved; Non-interactive mode: use --auto-approve to allow tool execution"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare permits explicit sandbox scratch writes without approval",
+          "expected": "fixture outside.txt exists",
+          "actual": "false; Tool execution was not approved; Non-interactive mode: use --auto-approve to allow tool execution"
+        }
+      ],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/integration.log",
+        "docs/experiments/rollover-queue/evidence/suite-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/suite-source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "24 files passed, 1 failed, 1 skipped. Same four names/denial signatures reproduced on clean base in this environment, not inferred from historical records. Existing historical signatures were consulted first. No checks weakened.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-integration-base",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "clean_base_production_with_untracked_evidence",
+      "suite": "integration-focused-base",
+      "command": "NODE_ENV=test pnpm exec vitest run --reporter=verbose --config vitest.integration.config.ts source/cli.integration.test.ts -t \"bare profile via|bare retains the outside-workspace|bare permits explicit sandbox\"",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": 0,
+        "failed": 4,
+        "skipped": 51
+      },
+      "failures": [
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+          "expected": "result.txt created by fixture shell write",
+          "actual": "false; shell result Sandbox blocked this command; requires one-shot unsandboxed approval"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+          "expected": "result.txt created by fixture shell write",
+          "actual": "false; shell result Sandbox blocked this command; requires one-shot unsandboxed approval"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare retains the outside-workspace edit approval boundary without asking headlessly",
+          "expected": "tool result matches /exit [1-9]/",
+          "actual": "Tool execution was not approved; Non-interactive mode: use --auto-approve to allow tool execution"
+        },
+        {
+          "file": "source/cli.integration.test.ts",
+          "test": "bare permits explicit sandbox scratch writes without approval",
+          "expected": "fixture outside.txt exists",
+          "actual": "false; Tool execution was not approved; Non-interactive mode: use --auto-approve to allow tool execution"
+        }
+      ],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/base-integration-focused.log",
+        "docs/experiments/rollover-queue/evidence/base-status.json"
+      ],
+      "source_identity": "clean HEAD production source",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "All four exact failure names and denial signatures match full changed-tree run; selected file only, not a claimed full base tier.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-lint-base-invalid",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "clean_base_production_with_untracked_evidence",
+      "suite": "lint-base-invocation",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 2,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/base-lint.log",
+        "docs/experiments/rollover-queue/evidence/base-status.json"
+      ],
+      "source_identity": "clean HEAD production source",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "Invalid comparison: concurrently staged temporary fixture was removed during ESLint enumeration (ENOENT). Settled; rerun alone below.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-lint-base",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "clean_base_production_with_untracked_evidence",
+      "suite": "lint-base",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/base-lint-confirmed.log",
+        "docs/experiments/rollover-queue/evidence/base-lint-confirmed.status.json"
+      ],
+      "source_identity": "clean HEAD production source",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "31 ESLint warnings, 0 errors; formatting failed same immutable coordinator assignment/progress JSON plus two owned evidence status JSON files. Owned files formatted separately. Protocol descriptor/reports left unchanged.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-lint-final",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/lint-final.log",
+        "docs/experiments/rollover-queue/evidence/final-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "31 ESLint warnings, 0 errors. Prettier fails only assignment.json and two published unread progress JSON files under .coord. New second progress report explains third immutable warning vs initial/base two; no source/artifact formatting failures. User forbids rewriting those protocol artifacts.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-lint-focused",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T04:43:46.893326+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "changed-file-lint-format",
+      "command": "pnpm exec eslint <nine changed source paths> docs/experiments/rollover-queue/verify.mjs; pnpm exec prettier --check <same paths and owned evidence JSON>",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "platform": "linux-x64",
+        "provider_network": "offline loopback fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/focused-lint.log",
+        "docs/experiments/rollover-queue/evidence/focused-format.log"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/source-manifest.json",
+      "task_ids": ["2026-10-25-rollover-queue"],
+      "notes": "Exact argv source paths in source-manifest.json; 0 errors and existing no-this-alias warning in ConversationService. No full-lint success claim.",
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-independent-reject",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "Independent queue-reviewer real-writer/replay fixture; parent confirmed 1 failed / 2 passed",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": 2,
+        "failed": 1,
+        "skipped": 0
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/red-reviewer-fixture.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/intake.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/intake.json",
+      "notes": "Reviewer REPORT and parent rerun route R1 as must-fix; author independently reproduced unchanged fixture before edits. External evidence: /home/qduc/coord/term2/tasks/rollover-queue/reviewer/REPORT.md and evidence/parent-risk-rerun.log. No author execution/mutation in reviewer checkout. Independent rejection of original candidate, not acceptance of repair.",
+      "comparison": {
+        "invalidates_run_ids": ["2026-10-25-rollover-queue-green"],
+        "reason": "Original eleven controls lacked real conversation journal writer; live next-request/sidecar assertions did not prove completed successor replay."
+      },
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-red",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=verbose source/hooks/journal-cancel.probe.test.tsx",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": 2,
+        "failed": 1,
+        "skipped": 0
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/red-reviewer-fixture.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/red-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/intake.json",
+      "notes": "Before source mutation: successor users omitted queued-before-rotation and queued-during-rotation; during-briefing survived. Original FIX_REPORT hash and exact reviewed source saved.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-first-attempt",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "Same unmodified reviewer fixture after start-time transfer attempt",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": 2,
+        "failed": 1,
+        "skipped": 0
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/green-reviewer-fixture.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/green-status.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Missing text restored but appears after newer during-briefing user record; exact replay-order assertion fails. Rejected start-time placement; keep submission-time journaling semantics.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-incomplete-edits",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "Same reviewer fixture and pnpm typecheck during incomplete mechanical map edit",
+      "command_complete": true,
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/green-reviewer-fixture-v2.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/green-reviewer-fixture-final.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/green-reviewer-fixture-v3.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/typecheck-initial.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/typecheck-v3.log"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Retained fixture variants remained 1 failed/2 passed; checked patch anchors aborted before producer/transfer insertion. Typechecks exited 1: TS2353 id property not in new private entry. Not a new product finding or passing coverage; corrected with observed exact anchors and fail-fast sequencing.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-green-reviewer",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=verbose source/hooks/journal-cancel.probe.test.tsx",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/reviewer-unmodified-final.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Exact unchanged reviewer fixture after final one-file repair, author executed only in own worktree. Writer-before-identity ordering, real flush/replay, ordinary queue and briefing cancellation. Scoped independent repair recheck still pending.",
+      "comparison": {
+        "resolves_run_ids": ["2026-10-25-rollover-queue-journal-repair-red"],
+        "resolved_finding_ids": ["R1"]
+      },
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-green-expanded",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "node docs/experiments/rollover-queue/verify.mjs",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/retained-runner-final.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Original eleven controls plus five real-writer/raw-count/replay controls. Raw user_message IDs/text counted exactly once for before/during rotation and during-briefing inputs; ordinary queue/released steer, cancel/resume, edited skill payload and retracted exclusion. No permanent test file remains.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-25-rollover-queue-journal-repair-red",
+          "2026-10-25-rollover-queue-journal-repair-first-attempt"
+        ],
+        "resolved_finding_ids": ["R1"]
+      },
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-typecheck",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/typecheck-final.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Focused affected check only; no broad provider/integration/global lint rerun requested or claimed.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-guards",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "pnpm test",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/guards-final.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Focused affected check only; no broad provider/integration/global lint rerun requested or claimed.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-no-unit",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "pnpm check:no-unit-tests",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/no-unit-final.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Focused affected check only; no broad provider/integration/global lint rerun requested or claimed.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-lint",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "pnpm exec eslint source/services/conversation/conversation-orchestrator.ts docs/experiments/rollover-queue/verify.mjs",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/lint-focused.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Focused affected check only; no broad provider/integration/global lint rerun requested or claimed.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-format",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "pnpm exec prettier --check source/services/conversation/conversation-orchestrator.ts docs/experiments/rollover-queue/verify.mjs",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/format-focused.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Focused affected check only; no broad provider/integration/global lint rerun requested or claimed.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-diff-check",
+      "recorded_on": "2026-10-25",
+      "recorded_at": "2026-10-25T05:26:38.875045+00:00",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-journal-ownership-rework",
+      "command": "git diff --check",
+      "command_complete": true,
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "providers": "offline fixtures only"
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/diff-check.log",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "notes": "Focused affected check only; no broad provider/integration/global lint rerun requested or claimed.",
+      "comparison": null,
+      "url": null
+    },
+    {
+      "id": "2026-10-25-rollover-queue-journal-repair-identity-scope-correction",
+      "recorded_on": "2026-10-25",
+      "commit": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "R1-evidence-identity-correction",
+      "command": "Identity inspection of retained red/green and failed intermediate attempts",
+      "command_complete": true,
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "task_ids": ["2026-10-25-rollover-queue", "2026-10-25-rollover-queue-journal-repair"],
+      "source_identity": "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+      "comparison": {
+        "corrects_run_ids": [
+          "2026-10-25-rollover-queue-journal-repair-independent-reject",
+          "2026-10-25-rollover-queue-journal-repair-first-attempt",
+          "2026-10-25-rollover-queue-journal-repair-incomplete-edits"
+        ],
+        "source_identity_overrides": {
+          "2026-10-25-rollover-queue-journal-repair-independent-reject": "docs/experiments/rollover-queue/evidence/journal-repair/intake.json",
+          "2026-10-25-rollover-queue-journal-repair-first-attempt": null,
+          "2026-10-25-rollover-queue-journal-repair-incomplete-edits": null
+        }
+      },
+      "notes": "Independent rejection concerns frozen intake source, not repaired source. Exact transient failed-edit source hashes were not retained; null is unknown, and source-manifest.json on those earlier rows must not be read as their tested revision. Exact unchanged reviewer red source and final green source are retained. Failed logs/numeric exits remain valid observations but do not certify final source. R1 task files_changed=1 and lines_changed=42 scope the production delta only; not a count of retained evidence files or a new completed delivery.",
+      "evidence": [
+        "docs/experiments/rollover-queue/evidence/journal-repair/intake.json",
+        "docs/experiments/rollover-queue/evidence/journal-repair/source-manifest.json",
+        "docs/experiments/rollover-queue/evidence/journal-repair/red-status.json",
+        "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
+      ]
     }
   ]
 }

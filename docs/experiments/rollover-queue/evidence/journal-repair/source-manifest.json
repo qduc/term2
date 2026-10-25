@@ -1,0 +1,20 @@
+{
+  "head": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+  "dirty": true,
+  "recorded_at": "2026-10-25T05:22:53.363365+00:00",
+  "files": {
+    "source/hooks/conversation-ui-reducer.ts": "96de67a2b8c22788280252db2513f58a42cca9352950a5014bca20c3da4fdb61",
+    "source/hooks/use-conversation.ts": "7edab9360ef64d789fc16c688e9b649bccb2d3fcaa37783b62c38971fa9f0fe6",
+    "source/services/conversation/conversation-adapter-factory.ts": "f5387c68cf4ef8f1685b806cc3eaea136396d1771f030a06ff5a7b45739eb891",
+    "source/services/conversation/conversation-adapter.ts": "e920944823ffe27fea6ebeb125f31efbf6926f157d1ccd9e0c98d123f43d47a6",
+    "source/services/conversation/conversation-orchestrator.ts": "f96a931ed38e019e0a94eb7aaf968aca197b84739bb983984c4919d5a459bc21",
+    "source/services/conversation/conversation-orchestrator.types.ts": "d61efe89e139f5efbd93ea8157c6ab8cd0db6347c266013c78338b18780785c4",
+    "source/services/conversation/conversation-service.ts": "bd0642a3ae7bcd06a0e20f1201436b58f1bcd7d7d20f79bc4efe7fd78c2d8e73",
+    "source/services/conversation/queue-persistence.ts": "19a1895fde3a28c975903fa0013ed9d7d3cb457712a9a16757dc3bf368b5de79",
+    "source/services/queue/queue-controller.ts": "e4136c47895ca319b21c786663699076bb58a74105b5b2b859701918be5a3233"
+  },
+  "full_source_patch_sha256": "55d8e9f41dc63beb47fc4a210e149b81b41463f2cf28a1744399becc39436f54",
+  "R1_changed_source_files": ["source/services/conversation/conversation-orchestrator.ts"],
+  "R1_delta_sha256": "5e368a0285ac7d3ab4dede89d37f0e1014298694f6cd95e58580266633093c4a",
+  "immutable_original_FIX_REPORT_sha256": "57aa473cda4ee8a717ae9fd6e50c6c0c83f404bac6c11b36496b507894be24b8"
+}

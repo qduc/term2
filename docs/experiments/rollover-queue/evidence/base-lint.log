@@ -1,0 +1,11 @@
+$ eslint . && prettier --check .
+
+Oops! Something went wrong! :(
+
+ESLint: 9.39.4
+
+Error: ENOENT: no such file or directory, open '/home/qduc/term2/.worktrees/rollover-queue/source/services/conversation/rollover-queue-persistence.probe.test.ts'
+    at async open (node:internal/fs/promises:697:25)
+    at async Object.readFile (node:internal/fs/promises:1348:14)
+    at async readAndVerifyFile (/home/qduc/term2/.worktrees/rollover-queue/node_modules/.pnpm/eslint@9.39.4_jiti@2.7.0/node_modules/eslint/lib/eslint/eslint-helpers.js:1306:16)
+[ELIFECYCLE] Command failed with exit code 2.

@@ -3848,3 +3848,55 @@ provider continuity are unchanged. Rollback is the source identity migration,
 not a threshold increase. Offline six-occurrence next-request and duplicate
 controls are retained in `docs/experiments/tool-occurrence-recovery/`;
 independent verification is pending with the parent.
+
+### Rollover queue boundary reservation
+
+Class: lifecycle/admission ordering, not a capacity or duration limit. Harm
+prevented: accepted follow-ups dispatching in the predecessor while its
+interactive turn-end callback prepares rollover, or preceding the successor's
+handoff. Queue length was a proxy for an unsafe interaction and incorrectly
+vetoed legitimate input. `ConversationService.#hasPendingRolloverInteraction`
+now measures actual approval/check-in owners; those authority checks and the
+runtime's active-turn preflight remain in force.
+
+`ConversationAdapter` uses `QueueController`'s existing completion barrier to
+reserve a ready rollover before dispatch. Ordinary holds remain idle-only;
+`afterCompletion` permits that barrier to reserve the next idle boundary.
+`submit_held` admits the successor bootstrap only while held and idle, places it
+before retained input (including released steers), then releases dispatch. No
+new queue, capacity, deadline, default, clamp, retry or setting migration is
+introduced. Ordinary steer priority, cancellation proof and failure pauses stay
+queue-owned. The hook's rollover-only presentation reset preserves queued rows
+and their orchestrator ownership rather than clearing their executable input.
+
+The interactive consumer owns release by rollover ID. Writer/preflight failure,
+missing handler or cancellation retains queued input for manual resume/discard;
+a failed briefing keeps the existing failure pause and reports the handoff for
+manual retry, never automatic replay. Blocked pending-interaction requests keep
+the existing notice and queue behavior. The queue sidecar follows the retained
+`SessionIdentity` on its next save by renaming ownership before atomic record
+replacement, preventing a stale predecessor copy from replaying successor input.
+This is not an atomic transaction with the conversation writer or a power-loss
+claim. Existing persistence-failure recovery still applies.
+
+Red/green reproduction: `node docs/experiments/rollover-queue/verify.mjs` stages
+untracked temporary fixtures, drives real hooks/orchestration/runtime and an
+offline model's actual next requests, exercises failure/cancel/blocked recovery
+and ordinary controls, then removes the fixtures. Source base `3b611e52` fails
+seven of eleven checks; the author patch passes eleven. Filesystem restoration
+also checks successor sidecar ownership and explicit-resume order. Existing
+queue snapshot/blocked-event/manual-retry diagnostics expose settlement without
+new user-content logging. Exact dirty-source identity, broader verification and
+limits are in `docs/experiments/rollover-queue/`. Independent acceptance belongs
+to the parent, not this author evidence. Rollback: the source patch as a unit;
+removing only the queue veto would reintroduce the dispatch race.
+
+R1 journal-ownership correction: retaining queue execution is not sufficient to
+retain completed successor history. The orchestrator's queue-preserving reset
+marks already-journaled queued entries; successor briefing acceptance journals
+those full accepted records after the briefing record and before newer input.
+Markers clear on transfer; ordinary queued starts still do not journal again.
+Unsettled steers keep their existing admission callback owner. Real writer
+rotation/replay and raw record counts are now in the retained author runner;
+independent recheck remains pending. No authority, retry, capacity or transaction
+policy is added. See `docs/experiments/rollover-queue/evidence/journal-repair/`.

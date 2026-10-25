@@ -42,6 +42,8 @@ export type SendMessageOptions = {
   suppressUserMessageDisplay?: boolean;
   /** Busy input joins the next model boundary, or queues if that turn releases it. */
   busyMode?: 'steer' | 'follow_up';
+  /** Internal successor bootstrap: requires a held, idle queue. */
+  rolloverBrief?: boolean;
 };
 
 export type HandleApprovalDecisionOptions = {
@@ -203,6 +205,7 @@ export class ConversationAdapter {
   #approvalActionId: ActionId | null = null;
   #postExecuteApproval: PostExecuteApprovalToken | null = null;
   #queueStateObserver: QueueStateObserver | null = null;
+  #beforeQueueAdvance: (() => void) | null = null;
   #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
   #compactionAbort: AbortController | null = null;
   readonly #activeCancelTimeoutMs: number;
@@ -283,6 +286,7 @@ export class ConversationAdapter {
       };
       this.#queue = new QueueController({
         driver,
+        completionBarrier: () => this.#beforeQueueAdvance?.(),
         snapshotFactory: (item) => {
           const message = this.#submissions.get(item.id);
           return message ? { requestId: item.id } : { requestId: item.id, recovered: true };
@@ -293,6 +297,11 @@ export class ConversationAdapter {
     } else {
       this.#queue = null;
     }
+  }
+
+  /** Observe settled turns before retained input can dispatch. */
+  setBeforeQueueAdvance(observer: (() => void) | null): void {
+    this.#beforeQueueAdvance = observer;
   }
 
   setEventSink(sink: ConversationEventSink | null): void {
@@ -336,9 +345,9 @@ export class ConversationAdapter {
    * Occupy the foreground queue the way an in-flight turn does, so new
    * submits enqueue instead of starting. False when a turn already owns it.
    */
-  holdForegroundQueue(): boolean {
+  holdForegroundQueue(options: { afterCompletion?: boolean } = {}): boolean {
     if (!this.#queue) return true;
-    const held = this.#queue.holdDispatch();
+    const held = this.#queue.holdDispatch(options);
     if (held) this.#notifyQueueState();
     return held;
   }
@@ -597,6 +606,7 @@ export class ConversationAdapter {
       replayFromHistory,
       preferredMessageId,
       busyMode,
+      rolloverBrief,
       suppressUserMessageDisplay,
     }: SendMessageOptions = {},
     existing?: Submission,
@@ -646,7 +656,11 @@ export class ConversationAdapter {
       const displayText = normalizeUserTurn(input).text;
       const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
       void queue
-        .command({ kind: busyMode === 'steer' ? 'steer' : 'submit', id: requestId, text: controllerText })
+        .command({
+          kind: rolloverBrief ? 'submit_held' : busyMode === 'steer' ? 'steer' : 'submit',
+          id: requestId,
+          text: controllerText,
+        })
         .then(async (result) => {
           if (result.kind !== 'accepted') {
             const reason = result.kind === 'rejected' ? result.reason : result.kind;

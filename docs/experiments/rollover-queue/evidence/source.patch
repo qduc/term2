@@ -1,0 +1,478 @@
+diff --git a/source/hooks/conversation-ui-reducer.ts b/source/hooks/conversation-ui-reducer.ts
+index 37d498d7..160f18a3 100644
+--- a/source/hooks/conversation-ui-reducer.ts
++++ b/source/hooks/conversation-ui-reducer.ts
+@@ -180,7 +180,7 @@ export type ConversationUIAction =
+   /** Reset transient approval/processing/indicator state (used by stop, rewind, etc.). */
+   | { type: 'reset_transient' }
+   /** Full reset including usage (used by clearConversation). */
+-  | { type: 'reset_all' };
++  | { type: 'reset_all'; preserveQueued?: boolean };
+ 
+ // ---------------------------------------------------------------------------
+ // Initial state factory
+@@ -638,6 +638,11 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
+       };
+ 
+     case 'reset_all':
+-      return createInitialUIState(null);
++      return {
++        ...createInitialUIState(null),
++        ...(action.preserveQueued
++          ? { pendingQueuedMessages: state.pendingQueuedMessages, queueSnapshot: state.queueSnapshot }
++          : {}),
++      };
+   }
+ }
+diff --git a/source/hooks/use-conversation.ts b/source/hooks/use-conversation.ts
+index 52dcc6b2..300bf376 100644
+--- a/source/hooks/use-conversation.ts
++++ b/source/hooks/use-conversation.ts
+@@ -345,6 +345,11 @@ export const useConversation = ({
+   const messagesRef = useRef(messages);
+   messagesRef.current = messages;
+ 
++  useEffect(() => {
++    conversationService.setRolloverQueueBoundary?.(true);
++    return () => conversationService.setRolloverQueueBoundary?.(false);
++  }, [conversationService]);
++
+   const orchestratorRef = useRef<ConversationOrchestrator | null>(null);
+   // Queue cancellation publishes a transient `cancelling` snapshot after the
+   // stop handler has already reset the UI. Do not let that late snapshot
+@@ -370,14 +375,24 @@ export const useConversation = ({
+           dispatch({ type: 'turn/completed' });
+           const consumption = conversationService.consumeSessionRolloverRequest?.();
+           if (consumption?.status === 'ready') {
++            let failed = true;
+             void Promise.resolve()
+-              .then(() => onSessionRollover?.(consumption.request))
++              .then(() => {
++                if (!onSessionRollover) throw new Error('No session rollover handler is available.');
++                return onSessionRollover(consumption.request);
++              })
++              .then(() => {
++                failed = false;
++              })
+               .catch((error: unknown) => {
+                 const reason = error instanceof Error ? error.message : String(error);
+                 addSystemMessage(
+                   `Session rollover was not completed: ${reason}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
+                 );
+-              });
++              })
++              .finally(() =>
++                conversationService.finishSessionRollover?.(consumption.request.rolloverId, { pauseIfQueued: failed }),
++              );
+           } else if (consumption?.status === 'blocked') {
+             addSystemMessage(
+               `Session rollover was not performed: ${consumption.error}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
+@@ -392,7 +407,7 @@ export const useConversation = ({
+         onRunBudgetNotice: (event) => dispatch({ type: 'run_budget/noticed', event }),
+         onRateLimitClear: () => dispatch({ type: 'rate_limit/cleared' }),
+         onResetTransient: () => dispatch({ type: 'reset_transient' }),
+-        onResetAll: () => dispatch({ type: 'reset_all' }),
++        onResetAll: (options) => dispatch({ type: 'reset_all', preserveQueued: options?.preserveQueued }),
+         onStreamingThinkingStarted: (timestamp) => dispatch({ type: 'streaming/thinking_started', timestamp }),
+         onStreamingThinkingCleared: () => dispatch({ type: 'streaming/thinking_cleared' }),
+         onStreamingToolInfo: (info) => dispatch({ type: 'streaming/tool_info', info }),
+@@ -519,7 +534,7 @@ export const useConversation = ({
+ 
+   const clearConversation = useCallback(() => orchestrator.clearConversation(), [orchestrator]);
+   const resetConversationPresentation = useCallback(
+-    () => orchestrator.resetPresentation({ preserveBackgroundNotificationDedup: true }),
++    () => orchestrator.resetPresentation({ preserveBackgroundNotificationDedup: true, preserveQueued: true }),
+     [orchestrator],
+   );
+ 
+diff --git a/source/services/conversation/conversation-adapter-factory.ts b/source/services/conversation/conversation-adapter-factory.ts
+index 98103261..6019b75e 100644
+--- a/source/services/conversation/conversation-adapter-factory.ts
++++ b/source/services/conversation/conversation-adapter-factory.ts
+@@ -51,6 +51,8 @@ export function createConversationAdapterForRuntime(
+     activeCancelTimeoutMs,
+     discardOnFailure,
+     queuePersistence:
+-      queueForeground && !isTestEnvironment() ? createSessionQueuePersistence(runtime.sessionId) : undefined,
++      queueForeground && !isTestEnvironment()
++        ? createSessionQueuePersistence(sessionIdentity ?? runtime.sessionId)
++        : undefined,
+   });
+ }
+diff --git a/source/services/conversation/conversation-adapter.ts b/source/services/conversation/conversation-adapter.ts
+index 2a3053f1..63239353 100644
+--- a/source/services/conversation/conversation-adapter.ts
++++ b/source/services/conversation/conversation-adapter.ts
+@@ -42,6 +42,8 @@ export type SendMessageOptions = {
+   suppressUserMessageDisplay?: boolean;
+   /** Busy input joins the next model boundary, or queues if that turn releases it. */
+   busyMode?: 'steer' | 'follow_up';
++  /** Internal successor bootstrap: requires a held, idle queue. */
++  rolloverBrief?: boolean;
+ };
+ 
+ export type HandleApprovalDecisionOptions = {
+@@ -203,6 +205,7 @@ export class ConversationAdapter {
+   #approvalActionId: ActionId | null = null;
+   #postExecuteApproval: PostExecuteApprovalToken | null = null;
+   #queueStateObserver: QueueStateObserver | null = null;
++  #beforeQueueAdvance: (() => void) | null = null;
+   #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
+   #compactionAbort: AbortController | null = null;
+   readonly #activeCancelTimeoutMs: number;
+@@ -283,6 +286,7 @@ export class ConversationAdapter {
+       };
+       this.#queue = new QueueController({
+         driver,
++        completionBarrier: () => this.#beforeQueueAdvance?.(),
+         snapshotFactory: (item) => {
+           const message = this.#submissions.get(item.id);
+           return message ? { requestId: item.id } : { requestId: item.id, recovered: true };
+@@ -295,6 +299,11 @@ export class ConversationAdapter {
+     }
+   }
+ 
++  /** Observe settled turns before retained input can dispatch. */
++  setBeforeQueueAdvance(observer: (() => void) | null): void {
++    this.#beforeQueueAdvance = observer;
++  }
++
+   setEventSink(sink: ConversationEventSink | null): void {
+     this.#eventSink = sink;
+   }
+@@ -336,9 +345,9 @@ export class ConversationAdapter {
+    * Occupy the foreground queue the way an in-flight turn does, so new
+    * submits enqueue instead of starting. False when a turn already owns it.
+    */
+-  holdForegroundQueue(): boolean {
++  holdForegroundQueue(options: { afterCompletion?: boolean } = {}): boolean {
+     if (!this.#queue) return true;
+-    const held = this.#queue.holdDispatch();
++    const held = this.#queue.holdDispatch(options);
+     if (held) this.#notifyQueueState();
+     return held;
+   }
+@@ -597,6 +606,7 @@ export class ConversationAdapter {
+       replayFromHistory,
+       preferredMessageId,
+       busyMode,
++      rolloverBrief,
+       suppressUserMessageDisplay,
+     }: SendMessageOptions = {},
+     existing?: Submission,
+@@ -646,7 +656,11 @@ export class ConversationAdapter {
+       const displayText = normalizeUserTurn(input).text;
+       const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
+       void queue
+-        .command({ kind: busyMode === 'steer' ? 'steer' : 'submit', id: requestId, text: controllerText })
++        .command({
++          kind: rolloverBrief ? 'submit_held' : busyMode === 'steer' ? 'steer' : 'submit',
++          id: requestId,
++          text: controllerText,
++        })
+         .then(async (result) => {
+           if (result.kind !== 'accepted') {
+             const reason = result.kind === 'rejected' ? result.reason : result.kind;
+diff --git a/source/services/conversation/conversation-orchestrator.ts b/source/services/conversation/conversation-orchestrator.ts
+index 124d62b4..a18742e6 100644
+--- a/source/services/conversation/conversation-orchestrator.ts
++++ b/source/services/conversation/conversation-orchestrator.ts
+@@ -564,12 +564,12 @@ export class ConversationOrchestrator {
+   }
+ 
+   /** Reset only the UI projection after an in-place session rollover. */
+-  resetPresentation(options: { preserveBackgroundNotificationDedup?: boolean } = {}): void {
+-    this.#lifecycleGeneration += 1;
++  resetPresentation(options: { preserveBackgroundNotificationDedup?: boolean; preserveQueued?: boolean } = {}): void {
++    if (!options.preserveQueued) this.#lifecycleGeneration += 1;
+     this.config.messages.setMessages(() => []);
+     this.config.approvedContext.current = null;
+     this.config.conversationService.clearPendingInteraction?.();
+-    this.config.ui.onResetAll();
++    this.config.ui.onResetAll({ preserveQueued: options.preserveQueued });
+     this.config.usageAccumulator?.reset();
+     this.config.subagentUsageAccumulator?.reset();
+     this.config.costAccumulator?.reset();
+@@ -577,7 +577,7 @@ export class ConversationOrchestrator {
+     if (!options.preserveBackgroundNotificationDedup) {
+       this.#displayedBackgroundNotificationMessageIds.clear();
+     }
+-    this.#outstandingSubmissions.clear();
++    if (!options.preserveQueued) this.#outstandingSubmissions.clear();
+     this.#reportedStrandedCallIds.clear();
+   }
+ 
+@@ -902,6 +902,7 @@ export class ConversationOrchestrator {
+           inputSurgeApproval: options?.inputSurgeApproval,
+           busyMode: options?.busyMode,
+           preferredMessageId: userMessage.id,
++          rolloverBrief: options?.presentation === 'session_rollover',
+         },
+         {
+           onSteerSettled: (admitted, latestInput) => {
+@@ -943,6 +944,10 @@ export class ConversationOrchestrator {
+       this.#settleTurn(applyConversationEvent, botResponseUpdater, result.terminal, streamingState);
+     } catch (error) {
+       this.logError('Error in sendUserMessage', error);
++      // The rollover owner must observe bootstrap failure, not release retained
++      // input as though the successor had received its handoff. Ordinary sends
++      // retain their existing rendered-error contract.
++      if (options?.presentation === 'session_rollover') throw error;
+ 
+       if (queueOwnsSubmission) {
+         this.#outstandingSubmissions.delete(userMessage.id);
+diff --git a/source/services/conversation/conversation-orchestrator.types.ts b/source/services/conversation/conversation-orchestrator.types.ts
+index 6518cf5c..e6a720de 100644
+--- a/source/services/conversation/conversation-orchestrator.types.ts
++++ b/source/services/conversation/conversation-orchestrator.types.ts
+@@ -39,7 +39,7 @@ export interface UIPort {
+   onRunBudgetNotice?(event: RunBudgetEvent): void;
+   onRateLimitClear(): void;
+   onResetTransient(): void;
+-  onResetAll(): void;
++  onResetAll(options?: { preserveQueued?: boolean }): void;
+   onStreamingThinkingStarted(timestamp: number): void;
+   onStreamingThinkingCleared(): void;
+   /** A retry is backing off until `until`; null once output resumes. */
+diff --git a/source/services/conversation/conversation-service.ts b/source/services/conversation/conversation-service.ts
+index 5c5432b1..ab2ac710 100644
+--- a/source/services/conversation/conversation-service.ts
++++ b/source/services/conversation/conversation-service.ts
+@@ -93,6 +93,9 @@ export type ConversationCompactionOutcome =
+  */
+ export class ConversationService {
+   #runtime: SessionRuntime;
++  #rolloverQueueBoundaryEnabled = false;
++  #reservedRollover: { rolloverId: string; cancelled: boolean } | null = null;
++  #settledRollover: SessionRolloverConsumption | null = null;
+   #adapter: ConversationAdapter;
+   readonly #sessionHandle: SessionHandle;
+   #clientHandle: SessionClientHandle;
+@@ -202,6 +205,7 @@ export class ConversationService {
+     });
+     this.#runtime = runtime;
+     this.#adapter = adapter;
++    this.#attachRolloverQueueBoundary();
+     const service = this;
+     this.#sessionHandle = {
+       sessionId: this.sessionId,
+@@ -354,6 +358,7 @@ export class ConversationService {
+     });
+     this.#runtime = runtime;
+     this.#adapter = adapter;
++    this.#attachRolloverQueueBoundary();
+     if (previousLogSink) {
+       this.#runtime.logs.setLogSink(previousLogSink);
+     }
+@@ -388,6 +393,7 @@ export class ConversationService {
+   /** Validate rollover admission without changing state or external persistence. */
+   prepareRolloverWithNewId(newId: string, sessionStartedAt?: string): () => void {
+     if (!newId) throw new Error('Session rollover requires a session ID.');
++    if (this.#reservedRollover?.cancelled) throw new Error('Session rollover was cancelled.');
+     this.#assertRolloverAdmission();
+     // Runtime admission is part of this preflight too. Its returned callback
+     // performs only the synchronous state transition, with no later rejection
+@@ -401,9 +407,6 @@ export class ConversationService {
+   }
+ 
+   #assertRolloverAdmission(): void {
+-    if (this.#adapter.isQueueOwningSubmissions() || this.#adapter.queuedSubmissionCount() > 0) {
+-      throw new Error('Session rollover is blocked while a queued submission is pending.');
+-    }
+     if (this.#hasPendingRolloverInteraction()) {
+       throw new Error('Session rollover is blocked while a user interaction or approval is pending.');
+     }
+@@ -426,9 +429,7 @@ export class ConversationService {
+       this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
+       this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
+       this.#runtime.nestedApproval.getSnapshot() !== null ||
+-      backgroundWaitingForAnswer ||
+-      this.#adapter.isQueueOwningSubmissions() ||
+-      this.#adapter.queuedSubmissionCount() > 0
++      backgroundWaitingForAnswer
+     );
+   }
+ 
+@@ -518,7 +519,40 @@ export class ConversationService {
+     this.#runtime.state.queueModeNotice(text);
+   }
+ 
++  /** Install the interactive turn-end consumer's queue reservation. Headless callers do not reserve. */
++  setRolloverQueueBoundary(enabled: boolean): void {
++    this.#rolloverQueueBoundaryEnabled = enabled;
++    if (!enabled && this.#reservedRollover) {
++      this.finishSessionRollover(this.#reservedRollover.rolloverId, { pauseIfQueued: true });
++    }
++  }
++
++  #attachRolloverQueueBoundary(): void {
++    this.#adapter.setBeforeQueueAdvance(() => {
++      if (!this.#rolloverQueueBoundaryEnabled) return;
++      const consumption = this.consumeSessionRolloverRequest();
++      if (consumption.status === 'none') return;
++      this.#settledRollover = consumption;
++      if (consumption.status === 'ready' && this.#adapter.holdForegroundQueue({ afterCompletion: true })) {
++        this.#reservedRollover = { rolloverId: consumption.request.rolloverId, cancelled: false };
++      }
++    });
++  }
++
++  /** Settle only this handoff's hold; failed/cancelled handoffs retain input for manual resume. */
++  finishSessionRollover(rolloverId: string, options: { pauseIfQueued?: boolean } = {}): void {
++    if (this.#reservedRollover?.rolloverId !== rolloverId) return;
++    const cancelled = this.#reservedRollover.cancelled;
++    this.#reservedRollover = null;
++    this.#adapter.releaseForegroundQueue({ pauseIfQueued: options.pauseIfQueued || cancelled });
++  }
++
+   consumeSessionRolloverRequest(): SessionRolloverConsumption {
++    if (this.#settledRollover) {
++      const consumption = this.#settledRollover;
++      this.#settledRollover = null;
++      return consumption;
++    }
+     const consumption = this.#clientHandle.agentClient.consumeSessionRolloverRequest?.() ?? { status: 'none' };
+     if (consumption.status === 'blocked') {
+       this.#logBlockedRollover(consumption);
+@@ -528,7 +562,7 @@ export class ConversationService {
+ 
+     if (!this.#hasPendingRolloverInteraction()) return consumption;
+ 
+-    const error = 'Session rollover was not performed because a user interaction or queued submission is pending.';
++    const error = 'Session rollover was not performed because a user interaction is pending.';
+     this.#runtime.state.queueModeNotice(error);
+     const blocked = {
+       status: 'blocked' as const,
+@@ -565,6 +599,7 @@ export class ConversationService {
+    * {@link interruptFromUser}, disposal, or shutdown.
+    */
+   abort(): void {
++    if (this.#reservedRollover) this.#reservedRollover.cancelled = true;
+     this.#adapter.abort();
+   }
+ 
+@@ -573,7 +608,7 @@ export class ConversationService {
+    * subagent runs, because the user explicitly asked everything to stop.
+    */
+   interruptFromUser(): void {
+-    this.#adapter.abort();
++    this.abort();
+     this.#clientHandle.agentClient.cancelBackgroundRuns?.();
+     this.#clientHandle.agentClient.cancelBackgroundShellJobs?.();
+   }
+@@ -617,6 +652,9 @@ export class ConversationService {
+   submitMessage(
+     ...args: Parameters<ConversationAdapter['submitMessage']>
+   ): ReturnType<ConversationAdapter['submitMessage']> {
++    if (args[1]?.rolloverBrief && (!this.#reservedRollover || this.#reservedRollover.cancelled)) {
++      return Promise.reject(new Error('Session rollover briefing has no active queue reservation.'));
++    }
+     return this.#adapter.submitMessage(...args);
+   }
+ 
+diff --git a/source/services/conversation/queue-persistence.ts b/source/services/conversation/queue-persistence.ts
+index 81349bc8..6d6d503f 100644
+--- a/source/services/conversation/queue-persistence.ts
++++ b/source/services/conversation/queue-persistence.ts
+@@ -2,14 +2,16 @@ import fs from 'fs';
+ import path from 'path';
+ import { type PersistedQueueV1, type QueuePersistence } from '../queue/queue-controller.js';
+ import { getConversationsDirForTest } from './conversation-persistence.js';
++import { resolveSessionId, type SessionIdSource } from '../session/session-identity.js';
+ 
+ /**
+  * Session-scoped atomic storage for foreground queue ownership. The queue is
+  * deliberately a sidecar to the append-only conversation journal: replacing
+  * it never risks truncating conversation history.
+  */
+-export function createSessionQueuePersistence<Snapshot>(sessionId: string): QueuePersistence<Snapshot> {
+-  const filePath = path.join(getConversationsDirForTest(), `${sessionId}.queue.json`);
++export function createSessionQueuePersistence<Snapshot>(sessionId: SessionIdSource): QueuePersistence<Snapshot> {
++  const pathForIdentity = () => path.join(getConversationsDirForTest(), `${resolveSessionId(sessionId)}.queue.json`);
++  let filePath = pathForIdentity();
+ 
+   return {
+     load(): unknown {
+@@ -17,6 +19,15 @@ export function createSessionQueuePersistence<Snapshot>(sessionId: string): Queu
+       return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+     },
+     replace(record: PersistedQueueV1<Snapshot>): void {
++      const successorPath = pathForIdentity();
++      if (successorPath !== filePath) {
++        // Move ownership rather than copy: restarting the predecessor must not
++        // replay the successor's pending input. Rename before replacement keeps
++        // the previous complete record recoverable if the next write fails.
++        if (fs.existsSync(successorPath)) throw new Error('Successor queue sidecar already exists.');
++        if (fs.existsSync(filePath)) fs.renameSync(filePath, successorPath);
++        filePath = successorPath;
++      }
+       const directory = path.dirname(filePath);
+       fs.mkdirSync(directory, { recursive: true });
+       const temporaryPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+diff --git a/source/services/queue/queue-controller.ts b/source/services/queue/queue-controller.ts
+index 4f918a57..57f05ba8 100644
+--- a/source/services/queue/queue-controller.ts
++++ b/source/services/queue/queue-controller.ts
+@@ -101,6 +101,8 @@ export type QueueState<Snapshot> =
+ 
+ export type QueueCommand =
+   | { readonly kind: 'submit'; readonly text: string; readonly id?: string }
++  /** Session bootstrap only: start ahead of retained input and release an idle dispatch hold. */
++  | { readonly kind: 'submit_held'; readonly text: string; readonly id?: string }
+   | { readonly kind: 'steer'; readonly text: string; readonly id?: string }
+   | { readonly kind: 'cancel' }
+   | { readonly kind: 'cancellation_settled'; readonly executionId: ExecutionId }
+@@ -327,11 +329,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
+   }
+ 
+   /**
+-   * Prevent `#dispatch` while idle. Submissions still enqueue. Returns false
+-   * when the queue is already occupied (running, paused, or already held).
++   * Prevent `#dispatch` while idle. Submissions still enqueue. The completion
++   * barrier may reserve the next idle boundary with `afterCompletion`; ordinary
++   * callers cannot acquire a hold while a turn or another hold owns the queue.
+    */
+-  holdDispatch(): boolean {
+-    if (this.#dispatchHeld || this.#phase !== 'idle' || this.#active) return false;
++  holdDispatch(options: { afterCompletion?: boolean } = {}): boolean {
++    const completing = options.afterCompletion && this.#phase === 'completing';
++    if (this.#dispatchHeld || (!completing && (this.#phase !== 'idle' || this.#active))) return false;
+     this.#dispatchHeld = true;
+     return true;
+   }
+@@ -386,6 +390,11 @@ export class QueueController<Snapshot, Terminal = unknown> {
+ 
+   async command(cmd: QueueCommand): Promise<QueueCommandResult> {
+     switch (cmd.kind) {
++      case 'submit_held':
++        if (!this.#dispatchHeld || this.#phase !== 'idle' || this.#active) {
++          return { kind: 'rejected', reason: 'invalid' };
++        }
++        return this.#submit(cmd);
+       case 'submit':
+         return this.#submit(cmd);
+       case 'steer':
+@@ -502,7 +511,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
+     }
+   }
+ 
+-  async #submit(cmd: Extract<QueueCommand, { kind: 'submit' | 'steer' }>): Promise<QueueCommandResult> {
++  async #submit(cmd: Extract<QueueCommand, { kind: 'submit' | 'steer' | 'submit_held' }>): Promise<QueueCommandResult> {
+     if (!cmd.text.trim()) return { kind: 'rejected', reason: 'invalid' };
+     if (this.#queue.length >= this.#capacity) return { kind: 'rejected', reason: 'capacity' };
+     const id = cmd.id ?? this.#itemId();
+@@ -516,6 +525,14 @@ export class QueueController<Snapshot, Terminal = unknown> {
+       submittedAt: this.#now(),
+       ...(cmd.kind === 'steer' ? { steer: true as const } : {}),
+     });
++    if (cmd.kind === 'submit_held') {
++      // Bootstrap belongs before every retained item (including released steers).
++      this.#queue = [item, ...this.#queue].map((queued) => freeze({ ...queued, sequence: this.#nextSequence++ }));
++      await this.#persist();
++      this.#dispatchHeld = false;
++      await this.#dispatch();
++      return { kind: 'accepted' };
++    }
+     if (cmd.kind === 'steer') {
+       // A steer that reaches the queue could not be delivered into the running
+       // turn, so it runs as its own turn — ahead of the follow-ups queued

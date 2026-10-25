@@ -1,0 +1,48 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/rollover-queue[39m
+
+[90mstderr[2m | source/hooks/journal-cancel.probe.test.tsx[2m > [22m[2mreview: successor journal replay retains delivered queued user inputs
+[22m[39mYour app (or one of its dependencies) is using an outdated JSX transform. Update to the modern JSX transform for faster performance: https://react.dev/link/new-jsx-transform
+
+[90mstdout[2m | source/hooks/journal-cancel.probe.test.tsx[2m > [22m[2mreview: successor journal replay retains delivered queued user inputs
+[22m[39mREVIEW_JOURNAL {"actualSessions":["predecessor","successor","successor","successor","successor"],"users":["# Continuation briefing\n\nPrevious session: `predecessor`\nOutcome: completed into successor session `successor`\nReason: task boundary\n\n## Harness-observed live work at cutover\n\n- none observed at cutover\n\n## Handoff from the previous session\n\nHANDOFF_FIXTURE\n\n## Continuation protocol\n\n- Treat a self-contained handoff as the primary authority. If it explicitly names one canonical durable artifact, treat the handoff as a delta and that artifact as authoritative; do not duplicate the full state in both places.\n- If predecessor detail is missing, read `session_read({ id: \"previous\", ... })` directly with bounded limits.\n- Use `session_search` only when the relevant session or location is unknown.\n- Do not replay the entire previous transcript.\n- Live job and subagent handles remain session-owned and are retained across this rollover; inspect or control them through the background-task tools when needed. Use durable artifacts, paths, and commits for completed results rather than copying transient output into the handoff.\n- User constraints and preferences stated in the handoff still apply.\n- Before building on state the handoff marks unverified, or that the workspace may have changed since cutover, check it cheaply first.\n- Continue from the next open step rather than redoing completed work.","queued-during-briefing","queued-before-rotation","queued-during-rotation"],"history":[{"role":"user","type":"message","content":"# Continuation briefing\n\nPrevious session: `predecessor`\nOutcome: completed into successor session `successor`\nReason: task boundary\n\n## Harness-observed live work at cutover\n\n- none observed at cutover\n\n## Handoff from the previous session\n\nHANDOFF_FIXTURE\n\n## Continuation protocol\n\n- Treat a self-contained handoff as the primary authority. If it explicitly names one canonical durable artifact, treat the handoff as a delta and that artifact as authoritative; do not duplicate the full state in both places.\n- If predecessor detail is missing, read `session_read({ id: \"previous\", ... })` directly with bounded limits.\n- Use `session_search` only when the relevant session or location is unknown.\n- Do not replay the entire previous transcript.\n- Live job and subagent handles remain session-owned and are retained across this rollover; inspect or control them through the background-task tools when needed. Use durable artifacts, paths, and commits for completed results rather than copying transient output into the handoff.\n- User constraints and preferences stated in the handoff still apply.\n- Before building on state the handoff marks unverified, or that the workspace may have changed since cutover, check it cheaply first.\n- Continue from the next open step rather than redoing completed work."},{"role":"user","type":"message","content":"queued-during-briefing"},{"role":"assistant","type":"message","status":"completed","content":[{"type":"output_text","text":"response-2"}]},{"role":"user","type":"message","content":"queued-before-rotation"},{"role":"assistant","type":"message","status":"completed","content":[{"type":"output_text","text":"response-3"}]},{"role":"user","type":"message","content":"queued-during-rotation"},{"role":"assistant","type":"message","status":"completed","content":[{"type":"output_text","text":"response-4"}]},{"role":"assistant","type":"message","status":"completed","content":[{"type":"output_text","text":"response-5"}]}]}
+
+ [31m×[39m source/hooks/journal-cancel.probe.test.tsx[2m > [22mreview: successor journal replay retains delivered queued user inputs[32m 198[2mms[22m[39m
+[31m   → expected [ 'queued-during-briefing', …(2) ] to deeply equal [ 'queued-before-rotation', …(2) ][39m
+[90mstdout[2m | source/hooks/journal-cancel.probe.test.tsx[2m > [22m[2mreview: ordinary queue journal replay control retains all user inputs
+[22m[39mREVIEW_ORDINARY_JOURNAL_CONTROL {"history":[{"role":"user","type":"message","content":"start"},{"role":"user","type":"message","content":"ordinary-queued-one"},{"role":"user","type":"message","content":"ordinary-queued-two"},{"role":"assistant","type":"message","status":"completed","content":[{"type":"output_text","text":"response-1"}]},{"role":"assistant","type":"message","status":"completed","content":[{"type":"output_text","text":"response-2"}]},{"role":"assistant","type":"message","status":"completed","content":[{"type":"output_text","text":"response-3"}]}]}
+
+ [32m✓[39m source/hooks/journal-cancel.probe.test.tsx[2m > [22mreview: cancelling active successor briefing retains queued input for successor resume[32m 99[2mms[22m[39m
+ [32m✓[39m source/hooks/journal-cancel.probe.test.tsx[2m > [22mreview: ordinary queue journal replay control retains all user inputs[32m 72[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/hooks/journal-cancel.probe.test.tsx[2m > [22mreview: successor journal replay retains delivered queued user inputs
+[31m[1mAssertionError[22m: expected [ 'queued-during-briefing', …(2) ] to deeply equal [ 'queued-before-rotation', …(2) ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[31m+   "queued-during-briefing",[39m
+[2m    "queued-before-rotation",[22m
+[2m    "queued-during-rotation",[22m
+[32m-   "queued-during-briefing",[39m
+[2m  ][22m
+
+[36m [2m❯[22m source/hooks/journal-cancel.probe.test.tsx:[2m270:28[22m[39m
+    [90m268|[39m     console.log('REVIEW_JOURNAL', JSON.stringify({ actualSessions: h.r…
+    [90m269|[39m     [34mexpect[39m(h[33m.[39mrequests)[33m.[39m[34mtoHaveLength[39m([34m5[39m)[33m;[39m
+    [90m270|[39m     expect(users.slice(1)).toEqual(['queued-before-rotation', 'queued-…
+    [90m   |[39m                            [31m^[39m
+    [90m271|[39m     for (const text of ['queued-before-rotation', 'queued-during-rotat…
+    [90m272|[39m       [34mexpect[39m([33mJSON[39m[33m.[39m[34mstringify[39m(restored[33m.[39mhistory))[33m.[39m[34mtoContain[39m(text)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 12:16:09
+[2m   Duration [22m 2.32s[2m (transform 1.16s, setup 20ms, import 1.81s, tests 370ms, environment 0ms)[22m
+

@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-25T04:44:37.654400+00:00",
+  "live_owned_verification_processes": [],
+  "children_agents": [],
+  "shell_jobs": {
+    "1dac2f72-5f08-47ed-bc5b-8d38d04baf40": "completed exit 0",
+    "6e11f5d4-3f2a-4b7e-acb4-7fd9acbea260": "settled exit 1; detailed checks in suite-status.json",
+    "baa54f4a-1aef-4fb1-8b4b-8490300093c2": "completed exit 0; base check exits captured",
+    "e71b02b8-83f5-4f04-92bc-9d0181d7426d": "completed exit 0; base lint exit 1 captured",
+    "e439c7f5-a56f-4726-b16c-8e96a512147f": "completed exit 0; final per-check exits captured"
+  }
+}

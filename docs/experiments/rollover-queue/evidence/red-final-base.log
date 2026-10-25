@@ -1,0 +1,146 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/term2/.worktrees/rollover-queue[39m
+
+ [31m×[39m source/services/conversation/rollover-queue-persistence.probe.test.ts[2m > [22mretained sidecar follows successor identity without stale replay in predecessor[32m 9[2mms[22m[39m
+[31m   → successor must own retained input on restart: expected false to be true // Object.is equality[39m
+[90mstderr[2m | source/hooks/rollover-queue.probe.test.tsx[2m > [22m[2mqueued before (0) and during rollover reaches successor after briefing exactly once
+[22m[39mYour app (or one of its dependencies) is using an outdated JSX transform. Update to the modern JSX transform for faster performance: https://react.dev/link/new-jsx-transform
+
+[90mstdout[2m | source/hooks/rollover-queue.probe.test.tsx[2m > [22m[2mqueued before (0) and during rollover reaches successor after briefing exactly once
+[22m[39mFIXTURE_ERROR Error in sendUserMessage {
+  error: [32m'Post-execute live run closed'[39m,
+  stack: [32m'Error: Post-execute live run closed\n'[39m +
+    [32m'    at LiveRun.next (/home/qduc/term2/.worktrees/rollover-queue/source/services/session/live-run.ts:77:49)\n'[39m +
+    [32m'    at SessionTurnAdapter.#observe (/home/qduc/term2/.worktrees/rollover-queue/source/services/session/session-turn-adapter.ts:268:33)\n'[39m +
+    [32m'    at #observe.next (<anonymous>)\n'[39m +
+    [32m'    at SessionTurnAdapter.executeInitial (/home/qduc/term2/.worktrees/rollover-queue/source/services/session/session-turn-adapter.ts:233:24)\n'[39m +
+    [32m'    at executeInitial.next (<anonymous>)\n'[39m +
+    [32m'    at TurnCoordinator.#forwardOwned (/home/qduc/term2/.worktrees/rollover-queue/source/services/session/turn-coordinator.ts:287:35)\n'[39m +
+    [32m'    at #forwardOwned.next (<anonymous>)\n'[39m +
+    [32m'    at TurnCoordinator.start (/home/qduc/term2/.worktrees/rollover-queue/source/services/session/turn-coordinator.ts:70:37)\n'[39m +
+    [32m'    at start.next (<anonymous>)\n'[39m +
+    [32m'    at collectTerminalResult (/home/qduc/term2/.worktrees/rollover-queue/source/services/session/terminal-result-collector.ts:84:20)'[39m
+}
+
+ [31m×[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mqueued before (0) and during rollover reaches successor after briefing exactly once[32m 108[2mms[22m[39m
+[31m   → expected [ …(2) ] to have a length of 1 but got 2[39m
+ [31m×[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mqueued before (2) and during rollover reaches successor after briefing exactly once[32m 35[2mms[22m[39m
+[31m   → queued input must not veto rollover: expected false to be true // Object.is equality[39m
+ [31m×[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mwriter-failure retains queued input for explicit recovery without retry[33m 1656[2mms[22m[39m
+[31m   → fixture condition did not settle[39m
+ [31m×[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mcancel retains queued input for explicit recovery without retry[33m 1637[2mms[22m[39m
+[31m   → fixture condition did not settle[39m
+ [32m✓[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mblocked interaction preserves existing queue delivery and manual handoff notice[32m 26[2mms[22m[39m
+ [31m×[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mfailed successor briefing pauses retained input and reports manual recovery[33m 1633[2mms[22m[39m
+[31m   → fixture condition did not settle[39m
+ [32m✓[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mordinary queue edit retract steer fallback and cancel/resume remain owned exactly once[32m 34[2mms[22m[39m
+ [32m✓[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mordinary cancellation retains queue until explicit resume[32m 31[2mms[22m[39m
+ [31m×[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22msteer released during rotation cannot overtake successor bootstrap[33m 1637[2mms[22m[39m
+[31m   → fixture condition did not settle[39m
+ [32m✓[39m source/hooks/rollover-queue.probe.test.tsx[2m > [22mordinary steering is admitted at next real model boundary without an extra queued turn[32m 29[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 7 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/hooks/rollover-queue.probe.test.tsx[2m > [22mqueued before (0) and during rollover reaches successor after briefing exactly once
+[31m[1mAssertionError[22m: expected [ …(2) ] to have a length of 1 but got 2[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 2[39m
+
+[36m [2m❯[22m source/hooks/rollover-queue.probe.test.tsx:[2m251:26[22m[39m
+    [90m249|[39m       [34mexpect[39m(h[33m.[39mrequests)[33m.[39m[34mtoHaveLength[39m([34m1[39m)[33m;[39m
+    [90m250|[39m       [35mawait[39m h[33m.[39m[34msubmit[39m([32m'during-rotation'[39m)[33m;[39m
+    [90m251|[39m       [34mexpect[39m(h[33m.[39mrequests)[33m.[39m[34mtoHaveLength[39m([34m1[39m)[33m;[39m
+    [90m   |[39m                          [31m^[39m
+    [90m252|[39m       [35mawait[39m [34mact[39m([35masync[39m () [33m=>[39m {
+    [90m253|[39m         h[33m.[39mrotate[33m.[39m[34mresolve[39m()[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/hooks/rollover-queue.probe.test.tsx[2m > [22mqueued before (2) and during rollover reaches successor after briefing exactly once
+[31m[1mAssertionError[22m: queued input must not veto rollover: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/hooks/rollover-queue.probe.test.tsx:[2m248:64[22m[39m
+    [90m246|[39m       })[33m;[39m
+    [90m247|[39m       [35mawait[39m [34muntil[39m(() [33m=>[39m h[33m.[39mentered [33m||[39m h[33m.[39mrequests[33m.[39mlength [33m>[39m [34m1[39m)[33m;[39m
+    [90m248|[39m       expect(h.entered, 'queued input must not veto rollover').toBe(tr…
+    [90m   |[39m                                                                [31m^[39m
+    [90m249|[39m       [34mexpect[39m(h[33m.[39mrequests)[33m.[39m[34mtoHaveLength[39m([34m1[39m)[33m;[39m
+    [90m250|[39m       [35mawait[39m h[33m.[39m[34msubmit[39m([32m'during-rotation'[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/hooks/rollover-queue.probe.test.tsx[2m > [22mwriter-failure retains queued input for explicit recovery without retry
+[41m[1m FAIL [22m[49m source/hooks/rollover-queue.probe.test.tsx[2m > [22mcancel retains queued input for explicit recovery without retry
+[31m[1mError[22m: fixture condition did not settle[39m
+[36m [2m❯[22m until source/hooks/rollover-queue.probe.test.tsx:[2m35:9[22m[39m
+    [90m 33|[39m     })[33m;[39m
+    [90m 34|[39m   }
+    [90m 35|[39m   [35mthrow[39m [35mnew[39m [33mError[39m([32m'fixture condition did not settle'[39m)[33m;[39m
+    [90m   |[39m         [31m^[39m
+    [90m 36|[39m }
+    [90m 37|[39m [35masync[39m [35mfunction[39m [34msetup[39m(mode [33m=[39m [32m'success'[39m) {
+[90m [2m❯[22m source/hooks/rollover-queue.probe.test.tsx:[2m296:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/hooks/rollover-queue.probe.test.tsx[2m > [22mfailed successor briefing pauses retained input and reports manual recovery
+[31m[1mError[22m: fixture condition did not settle[39m
+[36m [2m❯[22m until source/hooks/rollover-queue.probe.test.tsx:[2m35:9[22m[39m
+    [90m 33|[39m     })[33m;[39m
+    [90m 34|[39m   }
+    [90m 35|[39m   [35mthrow[39m [35mnew[39m [33mError[39m([32m'fixture condition did not settle'[39m)[33m;[39m
+    [90m   |[39m         [31m^[39m
+    [90m 36|[39m }
+    [90m 37|[39m [35masync[39m [35mfunction[39m [34msetup[39m(mode [33m=[39m [32m'success'[39m) {
+[90m [2m❯[22m source/hooks/rollover-queue.probe.test.tsx:[2m363:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/hooks/rollover-queue.probe.test.tsx[2m > [22msteer released during rotation cannot overtake successor bootstrap
+[31m[1mError[22m: fixture condition did not settle[39m
+[36m [2m❯[22m until source/hooks/rollover-queue.probe.test.tsx:[2m35:9[22m[39m
+    [90m 33|[39m     })[33m;[39m
+    [90m 34|[39m   }
+    [90m 35|[39m   [35mthrow[39m [35mnew[39m [33mError[39m([32m'fixture condition did not settle'[39m)[33m;[39m
+    [90m   |[39m         [31m^[39m
+    [90m 36|[39m }
+    [90m 37|[39m [35masync[39m [35mfunction[39m [34msetup[39m(mode [33m=[39m [32m'success'[39m) {
+[90m [2m❯[22m source/hooks/rollover-queue.probe.test.tsx:[2m448:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/services/conversation/rollover-queue-persistence.probe.test.ts[2m > [22mretained sidecar follows successor identity without stale replay in predecessor
+[31m[1mAssertionError[22m: successor must own retained input on restart: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/services/conversation/rollover-queue-persistence.probe.test.ts:[2m33:85[22m[39m
+    [90m 31|[39m     identity[33m.[39m[34mreplace[39m([32m'successor'[39m)[33m;[39m
+    [90m 32|[39m     [35mawait[39m queue[33m.[39m[34mcommand[39m({ kind[33m:[39m [32m'submit'[39m[33m,[39m text[33m:[39m [32m'during'[39m })[33m;[39m
+    [90m 33|[39m     expect(fs.existsSync(nextFile), 'successor must own retained input…
+    [90m   |[39m                                                                                     [31m^[39m
+    [90m 34|[39m     expect(fs.existsSync(oldFile), 'predecessor must not replay succes…
+    [90m 35|[39m     [35mconst[39m record [33m=[39m [33mJSON[39m[33m.[39m[34mparse[39m(fs[33m.[39m[34mreadFileSync[39m(nextFile[33m,[39m [32m'utf8'[39m))[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[31m7 failed[39m[22m[2m | [22m[1m[32m4 passed[39m[22m[90m (11)[39m
+[2m   Start at [22m 11:31:43
+[2m   Duration [22m 8.62s[2m (transform 1.20s, setup 39ms, import 1.94s, tests 6.84s, environment 0ms)[22m
+

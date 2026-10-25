@@ -345,6 +345,11 @@ export const useConversation = ({
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
+  useEffect(() => {
+    conversationService.setRolloverQueueBoundary?.(true);
+    return () => conversationService.setRolloverQueueBoundary?.(false);
+  }, [conversationService]);
+
   const orchestratorRef = useRef<ConversationOrchestrator | null>(null);
   // Queue cancellation publishes a transient `cancelling` snapshot after the
   // stop handler has already reset the UI. Do not let that late snapshot
@@ -370,15 +375,25 @@ export const useConversation = ({
           dispatch({ type: 'turn/completed' });
           const consumption = conversationService.consumeSessionRolloverRequest?.();
           if (consumption?.status === 'ready') {
+            let failed = true;
             void Promise.resolve()
-              .then(() => onSessionRollover?.(consumption.request))
+              .then(() => {
+                if (!onSessionRollover) throw new Error('No session rollover handler is available.');
+                return onSessionRollover(consumption.request);
+              })
+              .then(() => {
+                failed = false;
+              })
               .catch((error: unknown) => {
                 const reason = error instanceof Error ? error.message : String(error);
                 addSystemMessage(
                   `Session rollover was not completed: ${reason}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
                   'Session rollover was not completed. Brief preserved for manual retry.',
                 );
-              });
+              })
+              .finally(() =>
+                conversationService.finishSessionRollover?.(consumption.request.rolloverId, { pauseIfQueued: failed }),
+              );
           } else if (consumption?.status === 'blocked') {
             addSystemMessage(
               `Session rollover was not performed: ${consumption.error}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
@@ -394,7 +409,7 @@ export const useConversation = ({
         onRunBudgetNotice: (event) => dispatch({ type: 'run_budget/noticed', event }),
         onRateLimitClear: () => dispatch({ type: 'rate_limit/cleared' }),
         onResetTransient: () => dispatch({ type: 'reset_transient' }),
-        onResetAll: () => dispatch({ type: 'reset_all' }),
+        onResetAll: (options) => dispatch({ type: 'reset_all', preserveQueued: options?.preserveQueued }),
         onStreamingThinkingStarted: (timestamp) => dispatch({ type: 'streaming/thinking_started', timestamp }),
         onStreamingThinkingCleared: () => dispatch({ type: 'streaming/thinking_cleared' }),
         onStreamingToolInfo: (info) => dispatch({ type: 'streaming/tool_info', info }),
@@ -521,7 +536,7 @@ export const useConversation = ({
 
   const clearConversation = useCallback(() => orchestrator.clearConversation(), [orchestrator]);
   const resetConversationPresentation = useCallback(
-    () => orchestrator.resetPresentation({ preserveBackgroundNotificationDedup: true }),
+    () => orchestrator.resetPresentation({ preserveBackgroundNotificationDedup: true, preserveQueued: true }),
     [orchestrator],
   );
 

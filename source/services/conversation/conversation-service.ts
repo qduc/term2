@@ -93,6 +93,9 @@ export type ConversationCompactionOutcome =
  */
 export class ConversationService {
   #runtime: SessionRuntime;
+  #rolloverQueueBoundaryEnabled = false;
+  #reservedRollover: { rolloverId: string; cancelled: boolean } | null = null;
+  #settledRollover: SessionRolloverConsumption | null = null;
   #adapter: ConversationAdapter;
   readonly #sessionHandle: SessionHandle;
   #clientHandle: SessionClientHandle;
@@ -202,6 +205,7 @@ export class ConversationService {
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
+    this.#attachRolloverQueueBoundary();
     const service = this;
     this.#sessionHandle = {
       sessionId: this.sessionId,
@@ -354,6 +358,7 @@ export class ConversationService {
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
+    this.#attachRolloverQueueBoundary();
     if (previousLogSink) {
       this.#runtime.logs.setLogSink(previousLogSink);
     }
@@ -388,6 +393,7 @@ export class ConversationService {
   /** Validate rollover admission without changing state or external persistence. */
   prepareRolloverWithNewId(newId: string, sessionStartedAt?: string): () => void {
     if (!newId) throw new Error('Session rollover requires a session ID.');
+    if (this.#reservedRollover?.cancelled) throw new Error('Session rollover was cancelled.');
     this.#assertRolloverAdmission();
     // Runtime admission is part of this preflight too. Its returned callback
     // performs only the synchronous state transition, with no later rejection
@@ -401,9 +407,6 @@ export class ConversationService {
   }
 
   #assertRolloverAdmission(): void {
-    if (this.#adapter.isQueueOwningSubmissions() || this.#adapter.queuedSubmissionCount() > 0) {
-      throw new Error('Session rollover is blocked while a queued submission is pending.');
-    }
     if (this.#hasPendingRolloverInteraction()) {
       throw new Error('Session rollover is blocked while a user interaction or approval is pending.');
     }
@@ -426,9 +429,7 @@ export class ConversationService {
       this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
       this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
       this.#runtime.nestedApproval.getSnapshot() !== null ||
-      backgroundWaitingForAnswer ||
-      this.#adapter.isQueueOwningSubmissions() ||
-      this.#adapter.queuedSubmissionCount() > 0
+      backgroundWaitingForAnswer
     );
   }
 
@@ -518,7 +519,40 @@ export class ConversationService {
     this.#runtime.state.queueModeNotice(text);
   }
 
+  /** Install the interactive turn-end consumer's queue reservation. Headless callers do not reserve. */
+  setRolloverQueueBoundary(enabled: boolean): void {
+    this.#rolloverQueueBoundaryEnabled = enabled;
+    if (!enabled && this.#reservedRollover) {
+      this.finishSessionRollover(this.#reservedRollover.rolloverId, { pauseIfQueued: true });
+    }
+  }
+
+  #attachRolloverQueueBoundary(): void {
+    this.#adapter.setBeforeQueueAdvance(() => {
+      if (!this.#rolloverQueueBoundaryEnabled) return;
+      const consumption = this.consumeSessionRolloverRequest();
+      if (consumption.status === 'none') return;
+      this.#settledRollover = consumption;
+      if (consumption.status === 'ready' && this.#adapter.holdForegroundQueue({ afterCompletion: true })) {
+        this.#reservedRollover = { rolloverId: consumption.request.rolloverId, cancelled: false };
+      }
+    });
+  }
+
+  /** Settle only this handoff's hold; failed/cancelled handoffs retain input for manual resume. */
+  finishSessionRollover(rolloverId: string, options: { pauseIfQueued?: boolean } = {}): void {
+    if (this.#reservedRollover?.rolloverId !== rolloverId) return;
+    const cancelled = this.#reservedRollover.cancelled;
+    this.#reservedRollover = null;
+    this.#adapter.releaseForegroundQueue({ pauseIfQueued: options.pauseIfQueued || cancelled });
+  }
+
   consumeSessionRolloverRequest(): SessionRolloverConsumption {
+    if (this.#settledRollover) {
+      const consumption = this.#settledRollover;
+      this.#settledRollover = null;
+      return consumption;
+    }
     const consumption = this.#clientHandle.agentClient.consumeSessionRolloverRequest?.() ?? { status: 'none' };
     if (consumption.status === 'blocked') {
       this.#logBlockedRollover(consumption);
@@ -528,7 +562,7 @@ export class ConversationService {
 
     if (!this.#hasPendingRolloverInteraction()) return consumption;
 
-    const error = 'Session rollover was not performed because a user interaction or queued submission is pending.';
+    const error = 'Session rollover was not performed because a user interaction is pending.';
     this.#runtime.state.queueModeNotice(error);
     const blocked = {
       status: 'blocked' as const,
@@ -565,6 +599,7 @@ export class ConversationService {
    * {@link interruptFromUser}, disposal, or shutdown.
    */
   abort(): void {
+    if (this.#reservedRollover) this.#reservedRollover.cancelled = true;
     this.#adapter.abort();
   }
 
@@ -573,7 +608,7 @@ export class ConversationService {
    * subagent runs, because the user explicitly asked everything to stop.
    */
   interruptFromUser(): void {
-    this.#adapter.abort();
+    this.abort();
     this.#clientHandle.agentClient.cancelBackgroundRuns?.();
     this.#clientHandle.agentClient.cancelBackgroundShellJobs?.();
   }
@@ -617,6 +652,9 @@ export class ConversationService {
   submitMessage(
     ...args: Parameters<ConversationAdapter['submitMessage']>
   ): ReturnType<ConversationAdapter['submitMessage']> {
+    if (args[1]?.rolloverBrief && (!this.#reservedRollover || this.#reservedRollover.cancelled)) {
+      return Promise.reject(new Error('Session rollover briefing has no active queue reservation.'));
+    }
     return this.#adapter.submitMessage(...args);
   }
 

@@ -1,0 +1,7 @@
+{
+  "base_exit": 1,
+  "green_exit": 0,
+  "base_head": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+  "source_restoration": "all changed production SHA256 values match",
+  "green_manifest": "source-manifest.json"
+}

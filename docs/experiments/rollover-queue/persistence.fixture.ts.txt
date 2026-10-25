@@ -1,0 +1,59 @@
+import { test, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { SessionIdentity } from '../session/session-identity.js';
+import { createSessionQueuePersistence } from './queue-persistence.js';
+import { setConversationsDirForTest } from './conversation-persistence.js';
+import { QueueController } from '../queue/queue-controller.js';
+
+test('retained sidecar follows successor identity without stale replay in predecessor', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rollover-queue-persistence-'));
+  setConversationsDirForTest(dir);
+  const identity = new SessionIdentity('predecessor');
+  const starts: string[] = [];
+  const queue = new QueueController({
+    driver: {
+      start: (e: any) => {
+        starts.push(e.item.text);
+      },
+      cancel: async () => true,
+    },
+    snapshotFactory: () => ({}),
+    persistence: createSessionQueuePersistence(identity as any),
+  });
+  try {
+    expect(queue.holdDispatch()).toBe(true);
+    await queue.command({ kind: 'submit', text: 'before' });
+    const oldFile = path.join(dir, 'predecessor.queue.json'),
+      nextFile = path.join(dir, 'successor.queue.json');
+    expect(fs.existsSync(oldFile)).toBe(true);
+    identity.replace('successor');
+    await queue.command({ kind: 'submit', text: 'during' });
+    expect(fs.existsSync(nextFile), 'successor must own retained input on restart').toBe(true);
+    expect(fs.existsSync(oldFile), 'predecessor must not replay successor input').toBe(false);
+    const record = JSON.parse(fs.readFileSync(nextFile, 'utf8'));
+    expect(record.queue.map((i: any) => i.text)).toEqual(['before', 'during']);
+    const recovered = new QueueController({
+      driver: {
+        start: (e: any) => {
+          starts.push(e.item.text);
+        },
+        cancel: async () => true,
+      },
+      snapshotFactory: () => ({}),
+      persistence: createSessionQueuePersistence('successor'),
+    });
+    expect(recovered.state().kind).toBe('paused');
+    expect(starts).toEqual([]);
+    await recovered.command({ kind: 'resume_queue' });
+    expect(starts).toEqual(['before']);
+    const active = (recovered.state() as any).active;
+    await recovered.event({ kind: 'completed', executionId: active.executionId, terminal: {} });
+    expect(starts).toEqual(['before', 'during']);
+    console.log('PERSISTENCE_OBSERVATIONS', JSON.stringify({ record, starts }));
+  } finally {
+    setConversationsDirForTest(undefined);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

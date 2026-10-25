@@ -51,6 +51,8 @@ export function createConversationAdapterForRuntime(
     activeCancelTimeoutMs,
     discardOnFailure,
     queuePersistence:
-      queueForeground && !isTestEnvironment() ? createSessionQueuePersistence(runtime.sessionId) : undefined,
+      queueForeground && !isTestEnvironment()
+        ? createSessionQueuePersistence(sessionIdentity ?? runtime.sessionId)
+        : undefined,
   });
 }

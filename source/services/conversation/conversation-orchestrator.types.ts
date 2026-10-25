@@ -39,7 +39,7 @@ export interface UIPort {
   onRunBudgetNotice?(event: RunBudgetEvent): void;
   onRateLimitClear(): void;
   onResetTransient(): void;
-  onResetAll(): void;
+  onResetAll(options?: { preserveQueued?: boolean }): void;
   onStreamingThinkingStarted(timestamp: number): void;
   onStreamingThinkingCleared(): void;
   /** A retry is backing off until `until`; null once output resumes. */

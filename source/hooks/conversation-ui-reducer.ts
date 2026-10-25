@@ -180,7 +180,7 @@ export type ConversationUIAction =
   /** Reset transient approval/processing/indicator state (used by stop, rewind, etc.). */
   | { type: 'reset_transient' }
   /** Full reset including usage (used by clearConversation). */
-  | { type: 'reset_all' };
+  | { type: 'reset_all'; preserveQueued?: boolean };
 
 // ---------------------------------------------------------------------------
 // Initial state factory
@@ -638,6 +638,11 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
       };
 
     case 'reset_all':
-      return createInitialUIState(null);
+      return {
+        ...createInitialUIState(null),
+        ...(action.preserveQueued
+          ? { pendingQueuedMessages: state.pendingQueuedMessages, queueSnapshot: state.queueSnapshot }
+          : {}),
+      };
   }
 }

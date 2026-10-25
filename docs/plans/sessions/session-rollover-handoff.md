@@ -14,7 +14,11 @@ The M1-M3 minimal slice is merged in `fa4b371b` (M1/M2 implementation
 agent-triggered only: context milestones advise the agent, and
 `session_rollover` requests rotation after the current turn settles. Live
 background work remains on the retained runtime/client graph; pending
-interactions or queued user submissions still block at their mutation owner.
+interactions still block at their mutation owner. The interactive queue reserves
+the settled rollover boundary, starts the successor briefing before retained
+input, then drains that input in its existing queue order. Failed or cancelled
+handoffs preserve pending input for manual recovery; blocked interaction
+requests retain their existing delivery and manual-retry notice behavior.
 The new session starts with a protocol-composed,
 visually marked rollover briefing. Its `session_init.rolloverFrom` metadata
 durably identifies the predecessor, so `session_read({ id: "previous" })`

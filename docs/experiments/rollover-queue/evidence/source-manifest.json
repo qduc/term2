@@ -1,0 +1,18 @@
+{
+  "head": "3b611e52aa8f1d5ffb195b0b01abd89d53851419",
+  "dirty": true,
+  "recorded_at": "2026-10-25T04:35:59.071266+00:00",
+  "files": {
+    "source/hooks/conversation-ui-reducer.ts": "96de67a2b8c22788280252db2513f58a42cca9352950a5014bca20c3da4fdb61",
+    "source/hooks/use-conversation.ts": "7edab9360ef64d789fc16c688e9b649bccb2d3fcaa37783b62c38971fa9f0fe6",
+    "source/services/conversation/conversation-adapter-factory.ts": "f5387c68cf4ef8f1685b806cc3eaea136396d1771f030a06ff5a7b45739eb891",
+    "source/services/conversation/conversation-adapter.ts": "e920944823ffe27fea6ebeb125f31efbf6926f157d1ccd9e0c98d123f43d47a6",
+    "source/services/conversation/conversation-orchestrator.ts": "b572aff0a73f79e81a524e05f57030968ca987d08289b7b834fb68a8971fbc7c",
+    "source/services/conversation/conversation-orchestrator.types.ts": "d61efe89e139f5efbd93ea8157c6ab8cd0db6347c266013c78338b18780785c4",
+    "source/services/conversation/conversation-service.ts": "bd0642a3ae7bcd06a0e20f1201436b58f1bcd7d7d20f79bc4efe7fd78c2d8e73",
+    "source/services/conversation/queue-persistence.ts": "19a1895fde3a28c975903fa0013ed9d7d3cb457712a9a16757dc3bf368b5de79",
+    "source/services/queue/queue-controller.ts": "e4136c47895ca319b21c786663699076bb58a74105b5b2b859701918be5a3233"
+  },
+  "patch_sha256": "e8db57671b83836b7948158151e9fe029f38d2c786d7971ede19df071ad8fa03",
+  "change_since_suite_batch": "documentation-only API comment in QueueController.holdDispatch; green-runner is exact final source"
+}

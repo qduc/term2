@@ -13368,6 +13368,199 @@
           "Independent verifier/rework effort, author active minutes, tokens, monetary cost"
         ]
       }
+    },
+    {
+      "recorded_on": "2026-10-25",
+      "run_at": "2026-10-25T07:40:13.777659+00:00",
+      "commit": null,
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "810badcea0188d9ade6cfed85a3eebc081b4ddff",
+      "task_ids": [
+        "2026-10-25-authorized-zero-frame-timeout-retry"
+      ],
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": null,
+        "runner_env": {
+          "HUSKY": "0",
+          "NODE_ENV": "test",
+          "NODE_OPTIONS": "--require=/home/qduc/coord/term2/tasks/provider-recovery/registry-repair/loopback-only-with-data.cjs",
+          "PATH_prefix": "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry-fix/node_modules/.bin"
+        },
+        "notes": "Private Git/index/dependencies; only numeric127.0.0.1 HTTP and nonnetwork exact embedded data allowed; TLS/DNS/UDP/Unix IPC denied. Direct local runners, no live providers."
+      },
+      "id": "2026-10-25-authorized-zero-frame-timeout-retry-red",
+      "suite": "focused-integration-baseline",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts source/lib/zero-frame-timeout.integration.test.ts --reporter=verbose",
+      "command_complete": true,
+      "exit_code": 1,
+      "result": {
+        "passed": 7,
+        "failed": 10,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "settled effect -> chained interruption -> retry1 90s zero-frame timeout -> retry2 healthy",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "repeated zero-frame timeouts exhaust configured retry limit 0 without nested amplification",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "repeated zero-frame timeouts exhaust configured retry limit 1 without nested amplification",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "repeated zero-frame timeouts exhaust configured retry limit 2 without nested amplification",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "repeated zero-frame timeouts exhaust configured retry limit 5 without nested amplification",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "uncommitted close replay then timeout can use second configured replay",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "zero-frame receive credit does not waive unrelated recovery overhead",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "approval-resume continuation preserves settled effect through timeout (prior close: false)",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "approval-resume continuation preserves settled effect through timeout (prior close: true)",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        },
+        {
+          "file": "source/lib/zero-frame-timeout.integration.test.ts",
+          "test": "budget refusal reports the effective configured timeout cap",
+          "signature": "Baseline lacks authorized typed zero-frame timeout admission or effective cap diagnostics; see retained red log"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry/integration-red-final.log",
+        "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry/red-final-source.json",
+        "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry/integration-final-fixture.ts.txt"
+      ],
+      "notes": "All seven production files temporarily read from unchanged private base, restored byte-exact in finally; final fixture identical to green. Earlier red-v1 had fixture mistakes and is not clean proof. Retry0 desired count already passed historically; its typed evidence assertion is newly red."
+    },
+    {
+      "recorded_on": "2026-10-25",
+      "run_at": "2026-10-25T07:40:13.777659+00:00",
+      "commit": null,
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "810badcea0188d9ade6cfed85a3eebc081b4ddff",
+      "task_ids": [
+        "2026-10-25-authorized-zero-frame-timeout-retry"
+      ],
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": null,
+        "runner_env": {
+          "HUSKY": "0",
+          "NODE_ENV": "test",
+          "NODE_OPTIONS": "--require=/home/qduc/coord/term2/tasks/provider-recovery/registry-repair/loopback-only-with-data.cjs",
+          "PATH_prefix": "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry-fix/node_modules/.bin"
+        },
+        "notes": "Private Git/index/dependencies; only numeric127.0.0.1 HTTP and nonnetwork exact embedded data allowed; TLS/DNS/UDP/Unix IPC denied. Direct local runners, no live providers."
+      },
+      "id": "2026-10-25-authorized-zero-frame-timeout-retry-author",
+      "suite": "focused-author-verification",
+      "command": "Exact commands/exits in external final-checks.json and final-checks-v2.json plus identical focused integration command in red run",
+      "command_complete": true,
+      "result": {
+        "passed": 104,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 10,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "source_identity": "5066da6e0a800e54eea2212fb72b1a213bbafba0c7c9b16f872f4849e2b788da",
+      "source_identity_artifact": "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry/behavioral-source.json",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry/integration-green-final.log",
+        "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry/final-checks.json",
+        "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry/final-checks-v2.json",
+        "/home/qduc/coord/term2/tasks/provider-recovery/ambiguous-timeout-retry/preservation-audit.json"
+      ],
+      "checks": [
+        {
+          "suite": "timeout-public-integration",
+          "passed": 17,
+          "exit": 0
+        },
+        {
+          "suite": "existing-static-guards",
+          "passed": 28,
+          "exit": 0
+        },
+        {
+          "suite": "provider-contract-through-registry",
+          "passed": 43,
+          "exit": 0
+        },
+        {
+          "suite": "fake-codex-e2e",
+          "passed": 16,
+          "exit": 0
+        },
+        {
+          "suite": "typecheck-TS7/focused-eslint/prettier/no-unit-policy/build",
+          "exit": 0
+        }
+      ],
+      "prior_attempts": [
+        {
+          "log": "integration-green-v3.log",
+          "exit": 1,
+          "passed": 15,
+          "failed": 1,
+          "signature": "Fixture inherited approval policy, so approval journey did not pause; explicit isolated registry and off setting corrected it."
+        },
+        {
+          "log": "integration-green-v4.log",
+          "exit": 1,
+          "passed": 15,
+          "failed": 1,
+          "signature": "Fixture expected second continuation admission; actual fresh-start retry uses initial handler. Added direct timeout-in-continuation journey and asserted real transition."
+        },
+        {
+          "log": "typecheck-final.log",
+          "exit": 1,
+          "signature": "TS2739 partial test shell settings type; type-only cast repaired."
+        },
+        {
+          "log": "build-final.log",
+          "exit": 1,
+          "signature": "spawn tsc ENOENT from direct runner PATH; rerun with private node_modules/.bin prefix succeeded."
+        }
+      ],
+      "comparison": {
+        "red_run_id": "2026-10-25-authorized-zero-frame-timeout-retry-red",
+        "resolves_run_ids": []
+      },
+      "notes": "Author verification only; parent independent source and failure/recovery review remains pending. Focused provider subset only: broad suite not run for this candidate; prior registry broad suite strict-guard UnixIPC failure remains parent-owned, not waived. Side effect exactly once, 4 requests in interrupted close->timeout->healthy case; configured0/1/2/5 -> 1/2/3/6 requests. Only measured silence excluded from90s overhead. Original source927 unchanged; 437/441 protected files unchanged, four discord-bridge peer Git paths changed externally; no restoration attempted."
     }
   ]
 }

@@ -10,7 +10,11 @@ import {
 } from './retry-error-classification.js';
 import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
 import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
-import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
+import {
+  AmbiguousModelOutcomeError,
+  ConversationStateNoProgressError,
+  getZeroFrameAmbiguousTimeout,
+} from './retry-errors.js';
 import { extractHistoryLength } from '../stream-snapshot.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
@@ -88,7 +92,7 @@ export class DefaultRetryClassifier {
       if (recovered) {
         const connectionInterrupted =
           error instanceof UnsentWebSocketRequestError ||
-          (error instanceof AmbiguousModelOutcomeError && isRecoverableIncompleteStreamClose(error)) ||
+          Boolean(getZeroFrameAmbiguousTimeout(error)) ||
           isRecoverableIncompleteStreamClose(error);
         if (connectionInterrupted || providerStateRejected) {
           const nextAttempt = retryCounts.transientRetryCount + 1;
@@ -162,8 +166,10 @@ export class DefaultRetryClassifier {
     // refuses every ambiguous error — replaying against the open chain is unsafe.
     // Chain recovery does not replay: it rebuilds from full history. Route the
     // recoverable closes there rather than ending the run on one flaky drop.
+    // The explicitly authorized zero-frame receive expiry uses this same
+    // session-only owner; provider/in-loop retry still refuse ambiguous errors.
     if (error instanceof AmbiguousModelOutcomeError) {
-      if (isRecoverableIncompleteStreamClose(error)) {
+      if (isRecoverableIncompleteStreamClose(error) || getZeroFrameAmbiguousTimeout(error)) {
         const nextAttempt = retryCounts.transientRetryCount + 1;
         if (nextAttempt > maxTransientRetries) {
           return { kind: 'unrecoverable' };

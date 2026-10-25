@@ -206,17 +206,26 @@ export class InitialTurnRecoveryHandler {
     // transport_downgrade) draws against the automatic-replay budget.
     // replay_turn is produced exclusively by model_retry, which is excluded
     // for the same reason noted above.
-    const recoveryAdmission =
-      plan.kind === 'retry_fresh'
-        ? attempt.recoveryBudget.describeAdmission({
+    const timeoutAdmission =
+      plan.kind === 'retry_fresh' && classified.kind === 'chain_recovery'
+        ? attempt.recoveryBudget.claimZeroFrameTimeoutRecovery(error, {
+            maxRetries: attempt.maxTransientRetries,
             automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
           })
         : undefined;
+    const recoveryAdmission =
+      timeoutAdmission ??
+      (plan.kind === 'retry_fresh'
+        ? attempt.recoveryBudget.describeAdmission({
+            automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
+          })
+        : undefined);
     const admitted =
-      plan.kind !== 'retry_fresh' ||
-      ((skipsAutomaticReplayClaim(classified, committedToolContinuation) ||
-        attempt.recoveryBudget.claimAutomaticReplay()) &&
-        attempt.recoveryBudget.claimPhysicalAttempt());
+      timeoutAdmission?.admitted ??
+      (plan.kind !== 'retry_fresh' ||
+        ((skipsAutomaticReplayClaim(classified, committedToolContinuation) ||
+          attempt.recoveryBudget.claimAutomaticReplay()) &&
+          attempt.recoveryBudget.claimPhysicalAttempt()));
     if (recoveryAdmission) {
       this.deps.logger.warn('Retry recovery admission evaluated', {
         eventType: 'retry.recovery_admission',
@@ -263,7 +272,7 @@ export class InitialTurnRecoveryHandler {
         provider: this.deps.provider ?? 'provider',
         errorKind: classifyProviderFailure(error).errorKind,
         attempts: attempt.recoveryBudget.physicalAttempts,
-        maxAttempts: attempt.recoveryBudget.maxPhysicalAttempts,
+        maxAttempts: recoveryAdmission?.maxPhysicalAttempts ?? attempt.recoveryBudget.maxPhysicalAttempts,
         message: `Could not reach ${this.deps.provider ?? 'provider'} after ${
           attempt.recoveryBudget.physicalAttempts
         } attempts. No model response was received.`,

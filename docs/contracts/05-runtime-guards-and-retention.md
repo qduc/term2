@@ -137,7 +137,7 @@ the ledger remains the authoritative per-guard inventory.
 | Legitimate work resembling the harmful signal | safe `find` operations GREEN (`command-safety.find.test.ts:8-55`); read-only git commands GREEN, destructive YELLOW (`command-safety.git.test.ts:5-93`); red false-positive proofs for valid periodic output (`guard-ledger.md:232-244`) | covered |
 | Cancellation | background registry cancel + reject-after-disposal (`background-shell-registry.test.ts:139-163`); run-budget stopped interaction (`application-run-loop.run-budget.test.ts:138-159`); recovery terminate | covered |
 | Retry | recovery executor `retry_fresh` cases (`recovery-executor.test.ts:109-353`); watchdog timeouts retryable (`retry-error-classification.test.ts:171`) | covered |
-| Fallback | `initial-turn-recovery-handler.test.ts` `it.fails("characterizes the unimplemented watchdog timeout fallback at the initial-turn recovery boundary")` retains the intended `retry_fresh` / `full_history` assertion; the real `AmbiguousModelOutcomeError` path currently returns `terminate` | **PRODUCT DEFECT** — see §10 |
+| Fallback | `zero-frame-timeout.integration.test.ts` exercises real watchdog expiry and initial/approval-resume full-history recovery, configured limits, settled effects and negative controls | scoped authorized zero-frame exception — see §10 |
 | Ambiguous outcomes | `unknown` settlement (`recovery-executor.test.ts:199`, `:244`; `tool-output-and-effect-safety.md:75-91`) | covered |
 | Shared root path | run-budget root envelope unchanged (`run-budget.test.ts:164-167` "returns the child envelope unchanged at the root") | covered |
 | Child path | run-budget clamp to tighter envelope (`run-budget.test.ts:169-181`); critical subagent wrap-up (`application-run-loop.run-budget.test.ts:161-186`); `subagent-async-registry.test.ts:592-615` "releases shared-session admission after %s terminal settlement" releases capacity after both failure and cancellation | covered |
@@ -193,8 +193,9 @@ false-positive/true-positive matrix per `ROADMAP.md` Phase 3 Step 5, with the
 
 ## 10. Known gaps and classification
 
-1. **Fallback recovery classification — repaired in Phase 2 for the provable
-   half; the ambiguous half is an approved deferral.** The former
+1. **Fallback recovery classification — Phase 2 repaired the provably-unsent
+   half; an explicit 2026-10-25 authorization admits typed zero-frame ambiguous
+   timeouts at the session boundary.** The former
    expected-failure characterization in `initial-turn-recovery-handler.test.ts`
    is now two passing tests, one per side of the evidence line.
 
@@ -212,16 +213,19 @@ false-positive/true-positive matrix per `ROADMAP.md` Phase 3 Step 5, with the
    `frameCount === 0`, and the dispatch record is positively `unsent`. Each
    rules out one way of being wrong.
 
-   **Approved deferral (owner: providers).** A timeout after the frame was
-   flushed to an OPEN socket stays `AmbiguousModelOutcomeError` and still
-   terminates. This is not a coverage gap but a property of the transport: the
+   **Historical deferral rationale (owner: providers), retained.** A timeout after
+   dispatch stays `AmbiguousModelOutcomeError`. The new session-only exception
+   admits its immediate typed first-frame/zero-frame watchdog cause within
+   remaining configured retries; it does not fabricate unsent evidence. Other
+   ambiguous outcomes keep their existing classification, including existing
+   recoverable-close recovery. Silence is still uncertain: the
    Responses WebSocket protocol offers no resume or idempotency signal, so
    "server never saw it" and "server accepted it and went quiet" are
-   indistinguishable from the client. Replaying would risk a duplicated turn.
-   Revisit only if the protocol gains a resume token or the SDK's
-   `ResponsesWS` reconnect send-queue (`UnsentMessage[]`, `internal/ws.ts`) is
-   adopted, which would widen the provably-unsent set without closing this
-   case.
+   indistinguishable from the client. Replaying still risks a duplicated turn;
+   the user explicitly accepted that risk for the zero-frame case. Broader
+   recovery would require new evidence, such as a resume token or adoption of
+   the SDK's `ResponsesWS` reconnect send-queue (`UnsentMessage[]`,
+   `internal/ws.ts`), which would widen the provably-unsent set.
 
    The pre-existing string sniffing in `isDefinitelyUnsentWebSocketError`
    (`before opening`, `ECONNREFUSED`, `ENOTFOUND`) still serves non-watchdog

@@ -1,3 +1,5 @@
+import { getZeroFrameAmbiguousTimeout } from './retry-errors.js';
+
 /**
  * One bounded capability shared by provider transport retries and session
  * recovery. The owner is deliberately the retry/session layer: providers can
@@ -28,6 +30,8 @@ export type RetryRecoveryBudgetSnapshot = {
 
 export type RetryRecoveryAdmission = RetryRecoveryBudgetSnapshot & {
   automaticReplayRequired: boolean;
+  /** Receive silence excluded from the recovery overhead clock for this admission. */
+  zeroFrameWaitCreditMs?: number;
   automaticReplayAllowed: boolean;
   physicalAttemptAllowed: boolean;
   admitted: boolean;
@@ -87,12 +91,20 @@ export class RetryRecoveryBudget {
    * claims mutate the counters before the next dispatch is made.
    */
   describeAdmission(options: { automaticReplayRequired: boolean }): RetryRecoveryAdmission {
+    return this.#describeAdmission(options.automaticReplayRequired, this.maxPhysicalAttempts, this.maxAutomaticReplays);
+  }
+
+  #describeAdmission(
+    automaticReplayRequired: boolean,
+    maxPhysicalAttempts: number,
+    maxAutomaticReplays: number,
+  ): RetryRecoveryAdmission {
     const elapsedMs = this.elapsedMs;
     const snapshot: RetryRecoveryBudgetSnapshot = {
       physicalAttempts: this.physicalAttempts,
-      maxPhysicalAttempts: this.maxPhysicalAttempts,
+      maxPhysicalAttempts,
       automaticReplays: this.automaticReplays,
-      maxAutomaticReplays: this.maxAutomaticReplays,
+      maxAutomaticReplays,
       elapsedMs,
       maxRecoveryTimeMs: this.maxRecoveryTimeMs,
       deadlineExceeded: this.#startedAt !== undefined && elapsedMs >= this.maxRecoveryTimeMs,
@@ -103,11 +115,39 @@ export class RetryRecoveryBudget {
       snapshot.automaticReplays < snapshot.maxAutomaticReplays && !snapshot.deadlineExceeded;
     return {
       ...snapshot,
-      automaticReplayRequired: options.automaticReplayRequired,
+      automaticReplayRequired,
       automaticReplayAllowed,
       physicalAttemptAllowed,
-      admitted: physicalAttemptAllowed && (!options.automaticReplayRequired || automaticReplayAllowed),
+      admitted: physicalAttemptAllowed && (!automaticReplayRequired || automaticReplayAllowed),
     };
+  }
+
+  /**
+   * Admit only an authorized zero-frame ambiguous timeout using the configured
+   * retry count and the existing shared counters. Its observed receive wait is
+   * not recovery overhead: credit only that wait, never backoff or other work.
+   * All other failures retain the original 90s / 3 dispatch / 1 replay envelope.
+   * Returns undefined when the typed exception does not apply; no state changes.
+   */
+  claimZeroFrameTimeoutRecovery(
+    error: unknown,
+    options: { maxRetries: number; automaticReplayRequired: boolean },
+  ): RetryRecoveryAdmission | undefined {
+    const timeout = getZeroFrameAmbiguousTimeout(error);
+    if (!timeout || !Number.isInteger(options.maxRetries) || options.maxRetries < 0) return undefined;
+    const zeroFrameWaitCreditMs = Number.isFinite(timeout.waitedMs)
+      ? Math.min(this.elapsedMs, Math.max(0, timeout.waitedMs))
+      : 0;
+    if (this.#startedAt !== undefined) this.#startedAt += zeroFrameWaitCreditMs;
+    const admission = {
+      ...this.#describeAdmission(options.automaticReplayRequired, options.maxRetries, options.maxRetries),
+      zeroFrameWaitCreditMs,
+    };
+    if (admission.admitted) {
+      this.#physicalAttempts++;
+      if (options.automaticReplayRequired) this.#automaticReplays++;
+    }
+    return admission;
   }
 
   /**

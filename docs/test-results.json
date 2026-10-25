@@ -10904,6 +10904,1316 @@
         "docs/experiments/rollover-queue/evidence/journal-repair/red-status.json",
         "docs/experiments/rollover-queue/evidence/journal-repair/checks.json"
       ]
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-red-cli-valid",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "pinned_base_runtime_with_candidate_tests",
+      "suite": "red-cli-valid",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t \"unresolved goal returns attention|explicit goal preserves honest|bare.*headless|positional launch.*goal\"",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "unresolved goal returns attention|explicit goal preserves honest|bare.*headless|positional launch.*goal"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": 4,
+        "failed": 6,
+        "skipped": 52
+      },
+      "failures": [
+        " source/cli.integration.test.ts > positional launch durably records its goal before the first provider request",
+        " source/cli.integration.test.ts > unresolved goal returns attention without success (json=false, background=false)",
+        " source/cli.integration.test.ts > unresolved goal returns attention without success (json=true, background=false)",
+        " source/cli.integration.test.ts > unresolved goal returns attention without success (json=true, background=true)",
+        " source/cli.integration.test.ts > unresolved goal returns attention without success (json=false, background=true)",
+        " source/cli.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly"
+      ],
+      "duration_seconds": null,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/red-cli-valid.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "b0c0d93f7212ff33b7dcffa3e175fd7badbdca1dbb23114679082505fa9f8316",
+        "source/prompts/durable-goal-context.ts": "cc836e68bdea6adbc026af95585f97fd811325065ea3d6dab4c833a5274958e7",
+        "source/services/conversation/durable-goal-stop-check.ts": "fa10f3945fb2e09b363fe21c0cd593bfcb23ed24ae4819a3eb990c7ee0a14748",
+        "source/tools/agent/goal-check.ts": "d4d8915085c6d6c4613b18d70eec98afd63615fb01b0c9a4a7bf0ff1ad2b0b62"
+      },
+      "notes": "Valid red proof: four unresolved CLI cases and old positional goal control return exit 0. Additional outside-workspace approval assertion is unrelated and reproduced on base. Two earlier fixture-error attempts retained but not counted as behavioral red proof.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-green-cli",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "green-cli",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t \"unresolved goal returns attention|explicit goal preserves honest|positional launch.*goal|bare profile via|shipped CLI verifies a durable goal|resume preserves the replayed goal\"",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "unresolved goal returns attention|explicit goal preserves honest|positional launch.*goal|bare profile via|shipped CLI verifies a durable goal|resume preserves the replayed goal"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": 12,
+        "failed": 2,
+        "skipped": 48
+      },
+      "failures": [
+        " source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        " source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity"
+      ],
+      "duration_seconds": null,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/green-cli.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-baseline-bare-cli",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "pinned_base_runtime_with_candidate_tests",
+      "suite": "baseline-bare-cli",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t \"bare profile via\"",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "bare profile via"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": 0,
+        "failed": 2,
+        "skipped": 62
+      },
+      "failures": [
+        " source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        " source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity"
+      ],
+      "duration_seconds": 4.34,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/baseline-bare-cli.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "b0c0d93f7212ff33b7dcffa3e175fd7badbdca1dbb23114679082505fa9f8316",
+        "source/prompts/durable-goal-context.ts": "cc836e68bdea6adbc026af95585f97fd811325065ea3d6dab4c833a5274958e7",
+        "source/services/conversation/durable-goal-stop-check.ts": "fa10f3945fb2e09b363fe21c0cd593bfcb23ed24ae4819a3eb990c7ee0a14748",
+        "source/tools/agent/goal-check.ts": "d4d8915085c6d6c4613b18d70eec98afd63615fb01b0c9a4a7bf0ff1ad2b0b62"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-green-cli-final",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "green-cli-final",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t \"unresolved goal returns attention|no-goal Bare workflow|explicit goal preserves honest|positional launch.*goal|shipped CLI verifies a durable goal|resume preserves the replayed goal|headless .* has unattended instructions\"",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "unresolved goal returns attention|no-goal Bare workflow|explicit goal preserves honest|positional launch.*goal|shipped CLI verifies a durable goal|resume preserves the replayed goal|headless .* has unattended instructions"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": 20,
+        "failed": 1,
+        "skipped": 43
+      },
+      "failures": [
+        " source/cli.integration.test.ts > no-goal Bare workflow stays ordinary (incidental check=true)"
+      ],
+      "duration_seconds": 26.67,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/green-cli-final.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "Contains authored test-only result-selection/type errors subsequently corrected; runtime source unchanged. Retain failure, do not present as final evidence.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-implementation-lifecycle-probe",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "implementation-lifecycle-probe",
+      "command": "pnpm exec tsx /home/qduc/coord/term2/tasks/goal-check/implementation-lifecycle-probe.mts",
+      "argv": [
+        "pnpm",
+        "exec",
+        "tsx",
+        "/home/qduc/coord/term2/tasks/goal-check/implementation-lifecycle-probe.mts"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 1.22,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/implementation-lifecycle-probe.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-completion-verification-integration",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "completion-verification-integration",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/services/completion-verification/completion-verification.integration.test.ts",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/services/completion-verification/completion-verification.integration.test.ts"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 11.65,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/completion-verification-integration.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-typecheck",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "argv": [
+        "pnpm",
+        "typecheck"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [
+        "source/cli.integration.test.ts(583,20): error TS2571: Object is of type 'unknown'.",
+        "source/cli.integration.test.ts(589,23): error TS2571: Object is of type 'unknown'.",
+        "source/cli.integration.test.ts(593,25): error TS2571: Object is of type 'unknown'."
+      ],
+      "duration_seconds": 2.93,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/typecheck.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "Contains authored test-only result-selection/type errors subsequently corrected; runtime source unchanged. Retain failure, do not present as final evidence.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-lint",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "argv": [
+        "pnpm",
+        "lint"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": 45.4,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/lint.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-static-guards",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "static-guards",
+      "command": "pnpm test",
+      "argv": [
+        "pnpm",
+        "test"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 4.26,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/static-guards.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-no-unit-tests",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "no-unit-tests",
+      "command": "pnpm check:no-unit-tests",
+      "argv": [
+        "pnpm",
+        "check:no-unit-tests"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": 1.03,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/no-unit-tests.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-integration",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "argv": [
+        "pnpm",
+        "test:integration"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": 231,
+        "failed": 5,
+        "skipped": 1
+      },
+      "failures": [
+        " source/cli.integration.test.ts > no-goal Bare workflow stays ordinary (incidental check=true)",
+        " source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        " source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+        " source/cli.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly",
+        " source/cli.integration.test.ts > bare permits explicit sandbox scratch writes without approval"
+      ],
+      "duration_seconds": 82.04,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/integration.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "Contains authored test-only result-selection/type errors subsequently corrected; runtime source unchanged. Retain failure, do not present as final evidence.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-provider-black-box",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "argv": [
+        "pnpm",
+        "test:provider-black-box"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": 221,
+        "failed": 1,
+        "skipped": 1
+      },
+      "failures": [
+        " scripts/provider-black-box/turn-decisions.blackbox.ts > resumes repeated questions once per decision and settles cancellation before the next turn"
+      ],
+      "duration_seconds": 124.01,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/provider-black-box.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "Repeated-question PTY timeout after 40s; same signature seen historically but cause unresolved. Focused pinned-runtime scenario and final full candidate suite later passed. Parent observed concurrent Discord suite; concurrency not established as cause.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-fake-codex-e2e",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "fake-codex-e2e",
+      "command": "pnpm test:codex-network",
+      "argv": [
+        "pnpm",
+        "test:codex-network"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 1.82,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/fake-codex-e2e.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-baseline-four-bare-cli",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "pinned_base_runtime_with_candidate_tests",
+      "suite": "baseline-four-bare-cli",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t \"bare profile via|bare retains the outside|bare permits explicit\"",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "bare profile via|bare retains the outside|bare permits explicit"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": 0,
+        "failed": 4,
+        "skipped": 60
+      },
+      "failures": [
+        " source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        " source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+        " source/cli.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly",
+        " source/cli.integration.test.ts > bare permits explicit sandbox scratch writes without approval"
+      ],
+      "duration_seconds": 7.29,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/baseline-four-bare-cli.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "b0c0d93f7212ff33b7dcffa3e175fd7badbdca1dbb23114679082505fa9f8316",
+        "source/prompts/durable-goal-context.ts": "cc836e68bdea6adbc026af95585f97fd811325065ea3d6dab4c833a5274958e7",
+        "source/services/conversation/durable-goal-stop-check.ts": "fa10f3945fb2e09b363fe21c0cd593bfcb23ed24ae4819a3eb990c7ee0a14748",
+        "source/tools/agent/goal-check.ts": "d4d8915085c6d6c4613b18d70eec98afd63615fb01b0c9a4a7bf0ff1ad2b0b62"
+      },
+      "notes": "Four Bare sandbox/approval failures match directly between pinned-runtime baseline and final candidate; not repaired or waived in this task.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-baseline-provider-build",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "pinned_base_runtime_with_candidate_tests",
+      "suite": "baseline-provider-build",
+      "command": "pnpm build",
+      "argv": [
+        "pnpm",
+        "build"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": 3.99,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/baseline-provider-build.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "b0c0d93f7212ff33b7dcffa3e175fd7badbdca1dbb23114679082505fa9f8316",
+        "source/prompts/durable-goal-context.ts": "cc836e68bdea6adbc026af95585f97fd811325065ea3d6dab4c833a5274958e7",
+        "source/services/conversation/durable-goal-stop-check.ts": "fa10f3945fb2e09b363fe21c0cd593bfcb23ed24ae4819a3eb990c7ee0a14748",
+        "source/tools/agent/goal-check.ts": "d4d8915085c6d6c4613b18d70eec98afd63615fb01b0c9a4a7bf0ff1ad2b0b62"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-baseline-turn-decisions",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "pinned_base_runtime_with_candidate_tests",
+      "suite": "baseline-turn-decisions",
+      "command": "pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/turn-decisions.blackbox.ts",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.provider-black-box.config.ts",
+        "scripts/provider-black-box/turn-decisions.blackbox.ts"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 6.85,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/baseline-turn-decisions.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "b0c0d93f7212ff33b7dcffa3e175fd7badbdca1dbb23114679082505fa9f8316",
+        "source/prompts/durable-goal-context.ts": "cc836e68bdea6adbc026af95585f97fd811325065ea3d6dab4c833a5274958e7",
+        "source/services/conversation/durable-goal-stop-check.ts": "fa10f3945fb2e09b363fe21c0cd593bfcb23ed24ae4819a3eb990c7ee0a14748",
+        "source/tools/agent/goal-check.ts": "d4d8915085c6d6c4613b18d70eec98afd63615fb01b0c9a4a7bf0ff1ad2b0b62"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-final-typecheck",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "final-typecheck",
+      "command": "pnpm typecheck",
+      "argv": [
+        "pnpm",
+        "typecheck"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": 7.38,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/final-typecheck.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-final-cli",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "final-cli",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/cli.integration.test.ts -t \"unresolved goal returns attention|no-goal Bare workflow|explicit goal preserves honest|positional launch.*goal|shipped CLI verifies a durable goal|resume preserves the replayed goal|headless .* has unattended instructions\"",
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "unresolved goal returns attention|no-goal Bare workflow|explicit goal preserves honest|positional launch.*goal|shipped CLI verifies a durable goal|resume preserves the replayed goal|headless .* has unattended instructions"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 43
+      },
+      "failures": [],
+      "duration_seconds": 68.99,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/final-cli.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-final-lint",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "final-lint",
+      "command": "pnpm lint",
+      "argv": [
+        "pnpm",
+        "lint"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": 66.83,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/final-lint.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "Exit 0, 31 existing warnings, no errors; formatting check passed.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-final-integration",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "final-integration",
+      "command": "pnpm test:integration",
+      "argv": [
+        "pnpm",
+        "test:integration"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": 232,
+        "failed": 4,
+        "skipped": 1
+      },
+      "failures": [
+        " source/cli.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        " source/cli.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+        " source/cli.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly",
+        " source/cli.integration.test.ts > bare permits explicit sandbox scratch writes without approval"
+      ],
+      "duration_seconds": 87.39,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/final-integration.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "Four Bare sandbox/approval failures match directly between pinned-runtime baseline and final candidate; not repaired or waived in this task.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-final-provider-black-box",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "final-provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "argv": [
+        "pnpm",
+        "test:provider-black-box"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1
+      },
+      "failures": [],
+      "duration_seconds": 99.1,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/final-provider-black-box.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "Final full required provider tier passed. Prior timeout remains in original logs; no new broad rerun after parent serialization instruction.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-final-fake-codex-e2e",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "final-fake-codex-e2e",
+      "command": "pnpm test:codex-network",
+      "argv": [
+        "pnpm",
+        "test:codex-network"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 1.82,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/final-fake-codex-e2e.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-check-boundaries-final-static-guards",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": null,
+      "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
+      "revision_kind": "uncommitted_dirty_candidate",
+      "suite": "final-static-guards",
+      "command": "pnpm test",
+      "argv": [
+        "pnpm",
+        "test"
+      ],
+      "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 3.14,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/final-static-guards.log",
+      "source_sha256": {
+        "source/non-interactive.ts": "c0fce3a7076b631923dd7a52e14490f35e6787c4db111bd4bf614ca9e8d980c1",
+        "source/prompts/durable-goal-context.ts": "817843210c6f938417a48959264c180b98c3e80a18b1b1cfb86af89a49a6d024",
+        "source/services/conversation/durable-goal-stop-check.ts": "0598dcd557363871ebf74d5a127167d60f9067bab789244a8febc7772fbf8768",
+        "source/tools/agent/goal-check.ts": "38422303627cd045b2c4afc4c710ec2cecffca87326f75907acf068fa4ba78db"
+      },
+      "notes": "",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Independent verifier effort/verdict",
+          "Active author effort, tokens, monetary cost"
+        ]
+      }
     }
   ]
 }

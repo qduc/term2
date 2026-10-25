@@ -379,7 +379,7 @@ it('positional launch durably records its goal before the first provider request
       [cliPath(), '--goal', 'Noninteractive outcome', '--goal-criteria', 'Provider returns', 'hello'],
       createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
     );
-    expect(status).toBe(0);
+    expect(status).toBe(2);
     // The text-only mock never calls goal_check, so the active-goal stop check
     // reminds twice and then returns control with a visible notice.
     expect(mock.capturedModels()).toEqual(['mock-alpha', 'mock-alpha', 'mock-alpha']);
@@ -413,6 +413,284 @@ it('positional launch durably records its goal before the first provider request
     fs.rmSync(tempHome, { recursive: true, force: true });
   }
 });
+
+// These launch the shipped CLI against loopback-only provider doubles. The
+// background cases complete one synthetic child through that same fixture;
+// no external model, credentials, or real delegated work is involved.
+it.each([
+  { json: false, background: false },
+  { json: true, background: false },
+  { json: false, background: true },
+  { json: true, background: true },
+])(
+  'unresolved goal returns attention without success (json=$json, background=$background)',
+  async ({ json, background }) => {
+    let rootRequests = 0;
+    let childRequests = 0;
+    const text = (content: string) => [
+      { id: 'fixture', choices: [{ delta: { role: 'assistant', content } }] },
+      { id: 'fixture', choices: [{ delta: {}, finish_reason: 'stop' }] },
+    ];
+    const call = (name: string, args: unknown) => [
+      {
+        id: 'fixture',
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: `fixture-${rootRequests}`,
+                  type: 'function',
+                  function: { name, arguments: JSON.stringify(args) },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      { id: 'fixture', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+    ];
+    const mock = await startModelMock(['mock-alpha'], (_n, body) => {
+      const tools = (body?.tools ?? []) as { function: { name: string } }[];
+      if (!tools.some((tool) => tool.function.name === 'goal_check')) {
+        childRequests += 1;
+        return text('Synthetic background result');
+      }
+      rootRequests += 1;
+      if (background && rootRequests === 1) {
+        return call('run_subagent', {
+          execution: 'background',
+          name: 'goal-boundary-fixture',
+          agent_spec: {
+            goal: 'Return the synthetic fixture result',
+            tools: [],
+            model: { provider: 'mockprov', model: 'mock-alpha' },
+          },
+        });
+      }
+      if (background && rootRequests === 2) {
+        return call('goal_check', {
+          status: 'deferred',
+          evidence: 'Yielding this foreground reply while the fixture finishes',
+        });
+      }
+      return text(background && rootRequests <= 3 ? 'Foreground partial output' : 'Unresolved partial output');
+    });
+    writeSettings(testDir, {
+      app: { activeProfileId: 'builtin:standard' },
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+    });
+    try {
+      const result = await spawnCli(
+        [
+          cliPath(),
+          '--profile',
+          'standard',
+          '--goal',
+          'Deliver the fixture outcome',
+          ...(json ? ['--json'] : []),
+          'Run the fixture',
+        ],
+        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+      );
+      expect(result.status, result.stderr).toBe(2);
+      expect(rootRequests).toBe(background ? 6 : 3);
+      expect(childRequests).toBe(background ? 1 : 0);
+      if (json) {
+        const events = result.stdout
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        expect(events.some((event) => event.type === 'completed')).toBe(false);
+        const finals = events.filter((event) => event.type === 'final');
+        expect(finals.at(-1)).toMatchObject({
+          terminalCause: 'goal_check_unresolved',
+          finalText: 'Unresolved partial output',
+        });
+        if (background) expect(finals[0]).toMatchObject({ finalText: 'Foreground partial output' });
+      } else {
+        expect(result.stderr).toContain('Goal stop check unresolved');
+        expect(result.stdout).toContain('Unresolved partial output');
+        if (background) expect(result.stdout).toContain('Foreground partial output');
+      }
+      const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
+      const events = fs
+        .readFileSync(path.join(testDir, saved), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line).event);
+      const goals = events.filter((event) => event.type === 'goal_changed');
+      expect(goals).toHaveLength(1);
+      expect(goals[0].goal.status).toBe('active');
+      if (background) expect(events.some((event) => event.type === 'subagent_completed')).toBe(true);
+    } finally {
+      await mock.close();
+    }
+  },
+);
+
+it.each([false, true])('no-goal Bare workflow stays ordinary (incidental check=%s)', async (incidentalCheck) => {
+  const mock = await startModelMock(['mock-alpha'], (request) => {
+    const name = incidentalCheck && request === 1 ? 'goal_check' : 'run_code';
+    if (request <= (incidentalCheck ? 2 : 1)) {
+      return [
+        {
+          id: 'ordinary',
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: `ordinary-${request}`,
+                    type: 'function',
+                    function: {
+                      name,
+                      arguments: JSON.stringify(
+                        name === 'goal_check'
+                          ? { status: 'not_achieved', evidence: 'Incidental check without a goal' }
+                          : { code: 'return 6 * 7;', description: 'Compute the ordinary request result' },
+                      ),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        { id: 'ordinary', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+      ];
+    }
+    return [
+      { id: 'ordinary', choices: [{ delta: { role: 'assistant', content: 'Ordinary result: 42' } }] },
+      { id: 'ordinary', choices: [{ delta: {}, finish_reason: 'stop' }] },
+    ];
+  });
+  writeSettings(testDir, {
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+  try {
+    const result = await spawnCli(
+      [cliPath(), '--profile', 'bare', '--json', 'Compute six times seven'],
+      createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const requests = mock.capturedRequests();
+    expect(requests).toHaveLength(incidentalCheck ? 3 : 2);
+    const system = (requests[0].messages as WireMessage[])
+      .filter((message) => message.role === 'system')
+      .map((message) => message.content)
+      .join('\n');
+    expect(system).toContain('No durable session goal is set');
+    expect(system).toContain('do not call goal_check');
+    const toolNames = (requests[0].tools as { function: { name: string } }[]).map((tool) => tool.function.name);
+    expect(toolNames).toContain('goal_check');
+    expect(toolNames).not.toContain('propose_goal');
+    if (incidentalCheck) {
+      const rejection = (requests[1].messages as WireMessage[]).find((message) => message.role === 'tool')?.content;
+      expect(rejection).toContain('Error: goal_check was not recorded: there is no active durable goal to check.');
+      expect(rejection).toContain('Continue the ordinary request/tool workflow without goal_check');
+    }
+    expect(
+      lastWireToolExchange(requests).results.find((result) => result.id === `ordinary-${incidentalCheck ? 2 : 1}`)
+        ?.content,
+    ).toContain('42');
+    const output = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(output.at(-1)).toMatchObject({ type: 'completed', finalText: 'Ordinary result: 42' });
+    expect(result.stderr).not.toContain('Goal stop check unresolved');
+    const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
+    const events = fs
+      .readFileSync(path.join(testDir, saved), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).event);
+    expect(events.some((event) => event.type === 'goal_changed')).toBe(false);
+  } finally {
+    await mock.close();
+  }
+});
+
+it.each(['blocked', 'deferred', 'not_achieved'] as const)(
+  'explicit goal preserves honest %s handling',
+  async (status) => {
+    let requests = 0;
+    const mock = await startModelMock(['mock-alpha'], () => {
+      requests += 1;
+      // not_achieved must continue to another report before normal completion.
+      if (requests === 1 || (status === 'not_achieved' && requests === 2)) {
+        const reported = requests === 1 ? status : 'blocked';
+        return [
+          {
+            id: 'fixture',
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: `check-${requests}`,
+                      type: 'function',
+                      function: {
+                        name: 'goal_check',
+                        arguments: JSON.stringify({
+                          status: reported,
+                          evidence:
+                            reported === 'blocked'
+                              ? 'Need user fixture input'
+                              : 'Latest request or remaining fixture work',
+                        }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          { id: 'fixture', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+        ];
+      }
+      return [
+        { id: 'fixture', choices: [{ delta: { role: 'assistant', content: 'Honest fixture response' } }] },
+        { id: 'fixture', choices: [{ delta: {}, finish_reason: 'stop' }] },
+      ];
+    });
+    writeSettings(testDir, {
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+    });
+    try {
+      const result = await spawnCli(
+        [cliPath(), '--json', '--goal', 'Explicit fixture outcome', 'Reply to the current request'],
+        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(requests).toBe(status === 'not_achieved' ? 3 : 2);
+      const events = result.stdout
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(events.at(-1)).toMatchObject({ type: 'completed', finalText: 'Honest fixture response' });
+      expect(result.stderr).not.toContain('Goal stop check unresolved');
+      const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
+      const log = fs
+        .readFileSync(path.join(testDir, saved), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line).event);
+      expect(log.filter((event) => event.type === 'goal_changed').map((event) => event.goal.status)).toEqual([
+        'active',
+      ]);
+    } finally {
+      await mock.close();
+    }
+  },
+);
 
 it('positional launch closes the goal after a recorded achieved goal_check and reports it', async () => {
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
@@ -1867,6 +2145,8 @@ it.each(['flag', 'config'])(
       expect(system).not.toContain('GLOBAL_GUIDANCE_SENTINEL');
       expect(system).toContain('They are not preloaded');
       expect(system).toContain('report blocked');
+      expect(system).toContain('No durable session goal is set');
+      expect(system).toContain('do not call goal_check');
       expect(system).toContain('BARE_SKILL_CATALOG_SENTINEL');
       expect(system).toContain('read the SKILL.md at its\nlocation with the shell');
       expect(system).not.toContain('activate_skill');

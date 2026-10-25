@@ -4,7 +4,9 @@ import { TOOL_NAME_GOAL_CHECK } from '../tools/tool-names.js';
 
 /** A deterministic, bounded suffix for the current event-backed session goal. */
 export function renderDurableGoalContext(goal?: DurableGoal): string {
-  if (!goal) return '';
+  if (!goal) {
+    return '\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission.';
+  }
   if (
     !goal.outcome.trim() ||
     goal.outcome.length > MAX_GOAL_FIELD_LENGTH ||
@@ -35,4 +37,4 @@ While this goal is active, finish every turn by calling \`${TOOL_NAME_GOAL_CHECK
 - blocked: you cannot proceed without user input or a capability you lack; say exactly what is needed.
 - not_achieved: more work is needed that you can do now; keep working instead of ending the turn.
 - deferred: the latest user message asked for something else, asked you to pause, or superseded the goal; answer that instead of forcing it into goal work.
-Reporting achieved closes the goal: when the turn ends after a recorded achieved check, the goal is marked achieved. Before claiming it, verify the outcome and each success criterion against concrete evidence from this session (commands run and their results, files read); if any part is unverified, keep working or report blocked.`;
+Reporting achieved proposes completion: the harness closes the goal only after its applicable verification policy accepts the claim. It may request repairs or leave the goal active. Before claiming it, verify the outcome and each success criterion against concrete evidence from this session (commands run and their results, files read); if any part is unverified, keep working or report blocked.`;

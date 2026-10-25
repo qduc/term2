@@ -261,7 +261,7 @@ function reminderText(
       : `the latest goal_check was incomplete (${detail})`;
   return (
     `${header} ${problem}. Before ending the turn, call goal_check by itself: achieved (only after verifying ` +
-    'the outcome and any success criteria against concrete evidence; this closes the goal), blocked (the concrete user input or unavailable capability needed), ' +
+    'the outcome and any success criteria against concrete evidence; this proposes completion subject to the harness verification policy), blocked (the concrete user input or unavailable capability needed), ' +
     'not_achieved (then keep working), or deferred (the latest user message asked for something else or asked ' +
     `you to pause). ${rules}`
   );

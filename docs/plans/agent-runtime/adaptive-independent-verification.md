@@ -89,6 +89,12 @@ than automatically redispatched; consumed repairs and task deadlines remain auth
 
 `completion_verification_blocked` is a distinct terminal cause. The UI receives a visible notice and
 the goal stays active; non-interactive execution exits 2 and emits no `completed` record.
+The same attention-required result applies to `goal_check_unresolved`, in both the
+foreground response and a background-notification response: partial output and the
+terminal cause remain visible, but no successful JSON `completed` record is emitted.
+This intentionally changes the earlier unresolved-check exit-0 behavior. It is not
+a blanket failure for active goals: ordinary no-goal replies and valid blocked/deferred
+checks retain exit 0, and `not_achieved` still continues work before a later stop.
 
 ## Operations, rollback, and recovery
 

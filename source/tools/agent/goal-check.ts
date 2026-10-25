@@ -16,7 +16,8 @@ import {
 } from '../format-helpers.js';
 
 const GOAL_CHECK_DESCRIPTION =
-  'Report your self-check against the active durable session goal. While the goal is active, call this by itself ' +
+  'Use only when a durable session goal is active; do not call when no goal is set. Report your self-check ' +
+  'against that goal. While the goal is active, call this by itself ' +
   'as the last tool call before ending a turn, after any work and after reading its results. Reporting achieved ' +
   'proposes completion: the harness closes the goal only after its applicable verification policy accepts the claim. It may request repairs or leave the goal active. Before claiming ' +
   'achieved, verify the outcome and every success criterion against concrete evidence from this session ' +
@@ -87,7 +88,10 @@ export function createGoalCheckToolDefinition(deps: {
       const goal = deps.getGoal();
       const validation = validateGoalCheck(params, goal);
       if (!validation.ok || !goal) {
-        return `Error: goal_check was not recorded: ${validation.ok ? 'no goal' : validation.problem}.`;
+        const guidance = !goal
+          ? ' Continue the ordinary request/tool workflow without goal_check; this tool does not create a goal.'
+          : '';
+        return `Error: goal_check was not recorded: ${validation.ok ? 'no goal' : validation.problem}.${guidance}`;
       }
       // Record the goal the model judged: the one rendered into the request
       // whose response made this call. Reading the session goal at execution

@@ -3083,8 +3083,12 @@ Known limitations (deferred): the `[Mode Notice] ` prefix match that separates
 harness notices from user instructions; harness-injected user-role messages
 without that prefix restart the window (and both allowances); hosted
 (provider-executed) tool activity is invisible to the history scan; ACP maps
-`goal_check_unresolved` to an ordinary `end_turn`; non-interactive mode exits 0
-on an unresolved check.
+`goal_check_unresolved` to an ordinary `end_turn`.
+
+Non-interactive boundary update: foreground and background-notification responses
+with `goal_check_unresolved` now exit 2 without a successful JSON `completed`
+record, preserving partial output and the active goal. This changes only outward
+completion reporting, not this guard's decisions or reminder allowances.
 
 Update (2026-10-08, T8 — not a new guard): a recorded, valid `achieved` check
 that ends a root turn now closes the durable goal. The write lives in

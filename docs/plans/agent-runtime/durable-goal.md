@@ -34,12 +34,22 @@ closes, rather than proposing for approval.
 
 ## Active-goal stop check
 
+`goal_check` applies only when a durable session goal is active. With no goal set,
+the prompt explicitly directs the model to continue the ordinary request/tool
+workflow without calling it. The catalog stays stable so a goal set during a
+session can take effect; visibility of the tool does not imply an active goal or
+authorize creating one. An absent-goal call is rejected without recording a check.
+
 While the goal is `active`, a root turn may not end normally until the working
 model has called `goal_check` by itself after its last work, reporting one of:
 
 - `achieved` — evidence against the outcome, plus `criteriaEvidence` when the goal
-  has success criteria. The turn ends, and the durable goal is marked `achieved`
-  through the same `goal_changed` path as `/goal achieved` (`source: 'goal_check'`).
+  has success criteria. This proposes completion; the harness closes the goal only
+  after its applicable verification policy accepts the claim. It may request repair
+  or return control with the goal active; see
+  [Adaptive independent verification](adaptive-independent-verification.md).
+  Acceptance marks the durable goal `achieved` through the same `goal_changed` path
+  as `/goal achieved` (`source: 'goal_check'`).
   The write lives at the stop seam (`createGoalStopPolicy`), not in the tool: only
   there is the check known to be the turn's last tool activity with its own recorded
   result. Denied, failed, unrecorded, incomplete (missing criteria evidence), and

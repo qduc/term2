@@ -1,0 +1,24 @@
+docs/contracts/02-provider-input-continuity-and-effect-settlement.md
+docs/experiments/evidence-driven-development/tasks.jsonl
+docs/plans/approvals-and-sandbox/guard-ledger.md
+docs/test-results.json
+scripts/generated-verification/ledger.mjs
+source/contracts/conversation-items.ts
+source/services/conversation/conversation-decoder.ts
+source/services/conversation/conversation-history-repair.ts
+source/services/conversation/conversation-record-stream.ts
+source/services/conversation/conversation-record.ts
+source/services/conversation/conversation-replay.ts
+source/services/conversation/conversation-state-schema.ts
+source/services/conversation/conversation-turn-items.ts
+source/services/conversation/journal-to-ledger.ts
+source/services/conversation/run-item-normalizer.ts
+source/services/input-surge-guard.ts
+source/services/logging/assistant-turn-journal.ts
+source/services/logging/conversation-log-events.ts
+source/services/tool-execution-ledger.ts
+source/services/conversation/tool-occurrence.ts
+docs/experiments/tool-occurrence-recovery/ (owned probes, README, retained evidence)
+
+Ignored .coord/: confirmed by git check-ignore; only requested summary written.
+Final source inventory matches final/identity.json exactly.

@@ -1,0 +1,171 @@
+{
+  "id": "reused-final",
+  "createdAt": "2026-10-25T02:16:37.857Z",
+  "projectPath": "/tmp/qduc/term2-nodejs/tool-occurrence-nzxE8c/adapter-qVDUVX",
+  "previousResponseId": null,
+  "messages": [
+    {
+      "id": "command-same-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake",
+      "output": "turn-result-1",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 0
+      },
+      "callId": "same-0",
+      "success": true
+    },
+    {
+      "id": "command-same-0",
+      "sender": "command",
+      "status": "running",
+      "command": "fake",
+      "output": "",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 1
+      },
+      "callId": "same-0"
+    },
+    {
+      "id": "bot-bot-turn-0-2026-10-25T02:16:37.897Z-0",
+      "sender": "bot",
+      "status": "finalized",
+      "text": "done"
+    }
+  ],
+  "history": [
+    {
+      "type": "function_call",
+      "callId": "same-0",
+      "name": "fake",
+      "arguments": "{\"iteration\":0}",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-0",
+      "name": "fake",
+      "output": "turn-result-0",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call",
+      "callId": "same-0",
+      "name": "fake",
+      "arguments": "{\"iteration\":1}",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same-0",
+      "name": "fake",
+      "output": "turn-result-1",
+      "turnId": "turn-1",
+      "occurrence": 2
+    },
+    {
+      "role": "assistant",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "done"
+        }
+      ]
+    }
+  ],
+  "toolLedger": [
+    {
+      "turnId": "turn-1",
+      "callId": "same-0",
+      "occurrence": 1,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:16:37.897Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      ],
+      "arguments": "{\"iteration\":0}",
+      "output": "turn-result-0",
+      "completedAt": "2026-10-25T02:16:37.897Z"
+    },
+    {
+      "turnId": "turn-1",
+      "callId": "same-0",
+      "occurrence": 2,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:16:37.897Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      ],
+      "arguments": "{\"iteration\":1}",
+      "output": "turn-result-1",
+      "completedAt": "2026-10-25T02:16:37.897Z"
+    }
+  ],
+  "costRecords": [
+    {
+      "requestId": "req-13",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    },
+    {
+      "requestId": "req-14",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    },
+    {
+      "requestId": "req-15",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    }
+  ],
+  "replayWarnings": []
+}

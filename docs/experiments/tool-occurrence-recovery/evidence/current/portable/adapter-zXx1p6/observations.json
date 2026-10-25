@@ -1,0 +1,6417 @@
+[
+  {
+    "name": "distinct-cut",
+    "reused": false,
+    "settled": false,
+    "identical": false,
+    "expected": 2,
+    "body": 2,
+    "requests": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "call-0-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-0-0",
+            "output": "turn-result-0"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "call-0-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-0-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "call-1-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-1-0",
+            "output": "turn-result-1"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "projected": [
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-1",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "call-0-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "call-0-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "call-0-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "call-0-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-2",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "call-1-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 1
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "call-1-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "call-1-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "call-1-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-3",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "failed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_recovery",
+        "recoveredCallIds": ["call-0-0", "call-1-0"],
+        "droppedCallIds": [],
+        "message": "Recovered 2 settled tool call/result pair(s) from a previously interrupted turn. Dropped 0 incomplete tool call(s); do not assume dropped calls completed."
+      },
+      {
+        "type": "error",
+        "message": "OFFLINE_CUT_BEFORE_FINAL",
+        "stack": "Error: OFFLINE_CUT_BEFORE_FINAL\n    at Object.stream (/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/full-turn.mjs:113:21)"
+      }
+    ],
+    "errors": [
+      {
+        "name": "Error",
+        "message": "OFFLINE_CUT_BEFORE_FINAL"
+      }
+    ],
+    "memory": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "call-0-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.059Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "call-0-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "call-0-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.064Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.065Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "call-1-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":1}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.073Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "call-1-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "call-1-0",
+            "name": "fake",
+            "output": "turn-result-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.076Z",
+        "output": "turn-result-1",
+        "completedAt": "2026-10-25T02:11:51.077Z"
+      }
+    ],
+    "replay": {
+      "id": "distinct-cut",
+      "createdAt": "2026-10-25T02:11:51.043Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/adapter-zXx1p6",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "call-0-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "call-0-0"
+        },
+        {
+          "id": "call-1-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "call-1-0"
+        },
+        {
+          "id": "command-call-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-0",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "call-0-0",
+          "success": true
+        },
+        {
+          "id": "command-call-1-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-1",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "call-1-0",
+          "success": true
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "callId": "call-0-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "call-0-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "call-1-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "call-1-0",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "call-0-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.060Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "call-0-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "call-0-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.060Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "call-1-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.060Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "call-1-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "call-1-0",
+              "name": "fake",
+              "output": "turn-result-1",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":1}",
+          "output": "turn-result-1",
+          "completedAt": "2026-10-25T02:11:51.060Z"
+        }
+      ],
+      "replayWarnings": []
+    },
+    "resumed": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "tool_call",
+            "id": "call-0-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-0-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "call-1-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-1-0",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "offline resume"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "applicationTools": [],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "warnings": [
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "distinct-cut"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "distinct-cut"
+        }
+      ],
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "distinct-cut-resumed"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "distinct-cut-resumed"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "distinct-final",
+    "reused": false,
+    "settled": true,
+    "identical": false,
+    "expected": 2,
+    "body": 2,
+    "requests": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "call-0-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-0-0",
+            "output": "turn-result-0"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "call-0-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-0-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "call-1-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-1-0",
+            "output": "turn-result-1"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "projected": [
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-5",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "call-0-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "call-0-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "call-0-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "call-0-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-6",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "call-1-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 1
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "call-1-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "call-1-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "call-1-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-7",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "final",
+        "finalText": "done",
+        "costRecords": [
+          {
+            "requestId": "req-5",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          },
+          {
+            "requestId": "req-6",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          },
+          {
+            "requestId": "req-7",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          }
+        ],
+        "turnItems": [
+          {
+            "type": "tool_call",
+            "callId": "call-0-0",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":0}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "call-0-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "call-0-0",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-0",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "call-0-0",
+              "name": "fake",
+              "output": "turn-result-0"
+            }
+          },
+          {
+            "type": "tool_call",
+            "callId": "call-1-0",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":1}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "call-1-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "call-1-0",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-1",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "call-1-0",
+              "name": "fake",
+              "output": "turn-result-1"
+            }
+          },
+          {
+            "type": "assistant_text",
+            "text": "done"
+          }
+        ]
+      }
+    ],
+    "errors": [],
+    "memory": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "call-0-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.129Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "call-0-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "call-0-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.133Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.133Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "call-1-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":1}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.140Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "call-1-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "call-1-0",
+            "name": "fake",
+            "output": "turn-result-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.144Z",
+        "output": "turn-result-1",
+        "completedAt": "2026-10-25T02:11:51.144Z"
+      }
+    ],
+    "replay": {
+      "id": "distinct-final",
+      "createdAt": "2026-10-25T02:11:51.122Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/adapter-zXx1p6",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-call-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-0",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "call-0-0",
+          "success": true
+        },
+        {
+          "id": "command-call-1-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-1",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "call-1-0",
+          "success": true
+        },
+        {
+          "id": "bot-bot-turn-0-2026-10-25T02:11:51.156Z-0",
+          "sender": "bot",
+          "status": "finalized",
+          "text": "done"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "callId": "call-0-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "call-0-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "call-1-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "call-1-0",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "role": "assistant",
+          "type": "message",
+          "status": "completed",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "call-0-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.156Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "call-0-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "call-0-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.156Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "call-1-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.156Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "call-1-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "call-1-0",
+              "name": "fake",
+              "output": "turn-result-1",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":1}",
+          "output": "turn-result-1",
+          "completedAt": "2026-10-25T02:11:51.156Z"
+        }
+      ],
+      "costRecords": [
+        {
+          "requestId": "req-5",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        },
+        {
+          "requestId": "req-6",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        },
+        {
+          "requestId": "req-7",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      ],
+      "replayWarnings": []
+    },
+    "resumed": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "tool_call",
+            "id": "call-0-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-0-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "call-1-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_result",
+            "id": "call-1-0",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "done"
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "offline resume"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "applicationTools": [],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "warnings": [
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "distinct-final"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "distinct-final"
+        }
+      ],
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "distinct-final-resumed"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "distinct-final-resumed"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "reused-cut",
+    "reused": true,
+    "settled": false,
+    "identical": false,
+    "expected": 2,
+    "body": 2,
+    "requests": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-1"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "projected": [
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-9",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-10",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 1
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-11",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "failed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_recovery",
+        "recoveredCallIds": ["same-0", "same-0"],
+        "droppedCallIds": [],
+        "message": "Recovered 2 settled tool call/result pair(s) from a previously interrupted turn. Dropped 0 incomplete tool call(s); do not assume dropped calls completed."
+      },
+      {
+        "type": "error",
+        "message": "OFFLINE_CUT_BEFORE_FINAL",
+        "stack": "Error: OFFLINE_CUT_BEFORE_FINAL\n    at Object.stream (/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/full-turn.mjs:113:21)"
+      }
+    ],
+    "errors": [
+      {
+        "name": "Error",
+        "message": "OFFLINE_CUT_BEFORE_FINAL"
+      }
+    ],
+    "memory": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.179Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.183Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.183Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":1}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.190Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-1",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.194Z",
+        "output": "turn-result-1",
+        "completedAt": "2026-10-25T02:11:51.194Z"
+      }
+    ],
+    "replay": {
+      "id": "reused-cut",
+      "createdAt": "2026-10-25T02:11:51.171Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/adapter-zXx1p6",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-1",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0",
+          "success": true
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-0"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.179Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.179Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.179Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-1",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":1}",
+          "output": "turn-result-1",
+          "completedAt": "2026-10-25T02:11:51.179Z"
+        }
+      ],
+      "replayWarnings": []
+    },
+    "resumed": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "offline resume"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "applicationTools": [],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "warnings": [
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "reused-cut"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "reused-cut"
+        }
+      ],
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "reused-cut-resumed"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "reused-cut-resumed"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "reused-final",
+    "reused": true,
+    "settled": true,
+    "identical": false,
+    "expected": 2,
+    "body": 2,
+    "requests": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-1"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "projected": [
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-13",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-14",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 1
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-15",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "final",
+        "finalText": "done",
+        "costRecords": [
+          {
+            "requestId": "req-13",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          },
+          {
+            "requestId": "req-14",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          },
+          {
+            "requestId": "req-15",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          }
+        ],
+        "turnItems": [
+          {
+            "type": "tool_call",
+            "callId": "same-0",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":0}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-0",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-0",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0"
+            }
+          },
+          {
+            "type": "tool_call",
+            "callId": "same-0",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":1}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-0",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-1",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-1"
+            }
+          },
+          {
+            "type": "assistant_text",
+            "text": "done"
+          }
+        ]
+      }
+    ],
+    "errors": [],
+    "memory": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.229Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.232Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.232Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":1}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.239Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-1",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.242Z",
+        "output": "turn-result-1",
+        "completedAt": "2026-10-25T02:11:51.243Z"
+      }
+    ],
+    "replay": {
+      "id": "reused-final",
+      "createdAt": "2026-10-25T02:11:51.221Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/adapter-zXx1p6",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-1",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0",
+          "success": true
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "running",
+          "command": "fake",
+          "output": "",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "bot-bot-turn-0-2026-10-25T02:11:51.254Z-0",
+          "sender": "bot",
+          "status": "finalized",
+          "text": "done"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "role": "assistant",
+          "type": "message",
+          "status": "completed",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.254Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.254Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.254Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-1",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":1}",
+          "output": "turn-result-1",
+          "completedAt": "2026-10-25T02:11:51.254Z"
+        }
+      ],
+      "costRecords": [
+        {
+          "requestId": "req-13",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        },
+        {
+          "requestId": "req-14",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        },
+        {
+          "requestId": "req-15",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      ],
+      "replayWarnings": []
+    },
+    "resumed": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "done"
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "offline resume"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "applicationTools": [],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "warnings": [
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "reused-final"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "reused-final"
+        }
+      ],
+      [
+        "Completed stream history contains replayed tool call/result pairs",
+        {
+          "eventType": "conversation.stream_history.replayed_tools",
+          "category": "provider",
+          "phase": "post_stream",
+          "sessionId": "reused-final",
+          "source": "startStream",
+          "historyLength": 6,
+          "newItemsLength": 7,
+          "historyDuplicatePairs": 1,
+          "historyMaxCopies": 2,
+          "newItemsDuplicatePairs": 0,
+          "newItemsMaxCopies": 0
+        }
+      ],
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "reused-final-resumed"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "reused-final-resumed"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "identical-cut",
+    "reused": true,
+    "settled": false,
+    "identical": true,
+    "expected": 2,
+    "body": 2,
+    "requests": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "projected": [
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-17",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-18",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-19",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "failed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_recovery",
+        "recoveredCallIds": ["same-0", "same-0"],
+        "droppedCallIds": [],
+        "message": "Recovered 2 settled tool call/result pair(s) from a previously interrupted turn. Dropped 0 incomplete tool call(s); do not assume dropped calls completed."
+      },
+      {
+        "type": "error",
+        "message": "OFFLINE_CUT_BEFORE_FINAL",
+        "stack": "Error: OFFLINE_CUT_BEFORE_FINAL\n    at Object.stream (/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/full-turn.mjs:113:21)"
+      }
+    ],
+    "errors": [
+      {
+        "name": "Error",
+        "message": "OFFLINE_CUT_BEFORE_FINAL"
+      }
+    ],
+    "memory": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.276Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.280Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.280Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.287Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.291Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.291Z"
+      }
+    ],
+    "replay": {
+      "id": "identical-cut",
+      "createdAt": "2026-10-25T02:11:51.268Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/adapter-zXx1p6",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-0",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0",
+          "success": true
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.276Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.276Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.276Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.276Z"
+        }
+      ],
+      "replayWarnings": []
+    },
+    "resumed": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "offline resume"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "applicationTools": [],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "warnings": [
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "identical-cut"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "identical-cut"
+        }
+      ],
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "identical-cut-resumed"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "identical-cut-resumed"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "identical-final",
+    "reused": true,
+    "settled": true,
+    "identical": true,
+    "expected": 2,
+    "body": 2,
+    "requests": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "projected": [
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-21",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-22",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-23",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "final",
+        "finalText": "done",
+        "costRecords": [
+          {
+            "requestId": "req-21",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          },
+          {
+            "requestId": "req-22",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          },
+          {
+            "requestId": "req-23",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          }
+        ],
+        "turnItems": [
+          {
+            "type": "tool_call",
+            "callId": "same-0",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":0}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-0",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-0",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0"
+            }
+          },
+          {
+            "type": "tool_call",
+            "callId": "same-0",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":0}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-0",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-0",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0"
+            }
+          },
+          {
+            "type": "assistant_text",
+            "text": "done"
+          }
+        ]
+      }
+    ],
+    "errors": [],
+    "memory": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.326Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.330Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.330Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.337Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.340Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.341Z"
+      }
+    ],
+    "replay": {
+      "id": "identical-final",
+      "createdAt": "2026-10-25T02:11:51.318Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/adapter-zXx1p6",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-0",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0",
+          "success": true
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "running",
+          "command": "fake",
+          "output": "",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "bot-bot-turn-0-2026-10-25T02:11:51.352Z-0",
+          "sender": "bot",
+          "status": "finalized",
+          "text": "done"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "role": "assistant",
+          "type": "message",
+          "status": "completed",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.352Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.352Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.352Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.352Z"
+        }
+      ],
+      "costRecords": [
+        {
+          "requestId": "req-21",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        },
+        {
+          "requestId": "req-22",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        },
+        {
+          "requestId": "req-23",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      ],
+      "replayWarnings": []
+    },
+    "resumed": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "done"
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "offline resume"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "applicationTools": [],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "warnings": [
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "identical-final"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "identical-final"
+        }
+      ],
+      [
+        "Completed stream history contains replayed tool call/result pairs",
+        {
+          "eventType": "conversation.stream_history.replayed_tools",
+          "category": "provider",
+          "phase": "post_stream",
+          "sessionId": "identical-final",
+          "source": "startStream",
+          "historyLength": 6,
+          "newItemsLength": 7,
+          "historyDuplicatePairs": 1,
+          "historyMaxCopies": 2,
+          "newItemsDuplicatePairs": 0,
+          "newItemsMaxCopies": 0
+        }
+      ],
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "identical-final-resumed"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "identical-final-resumed"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "three-reused-cut",
+    "reused": true,
+    "settled": false,
+    "identical": false,
+    "expected": 6,
+    "body": 6,
+    "requests": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":2}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-2"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":2}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-2"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":3}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":4}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":5}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-3"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-4"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-5"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "projected": [
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-25",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-1",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 1
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-2",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 2
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-1",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-1-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-1"
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-2",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-2-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 2",
+          "output": "turn-result-2",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 2
+          },
+          "callId": "same-2"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-26",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 3
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-1",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 4
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-2",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 5
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 3",
+          "output": "turn-result-3",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 3
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-1",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-1-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 4",
+          "output": "turn-result-4",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 4
+          },
+          "callId": "same-1"
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-2",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-2-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 5",
+          "output": "turn-result-5",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 5
+          },
+          "callId": "same-2"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-27",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "failed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_recovery",
+        "recoveredCallIds": ["same-0", "same-1", "same-2", "same-0", "same-1", "same-2"],
+        "droppedCallIds": [],
+        "message": "Recovered 6 settled tool call/result pair(s) from a previously interrupted turn. Dropped 0 incomplete tool call(s); do not assume dropped calls completed."
+      },
+      {
+        "type": "error",
+        "message": "OFFLINE_CUT_BEFORE_FINAL",
+        "stack": "Error: OFFLINE_CUT_BEFORE_FINAL\n    at Object.stream (/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/full-turn.mjs:113:21)"
+      }
+    ],
+    "errors": [
+      {
+        "name": "Error",
+        "message": "OFFLINE_CUT_BEFORE_FINAL"
+      }
+    ],
+    "memory": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.374Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.384Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.384Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-1",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":1}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.377Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-1",
+            "name": "fake",
+            "output": "turn-result-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.388Z",
+        "output": "turn-result-1",
+        "completedAt": "2026-10-25T02:11:51.388Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-2",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":2}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.381Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":2}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-2",
+            "name": "fake",
+            "output": "turn-result-2",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.391Z",
+        "output": "turn-result-2",
+        "completedAt": "2026-10-25T02:11:51.394Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":3}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.405Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":3}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-3",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.415Z",
+        "output": "turn-result-3",
+        "completedAt": "2026-10-25T02:11:51.415Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-1",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":4}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.408Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":4}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-1",
+            "name": "fake",
+            "output": "turn-result-4",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.419Z",
+        "output": "turn-result-4",
+        "completedAt": "2026-10-25T02:11:51.419Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-2",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":5}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.412Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":5}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-2",
+            "name": "fake",
+            "output": "turn-result-5",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.422Z",
+        "output": "turn-result-5",
+        "completedAt": "2026-10-25T02:11:51.422Z"
+      }
+    ],
+    "replay": {
+      "id": "three-reused-cut",
+      "createdAt": "2026-10-25T02:11:51.366Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/adapter-zXx1p6",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "same-1-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-1"
+        },
+        {
+          "id": "same-2-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 2",
+          "output": "turn-result-2",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 2
+          },
+          "callId": "same-2"
+        },
+        {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 3",
+          "output": "turn-result-3",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 3
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "same-1-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 4",
+          "output": "turn-result-4",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 4
+          },
+          "callId": "same-1"
+        },
+        {
+          "id": "same-2-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 5",
+          "output": "turn-result-5",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 5
+          },
+          "callId": "same-2"
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-3",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0",
+          "success": true
+        },
+        {
+          "id": "command-same-1",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-4",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-1",
+          "success": true
+        },
+        {
+          "id": "command-same-2",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-5",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 2
+          },
+          "callId": "same-2",
+          "success": true
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 3
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "command-same-1",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 4
+          },
+          "callId": "same-1"
+        },
+        {
+          "id": "command-same-2",
+          "sender": "command",
+          "status": "unknown",
+          "command": "fake",
+          "output": "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+          "failureReason": "Session ended unexpectedly",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 5
+          },
+          "callId": "same-2"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-1",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-2",
+          "name": "fake",
+          "arguments": "{\"iteration\":2}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-1",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-2",
+          "name": "fake",
+          "output": "turn-result-2",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":3}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call",
+          "callId": "same-1",
+          "name": "fake",
+          "arguments": "{\"iteration\":4}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call",
+          "callId": "same-2",
+          "name": "fake",
+          "arguments": "{\"iteration\":5}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-3",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-1",
+          "name": "fake",
+          "output": "turn-result-4",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-2",
+          "name": "fake",
+          "output": "turn-result-5",
+          "turnId": "turn-1",
+          "occurrence": 2
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.374Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.374Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-1",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.374Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-1",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-1",
+              "name": "fake",
+              "output": "turn-result-1",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":1}",
+          "output": "turn-result-1",
+          "completedAt": "2026-10-25T02:11:51.374Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-2",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.374Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-2",
+              "name": "fake",
+              "arguments": "{\"iteration\":2}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-2",
+              "name": "fake",
+              "output": "turn-result-2",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":2}",
+          "output": "turn-result-2",
+          "completedAt": "2026-10-25T02:11:51.374Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.374Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":3}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-3",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":3}",
+          "output": "turn-result-3",
+          "completedAt": "2026-10-25T02:11:51.374Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-1",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.374Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-1",
+              "name": "fake",
+              "arguments": "{\"iteration\":4}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-1",
+              "name": "fake",
+              "output": "turn-result-4",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":4}",
+          "output": "turn-result-4",
+          "completedAt": "2026-10-25T02:11:51.374Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-2",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.374Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-2",
+              "name": "fake",
+              "arguments": "{\"iteration\":5}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-2",
+              "name": "fake",
+              "output": "turn-result-5",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":5}",
+          "output": "turn-result-5",
+          "completedAt": "2026-10-25T02:11:51.374Z"
+        }
+      ],
+      "replayWarnings": []
+    },
+    "resumed": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":2}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-2"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":3}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":4}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":5}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-3"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-4"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-5"
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "offline resume"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "applicationTools": [],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "warnings": [
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "three-reused-cut"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "three-reused-cut"
+        }
+      ],
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "three-reused-cut-resumed"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "three-reused-cut-resumed"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "three-reused-final",
+    "reused": true,
+    "settled": true,
+    "identical": false,
+    "expected": 6,
+    "body": 6,
+    "requests": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":2}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-2"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      },
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "synthetic full-turn occurrence fixture"
+              }
+            ]
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":2}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-2"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":3}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":4}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":5}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-3"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-4"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-5"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "applicationTools": [
+          {
+            "name": "fake",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            },
+            "effect": "read",
+            "parallelSafe": false
+          }
+        ],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "projected": [
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-29",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 0
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-1",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 1
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-2",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 2
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 0",
+          "output": "turn-result-0",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-1",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-1-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 1",
+          "output": "turn-result-1",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-1"
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-2",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-2-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 2",
+          "output": "turn-result-2",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 2
+          },
+          "callId": "same-2"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-30",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-0",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 3
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-1",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 4
+        }
+      },
+      {
+        "type": "tool_started",
+        "toolCallId": "same-2",
+        "toolName": "fake",
+        "arguments": {
+          "iteration": 5
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-0",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-0-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 3",
+          "output": "turn-result-3",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 3
+          },
+          "callId": "same-0"
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-1",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-1-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 4",
+          "output": "turn-result-4",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 4
+          },
+          "callId": "same-1"
+        }
+      },
+      {
+        "type": "tool_dispatched",
+        "toolCallId": "same-2",
+        "toolName": "fake"
+      },
+      {
+        "type": "command_message",
+        "message": {
+          "id": "same-2-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake 5",
+          "output": "turn-result-5",
+          "success": true,
+          "isApprovalRejection": false,
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 5
+          },
+          "callId": "same-2"
+        }
+      },
+      {
+        "type": "cost_update",
+        "record": {
+          "requestId": "req-31",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      },
+      {
+        "type": "final",
+        "finalText": "done",
+        "costRecords": [
+          {
+            "requestId": "req-29",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          },
+          {
+            "requestId": "req-30",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          },
+          {
+            "requestId": "req-31",
+            "provider": "openai",
+            "model": "fixture",
+            "serviceTier": "standard",
+            "outcome": "completed",
+            "unpricedReason": "missing_usage"
+          }
+        ],
+        "turnItems": [
+          {
+            "type": "tool_call",
+            "callId": "same-0",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":0}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}"
+            }
+          },
+          {
+            "type": "tool_call",
+            "callId": "same-1",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":1}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-1",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}"
+            }
+          },
+          {
+            "type": "tool_call",
+            "callId": "same-2",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":2}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-2",
+              "name": "fake",
+              "arguments": "{\"iteration\":2}"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-0",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-0",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-1",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-1",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-1",
+              "name": "fake",
+              "output": "turn-result-1"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-2",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-2",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-2",
+              "name": "fake",
+              "output": "turn-result-2"
+            }
+          },
+          {
+            "type": "tool_call",
+            "callId": "same-0",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":3}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":3}"
+            }
+          },
+          {
+            "type": "tool_call",
+            "callId": "same-1",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":4}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-1",
+              "name": "fake",
+              "arguments": "{\"iteration\":4}"
+            }
+          },
+          {
+            "type": "tool_call",
+            "callId": "same-2",
+            "toolName": "fake",
+            "arguments": "{\"iteration\":5}",
+            "providerItem": {
+              "type": "function_call",
+              "callId": "same-2",
+              "name": "fake",
+              "arguments": "{\"iteration\":5}"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-0",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-3",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-3"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-1",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-4",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-1",
+              "name": "fake",
+              "output": "turn-result-4"
+            }
+          },
+          {
+            "type": "tool_result",
+            "callId": "same-2",
+            "toolName": "fake",
+            "status": "completed",
+            "output": "turn-result-5",
+            "providerItem": {
+              "type": "function_call_result",
+              "callId": "same-2",
+              "name": "fake",
+              "output": "turn-result-5"
+            }
+          },
+          {
+            "type": "assistant_text",
+            "text": "done"
+          }
+        ]
+      }
+    ],
+    "errors": [],
+    "memory": [
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":0}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.473Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-0",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.482Z",
+        "output": "turn-result-0",
+        "completedAt": "2026-10-25T02:11:51.482Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-1",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":1}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.476Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-1",
+            "name": "fake",
+            "output": "turn-result-1",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.486Z",
+        "output": "turn-result-1",
+        "completedAt": "2026-10-25T02:11:51.486Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "userTurnCount": 1,
+        "callId": "same-2",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":2}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.479Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":2}",
+            "turnId": "turn-1",
+            "occurrence": 1
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-2",
+            "name": "fake",
+            "output": "turn-result-2",
+            "turnId": "turn-1",
+            "occurrence": 1
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.495Z",
+        "output": "turn-result-2",
+        "completedAt": "2026-10-25T02:11:51.500Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-0",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":3}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.513Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":3}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-0",
+            "name": "fake",
+            "output": "turn-result-3",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.525Z",
+        "output": "turn-result-3",
+        "completedAt": "2026-10-25T02:11:51.525Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-1",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":4}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.517Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":4}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-1",
+            "name": "fake",
+            "output": "turn-result-4",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.529Z",
+        "output": "turn-result-4",
+        "completedAt": "2026-10-25T02:11:51.530Z"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 2,
+        "userTurnCount": 1,
+        "callId": "same-2",
+        "toolName": "fake",
+        "arguments": "{\"iteration\":5}",
+        "status": "completed",
+        "startedAt": "2026-10-25T02:11:51.521Z",
+        "historyItems": [
+          {
+            "type": "function_call",
+            "callId": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":5}",
+            "turnId": "turn-1",
+            "occurrence": 2
+          },
+          {
+            "type": "function_call_result",
+            "callId": "same-2",
+            "name": "fake",
+            "output": "turn-result-5",
+            "turnId": "turn-1",
+            "occurrence": 2
+          }
+        ],
+        "dispatchedAt": "2026-10-25T02:11:51.533Z",
+        "output": "turn-result-5",
+        "completedAt": "2026-10-25T02:11:51.534Z"
+      }
+    ],
+    "replay": {
+      "id": "three-reused-final",
+      "createdAt": "2026-10-25T02:11:51.464Z",
+      "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/portable/adapter-zXx1p6",
+      "previousResponseId": null,
+      "messages": [
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-3",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 0
+          },
+          "callId": "same-0",
+          "success": true
+        },
+        {
+          "id": "command-same-1",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-4",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 1
+          },
+          "callId": "same-1",
+          "success": true
+        },
+        {
+          "id": "command-same-2",
+          "sender": "command",
+          "status": "completed",
+          "command": "fake",
+          "output": "turn-result-5",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 2
+          },
+          "callId": "same-2",
+          "success": true
+        },
+        {
+          "id": "command-same-0",
+          "sender": "command",
+          "status": "running",
+          "command": "fake",
+          "output": "",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 3
+          },
+          "callId": "same-0"
+        },
+        {
+          "id": "command-same-1",
+          "sender": "command",
+          "status": "running",
+          "command": "fake",
+          "output": "",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 4
+          },
+          "callId": "same-1"
+        },
+        {
+          "id": "command-same-2",
+          "sender": "command",
+          "status": "running",
+          "command": "fake",
+          "output": "",
+          "toolName": "fake",
+          "toolArgs": {
+            "iteration": 5
+          },
+          "callId": "same-2"
+        },
+        {
+          "id": "bot-bot-turn-0-2026-10-25T02:11:51.555Z-0",
+          "sender": "bot",
+          "status": "finalized",
+          "text": "done"
+        }
+      ],
+      "history": [
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-1",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-2",
+          "name": "fake",
+          "arguments": "{\"iteration\":2}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-1",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-2",
+          "name": "fake",
+          "output": "turn-result-2",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call",
+          "callId": "same-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":3}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call",
+          "callId": "same-1",
+          "name": "fake",
+          "arguments": "{\"iteration\":4}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call",
+          "callId": "same-2",
+          "name": "fake",
+          "arguments": "{\"iteration\":5}",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-0",
+          "name": "fake",
+          "output": "turn-result-3",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-1",
+          "name": "fake",
+          "output": "turn-result-4",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same-2",
+          "name": "fake",
+          "output": "turn-result-5",
+          "turnId": "turn-1",
+          "occurrence": 2
+        },
+        {
+          "role": "assistant",
+          "type": "message",
+          "status": "completed",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "toolLedger": [
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.555Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":0}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-0",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":0}",
+          "output": "turn-result-0",
+          "completedAt": "2026-10-25T02:11:51.555Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-1",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.555Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-1",
+              "name": "fake",
+              "arguments": "{\"iteration\":1}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-1",
+              "name": "fake",
+              "output": "turn-result-1",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":1}",
+          "output": "turn-result-1",
+          "completedAt": "2026-10-25T02:11:51.555Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-2",
+          "occurrence": 1,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.555Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-2",
+              "name": "fake",
+              "arguments": "{\"iteration\":2}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-2",
+              "name": "fake",
+              "output": "turn-result-2",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ],
+          "arguments": "{\"iteration\":2}",
+          "output": "turn-result-2",
+          "completedAt": "2026-10-25T02:11:51.555Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-0",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.555Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-0",
+              "name": "fake",
+              "arguments": "{\"iteration\":3}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-0",
+              "name": "fake",
+              "output": "turn-result-3",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":3}",
+          "output": "turn-result-3",
+          "completedAt": "2026-10-25T02:11:51.555Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-1",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.555Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-1",
+              "name": "fake",
+              "arguments": "{\"iteration\":4}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-1",
+              "name": "fake",
+              "output": "turn-result-4",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":4}",
+          "output": "turn-result-4",
+          "completedAt": "2026-10-25T02:11:51.555Z"
+        },
+        {
+          "turnId": "turn-1",
+          "callId": "same-2",
+          "occurrence": 2,
+          "toolName": "fake",
+          "status": "completed",
+          "startedAt": "2026-10-25T02:11:51.555Z",
+          "historyItems": [
+            {
+              "type": "function_call",
+              "callId": "same-2",
+              "name": "fake",
+              "arguments": "{\"iteration\":5}",
+              "turnId": "turn-1",
+              "occurrence": 2
+            },
+            {
+              "type": "function_call_result",
+              "callId": "same-2",
+              "name": "fake",
+              "output": "turn-result-5",
+              "turnId": "turn-1",
+              "occurrence": 2
+            }
+          ],
+          "arguments": "{\"iteration\":5}",
+          "output": "turn-result-5",
+          "completedAt": "2026-10-25T02:11:51.555Z"
+        }
+      ],
+      "costRecords": [
+        {
+          "requestId": "req-29",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        },
+        {
+          "requestId": "req-30",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        },
+        {
+          "requestId": "req-31",
+          "provider": "openai",
+          "model": "fixture",
+          "serviceTier": "standard",
+          "outcome": "completed",
+          "unpricedReason": "missing_usage"
+        }
+      ],
+      "replayWarnings": []
+    },
+    "resumed": [
+      {
+        "instructions": "Offline occurrence fixture",
+        "input": [
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":0}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":1}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":2}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-0"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-1"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-2"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-0",
+            "name": "fake",
+            "arguments": "{\"iteration\":3}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-1",
+            "name": "fake",
+            "arguments": "{\"iteration\":4}"
+          },
+          {
+            "type": "tool_call",
+            "id": "same-2",
+            "name": "fake",
+            "arguments": "{\"iteration\":5}"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-0",
+            "output": "turn-result-3"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-1",
+            "output": "turn-result-4"
+          },
+          {
+            "type": "tool_result",
+            "id": "same-2",
+            "output": "turn-result-5"
+          },
+          {
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "done"
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "offline resume"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "applicationTools": [],
+        "signal": {},
+        "recoveryBudget": {
+          "maxRecoveryTimeMs": 90000,
+          "maxPhysicalAttempts": 3,
+          "maxAutomaticReplays": 1
+        }
+      }
+    ],
+    "warnings": [
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "three-reused-final"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "three-reused-final"
+        }
+      ],
+      [
+        "Completed stream history contains replayed tool call/result pairs",
+        {
+          "eventType": "conversation.stream_history.replayed_tools",
+          "category": "provider",
+          "phase": "post_stream",
+          "sessionId": "three-reused-final",
+          "source": "startStream",
+          "historyLength": 14,
+          "newItemsLength": 19,
+          "historyDuplicatePairs": 3,
+          "historyMaxCopies": 2,
+          "newItemsDuplicatePairs": 0,
+          "newItemsMaxCopies": 0
+        }
+      ],
+      [
+        "Session composed without a graph-owned approval policy registry; using an isolated empty registry.",
+        {
+          "eventType": "session.approval_registry_fallback",
+          "category": "approval",
+          "sessionId": "three-reused-final-resumed"
+        }
+      ],
+      [
+        "Session approval policy registry holds zero policies; every evaluation resolves `unknown`.",
+        {
+          "eventType": "session.approval_registry_empty",
+          "category": "approval",
+          "sessionId": "three-reused-final-resumed"
+        }
+      ]
+    ]
+  }
+]

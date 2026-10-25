@@ -1,3 +1,4 @@
+import { toolOccurrenceMetadata } from './tool-occurrence.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type {
   PersistedAssistantTurn,
@@ -53,6 +54,7 @@ export function projectPersistedAssistantItemToProviderHistory(item: PersistedAs
       item.callId;
     return {
       ...raw,
+      ...toolOccurrenceMetadata(item),
       type: getString(raw.type) ?? 'function_call',
       callId,
       name: getString(raw.name) ?? item.toolName,
@@ -66,6 +68,7 @@ export function projectPersistedAssistantItemToProviderHistory(item: PersistedAs
     const providerData = stripReasoningFields(cloneRecord(raw.providerData));
     return {
       ...raw,
+      ...toolOccurrenceMetadata(item),
       type: getString(raw.type) ?? 'function_call_result',
       callId:
         getString(raw.callId) ??

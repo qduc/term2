@@ -1,0 +1,66 @@
+$ node --import tsx scripts/generated-verification/run.mjs --target history --runs 1000
+{
+  "schemaVersion": 1,
+  "revision": "4731459c44584c6e49854dac4a1d50cb849687dd",
+  "dirty": true,
+  "node": "v24.19.0",
+  "requestedRunsPerProperty": 1000,
+  "maxSequenceLength": 30,
+  "runtimeMs": 514.334147,
+  "results": [
+    {
+      "property": "history.ledger-settlement",
+      "failed": false,
+      "seed": -1281048861,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 143.62836599999997,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    },
+    {
+      "property": "history.ledger-reconciliation",
+      "failed": true,
+      "seed": 2122143588,
+      "path": "3:1:0:0:1:1:1:1:1:1",
+      "cases": 4,
+      "skips": 0,
+      "shrinks": 9,
+      "runtimeMs": 15.512467000000015,
+      "counterexample": [
+        {
+          "entries": [
+            {
+              "newUser": false,
+              "extraAttempts": 0,
+              "outcome": "completed",
+              "presence": "absent",
+              "args": null,
+              "output": ""
+            }
+          ],
+          "boundary": "none"
+        }
+      ],
+      "error": "AssertionError [ERR_ASSERTION]: call payload changed\n+ actual - expected\n\n  {\n    arguments: 'null',\n    call_id: 'call-0',\n    name: 'probe',\n+   occurrence: 1,\n+   turnId: 'turn-1',\n    type: 'function_call'\n  }\n\n    at file:///home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/scripts/generated-verification/ledger.mjs:191:14\n    at Property.predicate (file:///home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1355:99)\n    at Property.run (file:///home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:1324:24)\n    at propertyExecution (file:///home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2549:23)\n    at run (file:///home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2639:91)\n    at runIt (file:///home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2542:15)\n    at Module.check (file:///home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/node_modules/.pnpm/fast-check@4.10.2/node_modules/fast-check/lib/fast-check.js:2655:14)\n    at file:///home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/scripts/generated-verification/run.mjs:63:31\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+      "replay": "pnpm verify:generated --property history.ledger-reconciliation --seed=2122143588 --path '3:1:0:0:1:1:1:1:1:1' --runs 1000"
+    },
+    {
+      "property": "history.pair-projection",
+      "failed": false,
+      "seed": -1923217390,
+      "path": null,
+      "cases": 1000,
+      "skips": 0,
+      "shrinks": 0,
+      "runtimeMs": 355.16010200000005,
+      "counterexample": null,
+      "error": null,
+      "replay": null
+    }
+  ]
+}
+[ELIFECYCLE] Command failed with exit code 1.

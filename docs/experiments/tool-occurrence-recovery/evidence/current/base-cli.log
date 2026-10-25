@@ -1,0 +1,47 @@
+$ cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts source/cli.integration.test.ts -t 'bare profile via|bare retains the outside-workspace|bare permits explicit sandbox'
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix[39m
+
+ [31m❯[39m source/cli.integration.test.ts [2m([22m[2m55 tests[22m[2m | [22m[31m4 failed[39m[2m | [22m[33m51 skipped[39m[2m)[22m[33m 3461[2mms[22m[39m
+[31m   [31m×[31m bare profile via flag keeps a small tool surface, project guidance, and versioned session identity[39m[33m 1831[2mms[22m[39m
+[31m   [31m×[31m bare profile via config keeps a small tool surface, project guidance, and versioned session identity[39m[33m 549[2mms[22m[39m
+[31m   [31m×[31m bare retains the outside-workspace edit approval boundary without asking headlessly[39m[33m 535[2mms[22m[39m
+[31m   [31m×[31m bare permits explicit sandbox scratch writes without approval[39m[33m 545[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via flag keeps a small tool surface, project guidance, and versioned session identity
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via config keeps a small tool surface, project guidance, and versioned session identity
+[31m[1mError[22m: Failed to build CLI for tests: [39m
+[36m [2m❯[22m cliPath source/cli.integration.test.ts:[2m50:11[22m[39m
+    [90m 48|[39m     )[33m;[39m
+    [90m 49|[39m   } [35mcatch[39m (error[33m:[39m any) {
+    [90m 50|[39m     throw new Error(`Failed to build CLI for tests: ${error.stderr?.to…
+    [90m   |[39m           [31m^[39m
+    [90m 51|[39m   }
+    [90m 52|[39m   // `pnpm build` copies the prompts next to the compiled output; do t…
+[90m [2m❯[22m source/cli.integration.test.ts:[2m1829:11[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare retains the outside-workspace edit approval boundary without asking headlessly
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare permits explicit sandbox scratch writes without approval
+[31m[1mError[22m: Failed to build CLI for tests: [39m
+[36m [2m❯[22m cliPath source/cli.integration.test.ts:[2m50:11[22m[39m
+    [90m 48|[39m     )[33m;[39m
+    [90m 49|[39m   } [35mcatch[39m (error[33m:[39m any) {
+    [90m 50|[39m     throw new Error(`Failed to build CLI for tests: ${error.stderr?.to…
+    [90m   |[39m           [31m^[39m
+    [90m 51|[39m   }
+    [90m 52|[39m   // `pnpm build` copies the prompts next to the compiled output; do t…
+[90m [2m❯[22m source/cli.integration.test.ts:[2m2039:8[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[33m51 skipped[39m[90m (55)[39m
+[2m   Start at [22m 09:10:40
+[2m   Duration [22m 3.71s[2m (transform 78ms, setup 19ms, import 104ms, tests 3.46s, environment 0ms)[22m
+
+[ELIFECYCLE] Command failed with exit code 1.

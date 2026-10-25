@@ -1,0 +1,44 @@
+[
+  {
+    "name": "typecheck",
+    "command": "pnpm typecheck",
+    "exit": 0,
+    "seconds": 2.92
+  },
+  {
+    "name": "lint",
+    "command": "pnpm lint",
+    "exit": 1,
+    "seconds": 23.71
+  },
+  {
+    "name": "no-unit-tests",
+    "command": "pnpm check:no-unit-tests",
+    "exit": 0,
+    "seconds": 0.87
+  },
+  {
+    "name": "runtime-integration",
+    "command": "pnpm test:integration source/services/agent-runtime/agent-runtime.integration.test.ts",
+    "exit": 0,
+    "seconds": 3.03
+  },
+  {
+    "name": "integration",
+    "command": "pnpm test:integration",
+    "exit": 1,
+    "seconds": 64.1
+  },
+  {
+    "name": "static",
+    "command": "pnpm test",
+    "exit": 0,
+    "seconds": 3.13
+  },
+  {
+    "name": "generated-history",
+    "command": "pnpm verify:generated --target history --runs 1000",
+    "exit": 1,
+    "seconds": 1.67
+  }
+]

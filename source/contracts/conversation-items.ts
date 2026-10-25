@@ -17,6 +17,9 @@ export interface AssistantTextItem {
 export interface ToolCall {
   type: 'tool_call';
   callId: string;
+  /** Application-owned admission identity; never provider wire metadata. */
+  turnId?: string;
+  occurrence?: number;
   toolName: string;
   arguments: unknown;
   providerItem?: Record<string, unknown>;
@@ -25,6 +28,9 @@ export interface ToolCall {
 export interface ToolResult {
   type: 'tool_result';
   callId: string;
+  /** Application-owned admission identity; never provider wire metadata. */
+  turnId?: string;
+  occurrence?: number;
   toolName: string;
   status: 'completed' | 'failed' | 'aborted' | 'unknown';
   output: unknown;

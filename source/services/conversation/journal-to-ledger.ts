@@ -1,246 +1,67 @@
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
-import type {
-  PersistedAssistantTurnItem,
-  PersistedToolCallItem,
-  PersistedToolResultItem,
-} from './conversation-persistence-types.js';
+import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
+import { projectPersistedAssistantItemToProviderHistory } from './conversation-turn-items.js';
 import { normalizeRunItems } from './run-item-normalizer.js';
+import { pairToolOccurrences, toolOccurrenceKey } from './tool-occurrence.js';
 
-const clone = <T>(value: T): T => {
-  try {
-    return structuredClone(value);
-  } catch {
-    return JSON.parse(JSON.stringify(value)) as T;
-  }
-};
-
-const makeHistoryItemForToolCall = (item: PersistedToolCallItem): unknown => {
-  const raw = item.providerItem;
-  if (raw && typeof raw === 'object') {
-    return clone(raw);
-  }
-  return {
-    type: 'function_call',
-    callId: item.callId,
-    name: item.toolName,
-    arguments: item.arguments,
-  };
-};
-
-const makeHistoryItemForToolResult = (item: PersistedToolResultItem): unknown => {
-  const raw = item.providerItem;
-  if (raw && typeof raw === 'object') {
-    return clone(raw);
-  }
-  return {
-    type: 'function_call_result',
-    callId: item.callId,
-    name: item.toolName,
-    output: item.output,
-  };
-};
-
-const makeHistoryItemForReasoning = (item: Extract<PersistedAssistantTurnItem, { type: 'reasoning' }>): unknown => {
-  const providerData = item.providerMetadata ? clone(item.providerMetadata) : undefined;
-  if (providerData && 'reasoning_content' in providerData) {
-    delete providerData.reasoning_content;
-  }
-
-  return {
-    type: 'reasoning',
-    ...(item.providerItemId ? { id: item.providerItemId } : {}),
-    content: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
-    rawContent: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
-    ...(providerData && Object.keys(providerData).length > 0 ? { providerData } : {}),
-  };
-};
-
-const withMissingReasoningPrefix = (historyItems: unknown[] | undefined, reasoningItems: unknown[]): unknown[] => {
-  const existing = historyItems ?? [];
-  if (reasoningItems.length === 0 || normalizeRunItems(existing).some((item) => item.type === 'reasoning')) {
-    return existing;
-  }
-  return [...reasoningItems, ...existing];
-};
-
-const hasToolResultForCall = (historyItems: readonly unknown[], callId: string): boolean =>
-  normalizeRunItems(historyItems).some((item) => item.type === 'tool_result' && item.callId === callId);
-
-const appendToolResultIfMissing = (
-  historyItems: unknown[] | undefined,
-  callId: string,
-  resultItem: unknown,
-): unknown[] => {
-  const existing = historyItems ?? [];
-  return hasToolResultForCall(existing, callId) ? existing : [...existing, resultItem];
-};
-
-/**
- * Reconstructs tool-execution ledger entries from persisted assistant turn
- * items. This lets the durable journal serve as the source of truth for
- * recovery instead of the legacy in-memory ledger.
- */
+/** Reconstruct authoritative ordered pairs, not a provider-call-ID map. */
 export function buildToolLedgerFromAssistantTurnItems(
   items: PersistedAssistantTurnItem[],
   turnId: string,
   startedAt: string,
 ): SavedToolExecution[] {
-  const entries: SavedToolExecution[] = [];
-  const calls = new Map<string, PersistedToolCallItem>();
-  let pendingReasoningHistoryItems: unknown[] = [];
-
-  for (const item of items) {
+  const entries = new Map<string, SavedToolExecution>();
+  let reasoning: unknown[] = [];
+  for (const item of pairToolOccurrences(items, turnId)) {
     if (item.type === 'reasoning') {
-      pendingReasoningHistoryItems.push(makeHistoryItemForReasoning(item));
+      reasoning.push(projectPersistedAssistantItemToProviderHistory(item));
       continue;
     }
-
-    if (item.type === 'tool_call') {
-      calls.set(item.callId, item);
-      const callHistoryItem = makeHistoryItemForToolCall(item);
-      const existing = entries.find((entry) => entry.callId === item.callId);
-      if (!existing) {
-        entries.push({
-          turnId,
-          callId: item.callId,
-          toolName: item.toolName,
-          arguments: item.arguments,
-          status: 'started',
-          startedAt,
-          historyItems: [...pendingReasoningHistoryItems, callHistoryItem].filter(Boolean) as unknown[],
-        });
-      } else {
-        existing.toolName = item.toolName;
-        existing.arguments = item.arguments;
-        if (!existing.historyItems || existing.historyItems.length === 0) {
-          existing.historyItems = [...pendingReasoningHistoryItems, callHistoryItem].filter(Boolean) as unknown[];
-        } else {
-          existing.historyItems = withMissingReasoningPrefix(existing.historyItems, pendingReasoningHistoryItems);
-        }
-      }
-      pendingReasoningHistoryItems = [];
+    if (item.type !== 'tool_call' && item.type !== 'tool_result') {
+      reasoning = [];
       continue;
     }
-
-    pendingReasoningHistoryItems = [];
-
-    if (item.type !== 'tool_result') {
-      continue;
-    }
-
-    let existing = entries.find((entry) => entry.callId === item.callId);
-    if (!existing) {
-      const call = calls.get(item.callId);
-      existing = {
-        turnId,
+    const key = toolOccurrenceKey(item);
+    let entry = entries.get(key);
+    if (!entry) {
+      entry = {
+        turnId: item.turnId ?? turnId,
         callId: item.callId,
+        occurrence: item.occurrence,
         toolName: item.toolName,
-        arguments: call?.arguments,
         status: 'started',
         startedAt,
-        historyItems: call ? [makeHistoryItemForToolCall(call)] : [],
+        historyItems: [],
       };
-      entries.push(existing);
+      entries.set(key, entry);
     }
-
-    const callHistoryItem = existing.historyItems?.find((historyItem) =>
-      normalizeRunItems([historyItem]).some((normalizedItem) => normalizedItem.type === 'tool_call'),
-    );
-    existing.toolName = item.toolName;
-    existing.status = item.status;
-    existing.output = item.output;
-    existing.completedAt = startedAt;
-    const previousHistoryItems = existing.historyItems ?? (callHistoryItem ? [callHistoryItem] : []);
-    existing.historyItems = appendToolResultIfMissing(
-      previousHistoryItems,
-      item.callId,
-      makeHistoryItemForToolResult(item),
-    ).filter(Boolean) as unknown[];
+    if (item.type === 'tool_call') {
+      entry.arguments = item.arguments;
+      if (!entry.historyItems?.length)
+        entry.historyItems = [...reasoning, projectPersistedAssistantItemToProviderHistory(item)];
+    } else {
+      entry.status = item.status;
+      entry.output = item.output;
+      entry.completedAt = startedAt;
+      if (!normalizeRunItems(entry.historyItems).some((historyItem) => historyItem.type === 'tool_result'))
+        entry.historyItems = [...(entry.historyItems ?? []), projectPersistedAssistantItemToProviderHistory(item)];
+    }
+    reasoning = [];
   }
-
-  return entries;
+  return [...entries.values()];
 }
 
-/**
- * Reconstructs tool-execution ledger entries from journal item events,
- * preserving the original turn ids. Prefer this over
- * {@link buildToolLedgerFromAssistantTurnItems} when recovering from the
- * live journal so multi-turn history stays correctly ordered.
- */
+/** Preserve journal turn identity while sharing the authoritative pairing rule. */
 export function buildToolLedgerFromJournalEvents(
   events: AssistantJournalItemLogEvent[],
   startedAt: string,
 ): SavedToolExecution[] {
-  const entriesByTurn = new Map<string, SavedToolExecution[]>();
-  const pendingReasoningByTurn = new Map<string, unknown[]>();
-
+  const turns = new Map<string, PersistedAssistantTurnItem[]>();
   for (const event of events) {
-    const turnEntries = entriesByTurn.get(event.turnId) ?? [];
-    entriesByTurn.set(event.turnId, turnEntries);
-    const pendingReasoning = pendingReasoningByTurn.get(event.turnId) ?? [];
-    pendingReasoningByTurn.set(event.turnId, pendingReasoning);
-
-    const item = event.item;
-    if (item.type === 'reasoning') {
-      pendingReasoning.push(makeHistoryItemForReasoning(item));
-      continue;
-    }
-
-    if (item.type === 'tool_call') {
-      const existing = turnEntries.find((entry) => entry.callId === item.callId);
-      const callHistoryItem = makeHistoryItemForToolCall(item);
-      if (!existing) {
-        turnEntries.push({
-          turnId: event.turnId,
-          callId: item.callId,
-          toolName: item.toolName,
-          arguments: item.arguments,
-          status: 'started',
-          startedAt,
-          historyItems: [...pendingReasoning, callHistoryItem].filter(Boolean) as unknown[],
-        });
-      } else {
-        existing.toolName = item.toolName;
-        existing.arguments = item.arguments;
-        if (!existing.historyItems || existing.historyItems.length === 0) {
-          existing.historyItems = [...pendingReasoning, callHistoryItem].filter(Boolean) as unknown[];
-        } else {
-          existing.historyItems = withMissingReasoningPrefix(existing.historyItems, pendingReasoning);
-        }
-      }
-      pendingReasoning.length = 0;
-      continue;
-    }
-
-    pendingReasoning.length = 0;
-
-    if (item.type === 'tool_result') {
-      let existing = turnEntries.find((entry) => entry.callId === item.callId);
-      if (!existing) {
-        existing = {
-          turnId: event.turnId,
-          callId: item.callId,
-          toolName: item.toolName,
-          arguments: undefined,
-          status: 'started',
-          startedAt,
-          historyItems: [],
-        };
-        turnEntries.push(existing);
-      }
-      existing.toolName = item.toolName;
-      existing.status = item.status;
-      existing.output = item.output;
-      existing.completedAt = startedAt;
-      const previousHistoryItems = existing.historyItems ?? [];
-      existing.historyItems = appendToolResultIfMissing(
-        previousHistoryItems,
-        item.callId,
-        makeHistoryItemForToolResult(item),
-      ).filter(Boolean) as unknown[];
-    }
+    const items = turns.get(event.turnId) ?? [];
+    items.push(event.item);
+    turns.set(event.turnId, items);
   }
-
-  return [...entriesByTurn.values()].flat();
+  return [...turns].flatMap(([turnId, items]) => buildToolLedgerFromAssistantTurnItems(items, turnId, startedAt));
 }

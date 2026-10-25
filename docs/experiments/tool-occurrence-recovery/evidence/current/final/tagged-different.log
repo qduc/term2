@@ -1,0 +1,309 @@
+{
+  "tagged": true,
+  "different": true,
+  "events": [
+    {
+      "v": 1,
+      "ts": "2026-10-25T00:00:00Z",
+      "seq": 1,
+      "event": {
+        "type": "user_message",
+        "message": {
+          "id": "user-1",
+          "sender": "user",
+          "text": "question 1"
+        }
+      }
+    },
+    {
+      "v": 1,
+      "ts": "2026-10-25T00:00:01Z",
+      "seq": 2,
+      "event": {
+        "type": "assistant_turn",
+        "turnId": "turn-1",
+        "turn": {
+          "items": [
+            {
+              "type": "tool_call",
+              "callId": "same",
+              "toolName": "fake",
+              "arguments": "{}",
+              "turnId": "turn-1",
+              "occurrence": 1
+            },
+            {
+              "type": "tool_result",
+              "callId": "same",
+              "toolName": "fake",
+              "status": "completed",
+              "output": "result-1",
+              "turnId": "turn-1",
+              "occurrence": 1
+            }
+          ]
+        },
+        "state": {
+          "previousResponseId": null
+        }
+      }
+    },
+    {
+      "v": 1,
+      "ts": "2026-10-25T00:00:02Z",
+      "seq": 3,
+      "event": {
+        "type": "user_message",
+        "message": {
+          "id": "user-2",
+          "sender": "user",
+          "text": "question 2"
+        }
+      }
+    },
+    {
+      "v": 1,
+      "ts": "2026-10-25T00:00:03Z",
+      "seq": 4,
+      "event": {
+        "type": "assistant_turn",
+        "turnId": "turn-2",
+        "turn": {
+          "items": [
+            {
+              "type": "tool_call",
+              "callId": "same",
+              "toolName": "fake",
+              "arguments": "{}",
+              "turnId": "turn-2",
+              "occurrence": 1
+            },
+            {
+              "type": "tool_result",
+              "callId": "same",
+              "toolName": "fake",
+              "status": "completed",
+              "output": "result-2",
+              "turnId": "turn-2",
+              "occurrence": 1
+            }
+          ]
+        },
+        "state": {
+          "previousResponseId": null
+        }
+      }
+    }
+  ],
+  "state": {
+    "id": "",
+    "createdAt": "",
+    "previousResponseId": null,
+    "messages": [
+      {
+        "id": "user-1",
+        "sender": "user",
+        "text": "question 1"
+      },
+      {
+        "id": "command-same",
+        "sender": "command",
+        "status": "completed",
+        "command": "fake",
+        "output": "result-1",
+        "toolName": "fake",
+        "toolArgs": {},
+        "callId": "same",
+        "success": true
+      },
+      {
+        "id": "user-2",
+        "sender": "user",
+        "text": "question 2"
+      },
+      {
+        "id": "command-same",
+        "sender": "command",
+        "status": "completed",
+        "command": "fake",
+        "output": "result-2",
+        "toolName": "fake",
+        "toolArgs": {},
+        "callId": "same",
+        "success": true
+      }
+    ],
+    "history": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "question 1"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "type": "function_call",
+        "callId": "same",
+        "name": "fake",
+        "arguments": "{}"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "type": "function_call_result",
+        "callId": "same",
+        "name": "fake",
+        "output": "result-1"
+      },
+      {
+        "role": "user",
+        "type": "message",
+        "content": "question 2"
+      },
+      {
+        "turnId": "turn-2",
+        "occurrence": 1,
+        "type": "function_call",
+        "callId": "same",
+        "name": "fake",
+        "arguments": "{}"
+      },
+      {
+        "turnId": "turn-2",
+        "occurrence": 1,
+        "type": "function_call_result",
+        "callId": "same",
+        "name": "fake",
+        "output": "result-2"
+      }
+    ],
+    "toolLedger": [
+      {
+        "turnId": "turn-1",
+        "callId": "same",
+        "occurrence": 1,
+        "toolName": "fake",
+        "status": "completed",
+        "startedAt": "2026-10-25T00:00:01Z",
+        "historyItems": [
+          {
+            "turnId": "turn-1",
+            "occurrence": 1,
+            "type": "function_call",
+            "callId": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          {
+            "turnId": "turn-1",
+            "occurrence": 1,
+            "type": "function_call_result",
+            "callId": "same",
+            "name": "fake",
+            "output": "result-1"
+          }
+        ],
+        "arguments": "{}",
+        "output": "result-1",
+        "completedAt": "2026-10-25T00:00:01Z"
+      },
+      {
+        "turnId": "turn-2",
+        "callId": "same",
+        "occurrence": 1,
+        "toolName": "fake",
+        "status": "completed",
+        "startedAt": "2026-10-25T00:00:03Z",
+        "historyItems": [
+          {
+            "turnId": "turn-2",
+            "occurrence": 1,
+            "type": "function_call",
+            "callId": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          {
+            "turnId": "turn-2",
+            "occurrence": 1,
+            "type": "function_call_result",
+            "callId": "same",
+            "name": "fake",
+            "output": "result-2"
+          }
+        ],
+        "arguments": "{}",
+        "output": "result-2",
+        "completedAt": "2026-10-25T00:00:03Z"
+      }
+    ],
+    "replayWarnings": []
+  },
+  "requests": [
+    {
+      "instructions": "offline",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "question 1"
+            }
+          ]
+        },
+        {
+          "type": "tool_call",
+          "id": "same",
+          "name": "fake",
+          "arguments": "{}"
+        },
+        {
+          "type": "tool_result",
+          "id": "same",
+          "output": "result-1"
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "question 2"
+            }
+          ]
+        },
+        {
+          "type": "tool_call",
+          "id": "same",
+          "name": "fake",
+          "arguments": "{}"
+        },
+        {
+          "type": "tool_result",
+          "id": "same",
+          "output": "result-2"
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "resume"
+            }
+          ]
+        }
+      ],
+      "tools": [],
+      "applicationTools": [],
+      "signal": {},
+      "recoveryBudget": {
+        "maxRecoveryTimeMs": 90000,
+        "maxPhysicalAttempts": 3,
+        "maxAutomaticReplays": 1
+      }
+    }
+  ]
+}

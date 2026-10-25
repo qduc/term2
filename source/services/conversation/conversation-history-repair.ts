@@ -1,3 +1,4 @@
+import { toolOccurrenceKey } from './tool-occurrence.js';
 import { createHash } from 'node:crypto';
 import type { ToolCall, ToolResult } from '../../contracts/conversation-items.js';
 import { normalizeRunItem } from './run-item-normalizer.js';
@@ -56,7 +57,7 @@ const canonicalToolItem = (item: unknown): CanonicalToolItem | null => {
   return null;
 };
 
-const toolSignature = (item: CanonicalToolItem): string => `call:${item.callId}:${item.type}`;
+const toolSignature = (item: CanonicalToolItem): string => `call:${toolOccurrenceKey(item)}:${item.type}`;
 
 const cloneHistory = (history: unknown[]): unknown[] => {
   try {
@@ -160,9 +161,9 @@ const countDuplicatePairs = (
     }
 
     if (toolItem.type === 'tool_call') {
-      calls.set(toolItem.callId, (calls.get(toolItem.callId) ?? 0) + 1);
+      calls.set(toolOccurrenceKey(toolItem), (calls.get(toolOccurrenceKey(toolItem)) ?? 0) + 1);
     } else {
-      results.set(toolItem.callId, (results.get(toolItem.callId) ?? 0) + 1);
+      results.set(toolOccurrenceKey(toolItem), (results.get(toolOccurrenceKey(toolItem)) ?? 0) + 1);
     }
   }
 
@@ -283,9 +284,9 @@ const repairDuplicatedToolPairs = (input: unknown[]): { history: unknown[]; repa
       continue;
     }
     if (toolItem.type === 'tool_call') {
-      calls.set(toolItem.callId, (calls.get(toolItem.callId) ?? 0) + 1);
+      calls.set(toolOccurrenceKey(toolItem), (calls.get(toolOccurrenceKey(toolItem)) ?? 0) + 1);
     } else {
-      results.set(toolItem.callId, (results.get(toolItem.callId) ?? 0) + 1);
+      results.set(toolOccurrenceKey(toolItem), (results.get(toolOccurrenceKey(toolItem)) ?? 0) + 1);
     }
   }
 
@@ -304,22 +305,22 @@ const repairDuplicatedToolPairs = (input: unknown[]): { history: unknown[]; repa
   const keptResults = new Set<string>();
   const repaired = input.filter((item) => {
     const toolItem = canonicalToolItem(item);
-    if (!toolItem || !duplicatedPairCallIds.has(toolItem.callId)) {
+    if (!toolItem || !duplicatedPairCallIds.has(toolOccurrenceKey(toolItem))) {
       return true;
     }
 
     if (toolItem.type === 'tool_call') {
-      if (keptCalls.has(toolItem.callId)) {
+      if (keptCalls.has(toolOccurrenceKey(toolItem))) {
         return false;
       }
-      keptCalls.add(toolItem.callId);
+      keptCalls.add(toolOccurrenceKey(toolItem));
       return true;
     }
 
-    if (keptResults.has(toolItem.callId)) {
+    if (keptResults.has(toolOccurrenceKey(toolItem))) {
       return false;
     }
-    keptResults.add(toolItem.callId);
+    keptResults.add(toolOccurrenceKey(toolItem));
     return true;
   });
 

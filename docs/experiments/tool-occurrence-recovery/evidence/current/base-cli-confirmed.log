@@ -1,0 +1,77 @@
+$ cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts source/cli.integration.test.ts -t 'bare profile via|bare retains the outside-workspace|bare permits explicit sandbox'
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix[39m
+
+ [31m❯[39m source/cli.integration.test.ts [2m([22m[2m55 tests[22m[2m | [22m[31m4 failed[39m[2m | [22m[33m51 skipped[39m[2m)[22m[33m 4495[2mms[22m[39m
+[31m   [31m×[31m bare profile via flag keeps a small tool surface, project guidance, and versioned session identity[39m[33m 1611[2mms[22m[39m
+[31m   [31m×[31m bare profile via config keeps a small tool surface, project guidance, and versioned session identity[39m[33m 965[2mms[22m[39m
+[31m   [31m×[31m bare retains the outside-workspace edit approval boundary without asking headlessly[39m[33m 958[2mms[22m[39m
+[31m   [31m×[31m bare permits explicit sandbox scratch writes without approval[39m[33m 960[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via flag keeps a small tool surface, project guidance, and versioned session identity
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare profile via config keeps a small tool surface, project guidance, and versioned session identity
+[31m[1mAssertionError[22m: {"calls":[{"id":"bare-create","type":"function","function":{"name":"shell","arguments":"{\"command\":\"printf '%s\\\\n' \\\"bare edit succeeded\\\" > \\\"result.txt\\\"\",\"description\":\"Write the fixture file\"}"}}],"results":[{"id":"bare-create","content":"\"Error: Sandbox blocked this command. To request a one-shot escape, call shell again with sandbox=\\\"unsandboxed\\\"; user approval will be required.\""}]}: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m1843:9[22m[39m
+    [90m1841|[39m         fs[33m.[39m[34mexistsSync[39m(path[33m.[39m[34mjoin[39m(repo[33m,[39m [32m'result.txt'[39m))[33m,[39m
+    [90m1842|[39m         [33mJSON[39m[33m.[39m[34mstringify[39m([34mlastWireToolExchange[39m(mock[33m.[39m[34mcapturedRequests[39m()))[33m,[39m
+    [90m1843|[39m       )[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m         [31m^[39m
+    [90m1844|[39m       expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).t…
+    [90m1845|[39m       [35mconst[39m request [33m=[39m mock[33m.[39m[34mcapturedRequests[39m()[[34m0[39m][33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare retains the outside-workspace edit approval boundary without asking headlessly
+[31m[1mAssertionError[22m: expected '"Tool execution was not approved. Use…' to match /exit [1-9]/[39m
+
+[32m- Expected:[39m
+/exit [1-9]/
+
+[31m+ Received:[39m
+"\"Tool execution was not approved. User's reason: Non-interactive mode: use --auto-approve to allow tool execution\""
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m2055:48[22m[39m
+    [90m2053|[39m     } [35melse[39m {
+    [90m2054|[39m       // The sandbox's denial text is platform-specific; the failed ex…
+    [90m2055|[39m       [34mexpect[39m(toolExchange[33m.[39mresults[[34m0[39m][33m?.[39mcontent)[33m.[39m[34mtoMatch[39m([36m/exit [1-9]/[39m)[33m;[39m
+    [90m   |[39m                                                [31m^[39m
+    [90m2056|[39m     }
+    [90m2057|[39m   } [35mfinally[39m {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m source/cli.integration.test.ts[2m > [22mbare permits explicit sandbox scratch writes without approval
+[31m[1mAssertionError[22m: {"calls":[{"id":"outside-create","type":"function","function":{"name":"shell","arguments":"{\"command\":\"printf '%s\\\\n' \\\"fixture edit\\\" > \\\"/tmp/qduc/term2-nodejs/term2-cli-test-Mj09Ri/scratch/term2-nodejs/outside.txt\\\"\",\"description\":\"Write the fixture file\"}"}}],"results":[{"id":"outside-create","content":"\"Tool execution was not approved. User's reason: Non-interactive mode: use --auto-approve to allow tool execution\""}]}: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m source/cli.integration.test.ts:[2m2044:98[22m[39m
+    [90m2042|[39m     )[33m;[39m
+    [90m2043|[39m     [34mexpect[39m(result[33m.[39mstatus[33m,[39m result[33m.[39mstderr)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m2044|[39m     expect(fs.existsSync(target), JSON.stringify(lastWireToolExchange(…
+    [90m   |[39m                                                                                                  [31m^[39m
+    [90m2045|[39m     [34mexpect[39m(result[33m.[39mstdout)[33m.[39m[34mtoContain[39m(reply)[33m;[39m
+    [90m2046|[39m     [35mconst[39m toolExchange [33m=[39m [34mlastWireToolExchange[39m(mock[33m.[39m[34mcapturedRequests[39m())[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[33m51 skipped[39m[90m (55)[39m
+[2m   Start at [22m 09:11:45
+[2m   Duration [22m 4.75s[2m (transform 81ms, setup 19ms, import 107ms, tests 4.49s, environment 0ms)[22m
+
+[ELIFECYCLE] Command failed with exit code 1.

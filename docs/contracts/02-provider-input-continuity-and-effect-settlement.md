@@ -70,9 +70,16 @@ The evidence below records that baseline; ownership references describe the curr
 
 ## 4. Identities and state crossing the boundary
 
-- `callId` pairs — a ledger entry records `turnId`, `callId`, `toolName`,
-  `status`, `output?`, `dispatchedAt?`, `historyItems`
-  (`tool-execution-ledger.ts:12-25`). `ToolExecutionStatus`:
+- Provider `callId` correlates a call/result but may repeat across model rounds.
+  `SavedToolExecution` in `tool-execution-ledger.ts` records `turnId`, `callId`,
+  optional `occurrence`, `toolName`, `status`, `output?`, `dispatchedAt?` and
+  `historyItems`. New admissions allocate a positive per-turn/per-call ordinal
+  before validation, approval and dispatch. Journal, replay, direct settlement,
+  segment/history repair and surge checks use the application-owned occurrence
+  key; provider call IDs and raw provider payloads are not rewritten. Untagged
+  authoritative finals align only to their owning turn; accumulated-history
+  alignment remains conversation-wide. Legacy absent metadata remains readable.
+  See `tool-occurrence.ts` (`toolOccurrenceKey`, `pairToolOccurrences`). `ToolExecutionStatus`:
   `'started' | 'completed' | 'failed' | 'approval_required' | 'aborted' | 'unknown'`
   (`:4`).
 - `previousResponseId` + `outstandingToolCallIds` in `ProviderContinuity`

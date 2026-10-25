@@ -1,0 +1,172 @@
+{
+  "id": "distinct-final",
+  "createdAt": "2026-10-25T02:07:15.679Z",
+  "projectPath": "/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/green/adapter-sVit0G",
+  "previousResponseId": null,
+  "messages": [
+    {
+      "id": "command-call-0-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake",
+      "output": "turn-result-0",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 0
+      },
+      "callId": "call-0-0",
+      "success": true
+    },
+    {
+      "id": "command-call-1-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake",
+      "output": "turn-result-1",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 1
+      },
+      "callId": "call-1-0",
+      "success": true
+    },
+    {
+      "id": "bot-bot-turn-0-2026-10-25T02:07:15.716Z-0",
+      "sender": "bot",
+      "status": "finalized",
+      "text": "done"
+    }
+  ],
+  "history": [
+    {
+      "type": "function_call",
+      "callId": "call-0-0",
+      "name": "fake",
+      "arguments": "{\"iteration\":0}",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call_result",
+      "callId": "call-0-0",
+      "name": "fake",
+      "output": "turn-result-0",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call",
+      "callId": "call-1-0",
+      "name": "fake",
+      "arguments": "{\"iteration\":1}",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "type": "function_call_result",
+      "callId": "call-1-0",
+      "name": "fake",
+      "output": "turn-result-1",
+      "turnId": "turn-1",
+      "occurrence": 1
+    },
+    {
+      "role": "assistant",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "done"
+        }
+      ]
+    }
+  ],
+  "toolLedger": [
+    {
+      "turnId": "turn-1",
+      "callId": "call-0-0",
+      "occurrence": 1,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:07:15.716Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "call-0-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "call-0-0",
+          "name": "fake",
+          "output": "turn-result-0",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      ],
+      "arguments": "{\"iteration\":0}",
+      "output": "turn-result-0",
+      "completedAt": "2026-10-25T02:07:15.716Z"
+    },
+    {
+      "turnId": "turn-1",
+      "callId": "call-1-0",
+      "occurrence": 1,
+      "toolName": "fake",
+      "status": "completed",
+      "startedAt": "2026-10-25T02:07:15.716Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "call-1-0",
+          "name": "fake",
+          "arguments": "{\"iteration\":1}",
+          "turnId": "turn-1",
+          "occurrence": 1
+        },
+        {
+          "type": "function_call_result",
+          "callId": "call-1-0",
+          "name": "fake",
+          "output": "turn-result-1",
+          "turnId": "turn-1",
+          "occurrence": 1
+        }
+      ],
+      "arguments": "{\"iteration\":1}",
+      "output": "turn-result-1",
+      "completedAt": "2026-10-25T02:07:15.716Z"
+    }
+  ],
+  "costRecords": [
+    {
+      "requestId": "req-5",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    },
+    {
+      "requestId": "req-6",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    },
+    {
+      "requestId": "req-7",
+      "provider": "openai",
+      "model": "fixture",
+      "serviceTier": "standard",
+      "outcome": "completed",
+      "unpricedReason": "missing_usage"
+    }
+  ],
+  "replayWarnings": []
+}

@@ -1,3 +1,6 @@
+import { pairToolOccurrences, toolOccurrenceKey, toolOccurrenceMetadata } from './tool-occurrence.js';
+import { buildToolLedgerFromAssistantTurnItems } from './journal-to-ledger.js';
+import { alignHistoryToolOccurrences, normalizeToolLedgerOccurrences } from '../tool-execution-ledger.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { ModelSelectionSchema } from '../settings/model-selection.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
@@ -21,10 +24,8 @@ import type {
   PersistedAssistantTurn,
   PersistedAssistantTurnItem,
 } from './conversation-persistence-types.js';
-import {
-  projectPersistedAssistantItemToProviderHistory,
-  synthesizeHistoryFromAssistantTurn,
-} from './conversation-turn-items.js';
+import { normalizeRunItems } from './run-item-normalizer.js';
+import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
 import { formatPatchOutputItems, coerceToText } from '../../tools/format-helpers.js';
 import { projectProviderHistory } from './conversation-state-projector.js';
 import {
@@ -34,7 +35,6 @@ import {
   isToolResultHistoryItem,
 } from '../tool-execution-ledger.js';
 import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
-import { normalizeRunItems } from './run-item-normalizer.js';
 import {
   legacyModeFromProfileId,
   profileIdFromLegacyMode,
@@ -204,9 +204,6 @@ interface ReplayState {
   activeTurnStartIndex: number;
 }
 
-const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>): unknown =>
-  projectPersistedAssistantItemToProviderHistory(item);
-
 /**
  * Returns the journal slot for the current user turn, allocating it on
  * first use. Journals are keyed by the number of user messages seen so
@@ -231,109 +228,54 @@ const getOrCreateJournal = (state: ReplayState, ts: string, key: string, turnId?
   return journal;
 };
 
-const makeHistoryItemForToolResult = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_result' }>): unknown =>
-  projectPersistedAssistantItemToProviderHistory(item);
-
-const makeHistoryItemForReasoning = (item: Extract<PersistedAssistantTurnItem, { type: 'reasoning' }>): unknown =>
-  projectPersistedAssistantItemToProviderHistory(item);
-
-const withMissingReasoningPrefix = (historyItems: unknown[] | undefined, reasoningItems: unknown[]): unknown[] => {
-  const existing = historyItems ?? [];
-  if (reasoningItems.length === 0 || normalizeRunItems(existing).some((item) => item.type === 'reasoning')) {
-    return existing;
-  }
-  return [...reasoningItems, ...existing];
-};
-
-const hasToolResultForCall = (historyItems: readonly unknown[], callId: string): boolean =>
-  normalizeRunItems(historyItems).some((item) => item.type === 'tool_result' && item.callId === callId);
-
-const appendToolResultIfMissing = (
-  historyItems: unknown[] | undefined,
-  callId: string,
-  resultItem: unknown,
-): unknown[] => {
-  const existing = historyItems ?? [];
-  return hasToolResultForCall(existing, callId) ? existing : [...existing, resultItem];
-};
-
+/** Authoritative pairs replace provisional lifecycle views, never settled siblings. */
 function mergeAssistantTurnIntoLedger(
   state: ReplayState,
   turn: PersistedAssistantTurn,
   ts: string,
   turnId?: string,
 ): void {
-  const calls = new Map<string, Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>>();
-  let pendingReasoningHistoryItems: unknown[] = [];
-  for (const item of turn.items) {
-    if (item.type === 'reasoning') {
-      pendingReasoningHistoryItems.push(makeHistoryItemForReasoning(item));
-      continue;
-    }
-
-    if (item.type === 'tool_call') {
-      calls.set(item.callId, item);
-      const callHistoryItem = makeHistoryItemForToolCall(item);
-      const existing = state.toolLedger.find((entry) => entry.callId === item.callId);
-      if (!existing) {
-        state.toolLedger.push({
-          turnId: turnId ?? `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`,
-          callId: item.callId,
-          toolName: item.toolName,
-          arguments: item.arguments,
-          status: 'started',
-          startedAt: ts,
-          historyItems: [...pendingReasoningHistoryItems, callHistoryItem],
-        });
-      } else {
-        existing.toolName = item.toolName;
-        existing.arguments = item.arguments;
-        if (!existing.historyItems || existing.historyItems.length === 0) {
-          existing.historyItems = [...pendingReasoningHistoryItems, callHistoryItem];
-        } else {
-          existing.historyItems = withMissingReasoningPrefix(existing.historyItems, pendingReasoningHistoryItems);
-        }
-      }
-      pendingReasoningHistoryItems = [];
-      continue;
-    }
-
-    pendingReasoningHistoryItems = [];
-
-    if (item.type !== 'tool_result') {
-      continue;
-    }
-
-    let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
-    if (!existing) {
-      const call = calls.get(item.callId);
-      existing = {
-        turnId: turnId ?? `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`,
-        callId: item.callId,
-        toolName: item.toolName,
-        arguments: call?.arguments,
-        status: 'started',
-        startedAt: ts,
-        historyItems: call ? [makeHistoryItemForToolCall(call)] : [],
-      };
-      state.toolLedger.push(existing);
-    }
-
-    const callHistoryItem = existing.historyItems?.find((historyItem) =>
-      normalizeRunItems([historyItem]).some(
-        (normalized) => normalized.type === 'tool_call' && normalized.callId === item.callId,
-      ),
+  const id = turnId ?? `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`;
+  const entries = buildToolLedgerFromAssistantTurnItems(turn.items, id, ts);
+  for (const entry of entries) {
+    state.toolLedger = state.toolLedger.filter(
+      (candidate) =>
+        !(
+          candidate.occurrence === undefined &&
+          candidate.callId === entry.callId &&
+          (candidate.turnId === id || candidate.turnId === 'turn-interrupted')
+        ),
     );
-    existing.toolName = item.toolName;
-    existing.status = item.status;
-    existing.output = item.output;
-    existing.completedAt = ts;
-    const previousHistoryItems = existing.historyItems ?? (callHistoryItem ? [callHistoryItem] : []);
-    existing.historyItems = appendToolResultIfMissing(
-      previousHistoryItems,
-      item.callId,
-      makeHistoryItemForToolResult(item),
+    const index = state.toolLedger.findIndex((candidate) => toolOccurrenceKey(candidate) === toolOccurrenceKey(entry));
+    if (index === -1) state.toolLedger.push(entry);
+    else {
+      const existing = state.toolLedger[index]!;
+      // A later-segment direct settlement can precede the journal reconstruction.
+      state.toolLedger[index] =
+        entry.status === 'started' && existing.status !== 'started'
+          ? {
+              ...entry,
+              ...existing,
+              historyItems: existing.historyItems?.length ? existing.historyItems : entry.historyItems,
+            }
+          : {
+              ...existing,
+              ...entry,
+              ...(!normalizeRunItems(entry.historyItems).some((item) => item.type === 'tool_call') &&
+              normalizeRunItems(existing.historyItems).some((item) => item.type === 'tool_call')
+                ? { arguments: existing.arguments, historyItems: existing.historyItems }
+                : {}),
+            };
+    }
+  }
+  const keys = new Set(entries.map(toolOccurrenceKey));
+  const first = state.toolLedger.findIndex((entry) => keys.has(toolOccurrenceKey(entry)));
+  if (first >= 0) {
+    const ordered = entries.map(
+      (entry) => state.toolLedger.find((candidate) => toolOccurrenceKey(candidate) === toolOccurrenceKey(entry))!,
     );
+    state.toolLedger = state.toolLedger.filter((entry) => !keys.has(toolOccurrenceKey(entry)));
+    state.toolLedger.splice(first, 0, ...ordered);
   }
 }
 
@@ -618,8 +560,12 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
     }
     case 'tool_started': {
       state.inFlightToolCalls.set(event.toolCallId, { callId: event.toolCallId, toolName: event.toolName });
-      const existing = state.toolLedger.find((e) => e.callId === event.toolCallId);
-      if (!existing) {
+      const journal = getOrCreateJournal(state, ts, journalKeyForEvent(event, state), event.turnId);
+      const existing = state.toolLedger.find(
+        (e) => e.callId === event.toolCallId && e.turnId === (event.turnId ?? 'turn-interrupted'),
+      );
+      const journalCall = journal.items.some((item) => item.type === 'tool_call' && item.callId === event.toolCallId);
+      if (!existing && !journalCall) {
         state.toolLedger.push({
           turnId: event.turnId ?? 'turn-interrupted',
           callId: event.toolCallId,
@@ -629,17 +575,24 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
           startedAt: ts,
         });
       }
-      const journal = getOrCreateJournal(state, ts, journalKeyForEvent(event, state), event.turnId);
       journal.toolStartedByCall.set(event.toolCallId, event.toolName);
       return;
     }
     case 'tool_result': {
       state.inFlightToolCalls.delete(event.callId);
-      let existing = state.toolLedger.find((e) => e.callId === event.callId);
+      let existing = [...state.toolLedger]
+        .reverse()
+        .find(
+          (e) =>
+            e.callId === event.callId &&
+            e.turnId === (event.turnId ?? 'turn-interrupted') &&
+            (event.occurrence === undefined || e.occurrence === event.occurrence),
+        );
       if (!existing) {
         existing = {
           turnId: event.turnId ?? 'turn-interrupted',
           callId: event.callId,
+          occurrence: event.occurrence,
           toolName: event.toolName,
           status: 'started',
           startedAt: ts,
@@ -861,13 +814,30 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       return;
     }
     case 'assistant_turn': {
+      const authoritativeTurnId =
+        event.turnId ?? `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`;
+      if (!event.snapshot) {
+        for (const journal of state.pendingJournals.values()) {
+          if (
+            journal.turnId === authoritativeTurnId ||
+            (!event.turnId &&
+              journal.userTurnIndex === state.messages.filter((message) => message.sender === 'user').length)
+          )
+            mergeAssistantTurnIntoLedger(state, { items: journal.items }, journal.startedAt, authoritativeTurnId);
+        }
+      }
+      const alignedItems = alignHistoryToolOccurrences(
+        event.turn.items,
+        state.toolLedger.filter((entry) => entry.turnId === authoritativeTurnId),
+      ) as PersistedAssistantTurnItem[];
+      const turn = { ...event.turn, items: pairToolOccurrences(alignedItems, authoritativeTurnId) };
       const currentUserTurnIndex = state.messages.filter((message) => message.sender === 'user').length;
       const lastUserIndex = state.messages.map((m) => m.sender).lastIndexOf('user');
       const startIndex =
         state.trailingUserMessage && lastUserIndex !== -1 ? lastUserIndex + 1 : state.activeTurnStartIndex;
       state.messages = state.messages.slice(0, startIndex);
       const turnId = `bot-turn-${state.messages.length}-${ts}`;
-      const replayedMessages = replayAssistantTurn(event.turn, turnId, event.usage, event.displayUsage);
+      const replayedMessages = replayAssistantTurn(turn, turnId, event.usage, event.displayUsage);
       for (const m of replayedMessages) {
         state.messages.push(m);
       }
@@ -875,13 +845,14 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       const compactState = stateFromAssistantTurn(event);
       state.history = event.providerHistory
         ? cloneValue(event.providerHistory)
-        : synthesizeHistoryFromAssistantTurn(state.history, event.turn);
+        : synthesizeHistoryFromAssistantTurn(state.history, turn);
       if (event.snapshot) {
         const snap = cloneSnapshot(event.snapshot);
         state.toolLedger = snap.toolLedger;
       } else {
-        mergeAssistantTurnIntoLedger(state, event.turn, ts, event.turnId);
+        mergeAssistantTurnIntoLedger(state, turn, ts, authoritativeTurnId);
       }
+      state.history = projectProviderHistory({ history: state.history, toolLedger: state.toolLedger }).history;
       state.previousResponseId = compactState.previousResponseId;
       state.snapshotModel = compactState.model ?? state.snapshotModel;
       state.snapshotProvider = compactState.provider ?? state.snapshotProvider;
@@ -1046,76 +1017,11 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
     // Append corresponding history items (tool call / tool result) so the
     // next resumed request sees them. Also rehydrate the tool ledger so
     // existing recovery semantics keep working.
-    let pendingReasoningHistoryItems: unknown[] = [];
-    for (const item of journal.items) {
-      if (item.type === 'reasoning') {
-        const historyItem = makeHistoryItemForReasoning(item);
-        state.history.push(historyItem as ProviderInputItem);
-        pendingReasoningHistoryItems.push(historyItem);
-        continue;
-      }
-
-      if (item.type === 'provider_opaque') {
-        state.history.push(projectPersistedAssistantItemToProviderHistory(item));
-        pendingReasoningHistoryItems = [];
-        continue;
-      }
-
-      if (item.type === 'tool_call') {
-        const historyItem = makeHistoryItemForToolCall(item);
-        if (historyItem != null) {
-          state.history.push(historyItem as ProviderInputItem);
-        }
-        const existing = state.toolLedger.find((entry) => entry.callId === item.callId);
-        if (!existing) {
-          state.toolLedger.push({
-            turnId: journal.turnId ?? `turn-${journal.userTurnIndex}`,
-            callId: item.callId,
-            toolName: item.toolName,
-            arguments: item.arguments,
-            status: 'started',
-            startedAt: journal.startedAt,
-            historyItems: [...pendingReasoningHistoryItems, historyItem].filter(Boolean) as unknown[],
-          });
-        } else if (existing && (!existing.historyItems || existing.historyItems.length === 0)) {
-          existing.historyItems = [...pendingReasoningHistoryItems, historyItem].filter(Boolean) as unknown[];
-        } else if (existing) {
-          existing.historyItems = withMissingReasoningPrefix(existing.historyItems, pendingReasoningHistoryItems);
-        }
-        pendingReasoningHistoryItems = [];
-      } else if (item.type === 'tool_result') {
-        pendingReasoningHistoryItems = [];
-        const historyItem = makeHistoryItemForToolResult(item);
-        if (historyItem != null) {
-          state.history.push(historyItem as ProviderInputItem);
-        }
-        let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
-        if (!existing) {
-          existing = {
-            turnId: journal.turnId ?? `turn-${journal.userTurnIndex}`,
-            callId: item.callId,
-            toolName: item.toolName,
-            status: 'started',
-            startedAt: journal.startedAt,
-          };
-          state.toolLedger.push(existing);
-        }
-        existing.status = item.status;
-        existing.output = item.output;
-        existing.completedAt = journal.startedAt;
-        const callHistoryItem = existing.historyItems?.find((historyItem) =>
-          normalizeRunItems([historyItem]).some(
-            (normalized) => normalized.type === 'tool_call' && normalized.callId === item.callId,
-          ),
-        );
-        const previousHistoryItems = existing.historyItems ?? (callHistoryItem ? [callHistoryItem] : []);
-        existing.historyItems = appendToolResultIfMissing(previousHistoryItems, item.callId, historyItem).filter(
-          Boolean,
-        ) as unknown[];
-      } else {
-        pendingReasoningHistoryItems = [];
-      }
-    }
+    const id = journal.turnId ?? `turn-${journal.userTurnIndex}`;
+    const turn = { items: pairToolOccurrences(journal.items, id) };
+    mergeAssistantTurnIntoLedger(state, turn, journal.startedAt, id);
+    // Text deltas are represented below; canonical text items are authoritative.
+    state.history = synthesizeHistoryFromAssistantTurn(state.history, turn);
     if (journal.reasoningFragment) {
       state.history.push({
         type: 'reasoning',
@@ -1178,6 +1084,7 @@ const settleInterruptedToolEntries = (state: ReplayState): void => {
           {
             type: 'function_call',
             callId: entry.callId,
+            ...toolOccurrenceMetadata(entry),
             name: entry.toolName,
             arguments: typeof entry.arguments === 'string' ? entry.arguments : JSON.stringify(entry.arguments ?? {}),
           },
@@ -1190,6 +1097,7 @@ const settleInterruptedToolEntries = (state: ReplayState): void => {
           {
             type: 'function_call_output',
             callId: entry.callId,
+            ...toolOccurrenceMetadata(entry),
             output: RESTART_UNOBSERVED_TOOL_RESULT,
           },
         ];
@@ -1443,6 +1351,8 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
   }
 
   // Defensive idempotent final repair pass
+  state.toolLedger = normalizeToolLedgerOccurrences(state.toolLedger);
+  state.history = alignHistoryToolOccurrences(state.history, state.toolLedger) as ProviderInputItem[];
   const repair = repairConversationHistory(state.history);
   if (repair.repaired && repair.removedItems > 0) {
     state.history = repair.history as ProviderInputItem[];

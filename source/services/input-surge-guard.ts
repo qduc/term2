@@ -1,3 +1,4 @@
+import { toolOccurrenceKey } from './conversation/tool-occurrence.js';
 import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 import type { ToolCall, ToolResult } from '../contracts/conversation-items.js';
 
@@ -44,7 +45,7 @@ const normalizedToolItems = (item: unknown): (ToolCall | ToolResult)[] =>
 
 const toolCallSignature = (item: unknown): string | null => {
   const normalized = normalizedToolItems(item).find((candidate) => candidate.callId !== 'unknown-call');
-  return normalized ? `${normalized.type}:${normalized.callId}` : null;
+  return normalized ? `${normalized.type}:${toolOccurrenceKey(normalized)}` : null;
 };
 
 const serializedBytes = (input: unknown): number => {
@@ -87,10 +88,10 @@ export const collectDuplicateToolCallResultPairs = (input: unknown): { pairs: nu
     for (const normalized of normalizedToolItems(item)) {
       if (normalized.callId === 'unknown-call') continue;
       if (normalized.type === 'tool_call') {
-        calls.set(normalized.callId, (calls.get(normalized.callId) ?? 0) + 1);
+        calls.set(toolOccurrenceKey(normalized), (calls.get(toolOccurrenceKey(normalized)) ?? 0) + 1);
       }
       if (normalized.type === 'tool_result') {
-        results.set(normalized.callId, (results.get(normalized.callId) ?? 0) + 1);
+        results.set(toolOccurrenceKey(normalized), (results.get(toolOccurrenceKey(normalized)) ?? 0) + 1);
       }
     }
   }

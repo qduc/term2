@@ -1,0 +1,92 @@
+{
+  "id": "reused-cut",
+  "createdAt": "2026-10-25T02:06:25.558Z",
+  "projectPath": "/home/qduc/.local/state/coordinator/tasks/5c729fd449f94ed68e8cf92cba246866/workspaces/brief/2be94fa14002/evidence/adapter-cXBsIU",
+  "previousResponseId": null,
+  "messages": [
+    {
+      "id": "same-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake 0",
+      "output": "turn-result-0",
+      "success": true,
+      "isApprovalRejection": false,
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 0
+      },
+      "callId": "same"
+    },
+    {
+      "id": "same-0",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake 1",
+      "output": "turn-result-1",
+      "success": true,
+      "isApprovalRejection": false,
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 1
+      },
+      "callId": "same"
+    },
+    {
+      "id": "command-same",
+      "sender": "command",
+      "status": "completed",
+      "command": "fake",
+      "output": "turn-result-0",
+      "toolName": "fake",
+      "toolArgs": {
+        "iteration": 0
+      },
+      "callId": "same",
+      "success": true
+    }
+  ],
+  "history": [
+    {
+      "type": "function_call",
+      "callId": "same",
+      "name": "fake",
+      "arguments": "{\"iteration\":0}"
+    },
+    {
+      "type": "function_call_result",
+      "callId": "same",
+      "name": "fake",
+      "output": "turn-result-0"
+    }
+  ],
+  "toolLedger": [
+    {
+      "turnId": "turn-1",
+      "callId": "same",
+      "toolName": "fake",
+      "arguments": {
+        "iteration": 0
+      },
+      "status": "completed",
+      "startedAt": "2026-10-25T02:06:25.573Z",
+      "historyItems": [
+        {
+          "type": "function_call",
+          "callId": "same",
+          "name": "fake",
+          "arguments": "{\"iteration\":0}"
+        },
+        {
+          "type": "function_call_result",
+          "callId": "same",
+          "name": "fake",
+          "output": "turn-result-0"
+        }
+      ],
+      "output": "turn-result-0",
+      "completedAt": "2026-10-25T02:06:25.566Z"
+    }
+  ],
+  "replayWarnings": []
+}

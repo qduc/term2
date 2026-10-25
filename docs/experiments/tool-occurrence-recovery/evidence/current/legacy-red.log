@@ -1,0 +1,265 @@
+{
+  "tagged": false,
+  "different": false,
+  "events": [
+    {
+      "v": 1,
+      "ts": "2026-10-25T00:00:00Z",
+      "seq": 1,
+      "event": {
+        "type": "user_message",
+        "message": {
+          "id": "user-1",
+          "sender": "user",
+          "text": "question 1"
+        }
+      }
+    },
+    {
+      "v": 1,
+      "ts": "2026-10-25T00:00:01Z",
+      "seq": 2,
+      "event": {
+        "type": "assistant_turn",
+        "turnId": "turn-1",
+        "turn": {
+          "items": [
+            {
+              "type": "tool_call",
+              "callId": "same",
+              "toolName": "fake",
+              "arguments": "{}"
+            },
+            {
+              "type": "tool_result",
+              "callId": "same",
+              "toolName": "fake",
+              "status": "completed",
+              "output": "equal"
+            }
+          ]
+        },
+        "state": {
+          "previousResponseId": null
+        }
+      }
+    },
+    {
+      "v": 1,
+      "ts": "2026-10-25T00:00:02Z",
+      "seq": 3,
+      "event": {
+        "type": "user_message",
+        "message": {
+          "id": "user-2",
+          "sender": "user",
+          "text": "question 2"
+        }
+      }
+    },
+    {
+      "v": 1,
+      "ts": "2026-10-25T00:00:03Z",
+      "seq": 4,
+      "event": {
+        "type": "assistant_turn",
+        "turnId": "turn-2",
+        "turn": {
+          "items": [
+            {
+              "type": "tool_call",
+              "callId": "same",
+              "toolName": "fake",
+              "arguments": "{}"
+            },
+            {
+              "type": "tool_result",
+              "callId": "same",
+              "toolName": "fake",
+              "status": "completed",
+              "output": "equal"
+            }
+          ]
+        },
+        "state": {
+          "previousResponseId": null
+        }
+      }
+    }
+  ],
+  "state": {
+    "id": "",
+    "createdAt": "",
+    "previousResponseId": null,
+    "messages": [
+      {
+        "id": "user-1",
+        "sender": "user",
+        "text": "question 1"
+      },
+      {
+        "id": "command-same",
+        "sender": "command",
+        "status": "completed",
+        "command": "fake",
+        "output": "equal",
+        "toolName": "fake",
+        "toolArgs": {},
+        "callId": "same",
+        "success": true
+      },
+      {
+        "id": "user-2",
+        "sender": "user",
+        "text": "question 2"
+      },
+      {
+        "id": "command-same",
+        "sender": "command",
+        "status": "completed",
+        "command": "fake",
+        "output": "equal",
+        "toolName": "fake",
+        "toolArgs": {},
+        "callId": "same",
+        "success": true
+      }
+    ],
+    "history": [
+      {
+        "role": "user",
+        "type": "message",
+        "content": "question 1"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "type": "function_call",
+        "callId": "same",
+        "name": "fake",
+        "arguments": "{}"
+      },
+      {
+        "turnId": "turn-1",
+        "occurrence": 1,
+        "type": "function_call_result",
+        "callId": "same",
+        "name": "fake",
+        "output": "equal"
+      },
+      {
+        "role": "user",
+        "type": "message",
+        "content": "question 2"
+      }
+    ],
+    "toolLedger": [
+      {
+        "turnId": "turn-1",
+        "callId": "same",
+        "occurrence": 1,
+        "toolName": "fake",
+        "status": "completed",
+        "startedAt": "2026-10-25T00:00:03Z",
+        "historyItems": [
+          {
+            "turnId": "turn-1",
+            "occurrence": 1,
+            "type": "function_call",
+            "callId": "same",
+            "name": "fake",
+            "arguments": "{}"
+          },
+          {
+            "turnId": "turn-1",
+            "occurrence": 1,
+            "type": "function_call_result",
+            "callId": "same",
+            "name": "fake",
+            "output": "equal"
+          }
+        ],
+        "arguments": "{}",
+        "output": "equal",
+        "completedAt": "2026-10-25T00:00:03Z"
+      }
+    ],
+    "replayWarnings": [
+      "Repaired conversation history: removed 2 duplicated tool replay item(s)."
+    ]
+  },
+  "requests": [
+    {
+      "instructions": "offline",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "question 1"
+            }
+          ]
+        },
+        {
+          "type": "tool_call",
+          "id": "same",
+          "name": "fake",
+          "arguments": "{}"
+        },
+        {
+          "type": "tool_result",
+          "id": "same",
+          "output": "equal"
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "question 2"
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "resume"
+            }
+          ]
+        }
+      ],
+      "tools": [],
+      "applicationTools": [],
+      "signal": {},
+      "recoveryBudget": {
+        "maxRecoveryTimeMs": 90000,
+        "maxPhysicalAttempts": 3,
+        "maxAutomaticReplays": 1
+      }
+    }
+  ]
+}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: actual next request two calls
+
+1 !== 2
+
+    at <anonymous> (/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/legacy-request.mjs:20:117) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.19.0

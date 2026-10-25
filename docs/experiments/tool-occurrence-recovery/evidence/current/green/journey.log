@@ -1,0 +1,20 @@
+{"name":"distinct-cut","body":2,"memory":2,"ledger":2,"historyLatest":true,"nextRequestLatest":true,"errors":[{"name":"Error","message":"OFFLINE_CUT_BEFORE_FINAL"}]}
+{"name":"distinct-final","body":2,"memory":2,"ledger":2,"historyLatest":true,"nextRequestLatest":true,"errors":[]}
+{"name":"reused-cut","body":2,"memory":2,"ledger":2,"historyLatest":true,"nextRequestLatest":true,"errors":[{"name":"Error","message":"OFFLINE_CUT_BEFORE_FINAL"}]}
+{"name":"reused-final","body":2,"memory":2,"ledger":2,"historyLatest":true,"nextRequestLatest":true,"errors":[]}
+{"name":"identical-cut","body":2,"memory":2,"ledger":2,"historyLatest":true,"nextRequestLatest":true,"errors":[{"name":"Error","message":"OFFLINE_CUT_BEFORE_FINAL"}]}
+{"name":"identical-final","body":2,"memory":2,"ledger":2,"historyLatest":true,"nextRequestLatest":true,"errors":[]}
+{"name":"three-reused-cut","body":6,"memory":6,"ledger":6,"historyLatest":true,"nextRequestLatest":true,"errors":[{"name":"Error","message":"OFFLINE_CUT_BEFORE_FINAL"}]}
+{"name":"three-reused-final","body":6,"memory":6,"ledger":6,"historyLatest":true,"nextRequestLatest":true,"errors":[]}
+{"dir":"/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/green/adapter-sVit0G","sourceRoot":"/home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix"}
+PASS no-body-approval-false
+PASS no-body-approval-true
+PASS unknown-tool-no-body
+PASS admitted-before-result
+PASS direct-segment
+PASS same-occurrence-and-accumulated-segments
+PASS parallel-ordinary
+PASS parallel-invariant
+PASS final-legacy-rich-envelope-controls
+PASS guard duplicate controls
+Control evidence: /home/qduc/.local/state/coordinator/tasks/15d4f03c274d41afbcfe907d72d61729/worktrees/occurrence-fix/docs/experiments/tool-occurrence-recovery/evidence/current/green/controls-zBdiHG

@@ -9479,6 +9479,28 @@
       },
       "evidence": "pnpm typecheck passed. pnpm lint failed with 9431 errors/34 warnings, including untracked .cache comparison/probe scripts (Buffer/process no-undef, CJS no-require-imports). Release source-only lint gate passed with 31 warnings. Not classified as clean repository baseline. Focused Bare integration assertions passed 4/4 with socat on PATH.",
       "url": null
+    },
+    {
+      "id": "2026-10-25-tool-occurrence-recovery-author",
+      "recorded_on": "2026-10-25",
+      "commit": "4731459c44584c6e49854dac4a1d50cb849687dd",
+      "revision_kind": "dirty_isolated_worktree",
+      "suite": "occurrence-recovery-and-project-tiers",
+      "command": "node docs/experiments/tool-occurrence-recovery/verify.mjs; project tiers listed in experiment README",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": null
+      },
+      "result": {
+        "passed": null,
+        "failed": 4,
+        "skipped": null
+      },
+      "evidence": "docs/experiments/tool-occurrence-recovery/evidence/current/portable/identity.json; portable.log; tiers.json; additional-tiers.json. Goal entrypoint and retained preservation/pairing pass; typecheck/lint/static/runtime integration/generated history/e2e/provider tiers pass. Full integration 223 passed, 4 failed, 1 skipped. Four Bare sandbox failures reproduce on HEAD source with matching signatures (base-cli-confirmed.log). Initial base-cli.log invalid comparison (new module caused build failure); initial lint and generated metadata-oracle failures retained and resolved. Independent verification not performed; parent owns inspection. No clean commit certification.",
+      "task_ids": ["2026-10-25-tool-occurrence-recovery"],
+      "url": null
     }
   ]
 }

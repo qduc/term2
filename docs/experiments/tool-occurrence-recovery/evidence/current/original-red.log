@@ -1,0 +1,21 @@
+{"name":"distinct-cut","body":2,"memory":2,"ledger":2,"historyLatest":true,"nextRequestLatest":true,"errors":[{"name":"Error","message":"OFFLINE_CUT_BEFORE_FINAL"}]}
+{"name":"distinct-final","body":2,"memory":2,"ledger":2,"historyLatest":true,"nextRequestLatest":true,"errors":[]}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: full occurrence preservation: reused-cut
+
+1 !== 2
+
+    at <anonymous> (/home/qduc/.local/state/coordinator/tasks/5c729fd449f94ed68e8cf92cba246866/workspaces/brief/2be94fa14002/probes/adapter.mjs:50:50) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.19.0
+command exit=1 log=/home/qduc/.local/state/coordinator/tasks/5c729fd449f94ed68e8cf92cba246866/workspaces/brief/2be94fa14002/evidence/probe-VPzMcT.log

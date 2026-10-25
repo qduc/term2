@@ -1,0 +1,4 @@
+distinct-cut: bodies=2, memory=2, replay=2
+distinct-final: bodies=2, memory=2, replay=2
+reused-cut: bodies=2, memory=2, replay=2
+reused-final: bodies=2, memory=2, replay=2

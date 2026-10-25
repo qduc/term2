@@ -45,12 +45,14 @@ const taskLabel = (details: BackgroundTaskControlDetails): string => {
 const foregroundTaskLabel = (candidate: ForegroundTransferCandidate): string =>
   candidate.kind === 'shell' ? candidate.command : candidate.task;
 
-const compactLabel = (value: string, columns: number): string => {
+const compactLabel = (value: string, columns: number, prefix: string, suffix: string): string => {
   const firstLine = value.split(/\r?\n/).find((line) => line.trim().length > 0) ?? '';
   const collapsed = firstLine.replace(/\s+/g, ' ').trim();
-  // Budget includes marker, identity badge, separators, and status; retain at least
-  // a small identity fragment even in exceptionally narrow terminals.
-  const labelBudget = Math.max(1, Math.min(72, columns - 30));
+  // The classic frame has two borders and horizontal padding on both sides.
+  // Reserve the actual row decorations so the status stays with its identity.
+  const frameWidth = 4;
+  const overhead = frameWidth + terminalTextWidth(prefix) + terminalTextWidth(suffix);
+  const labelBudget = Math.max(1, Math.min(72, columns - overhead));
   return truncateTerminalText(collapsed, labelBudget);
 };
 
@@ -368,8 +370,18 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
             key={`${candidate.kind}:${candidate.kind === 'shell' ? candidate.callId : candidate.runId}`}
             color={index === selectedIndex ? theme.text : theme.textSubtle}
           >
-            {index === selectedIndex ? '❯' : ' '} [{candidate.kind === 'shell' ? 'Shell' : candidate.role} · foreground]{' '}
-            {compactLabel(foregroundTaskLabel(candidate), labelColumns)} · running
+            {`${index === selectedIndex ? '❯' : ' '} [${
+              candidate.kind === 'shell' ? 'Shell' : candidate.role
+            } · foreground] `}
+            {compactLabel(
+              foregroundTaskLabel(candidate),
+              labelColumns,
+              `${index === selectedIndex ? '❯' : ' '} [${
+                candidate.kind === 'shell' ? 'Shell' : candidate.role
+              } · foreground] `,
+              ' · running',
+            )}{' '}
+            · running
           </Text>
         ))}
         {tasks.map((task, index) => {
@@ -379,8 +391,14 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
               key={`${task.kind}:${task.id}`}
               color={displayIndex === selectedIndex ? theme.text : theme.textSubtle}
             >
-              {displayIndex === selectedIndex ? '❯' : ' '} [{task.kind === 'shell' ? 'Shell' : task.role}]{' '}
-              {compactLabel(taskLabel(task), labelColumns)} · {statusText(task)}
+              {`${displayIndex === selectedIndex ? '❯' : ' '} [${task.kind === 'shell' ? 'Shell' : task.role}] `}
+              {compactLabel(
+                taskLabel(task),
+                labelColumns,
+                `${displayIndex === selectedIndex ? '❯' : ' '} [${task.kind === 'shell' ? 'Shell' : task.role}] `,
+                ` · ${statusText(task)}`,
+              )}{' '}
+              · {statusText(task)}
             </Text>
           );
         })}

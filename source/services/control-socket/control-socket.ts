@@ -155,6 +155,7 @@ export interface ControlAdvertisement {
   socketPath: string;
   cwd: string;
   host: string;
+  discordInput?: boolean;
 }
 
 export function isControlSocketName(name: string): boolean {
@@ -374,6 +375,7 @@ export class ControlSocketServer {
         socketPath: this.socketPath,
         cwd: this.#options.cwd ?? process.cwd(),
         host: this.#options.host ?? os.hostname(),
+        ...(this.#options.discordInput === true ? { discordInput: true } : {}),
       };
       atomicWriteJson(this.advertisementPath, advertisement, 0o600);
       this.#ownsAdvertisement = true;
@@ -743,7 +745,8 @@ function readAdvertisement(file: string): ControlAdvertisement | null {
       typeof value.pid !== 'number' ||
       typeof value.startedAt !== 'string' ||
       typeof value.socketPath !== 'string' ||
-      typeof value.host !== 'string'
+      typeof value.host !== 'string' ||
+      (value.discordInput !== undefined && typeof value.discordInput !== 'boolean')
     )
       return null;
     return value as ControlAdvertisement;

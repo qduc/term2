@@ -62,6 +62,7 @@ function readAdvertisement(file: string): Advertisement {
       !Number.isInteger(ad.pid) ||
       typeof ad.startedAt !== 'string' ||
       !ad.bindings ||
+      typeof ad.bindings !== 'object' ||
       ad.socketPath !== file.replace(/\.json$/, '.sock')
     )
       throw new Error('Invalid Discord advertisement');
@@ -151,6 +152,25 @@ export class DiscordOutboundServer {
         }
       });
     });
+  }
+  refreshBindings(bindings: Record<string, DiscordBinding>): void {
+    if (!this.#owned || JSON.stringify(bindings) === JSON.stringify(this.#ad.bindings)) return;
+    try {
+      const current = readAdvertisement(this.#file);
+      if (current.pid !== this.#ad.pid || current.startedAt !== this.#ad.startedAt) return;
+      this.#ad.bindings = { ...bindings };
+      const temporary = `${this.#file}.${process.pid}.tmp`;
+      const fd = fs.openSync(temporary, 'w', 0o600);
+      try {
+        fs.writeFileSync(fd, JSON.stringify(this.#ad));
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      fs.renameSync(temporary, this.#file);
+    } catch {
+      /* advertisement ownership or persistence lost: do not overwrite */
+    }
   }
   async listen(): Promise<void> {
     if (fs.existsSync(this.#file)) {

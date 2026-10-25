@@ -92,11 +92,7 @@ Example `/absolute/private/discord.json` (replace every example ID/path):
   "channelId": "123456789012345678",
   "humanUserId": "234567890123456789",
   "coordinator": "coord",
-  "sessions": {
-    "coord": {"socket": "coord", "sessionId": "YOUR_EXISTING_SESSION_ID"},
-    "worker": {"socket": "worker", "sessionId": "YOUR_EXISTING_WORKER_ID"}
-  },
-  "stateDir": "/home/YOU/.local/state/term2-discord/private-channel",
+    "stateDir": "/home/YOU/.local/state/term2-discord/private-channel",
   "maxHops": 4
 }
 ```
@@ -117,9 +113,8 @@ term2 discord /absolute/private/discord.json
 
 Wait for `[bridge] Ready` in Discord **before sending new work**. First startup
 establishes a current-channel watermark; historical messages deliberately do not
-activate anything. Restart with unchanged config/state preserves the cursor,
-pending input and outbox. Do not delete the journal to “fix” an uncertain delivery.
-Only one bridge owns a state directory. Ctrl-C/SIGTERM stops the bridge loop after
+activate anything. Restart with unchanged config/state preserves the cursor, pending input and outbox. Late-attached opted-in sessions can also use `discord_send` and status/idempotent replay without restarting the bridge. Do not delete the journal to “fix” an uncertain delivery.
+Only one bridge owns a state directory. Generic discovery assumes one bridge per runtime directory. If multiple bridges advertise the same binding, outbound lookup is ambiguous and unavailable; do not rely on which bridge responds. Ctrl-C/SIGTERM stops the bridge loop after
 the current bounded operation; it does **not** stop the terminal sessions.
 
 ## Mobile usage and identity

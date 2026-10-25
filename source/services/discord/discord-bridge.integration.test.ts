@@ -263,10 +263,6 @@ async function fixture(
     channelId: '200',
     humanUserId: '100',
     coordinator: 'coord',
-    sessions: {
-      coord: { socket: 'coord', sessionId: 'session-coord' },
-      worker: { socket: 'worker', sessionId: 'session-worker' },
-    },
     stateDir: path.join(root, 'bridge'),
     maxHops: options.maxHops ?? 2,
   };

@@ -18,7 +18,6 @@ export interface DiscordBridgeConfig {
   channelId: string;
   humanUserId: string;
   coordinator: string;
-  sessions: Record<string, { socket: string; sessionId: string }>;
   stateDir: string;
   maxHops: number;
 }
@@ -42,6 +41,7 @@ interface Job {
   hops: number;
   state: 'new' | 'dispatching' | 'accepted' | 'done' | 'uncertain';
   noRoute?: boolean;
+  binding: Binding;
 }
 interface Outgoing {
   id: string;
@@ -58,13 +58,12 @@ interface Proactive {
 }
 interface Journal {
   proactive?: Proactive[];
-  v: 1;
+  v: 2;
   fingerprint: string;
   cursor: string;
   paused: boolean;
   stopPending?: boolean;
   retryAt?: number;
-  bindings: Record<string, Binding>;
   jobs: Job[];
   outbox: Outgoing[];
 }
@@ -74,11 +73,13 @@ const snowflakePattern = /^[0-9]{1,24}$/;
 /** Validate a private single-channel bridge configuration; no token belongs in this file. */
 export function parseDiscordBridgeConfig(value: unknown): DiscordBridgeConfig {
   const config = value as DiscordBridgeConfig;
+  if (config && typeof config === 'object' && Object.hasOwn(config, 'sessions'))
+    throw new Error('Pinned-session schema has been replaced; archive old state and use a fresh stateDir/config');
   if (
     !config ||
     typeof config !== 'object' ||
     Object.keys(config).some(
-      (key) => !['channelId', 'humanUserId', 'coordinator', 'sessions', 'stateDir', 'maxHops'].includes(key),
+      (key) => !['channelId', 'humanUserId', 'coordinator', 'stateDir', 'maxHops'].includes(key),
     ) ||
     typeof config.channelId !== 'string' ||
     !snowflakePattern.test(config.channelId) ||
@@ -87,30 +88,9 @@ export function parseDiscordBridgeConfig(value: unknown): DiscordBridgeConfig {
     typeof config.coordinator !== 'string' ||
     !aliasPattern.test(config.coordinator) ||
     typeof config.stateDir !== 'string' ||
-    !path.isAbsolute(config.stateDir) ||
-    !config.sessions ||
-    typeof config.sessions !== 'object' ||
-    Array.isArray(config.sessions) ||
-    Object.keys(config.sessions).length < 1 ||
-    Object.keys(config.sessions).length > 16 ||
-    !Object.hasOwn(config.sessions, config.coordinator)
+    !path.isAbsolute(config.stateDir)
   )
     throw new Error('Invalid Discord bridge config');
-  const sockets = new Set<string>();
-  for (const [alias, session] of Object.entries(config.sessions)) {
-    if (
-      !aliasPattern.test(alias) ||
-      !session ||
-      Object.keys(session).some((key) => !['socket', 'sessionId'].includes(key)) ||
-      typeof session.socket !== 'string' ||
-      !/^[A-Za-z0-9_-]{1,64}$/.test(session.socket) ||
-      typeof session.sessionId !== 'string' ||
-      !/^[A-Za-z0-9_-]{1,128}$/.test(session.sessionId) ||
-      sockets.has(session.socket)
-    )
-      throw new Error('Invalid or duplicated Discord session mapping');
-    sockets.add(session.socket);
-  }
   const maxHops = config.maxHops ?? 4;
   if (!Number.isInteger(maxHops) || maxHops < 1 || maxHops > 8) throw new Error('Invalid Discord hop limit');
   return { ...config, maxHops };
@@ -274,7 +254,7 @@ export class DiscordBridge {
         }
         this.#journal = JSON.parse(fs.readFileSync(this.#file, 'utf8'));
         if (
-          this.#journal.v !== 1 ||
+          this.#journal.v !== 2 ||
           this.#journal.fingerprint !== fingerprint ||
           !Array.isArray(this.#journal.jobs) ||
           !Array.isArray(this.#journal.outbox) ||
@@ -287,16 +267,17 @@ export class DiscordBridge {
                 'paused',
                 'stopPending',
                 'retryAt',
-                'bindings',
                 'jobs',
                 'outbox',
                 'proactive',
               ].includes(key),
           ) ||
           (this.#journal.proactive !== undefined && !Array.isArray(this.#journal.proactive))
-        ) {
-          throw new Error('Discord journal/config mismatch; reconcile retained inputs before remapping');
-        }
+        )
+          throw new Error('Discord journal/config mismatch; archive old state and use a fresh stateDir');
+        for (const job of this.#journal.jobs)
+          if (!job.binding || !job.binding.socketPath || !job.binding.sessionId || !job.binding.startedAt)
+            throw new Error('Invalid v2 Discord journal; archive old state and use a fresh stateDir');
         if (this.#journal.stopPending)
           this.#warn('Previous stop outcome uncertain; routing remains paused. Check each terminal before resume.');
         for (const output of this.#journal.outbox)
@@ -305,14 +286,7 @@ export class DiscordBridge {
             this.#warn('Uncertain Discord output retained; reconcile journal, do not resend blindly');
           }
       } else {
-        const ads = listControlAdvertisements(this.#runtimeDir);
-        const bindings: Record<string, Binding> = {};
-        for (const [alias, session] of Object.entries(this.#config.sessions)) {
-          const ad = ads.find((entry) => entry.name === session.socket && entry.sessionId === session.sessionId);
-          if (!ad) throw new Error('Configured Discord session is not available');
-          bindings[alias] = { socketPath: ad.socketPath, startedAt: ad.startedAt, sessionId: ad.sessionId };
-        }
-        this.#journal = { v: 1, fingerprint, cursor: '', paused: false, bindings, jobs: [], outbox: [] };
+        this.#journal = { v: 2, fingerprint, cursor: '', paused: false, jobs: [], outbox: [] };
       }
       this.#journal.proactive ??= [];
       for (const entry of this.#journal.proactive) {
@@ -325,8 +299,7 @@ export class DiscordBridge {
           !/^[A-Za-z0-9_-]{1,64}$/.test(entry.requestId) ||
           typeof entry.digest !== 'string' ||
           !/^[a-f0-9]{64}$/.test(entry.digest) ||
-          !this.#journal.bindings[entry.alias] ||
-          !sameDiscordBinding(entry.binding, this.#journal.bindings[entry.alias]!) ||
+          false ||
           entry.channelId !== this.#config.channelId ||
           !Array.isArray(entry.outputs) ||
           !entry.outputs.length ||
@@ -383,7 +356,7 @@ export class DiscordBridge {
       {
         fingerprint: this.#journal.fingerprint,
         channelId: this.#config.channelId,
-        bindings: this.#journal.bindings,
+        bindings: this.#liveBindings(),
       },
       (method, params) => this.#send(method, params),
     );
@@ -415,9 +388,9 @@ export class DiscordBridge {
       (sending && (typeof params.text !== 'string' || !params.text.trim() || params.text.length > 16_384))
     )
       return reject('invalid_input');
-    const alias = Object.keys(this.#journal.bindings).find((key) =>
-      sameDiscordBinding(params.binding, this.#journal.bindings[key]!),
-    );
+    const alias = Object.entries(this.#liveBindings()).find(([, binding]) =>
+      sameDiscordBinding(params.binding, binding),
+    )?.[0];
     if (!alias) return reject('identity_changed');
     if (!this.#owned || this.#failed) throw new Error('Discord persistence unavailable');
     const records = this.#journal.proactive!;
@@ -513,20 +486,22 @@ export class DiscordBridge {
     }
   }
 
+  #bindingMaybe(alias: string): boolean {
+    return Boolean(this.#liveBindings()[alias]);
+  }
+  #liveBindings(): Record<string, Binding> {
+    const all = listControlAdvertisements(this.#runtimeDir).filter((ad) => ad.discordInput === true);
+    if (all.length > 16) this.#warn('More than 16 opted-in Discord aliases are live; excess aliases are unavailable');
+    const result: Record<string, Binding> = {};
+    for (const ad of all)
+      if (Object.keys(result).length < 16)
+        result[ad.name] = { socketPath: ad.socketPath, sessionId: ad.sessionId, startedAt: ad.startedAt };
+    return result;
+  }
   #binding(alias: string): Binding {
-    const pinned = this.#journal.bindings[alias]!;
-    const session = this.#config.sessions[alias]!;
-    const live = listControlAdvertisements(this.#runtimeDir).find((entry) => entry.name === session.socket);
-    if (
-      !live ||
-      live.sessionId !== session.sessionId ||
-      live.sessionId !== pinned.sessionId ||
-      live.startedAt !== pinned.startedAt ||
-      live.socketPath !== pinned.socketPath
-    ) {
-      throw new Error('Discord session process changed; explicit remapping required');
-    }
-    return pinned;
+    const binding = this.#liveBindings()[alias];
+    if (!binding) throw new Error('Discord alias is not attached');
+    return binding;
   }
 
   async #ingress(): Promise<void> {
@@ -568,12 +543,7 @@ export class DiscordBridge {
           const route = /^@([A-Za-z0-9_-]+)(?:\s+|$)([\s\S]*)$/.exec(message.content);
           const alias = route?.[1] ?? this.#config.coordinator;
           const text = route ? route[2]!.trim() : message.content;
-          if (
-            (message.content.startsWith('@') && !route) ||
-            !Object.hasOwn(this.#config.sessions, alias) ||
-            !text ||
-            text.length > 32_000
-          ) {
+          if ((message.content.startsWith('@') && !route) || !text || text.length > 32_000) {
             this.#post(`reject_${message.id}`, '[bridge] Unknown target, empty or oversized message; not delivered.');
           } else if (this.#journal.jobs.filter((job) => !['done', 'uncertain'].includes(job.state)).length >= 128) {
             // Bound work admission, never the shared cursor carrying human recovery controls.
@@ -581,15 +551,24 @@ export class DiscordBridge {
               `overflow_${message.id}`,
               `[bridge → ${alias}] Work inbox full (128 pending). Message ${message.id} NOT accepted: not queued or sent to a session. Resend after the backlog drains. !bridge status/resume/stop remain available.`,
             );
-          } else
-            this.#journal.jobs.push({
-              id: `discord_${message.id}`,
-              alias,
-              text,
-              origin: { kind: 'human', sender: this.#config.humanUserId },
-              hops: 0,
-              state: 'new',
-            });
+          } else {
+            const binding = this.#liveBindings()[alias];
+            if (!binding)
+              this.#post(
+                `reject_${message.id}`,
+                `[bridge] Target ${alias} is not attached; message ${message.id} NOT accepted.`,
+              );
+            else
+              this.#journal.jobs.push({
+                id: `discord_${message.id}`,
+                alias,
+                binding,
+                text,
+                origin: { kind: 'human', sender: this.#config.humanUserId },
+                hops: 0,
+                state: 'new',
+              });
+          }
         }
       }
       this.#journal.cursor = message.id;
@@ -615,7 +594,7 @@ export class DiscordBridge {
       }
       this.#save();
       let stopped = true;
-      for (const alias of Object.keys(this.#config.sessions)) {
+      for (const alias of Object.keys(this.#liveBindings())) {
         try {
           const binding = this.#binding(alias);
           await callDiscordControl(binding.socketPath, 'interrupt');
@@ -646,7 +625,9 @@ export class DiscordBridge {
     for (const job of [...this.#journal.jobs]) {
       if (job.state === 'done' || job.state === 'uncertain') continue;
       try {
-        const binding = this.#binding(job.alias);
+        const binding = job.binding;
+        const live = this.#liveBindings()[job.alias];
+        if (!live || !sameDiscordBinding(live, binding)) throw new Error('Discord session identity changed');
         const params = { ...binding, clientRequestId: job.id };
         if (job.state === 'new') {
           if (this.#journal.paused) continue;
@@ -692,7 +673,7 @@ export class DiscordBridge {
           const route = /^@([A-Za-z0-9_-]+)\s+([\s\S]+)$/.exec(text);
           if (route && !job.noRoute && !result.truncated) {
             const alias = route[1]!;
-            if (!Object.hasOwn(this.#config.sessions, alias))
+            if (!this.#bindingMaybe(alias))
               this.#post(`${job.id}_target`, `[bridge] Unknown agent target ${alias}; not delivered.`);
             else if (job.hops >= this.#config.maxHops)
               this.#post(`${job.id}_limit`, '[bridge] Peer hop limit reached; waiting for the human.');
@@ -700,6 +681,7 @@ export class DiscordBridge {
               this.#journal.jobs.push({
                 id: `${job.id}_p`,
                 alias,
+                binding: this.#binding(alias),
                 text: route[2]!,
                 origin: { kind: 'agent', sender: job.alias },
                 hops: job.hops + 1,
@@ -785,6 +767,7 @@ export class DiscordBridge {
     if (Date.now() < this.#retryAt) return;
     this.#running = true;
     try {
+      this.#outbound?.refreshBindings(this.#liveBindings());
       try {
         await this.#ingress();
         this.#readFailures = 0;

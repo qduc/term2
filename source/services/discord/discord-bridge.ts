@@ -70,6 +70,48 @@ interface Journal {
 const aliasPattern = /^[a-z][a-z0-9_-]{0,31}$/;
 const snowflakePattern = /^[0-9]{1,24}$/;
 
+function validBinding(value: unknown): value is Binding {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const binding = value as Record<string, unknown>;
+  const keys = Object.keys(binding);
+  return (
+    keys.length === 3 &&
+    keys.every((key) => ['socketPath', 'sessionId', 'startedAt'].includes(key)) &&
+    typeof binding.socketPath === 'string' &&
+    typeof binding.sessionId === 'string' &&
+    typeof binding.startedAt === 'string'
+  );
+}
+const jobStates = ['new', 'dispatching', 'accepted', 'done', 'uncertain'];
+function validJob(value: unknown): value is Job {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const job = value as Record<string, unknown>;
+  const origin = job.origin;
+  if (!origin || typeof origin !== 'object' || Array.isArray(origin)) return false;
+  const source = origin as Record<string, unknown>;
+  return (
+    Object.keys(job).every((key) =>
+      ['id', 'alias', 'text', 'origin', 'hops', 'state', 'noRoute', 'binding'].includes(key),
+    ) &&
+    typeof job.id === 'string' &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(job.id) &&
+    typeof job.alias === 'string' &&
+    aliasPattern.test(job.alias) &&
+    typeof job.text === 'string' &&
+    typeof job.hops === 'number' &&
+    Number.isInteger(job.hops) &&
+    job.hops >= 0 &&
+    job.hops <= 8 &&
+    jobStates.includes(job.state as string) &&
+    (job.noRoute === undefined || typeof job.noRoute === 'boolean') &&
+    validBinding(job.binding) &&
+    Object.keys(source).length === 2 &&
+    ['human', 'agent'].includes(source.kind as string) &&
+    typeof source.sender === 'string' &&
+    (source.kind === 'human' ? snowflakePattern.test(source.sender) : aliasPattern.test(source.sender))
+  );
+}
+
 /** Validate a private single-channel bridge configuration; no token belongs in this file. */
 export function parseDiscordBridgeConfig(value: unknown): DiscordBridgeConfig {
   const config = value as DiscordBridgeConfig;
@@ -276,8 +318,7 @@ export class DiscordBridge {
         )
           throw new Error('Discord journal/config mismatch; archive old state and use a fresh stateDir');
         for (const job of this.#journal.jobs)
-          if (!job.binding || !job.binding.socketPath || !job.binding.sessionId || !job.binding.startedAt)
-            throw new Error('Invalid v2 Discord journal; archive old state and use a fresh stateDir');
+          if (!validJob(job)) throw new Error('Invalid v2 Discord journal; archive old state and use a fresh stateDir');
         if (this.#journal.stopPending)
           this.#warn('Previous stop outcome uncertain; routing remains paused. Check each terminal before resume.');
         for (const output of this.#journal.outbox)
@@ -299,7 +340,8 @@ export class DiscordBridge {
           !/^[A-Za-z0-9_-]{1,64}$/.test(entry.requestId) ||
           typeof entry.digest !== 'string' ||
           !/^[a-f0-9]{64}$/.test(entry.digest) ||
-          false ||
+          !validBinding(entry.binding) ||
+          !aliasPattern.test(entry.alias) ||
           entry.channelId !== this.#config.channelId ||
           !Array.isArray(entry.outputs) ||
           !entry.outputs.length ||
@@ -356,7 +398,6 @@ export class DiscordBridge {
       {
         fingerprint: this.#journal.fingerprint,
         channelId: this.#config.channelId,
-        bindings: this.#liveBindings(),
       },
       (method, params) => this.#send(method, params),
     );
@@ -388,7 +429,7 @@ export class DiscordBridge {
       (sending && (typeof params.text !== 'string' || !params.text.trim() || params.text.length > 16_384))
     )
       return reject('invalid_input');
-    const alias = Object.entries(this.#liveBindings()).find(([, binding]) =>
+    const alias = Object.entries(this.#attached()).find(([, binding]) =>
       sameDiscordBinding(params.binding, binding),
     )?.[0];
     if (!alias) return reject('identity_changed');
@@ -486,20 +527,17 @@ export class DiscordBridge {
     }
   }
 
-  #bindingMaybe(alias: string): boolean {
-    return Boolean(this.#liveBindings()[alias]);
-  }
-  #liveBindings(): Record<string, Binding> {
-    const all = listControlAdvertisements(this.#runtimeDir).filter((ad) => ad.discordInput === true);
-    if (all.length > 16) this.#warn('More than 16 opted-in Discord aliases are live; excess aliases are unavailable');
-    const result: Record<string, Binding> = {};
-    for (const ad of all)
-      if (Object.keys(result).length < 16)
-        result[ad.name] = { socketPath: ad.socketPath, sessionId: ad.sessionId, startedAt: ad.startedAt };
-    return result;
+  /** Live aliases come only from explicitly opted-in control advertisements; there is no cache. */
+  #attached(): Record<string, Binding> {
+    const attached: Record<string, Binding> = {};
+    for (const ad of listControlAdvertisements(this.#runtimeDir)) {
+      if (ad.discordInput !== true) continue;
+      attached[ad.name] = { socketPath: ad.socketPath, sessionId: ad.sessionId, startedAt: ad.startedAt };
+    }
+    return attached;
   }
   #binding(alias: string): Binding {
-    const binding = this.#liveBindings()[alias];
+    const binding = this.#attached()[alias];
     if (!binding) throw new Error('Discord alias is not attached');
     return binding;
   }
@@ -552,11 +590,11 @@ export class DiscordBridge {
               `[bridge → ${alias}] Work inbox full (128 pending). Message ${message.id} NOT accepted: not queued or sent to a session. Resend after the backlog drains. !bridge status/resume/stop remain available.`,
             );
           } else {
-            const binding = this.#liveBindings()[alias];
+            const binding = this.#attached()[alias];
             if (!binding)
               this.#post(
                 `reject_${message.id}`,
-                `[bridge] Target ${alias} is not attached; message ${message.id} NOT accepted.`,
+                `[bridge] Target ${alias} is not attached; message ${message.id} NOT accepted and not delivered.`,
               );
             else
               this.#journal.jobs.push({
@@ -594,13 +632,13 @@ export class DiscordBridge {
       }
       this.#save();
       let stopped = true;
-      for (const alias of Object.keys(this.#liveBindings())) {
+      for (const alias of Object.keys(this.#attached())) {
         try {
           const binding = this.#binding(alias);
           await callDiscordControl(binding.socketPath, 'interrupt');
         } catch {
           stopped = false;
-          this.#warn('Discord stop could not reach a configured session; use terminal Escape');
+          this.#warn('Discord stop could not reach an attached session; use terminal Escape');
         }
       }
       this.#journal.stopPending = !stopped;
@@ -608,15 +646,18 @@ export class DiscordBridge {
     } else if (command !== 'status') {
       this.#post(
         `command_${message.id}`,
-        '[bridge] Commands: !bridge pause | resume | status | stop. Stop pauses routing and interrupts mapped sessions; approvals stay terminal-owned.',
+        '[bridge] Commands: !bridge pause | resume | status | stop. Stop pauses routing and interrupts attached sessions; approvals stay terminal-owned.',
       );
       return;
     }
+    const attached = Object.keys(this.#attached());
     this.#post(
       `command_${message.id}`,
       `[bridge] ${this.#journal.paused ? 'Paused' : 'Running'}; pending ${
         this.#journal.jobs.filter((job) => !['done', 'uncertain'].includes(job.state)).length
-      }. Pause prevents new dispatch only. Stop requires explicit resume.`,
+      }. ${
+        attached.length ? `Attached: ${attached.join(', ')}.` : 'No sessions attached.'
+      } Pause prevents new dispatch only. Stop requires explicit resume.`,
     );
   }
 
@@ -626,7 +667,7 @@ export class DiscordBridge {
       if (job.state === 'done' || job.state === 'uncertain') continue;
       try {
         const binding = job.binding;
-        const live = this.#liveBindings()[job.alias];
+        const live = this.#attached()[job.alias];
         if (!live || !sameDiscordBinding(live, binding)) throw new Error('Discord session identity changed');
         const params = { ...binding, clientRequestId: job.id };
         if (job.state === 'new') {
@@ -673,7 +714,7 @@ export class DiscordBridge {
           const route = /^@([A-Za-z0-9_-]+)\s+([\s\S]+)$/.exec(text);
           if (route && !job.noRoute && !result.truncated) {
             const alias = route[1]!;
-            if (!this.#bindingMaybe(alias))
+            if (!this.#attached()[alias])
               this.#post(`${job.id}_target`, `[bridge] Unknown agent target ${alias}; not delivered.`);
             else if (job.hops >= this.#config.maxHops)
               this.#post(`${job.id}_limit`, '[bridge] Peer hop limit reached; waiting for the human.');
@@ -698,7 +739,7 @@ export class DiscordBridge {
           job.state = 'done';
           this.#post(
             `${job.id}_denied`,
-            `[bridge → ${job.alias}] Control rejected admission; check session opt-in and mapping. Original input retained in journal, not retried.`,
+            `[bridge → ${job.alias}] Control rejected admission; check session opt-in. Original input retained in journal, not retried.`,
           );
           this.#save();
           continue;
@@ -708,7 +749,7 @@ export class DiscordBridge {
         if (job.state === 'new') {
           this.#post(
             `${job.id}_waiting`,
-            `[bridge → ${job.alias}] Session mapping unavailable. Input retained and NOT accepted; restore the pinned process or reconcile and remap explicitly.`,
+            `[bridge → ${job.alias}] Target is not attached right now. Input retained and NOT delivered; only the exact admitted process identity may receive it. Reconcile in the terminal otherwise.`,
           );
           this.#save();
           continue;
@@ -719,7 +760,7 @@ export class DiscordBridge {
           job.state = 'uncertain';
           this.#post(
             `${job.id}_uncertain`,
-            `[bridge → ${job.alias}] Session identity changed or disconnected. Input retained for reconciliation; NOT resubmitted. Remap explicitly after checking terminal history.`,
+            `[bridge → ${job.alias}] Session identity changed or disconnected. Input retained for reconciliation; NOT resubmitted. Reconcile after checking terminal history.`,
           );
           this.#save();
           continue;
@@ -767,7 +808,6 @@ export class DiscordBridge {
     if (Date.now() < this.#retryAt) return;
     this.#running = true;
     try {
-      this.#outbound?.refreshBindings(this.#liveBindings());
       try {
         await this.#ingress();
         this.#readFailures = 0;

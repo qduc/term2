@@ -36,7 +36,7 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
     }
   } catch {
     process.stderr.write(
-      '[discord] Bridge stopped: check config, private state directory, credentials and session mappings. Enroll on a TTY with term2 discord --save-token [absolute-config-path]. Credentials and payloads redacted.\n',
+      '[discord] Bridge stopped: check config, private state directory, credentials and attached sessions. Enroll on a TTY with term2 discord --save-token [absolute-config-path]. Credentials and payloads redacted.\n',
     );
     process.exitCode = 1;
   } finally {

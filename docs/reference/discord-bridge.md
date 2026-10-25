@@ -1,8 +1,9 @@
 # Discord bridge (candidate)
 
 One bot in one private channel can speak to multiple **existing term2 terminal
-sessions**. Stable aliases select sessions; this does not create a chatbot or a
-new conversation per message. This candidate needs independent auth/session review
+sessions**. Live, explicitly opted-in sessions are addressable by their control
+socket name while they run; this does not create a chatbot or a new conversation
+per message. This candidate needs independent auth/session review
 and authorized live Discord validation before acceptance. No live bot setup was
 performed during implementation.
 
@@ -18,8 +19,8 @@ session; `/bridge status` reports its binding and `/bridge disconnect` removes a
 runtime-created socket. Connecting is a security-sensitive action: remote human
 input can reach the session, but approvals and questions remain terminal-only.
 Do not opt in sessions whose unattended work you do not intend remote users to
-steer. This does not edit the bridge journal or synthesize/rebind an outbound
-Discord advertisement; the bridge must separately discover and bind the session.
+steer. The bridge notices the new live opt-in advertisement on its next tick; no
+bridge restart, journal edit or config entry is needed.
 
 Alternatively, opt in at process launch with both flags. If your existing session
 was already launched with both flags, keep it running. Otherwise, do not kill
@@ -92,18 +93,32 @@ Example `/absolute/private/discord.json` (replace every example ID/path):
   "channelId": "123456789012345678",
   "humanUserId": "234567890123456789",
   "coordinator": "coord",
-    "stateDir": "/home/YOU/.local/state/term2-discord/private-channel",
+  "stateDir": "/home/YOU/.local/state/term2-discord/private-channel",
   "maxHops": 4
 }
 ```
 
+The config has **no session map**. Sessions attach live: any interactive root TUI
+that explicitly opts in with `/bridge connect NAME` or the startup flags
+`--control-socket NAME --discord-input` becomes addressable as `@NAME` while its
+control advertisement is live and carries the `discordInput` opt-in marker. A
+session that does not opt in is never discovered, even if its socket exists.
 Aliases are lowercase ASCII letters/digits/underscore/hyphen, start with a letter,
-and are at most 32 characters. Every alias must refer to a different socket.
+and are at most 32 characters; the alias is the opted-in session's control socket
+name. `coordinator` is only the default alias name for unaddressed human input; it
+does not pin a socket, session ID or process. Unaddressed text is delivered only
+while a live opted-in session with that name is attached; otherwise it is visibly
+refused and no job is created. There is no queue for a future process.
+
 `maxHops` is 1–8, default 4. `stateDir` must be absolute, owned by this OS user,
 mode 0700. It is created if absent; its journal and ownership file are mode 0600.
 Protect config too, e.g. mode 0600. Do not reuse a state directory for another
-channel/user/mapping. A changed config is refused against the old journal rather
-than silently accepting stale routing state.
+channel/user. A changed config is refused against the old journal rather than
+silently accepting stale routing state. The previous pinned-session schema (a
+`sessions` map) is rejected with an explicit error: archive the old state and use a
+fresh `stateDir`. Journals are version 2 and store each admitted job's socket,
+session ID and start epoch; a version 1 journal or any config-fingerprint mismatch
+also fails closed. Old files are never deleted, migrated or rewritten.
 
 ```sh
 term2 discord
@@ -113,9 +128,26 @@ term2 discord /absolute/private/discord.json
 
 Wait for `[bridge] Ready` in Discord **before sending new work**. First startup
 establishes a current-channel watermark; historical messages deliberately do not
-activate anything. Restart with unchanged config/state preserves the cursor, pending input and outbox. Late-attached opted-in sessions can also use `discord_send` and status/idempotent replay without restarting the bridge. Do not delete the journal to “fix” an uncertain delivery.
-Only one bridge owns a state directory. Generic discovery assumes one bridge per runtime directory. If multiple bridges advertise the same binding, outbound lookup is ambiguous and unavailable; do not rely on which bridge responds. Ctrl-C/SIGTERM stops the bridge loop after
-the current bounded operation; it does **not** stop the terminal sessions.
+activate anything. The bridge opens successfully with no attached sessions and
+reports `No sessions attached` in `!bridge status`. A session attached later is
+addressable immediately without restarting the bridge. Restart with unchanged
+config/state preserves the cursor, pending input and outbox. Do not delete the
+journal to “fix” an uncertain delivery.
+
+Only one bridge owns a state directory, and generic mode assumes one bridge per
+runtime directory. `discord_send` from a session requires exactly one live bridge
+advertisement there; with zero it is unavailable, and with two or more it is
+ambiguous and unavailable rather than a guess. Ctrl-C/SIGTERM stops the bridge loop
+after the current bounded operation; it does **not** stop the terminal sessions.
+
+### Migration from the pinned-session schema
+
+Version 1 journals pinned aliases to `{socket, sessionId}` entries. That schema is
+gone. Preserve the old state directory and journal unchanged, create a new config
+without `sessions`, and point `stateDir` at a fresh directory for the same channel
+and human. Do not copy pending rows into the new state; reconcile them from the old
+journal and terminal history first. The bridge refuses an old journal instead of
+reinterpreting it.
 
 ## Mobile usage and identity
 
@@ -166,8 +198,8 @@ Only the configured human can issue:
   run after resume. Excess ordinary human work is explicitly refused, not queued.
 * `!bridge resume`: permit retained new work again. It grants no tool approvals.
 * `!bridge stop`: persist paused state, discard bridge-owned **not-yet-dispatched**
-  jobs, prohibit peer routing from existing jobs, then call each mapped session's
-  native interrupt. This follows the same cancellation/denial semantics as that
+  jobs, prohibit peer routing from existing jobs, then call the native interrupt of
+  each currently attached opted-in session. This follows the same cancellation/denial semantics as that
   session's terminal control; it is not a separate queue-retraction API. Other
   terminal-origin queued work follows term2's existing interrupt policy. Subsequent
   human messages remain queued while paused only within the inbox capacity. Inspect
@@ -214,11 +246,13 @@ exactly-once guarantee:
 * A POST interrupted before its acknowledgement is `uncertain`, never automatically
   retried. Inspect channel history and the private outbox before deciding whether a
   manual resend is appropriate. Discord nonce dedup alone is not permanent proof.
-* Unsent new work waits for its pinned mapping; it does not activate replacement
-  processes/histories. A deliberate session restart/rollover requires inspecting old
-  work, reconciling pending/outbox records, then an explicit fresh mapping/state
-  directory. Preserve the old journal; do not copy pending rows into a new session
-  blindly. Automated cross-process exactly-once recovery is intentionally absent.
+* An admitted job keeps the socket/session/start identity captured at admission.
+  Each dispatch rechecks that the live opted-in advertisement for its alias still
+  matches exactly. A detached or replaced process never receives it; the job is
+  retained with a visible notice. A replacement session that deliberately reuses an
+  alias receives only new messages addressed to it after it attaches. Reconnecting
+  the original process identity is the only automatic continuation. Automated
+  cross-process exactly-once recovery is intentionally absent.
 
 Final-feed limitation: only bridge-submitted turns and their explicit peer chains
 are correlated/forwarded. Independent terminal turns, later approval continuations,
@@ -239,18 +273,20 @@ running when the agent is constructed.
 The input is `{action:"send",requestId,text}` or `{action:"status",requestId}`.
 Request IDs contain 1–64 ASCII letters, digits, `_` or `-`; text is nonblank and at
 most 16,384 UTF-16 units, never silently truncated. Use a fresh key for a new
-notification. Reuse the same key only to reconcile that notification. The bridge
-derives `[alias]` attribution and channel from the full pinned socket/session/start
-identity. Text beginning `@worker` is literal notification text, not peer routing.
+notification. Reuse the same key only to reconcile that notification. The bridge resolves
+`[alias]` attribution and channel by matching the caller's full socket/session/start
+binding against a currently live opted-in session; there is no separate identity map. Text beginning `@worker` is literal notification text, not peer routing.
 Explicit sends and automatic Discord-job finals are separate intentional outputs.
 
 Discovery is a private Unix RPC under `$XDG_RUNTIME_DIR/term2-discord`: directory
 0700, socket and advertisement 0600, no credentials or payloads in advertisements.
-The stable endpoint name hashes the absolute state directory. Discovery requires
-exact session identity and a unique live bridge; ambiguous mappings fail closed.
-The bridge rechecks the current session advertisement before new admission. Status
-and identical replay can still reconcile accepted records after pause or identity
-change, but only with that record's original mapped identity. This is the existing
+The stable endpoint name hashes the absolute state directory. Discovery selects the
+unique live bridge advertisement and never retries a mutation after its frame may
+have been written; zero or multiple live bridges fail closed. The bridge itself
+rechecks the exact session identity before every control call. Status and identical
+replay reconcile records while the caller's exact identity is still live; after a
+disconnect or replacement the bridge answers `identity_changed` rather than exposing
+another process's records. This is the existing
 same-uid trust model, not cryptographic authentication against another local process.
 
 `queued` means index and all chunks were atomically persisted, **not delivered**.
@@ -274,9 +310,10 @@ These conservative local-resource bounds are not measured workload limits. A
 long-lived journal can reach the byte budget: the operator must reconcile and
 archive it before deliberately provisioning fresh state. Never delete uncertainty
 or replay pending records to regain capacity. No automatic eviction, TTL or retry
-is added. Existing journals without the optional proactive index load as empty;
-incompatible new shapes fail closed. Preserve the extended journal on rollback;
-do not run an older bridge executable against it without a compatibility check.
+is added. Existing version 1 journals are refused with a fresh-`stateDir` message;
+incompatible new shapes fail closed without rewriting the file. Preserve the old
+journal on rollback; do not run an older bridge executable against a version 2
+journal, and do not run this bridge against a version 1 journal.
 
 ## Offline evidence and optional authorized live smoke
 

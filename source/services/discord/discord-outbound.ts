@@ -28,7 +28,6 @@ interface Advertisement {
   startedAt: string;
   fingerprint: string;
   channelId: string;
-  bindings: Record<string, DiscordBinding>;
 }
 export type DiscordSend = (input: DiscordSendInput) => Promise<DiscordSendResult>;
 
@@ -61,8 +60,6 @@ function readAdvertisement(file: string): Advertisement {
       ad.v !== 1 ||
       !Number.isInteger(ad.pid) ||
       typeof ad.startedAt !== 'string' ||
-      !ad.bindings ||
-      typeof ad.bindings !== 'object' ||
       ad.socketPath !== file.replace(/\.json$/, '.sock')
     )
       throw new Error('Invalid Discord advertisement');
@@ -85,7 +82,7 @@ export class DiscordOutboundServer {
   constructor(
     runtime: string,
     stateDir: string,
-    metadata: Pick<Advertisement, 'fingerprint' | 'channelId' | 'bindings'>,
+    metadata: Pick<Advertisement, 'fingerprint' | 'channelId'>,
     handle: (method: string, params: unknown) => DiscordSendResult,
   ) {
     const directory = directoryFor(runtime, true);
@@ -153,25 +150,6 @@ export class DiscordOutboundServer {
       });
     });
   }
-  refreshBindings(bindings: Record<string, DiscordBinding>): void {
-    if (!this.#owned || JSON.stringify(bindings) === JSON.stringify(this.#ad.bindings)) return;
-    try {
-      const current = readAdvertisement(this.#file);
-      if (current.pid !== this.#ad.pid || current.startedAt !== this.#ad.startedAt) return;
-      this.#ad.bindings = { ...bindings };
-      const temporary = `${this.#file}.${process.pid}.tmp`;
-      const fd = fs.openSync(temporary, 'w', 0o600);
-      try {
-        fs.writeFileSync(fd, JSON.stringify(this.#ad));
-        fs.fsyncSync(fd);
-      } finally {
-        fs.closeSync(fd);
-      }
-      fs.renameSync(temporary, this.#file);
-    } catch {
-      /* advertisement ownership or persistence lost: do not overwrite */
-    }
-  }
   async listen(): Promise<void> {
     if (fs.existsSync(this.#file)) {
       const old = readAdvertisement(this.#file);
@@ -230,7 +208,7 @@ export class DiscordOutboundServer {
   }
 }
 
-/** Discover a unique pinned bridge; never retry a mutation after its frame may have been written. */
+/** Discover the unique live bridge; it validates the sender identity. */
 export async function sendDiscord(
   runtime: string,
   binding: DiscordBinding,
@@ -245,10 +223,7 @@ export async function sendDiscord(
       .filter((name) => /^[a-f0-9]{20}\.json$/.test(name))
       .flatMap((name) => {
         const candidate = readAdvertisement(path.join(directory, name));
-        return readProcStartTime(candidate.pid) === candidate.startedAt &&
-          Object.values(candidate.bindings).some((b) => sameDiscordBinding(b, binding))
-          ? [candidate]
-          : [];
+        return readProcStartTime(candidate.pid) === candidate.startedAt ? [candidate] : [];
       });
     if (matches.length !== 1) return { ...unavailable, reason: matches.length ? 'ambiguous' : 'not_mapped' };
     ad = matches[0]!;

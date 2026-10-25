@@ -37,7 +37,21 @@ export type ControlErrorCode =
   | 'unavailable'
   | 'internal';
 
+export interface BridgeInput {
+  text: string;
+  clientRequestId: string;
+  sessionId: string;
+  origin: { kind: 'human' | 'agent'; sender: string };
+}
+
+export interface BridgeOutcome {
+  state: 'pending' | 'final' | 'awaiting_approval' | 'interrupted' | 'rejected';
+  text?: string;
+  truncated?: boolean;
+}
+
 export interface ControlSessionPort {
+  bridgeSubmit?(params: BridgeInput, complete: (outcome: BridgeOutcome) => void): Promise<ControlMutationReceipt>;
   status(): unknown;
   get(topic: ControlTopic): unknown;
   submit?(params: {
@@ -193,6 +207,8 @@ function isSocketAcceptingConnections(socketPath: string): Promise<boolean> {
 
 export interface ControlSocketOptions {
   name: string;
+  /** Explicit process-local opt-in; never enabled through mutable settings. */
+  discordInput?: boolean;
   sessionId: () => string;
   port?: ControlSessionPort | null;
   runtimeDir?: string;
@@ -216,6 +232,10 @@ export class ControlSocketServer {
   readonly #connections = new Set<Socket>();
   readonly #admissionLock = new ControlAdmissionLock();
   readonly #idempotency = new ControlIdempotencyMap<ControlMutationReceipt>();
+  readonly #bridgeResults = new Map<
+    string,
+    { body: string; receipt?: ControlMutationReceipt; outcome: BridgeOutcome }
+  >();
   #port: ControlSessionPort | null;
   #interruptHandler:
     | (() => Promise<{ accepted: boolean; reason?: string }> | { accepted: boolean; reason?: string })
@@ -485,13 +505,88 @@ export class ControlSocketServer {
         reply(true, { v: 1, capabilities: ['submit', 'steer', 'interrupt'], topics: [...CONTROL_TOPICS] });
         return true;
       }
-      if (!['status', 'get', 'submit', 'steer', 'interrupt'].includes(request.method)) {
+      if (
+        !['status', 'get', 'submit', 'steer', 'interrupt', 'bridge_submit', 'bridge_result'].includes(request.method)
+      ) {
         reply(false, undefined, 'unknown_method', `Unknown method: ${request.method}`);
         return helloSeen;
       }
       const port = this.#port;
       if (!port) {
         reply(false, undefined, 'not_ready', 'Interactive session is not ready');
+        return helloSeen;
+      }
+      if (request.method === 'bridge_submit' || request.method === 'bridge_result') {
+        const params = request.params;
+        if (!this.#options.discordInput || !port.bridgeSubmit) {
+          reply(false, undefined, 'unauthorized', 'Session has not opted in to Discord input');
+          return helloSeen;
+        }
+        if (!params || params.sessionId !== this.#options.sessionId() || params.startedAt !== this.#startedAt) {
+          reply(false, undefined, 'conflict', 'Session identity changed; remap explicitly');
+          return helloSeen;
+        }
+        const key = params.clientRequestId;
+        if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(key)) {
+          reply(false, undefined, 'invalid_request', 'Invalid bridge request id');
+          return helloSeen;
+        }
+        if (request.method === 'bridge_result') {
+          const entry = this.#bridgeResults.get(key);
+          reply(true, entry ? { ...entry.outcome, receipt: entry.receipt } : { state: 'missing' });
+          return helloSeen;
+        }
+        if (
+          typeof params.text !== 'string' ||
+          !params.text.trim() ||
+          params.text.length > 32_000 ||
+          !params.origin ||
+          !['human', 'agent'].includes(params.origin.kind) ||
+          typeof params.origin.sender !== 'string' ||
+          !/^[A-Za-z0-9_-]{1,64}$/.test(params.origin.sender)
+        ) {
+          reply(false, undefined, 'invalid_request', 'Invalid bridge input');
+          return helloSeen;
+        }
+        const body = hashBody({ text: params.text, origin: params.origin, sessionId: params.sessionId });
+        const result = await this.#admissionLock.run(async () => {
+          const prior = this.#bridgeResults.get(key);
+          if (prior) return prior.body === body ? { ...prior.receipt, replayed: true } : null;
+          if (this.#bridgeResults.size >= 256) {
+            const completed = [...this.#bridgeResults].find(([, entry]) => entry.outcome.state !== 'pending');
+            if (!completed) return { delivery: 'rejected', reason: 'bridge_capacity' };
+            this.#bridgeResults.delete(completed[0]);
+          }
+          const entry: { body: string; receipt?: ControlMutationReceipt; outcome: BridgeOutcome } = {
+            body,
+            outcome: { state: 'pending' },
+          };
+          this.#bridgeResults.set(key, entry);
+          try {
+            entry.receipt = await port.bridgeSubmit!(params, (outcome) => {
+              entry.outcome = {
+                ...outcome,
+                truncated: (outcome.text?.length ?? 0) > 16_384,
+                ...(outcome.text
+                  ? {
+                      text:
+                        outcome.text.slice(0, 16_384) +
+                        (outcome.text.length > 16_384 ? '\n[truncated by session control]' : ''),
+                    }
+                  : {}),
+              };
+            });
+            if (entry.receipt.delivery === 'rejected') entry.outcome = { state: 'rejected' };
+            return entry.receipt;
+          } catch {
+            entry.outcome = { state: 'interrupted' };
+            // Outcome uncertain: retain the key, never admit this request twice.
+            entry.receipt = { delivery: 'rejected', reason: 'uncertain_admission' };
+            return entry.receipt;
+          }
+        });
+        if (result) reply(true, result);
+        else reply(false, undefined, 'conflict', 'Bridge request body changed');
         return helloSeen;
       }
       if (request.method === 'submit' || request.method === 'steer') {

@@ -1,0 +1,643 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { connect } from 'node:net';
+import {
+  listControlAdvertisements,
+  readProcStartTime,
+  CONTROL_MAX_FRAME_BYTES,
+} from '../control-socket/control-socket.js';
+
+export interface DiscordBridgeConfig {
+  channelId: string;
+  humanUserId: string;
+  coordinator: string;
+  sessions: Record<string, { socket: string; sessionId: string }>;
+  stateDir: string;
+  maxHops: number;
+}
+interface DiscordMessage {
+  id: string;
+  channel_id: string;
+  content: string;
+  author: { id: string; bot?: boolean };
+  webhook_id?: string;
+}
+interface Binding {
+  socketPath: string;
+  startedAt: string;
+  sessionId: string;
+}
+interface Job {
+  id: string;
+  alias: string;
+  text: string;
+  origin: { kind: 'human' | 'agent'; sender: string };
+  hops: number;
+  state: 'new' | 'dispatching' | 'accepted' | 'done' | 'uncertain';
+  noRoute?: boolean;
+}
+interface Outgoing {
+  id: string;
+  content: string;
+  state: 'queued' | 'sending' | 'sent' | 'uncertain';
+}
+interface Journal {
+  v: 1;
+  fingerprint: string;
+  cursor: string;
+  paused: boolean;
+  stopPending?: boolean;
+  retryAt?: number;
+  bindings: Record<string, Binding>;
+  jobs: Job[];
+  outbox: Outgoing[];
+}
+const aliasPattern = /^[a-z][a-z0-9_-]{0,31}$/;
+const snowflakePattern = /^[0-9]{1,24}$/;
+
+/** Validate a private single-channel bridge configuration; no token belongs in this file. */
+export function parseDiscordBridgeConfig(value: unknown): DiscordBridgeConfig {
+  const config = value as DiscordBridgeConfig;
+  if (
+    !config ||
+    typeof config !== 'object' ||
+    Object.keys(config).some(
+      (key) => !['channelId', 'humanUserId', 'coordinator', 'sessions', 'stateDir', 'maxHops'].includes(key),
+    ) ||
+    typeof config.channelId !== 'string' ||
+    !snowflakePattern.test(config.channelId) ||
+    typeof config.humanUserId !== 'string' ||
+    !snowflakePattern.test(config.humanUserId) ||
+    typeof config.coordinator !== 'string' ||
+    !aliasPattern.test(config.coordinator) ||
+    typeof config.stateDir !== 'string' ||
+    !path.isAbsolute(config.stateDir) ||
+    !config.sessions ||
+    typeof config.sessions !== 'object' ||
+    Array.isArray(config.sessions) ||
+    Object.keys(config.sessions).length < 1 ||
+    Object.keys(config.sessions).length > 16 ||
+    !Object.hasOwn(config.sessions, config.coordinator)
+  )
+    throw new Error('Invalid Discord bridge config');
+  const sockets = new Set<string>();
+  for (const [alias, session] of Object.entries(config.sessions)) {
+    if (
+      !aliasPattern.test(alias) ||
+      !session ||
+      Object.keys(session).some((key) => !['socket', 'sessionId'].includes(key)) ||
+      typeof session.socket !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,64}$/.test(session.socket) ||
+      typeof session.sessionId !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(session.sessionId) ||
+      sockets.has(session.socket)
+    )
+      throw new Error('Invalid or duplicated Discord session mapping');
+    sockets.add(session.socket);
+  }
+  const maxHops = config.maxHops ?? 4;
+  if (!Number.isInteger(maxHops) || maxHops < 1 || maxHops > 8) throw new Error('Invalid Discord hop limit');
+  return { ...config, maxHops };
+}
+
+/** One bounded newline-framed RPC; transport failure is ambiguous for mutations, never retried here. */
+export function callDiscordControl(socketPath: string, method: string, params?: unknown): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(socketPath);
+    let bytes = Buffer.alloc(0);
+    let hello = false;
+    let settled = false;
+    const finish = (error?: Error, value?: unknown) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      if (error) reject(error);
+      else resolve(value);
+    };
+    socket.setTimeout(10_000, () => finish(new Error('Control timeout')));
+    socket.on('error', () => finish(new Error('Control unavailable')));
+    socket.on('close', () => finish(new Error('Control disconnected')));
+    socket.on('connect', () => socket.write(JSON.stringify({ v: 1, id: 'hello', method: 'hello' }) + '\n'));
+    socket.on('data', (chunk) => {
+      bytes = Buffer.concat([bytes, chunk]);
+      if (bytes.length > CONTROL_MAX_FRAME_BYTES) return finish(new Error('Control frame too large'));
+      let newline: number;
+      while ((newline = bytes.indexOf(10)) >= 0) {
+        const line = bytes.subarray(0, newline).toString('utf8');
+        bytes = bytes.subarray(newline + 1);
+        try {
+          const response = JSON.parse(line);
+          if (response.v !== 1 || response.id !== (hello ? 'call' : 'hello'))
+            throw new Error('Invalid control response');
+          if (!response.ok) {
+            const error = new Error('Control rejected request') as Error & { code?: string };
+            error.code = typeof response.error?.code === 'string' ? response.error.code : 'internal';
+            return finish(error);
+          }
+          if (!hello) {
+            hello = true;
+            socket.write(JSON.stringify({ v: 1, id: 'call', method, params }) + '\n');
+          } else return finish(undefined, response.result);
+        } catch {
+          return finish(new Error('Invalid control response'));
+        }
+      }
+    });
+  });
+}
+
+function atomicSave(file: string, data: unknown): void {
+  const temporary = `${file}.${process.pid}.tmp`;
+  const fd = fs.openSync(temporary, 'w', 0o600);
+  try {
+    fs.writeFileSync(fd, JSON.stringify(data));
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(temporary, file);
+  const dir = fs.openSync(path.dirname(file), 'r');
+  try {
+    fs.fsyncSync(dir);
+  } finally {
+    fs.closeSync(dir);
+  }
+}
+
+function chunks(text: string): string[] {
+  const result: string[] = [];
+  let rest = text;
+  while (rest.length > 1700) {
+    let size = 1700;
+    if (/[\uD800-\uDBFF]/.test(rest[size - 1]!)) size--;
+    result.push(rest.slice(0, size));
+    rest = rest.slice(size);
+  }
+  if (rest) result.push(rest);
+  return result;
+}
+
+/**
+ * Serial Discord REST adapter attached to existing explicitly opted-in terminal sessions.
+ * tick() is single-owner: durable state precedes effects; ambiguous effects are quarantined,
+ * not automatically replayed. No history scan or Discord bot message can wake a session.
+ */
+export class DiscordBridge {
+  readonly #config: DiscordBridgeConfig;
+  readonly #token: string;
+  readonly #runtimeDir: string;
+  readonly #apiBase: string;
+  readonly #warn: (message: string) => void;
+  readonly #file: string;
+  readonly #lock: string;
+  #journal!: Journal;
+  #retryAt = 0;
+  #readFailures = 0;
+  #running = false;
+  #owned = false;
+
+  constructor(
+    config: DiscordBridgeConfig,
+    token: string,
+    options: {
+      runtimeDir: string;
+      /** Test-only loopback HTTP fixture; production always uses Discord v10. */
+      apiBase?: string;
+      warn?: (message: string) => void;
+    },
+  ) {
+    this.#config = parseDiscordBridgeConfig(config);
+    if (!token || /[\s\r\n]/.test(token)) throw new Error('Discord bot token missing or invalid');
+    if (!path.isAbsolute(options.runtimeDir)) throw new Error('Invalid control runtime directory');
+    const base = options.apiBase ?? 'https://discord.com/api/v10';
+    const url = new URL(base);
+    if (
+      base !== 'https://discord.com/api/v10' &&
+      !(url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname))
+    ) {
+      throw new Error('Invalid Discord transport endpoint');
+    }
+    this.#token = token;
+    this.#runtimeDir = options.runtimeDir;
+    this.#apiBase = base;
+    this.#warn = options.warn ?? (() => {});
+    this.#file = path.join(config.stateDir, 'journal.json');
+    this.#lock = path.join(config.stateDir, 'owner.json');
+  }
+
+  /** Acquire private state ownership and pin aliases to the currently advertised process epochs. */
+  open(): void {
+    const { stateDir } = this.#config;
+    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    const stat = fs.lstatSync(stateDir);
+    if (!stat.isDirectory() || stat.uid !== process.getuid?.() || (stat.mode & 0o777) !== 0o700) {
+      throw new Error('Discord state directory must be owned by this user and mode 0700');
+    }
+    if (fs.existsSync(this.#lock)) {
+      const owner = JSON.parse(fs.readFileSync(this.#lock, 'utf8'));
+      if (!Number.isInteger(owner.pid) || !owner.start || readProcStartTime(owner.pid) === owner.start) {
+        throw new Error('Discord bridge already running or owner cannot be verified');
+      }
+      fs.unlinkSync(this.#lock);
+    }
+    const fd = fs.openSync(this.#lock, 'wx', 0o600);
+    try {
+      fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, start: readProcStartTime(process.pid) }));
+    } finally {
+      fs.closeSync(fd);
+    }
+    this.#owned = true;
+    try {
+      const fingerprint = createHash('sha256').update(JSON.stringify(this.#config)).digest('hex');
+      if (fs.existsSync(this.#file)) {
+        const stateStat = fs.lstatSync(this.#file);
+        if (!stateStat.isFile() || (stateStat.mode & 0o777) !== 0o600 || stateStat.uid !== process.getuid?.()) {
+          throw new Error('Unsafe Discord journal permissions');
+        }
+        this.#journal = JSON.parse(fs.readFileSync(this.#file, 'utf8'));
+        if (
+          this.#journal.v !== 1 ||
+          this.#journal.fingerprint !== fingerprint ||
+          !Array.isArray(this.#journal.jobs) ||
+          !Array.isArray(this.#journal.outbox)
+        ) {
+          throw new Error('Discord journal/config mismatch; reconcile retained inputs before remapping');
+        }
+        if (this.#journal.stopPending)
+          this.#warn('Previous stop outcome uncertain; routing remains paused. Check each terminal before resume.');
+        for (const output of this.#journal.outbox)
+          if (output.state === 'sending') {
+            output.state = 'uncertain';
+            this.#warn('Uncertain Discord output retained; reconcile journal, do not resend blindly');
+          }
+      } else {
+        const ads = listControlAdvertisements(this.#runtimeDir);
+        const bindings: Record<string, Binding> = {};
+        for (const [alias, session] of Object.entries(this.#config.sessions)) {
+          const ad = ads.find((entry) => entry.name === session.socket && entry.sessionId === session.sessionId);
+          if (!ad) throw new Error('Configured Discord session is not available');
+          bindings[alias] = { socketPath: ad.socketPath, startedAt: ad.startedAt, sessionId: ad.sessionId };
+        }
+        this.#journal = { v: 1, fingerprint, cursor: '', paused: false, bindings, jobs: [], outbox: [] };
+      }
+      this.#retryAt = this.#journal.retryAt ?? 0;
+      this.#save();
+    } catch (error) {
+      this.close();
+      throw error;
+    }
+  }
+
+  /** Release only this bridge's ownership; pending work and reconciliation records survive. */
+  close(): void {
+    if (this.#owned) {
+      fs.unlinkSync(this.#lock);
+      this.#owned = false;
+    }
+  }
+
+  #save(): void {
+    this.#journal.retryAt = this.#retryAt;
+    atomicSave(this.#file, this.#journal);
+  }
+
+  #post(id: string, text: string): void {
+    const pieces = chunks(text);
+    const label = /^\[[^\]]{1,64}\]/.exec(text)?.[0] ?? '[bridge]';
+    for (const [index, piece] of pieces.entries()) {
+      const content = pieces.length > 1 ? `${label} [${index + 1}/${pieces.length}] ${piece}` : piece;
+      const key = createHash('sha256').update(`${id}_${index}`).digest('hex').slice(0, 24);
+      if (!this.#journal.outbox.some((entry) => entry.id === key))
+        this.#journal.outbox.push({ id: key, content, state: 'queued' });
+    }
+  }
+
+  async #request(method: string, suffix: string, body?: unknown): Promise<Response> {
+    try {
+      const response = await fetch(`${this.#apiBase}/channels/${this.#config.channelId}/messages${suffix}`, {
+        method,
+        headers: { Authorization: `Bot ${this.#token}`, 'Content-Type': 'application/json' },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(10_000),
+        redirect: 'error',
+      });
+      if (response.status === 429) {
+        const retry = (await response.json()) as { retry_after?: number };
+        const seconds =
+          typeof retry.retry_after === 'number' && Number.isFinite(retry.retry_after) ? retry.retry_after : 5;
+        this.#retryAt = Date.now() + Math.max(1, seconds) * 1000;
+      }
+      const reset = Number(response.headers.get('x-ratelimit-reset-after'));
+      if (response.headers.get('x-ratelimit-remaining') === '0' && Number.isFinite(reset) && reset > 0) {
+        this.#retryAt = Math.max(this.#retryAt, Date.now() + reset * 1000);
+      }
+      return response;
+    } catch {
+      throw new Error('Discord transport unavailable (credentials and response body redacted)');
+    }
+  }
+
+  #binding(alias: string): Binding {
+    const pinned = this.#journal.bindings[alias]!;
+    const session = this.#config.sessions[alias]!;
+    const live = listControlAdvertisements(this.#runtimeDir).find((entry) => entry.name === session.socket);
+    if (
+      !live ||
+      live.sessionId !== session.sessionId ||
+      live.sessionId !== pinned.sessionId ||
+      live.startedAt !== pinned.startedAt ||
+      live.socketPath !== pinned.socketPath
+    ) {
+      throw new Error('Discord session process changed; explicit remapping required');
+    }
+    return pinned;
+  }
+
+  async #ingress(): Promise<void> {
+    const response = await this.#request(
+      'GET',
+      this.#journal.cursor ? `?after=${this.#journal.cursor}&limit=50` : '?limit=1',
+    );
+    if (!response.ok) throw new Error(`Discord read rejected (HTTP ${response.status})`);
+    const messages = (await response.json()) as DiscordMessage[];
+    if (
+      !Array.isArray(messages) ||
+      messages.some(
+        (message) =>
+          !snowflakePattern.test(message.id) ||
+          message.channel_id !== this.#config.channelId ||
+          typeof message.content !== 'string' ||
+          !message.author?.id,
+      )
+    ) {
+      throw new Error('Invalid Discord channel response');
+    }
+    if (!this.#journal.cursor) {
+      this.#journal.cursor = messages[0]?.id ?? '0';
+      this.#post(
+        'ready',
+        '[bridge] Ready. Only new messages from the configured human are accepted. Use @alias text; !bridge pause/resume/status/stop.',
+      );
+      this.#save();
+      return;
+    }
+    messages.sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+    for (const message of messages) {
+      if (BigInt(message.id) <= BigInt(this.#journal.cursor)) continue;
+      // Never trust Discord bot identity, including our own echo or webhook messages.
+      if (message.author.id === this.#config.humanUserId && !message.author.bot && !message.webhook_id) {
+        if (message.content.startsWith('!bridge ')) {
+          await this.#command(message);
+        } else if (message.content.trim()) {
+          const route = /^@([A-Za-z0-9_-]+)(?:\s+|$)([\s\S]*)$/.exec(message.content);
+          const alias = route?.[1] ?? this.#config.coordinator;
+          const text = route ? route[2]!.trim() : message.content;
+          if (
+            (message.content.startsWith('@') && !route) ||
+            !Object.hasOwn(this.#config.sessions, alias) ||
+            !text ||
+            text.length > 32_000
+          ) {
+            this.#post(`reject_${message.id}`, '[bridge] Unknown target, empty or oversized message; not delivered.');
+          } else if (this.#journal.jobs.filter((job) => !['done', 'uncertain'].includes(job.state)).length >= 128) {
+            // Bound work admission, never the shared cursor carrying human recovery controls.
+            this.#post(
+              `overflow_${message.id}`,
+              `[bridge → ${alias}] Work inbox full (128 pending). Message ${message.id} NOT accepted: not queued or sent to a session. Resend after the backlog drains. !bridge status/resume/stop remain available.`,
+            );
+          } else
+            this.#journal.jobs.push({
+              id: `discord_${message.id}`,
+              alias,
+              text,
+              origin: { kind: 'human', sender: this.#config.humanUserId },
+              hops: 0,
+              state: 'new',
+            });
+        }
+      }
+      this.#journal.cursor = message.id;
+      this.#save();
+    }
+  }
+
+  async #command(message: DiscordMessage): Promise<void> {
+    const command = message.content.slice('!bridge '.length).trim();
+    if (command === 'pause') this.#journal.paused = true;
+    else if (command === 'resume') this.#journal.paused = false;
+    else if (command === 'stop') {
+      this.#journal.paused = true;
+      this.#journal.stopPending = true;
+      this.#journal.cursor = message.id;
+      // Persist the stop before contacting any session; restarting cannot resume chains.
+      for (const job of this.#journal.jobs) {
+        job.noRoute = true;
+        if (job.state === 'new') {
+          job.state = 'done';
+          job.text = '';
+        }
+      }
+      this.#save();
+      let stopped = true;
+      for (const alias of Object.keys(this.#config.sessions)) {
+        try {
+          const binding = this.#binding(alias);
+          await callDiscordControl(binding.socketPath, 'interrupt');
+        } catch {
+          stopped = false;
+          this.#warn('Discord stop could not reach a configured session; use terminal Escape');
+        }
+      }
+      this.#journal.stopPending = !stopped;
+      this.#save();
+    } else if (command !== 'status') {
+      this.#post(
+        `command_${message.id}`,
+        '[bridge] Commands: !bridge pause | resume | status | stop. Stop pauses routing and interrupts mapped sessions; approvals stay terminal-owned.',
+      );
+      return;
+    }
+    this.#post(
+      `command_${message.id}`,
+      `[bridge] ${this.#journal.paused ? 'Paused' : 'Running'}; pending ${
+        this.#journal.jobs.filter((job) => !['done', 'uncertain'].includes(job.state)).length
+      }. Pause prevents new dispatch only. Stop requires explicit resume.`,
+    );
+  }
+
+  async #jobs(): Promise<void> {
+    // Snapshot: a peer reply may create a new job, but it cannot run in this same tick.
+    for (const job of [...this.#journal.jobs]) {
+      if (job.state === 'done' || job.state === 'uncertain') continue;
+      try {
+        const binding = this.#binding(job.alias);
+        const params = { ...binding, clientRequestId: job.id };
+        if (job.state === 'new') {
+          if (this.#journal.paused) continue;
+          job.state = 'dispatching';
+          this.#save();
+          const receipt = await callDiscordControl(binding.socketPath, 'bridge_submit', {
+            ...params,
+            text: job.text,
+            origin: job.origin,
+          });
+          if (!['started', 'queued'].includes(receipt.delivery)) {
+            job.state = 'done';
+            this.#post(
+              `${job.id}_rejected`,
+              `[bridge → ${job.alias}] Not accepted (${
+                receipt.reason ?? 'rejected'
+              }); original input retained in journal. Use the terminal for approval/confirmation.`,
+            );
+          } else {
+            job.state = 'accepted';
+            this.#post(`${job.id}_receipt`, `[bridge → ${job.alias}] ${receipt.delivery}.`);
+          }
+          this.#save();
+        }
+        if (job.state !== 'accepted' && job.state !== 'dispatching') continue;
+        const result = await callDiscordControl(binding.socketPath, 'bridge_result', params);
+        if (result.state === 'missing') {
+          job.state = 'uncertain';
+          this.#post(
+            `${job.id}_missing`,
+            `[bridge → ${job.alias}] Result no longer available. Input retained; check terminal history before manual recovery. NOT resubmitted.`,
+          );
+          this.#save();
+          continue;
+        }
+        if (result.state === 'pending') {
+          if (result.receipt) job.state = 'accepted';
+          this.#save();
+          continue;
+        }
+        if (result.state === 'final') {
+          const text = typeof result.text === 'string' ? result.text : '';
+          this.#post(`${job.id}_final`, `[${job.alias}] ${text || '(completed without text)'}`);
+          const route = /^@([A-Za-z0-9_-]+)\s+([\s\S]+)$/.exec(text);
+          if (route && !job.noRoute && !result.truncated) {
+            const alias = route[1]!;
+            if (!Object.hasOwn(this.#config.sessions, alias))
+              this.#post(`${job.id}_target`, `[bridge] Unknown agent target ${alias}; not delivered.`);
+            else if (job.hops >= this.#config.maxHops)
+              this.#post(`${job.id}_limit`, '[bridge] Peer hop limit reached; waiting for the human.');
+            else
+              this.#journal.jobs.push({
+                id: `${job.id}_p`,
+                alias,
+                text: route[2]!,
+                origin: { kind: 'agent', sender: job.alias },
+                hops: job.hops + 1,
+                state: 'new',
+              });
+          }
+        } else
+          this.#post(`${job.id}_outcome`, `[${job.alias}] ${result.state}; inspect the terminal. No peer activation.`);
+        job.state = 'done';
+        job.text = '';
+        this.#save();
+      } catch (error) {
+        if ((error as { code?: string }).code && job.state === 'dispatching') {
+          job.state = 'done';
+          this.#post(
+            `${job.id}_denied`,
+            `[bridge → ${job.alias}] Control rejected admission; check session opt-in and mapping. Original input retained in journal, not retried.`,
+          );
+          this.#save();
+          continue;
+        }
+        // If the session was temporarily unavailable after a dispatch, read-only recovery
+        // on the next tick is safe; never send a second mutation automatically.
+        if (job.state === 'new') {
+          this.#post(
+            `${job.id}_waiting`,
+            `[bridge → ${job.alias}] Session mapping unavailable. Input retained and NOT accepted; restore the pinned process or reconcile and remap explicitly.`,
+          );
+          this.#save();
+          continue;
+        }
+        try {
+          this.#binding(job.alias);
+        } catch {
+          job.state = 'uncertain';
+          this.#post(
+            `${job.id}_uncertain`,
+            `[bridge → ${job.alias}] Session identity changed or disconnected. Input retained for reconciliation; NOT resubmitted. Remap explicitly after checking terminal history.`,
+          );
+          this.#save();
+          continue;
+        }
+        this.#warn('Control unavailable or outcome unknown; retaining input without resubmission');
+      }
+    }
+  }
+
+  async #outputs(): Promise<void> {
+    for (const outgoing of this.#journal.outbox) {
+      if (Date.now() < this.#retryAt) return;
+      if (outgoing.state !== 'queued') continue;
+      outgoing.state = 'sending';
+      this.#save();
+      try {
+        const response = await this.#request('POST', '', {
+          content: outgoing.content,
+          allowed_mentions: { parse: [], replied_user: false },
+          nonce: outgoing.id,
+          enforce_nonce: true,
+        });
+        if (response.status === 429) {
+          outgoing.state = 'queued';
+          this.#save();
+          return;
+        }
+        // Non-2xx may hide a successful effect at an intermediary. Never blindly resend.
+        if (!response.ok) throw new Error('Discord output not acknowledged');
+        outgoing.state = 'sent';
+        this.#save();
+      } catch {
+        outgoing.state = 'uncertain';
+        this.#save();
+        this.#warn('Uncertain Discord output retained in journal; do not resend without reconciliation');
+      }
+      // At most one Discord POST per normal one-second cycle, including failures.
+      return;
+    }
+  }
+
+  /** Perform one bounded poll/admission/result/outbox cycle; call serially after open(). */
+  async tick(): Promise<void> {
+    if (!this.#owned || this.#running) throw new Error('Discord bridge not open or already ticking');
+    if (Date.now() < this.#retryAt) return;
+    this.#running = true;
+    try {
+      try {
+        await this.#ingress();
+        this.#readFailures = 0;
+      } catch {
+        this.#readFailures++;
+        this.#retryAt = Math.max(
+          this.#retryAt,
+          Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(6, this.#readFailures)),
+        );
+        this.#warn('Discord ingress unavailable or rejected; cursor retained, bounded backoff active');
+      }
+      await this.#jobs();
+      if (Date.now() >= this.#retryAt) await this.#outputs();
+      // Keep pending/uncertain evidence; trim only settled records behind the persisted cursor.
+      const done = this.#journal.jobs.filter((job) => job.state === 'done');
+      const sent = this.#journal.outbox.filter((output) => output.state === 'sent');
+      if (done.length > 256)
+        this.#journal.jobs = this.#journal.jobs.filter(
+          (job) => job.state !== 'done' || done.indexOf(job) >= done.length - 256,
+        );
+      if (sent.length > 512)
+        this.#journal.outbox = this.#journal.outbox.filter(
+          (output) => output.state !== 'sent' || sent.indexOf(output) >= sent.length - 512,
+        );
+      this.#save();
+    } finally {
+      this.#running = false;
+    }
+  }
+}

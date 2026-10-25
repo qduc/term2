@@ -24,6 +24,8 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth, displayMode = 'standard' }) => 
           <Text color={theme.reasoning}>↻ Session rollover briefing</Text>
           <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
         </>
+      ) : msg.sender === 'user' && msg.presentation === 'server_message' ? (
+        <Text color={theme.reasoning}>{msg.text}</Text>
       ) : msg.sender === 'user' ? (
         <UserMessage text={msg.text} />
       ) : msg.sender === 'system' && msg.presentation === 'rule' ? (

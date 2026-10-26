@@ -1159,6 +1159,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
                 () => activeControlSocketServer,
                 process.env.XDG_RUNTIME_DIR ?? '',
               ),
+              isDiscordInputEnabled: () => activeControlSocketServer?.discordInputEnabled === true,
             }
           : {}),
         mcpToolSource: mcpManager,

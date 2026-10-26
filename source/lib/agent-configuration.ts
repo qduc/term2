@@ -66,6 +66,7 @@ export interface AgentConfigurationDeps {
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
   discordSend?: DiscordSend;
+  isDiscordInputEnabled?: () => boolean;
   requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
   configureTaskCheckIn?: (params: any) => any;
   setTaskCheckInPolicy?: (
@@ -113,6 +114,7 @@ export class AgentConfiguration implements AgentSource {
   #allowAskUser: boolean;
   #sessionBrowser?: SessionBrowser;
   #discordSend?: DiscordSend;
+  #isDiscordInputEnabled?: () => boolean;
   #requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
   #configureTaskCheckIn?: (params: any) => any;
   #setTaskCheckInPolicy?: (
@@ -163,6 +165,7 @@ export class AgentConfiguration implements AgentSource {
     this.#allowAskUser = deps.allowAskUser ?? true;
     this.#sessionBrowser = deps.sessionBrowser;
     this.#discordSend = deps.discordSend;
+    this.#isDiscordInputEnabled = deps.isDiscordInputEnabled;
     this.#requestSessionRollover = deps.requestSessionRollover;
     this.#configureTaskCheckIn = deps.configureTaskCheckIn;
     this.#setTaskCheckInPolicy = deps.setTaskCheckInPolicy;
@@ -306,6 +309,7 @@ export class AgentConfiguration implements AgentSource {
       allowAskUser: this.#allowAskUser,
       sessionBrowser: this.#sessionBrowser,
       discordSend: this.#discordSend,
+      isDiscordInputEnabled: this.#isDiscordInputEnabled,
       ...(this.#requestSessionRollover ? { requestSessionRollover: this.#requestSessionRollover } : {}),
       configureTaskCheckIn: this.#configureTaskCheckIn,
       setTaskCheckInPolicy: this.#setTaskCheckInPolicy,

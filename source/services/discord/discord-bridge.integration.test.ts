@@ -1667,14 +1667,42 @@ it('requires a root dependency and suppresses read-only/plan sending before the 
   await f.bridge().listenOutbound();
   const settings = createMockSettingsService({ 'app.activeProfileId': 'builtin:bare' });
   const discordSend = (input: DiscordSendInput) => sendDiscord(f.root, f.sessions.coord!.socket.binding, input);
+  let activeServer: ControlSocketServer | null = null;
   const definition = (extra: Record<string, unknown> = {}) =>
-    getAgentDefinition({ settingsService: settings, loggingService: logger, ...extra }, 'fixture');
+    getAgentDefinition(
+      {
+        settingsService: settings,
+        loggingService: logger,
+        isDiscordInputEnabled: () => activeServer?.discordInputEnabled === true,
+        ...extra,
+      },
+      'fixture',
+    );
   const tools = (extra: Record<string, unknown> = {}) => definition(extra).tools!;
+  const requestInstructions = (extra: Record<string, unknown> = {}) => {
+    const agent = definition(extra);
+    return agent.resolveInstructionsForRequest?.() ?? agent.instructions;
+  };
   const discordSection = '## Communicating through Discord';
   expect(tools().some((t) => t.name === 'discord_send')).toBe(false);
-  expect(definition().instructions).not.toContain(discordSection);
+  expect(requestInstructions()).not.toContain(discordSection);
   expect(tools({ discordSend }).some((t) => t.name === 'discord_send')).toBe(true);
-  const discordPrompt = definition({ discordSend }).instructions;
+  const connectedAgent = definition({ discordSend });
+  expect(connectedAgent.resolveInstructionsForRequest?.()).not.toContain(discordSection);
+
+  const nonOptedServer = new ControlSocketServer({
+    name: 'non-opted-prompt-test',
+    runtimeDir: f.root,
+    discordInput: false,
+    sessionId: () => 'discord-prompt-test',
+  });
+  await nonOptedServer.listen();
+  cleanup.push(() => nonOptedServer.close());
+  activeServer = nonOptedServer;
+  expect(connectedAgent.resolveInstructionsForRequest?.()).not.toContain(discordSection);
+  await nonOptedServer.close();
+  activeServer = f.sessions.coord!.socket;
+  const discordPrompt = connectedAgent.resolveInstructionsForRequest?.() ?? connectedAgent.instructions;
   expect(discordPrompt).toContain(discordSection);
   for (const guidance of [
     'The human sees only messages posted to Discord',
@@ -1687,10 +1715,13 @@ it('requires a root dependency and suppresses read-only/plan sending before the 
     expect(discordPrompt).toContain(guidance);
   }
   expect(tools({ discordSend, readOnly: true }).some((t) => t.name === 'discord_send')).toBe(false);
-  expect(definition({ discordSend, readOnly: true }).instructions).not.toContain(discordSection);
+  expect(requestInstructions({ discordSend, readOnly: true })).not.toContain(discordSection);
   settings.set('app.activeProfileId', 'builtin:plan');
   expect(tools({ discordSend }).some((t) => t.name === 'discord_send')).toBe(false);
-  expect(definition({ discordSend }).instructions).not.toContain(discordSection);
+  expect(requestInstructions({ discordSend })).not.toContain(discordSection);
+  settings.set('app.activeProfileId', 'builtin:bare');
+  activeServer = null;
+  expect(connectedAgent.resolveInstructionsForRequest?.()).not.toContain(discordSection);
   const tool = createDiscordSendToolDefinition(discordSend);
   const result = await tool.execute({ action: 'send', requestId: 'root', text: 'root only' });
   expect(result).toMatchObject({ delivery: 'queued' });

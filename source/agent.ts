@@ -64,7 +64,7 @@ import fs from 'fs';
 import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
-import { buildPromptSpec } from './prompts/prompt-constructor.js';
+import { buildPromptSpec, getDiscordCommunicationSection } from './prompts/prompt-constructor.js';
 import { ProfileResolutionError, resolveActiveProfile } from './services/profiles/index.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
@@ -288,6 +288,7 @@ export const getAgentDefinition = (
     sessionBrowser?: SessionBrowser;
     /** Explicit interactive-root-only outbound capability; never inherited by subagents. */
     discordSend?: DiscordSend;
+    isDiscordInputEnabled?: () => boolean;
     requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
     configureTaskCheckIn?: (params: ConfigureTaskCheckInParams) => ConfigureTaskCheckInResult;
     setTaskCheckInPolicy?: (
@@ -441,7 +442,6 @@ export const getAgentDefinition = (
     memoryGuidance: hasCapability('memory') ? memoryCapability.guidance : '',
     memoryContext: memoryCapability.context,
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
-    discordCommunicationEnabled: discordSendEnabled,
     executionContext,
     runCodeEnabled: hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
@@ -769,13 +769,20 @@ export const getAgentDefinition = (
       ? '\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.'
       : ''
   }`;
+  const resolveInstructionsForRequest =
+    deps.getGoal || deps.isDiscordInputEnabled
+      ? () =>
+          `${instructions}${
+            discordSendEnabled && deps.isDiscordInputEnabled?.() ? `\n\n${getDiscordCommunicationSection()}` : ''
+          }${deps.getGoal ? renderDurableGoalContext(deps.getGoal()) : ''}`
+      : undefined;
   return {
     name: 'Terminal Assistant',
     memoryContextEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
     instructions,
+    ...(resolveInstructionsForRequest ? { resolveInstructionsForRequest } : {}),
     ...(deps.getGoal
       ? {
-          resolveInstructionsForRequest: () => `${instructions}${renderDurableGoalContext(deps.getGoal?.())}`,
           // Read at the same request boundary as the rendered goal above, so
           // goal_check records the goal the model judged, not a later one.
           resolveRequestSnapshot: () => ({ goal: deps.getGoal?.() }),

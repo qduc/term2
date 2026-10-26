@@ -23,7 +23,6 @@ type PromptConstructorBaseOptions = {
   memoryGuidance?: string;
   memoryContext?: string;
   sessionBrowserEnabled?: boolean;
-  discordCommunicationEnabled?: boolean;
   executionContext?: ExecutionContext;
 };
 
@@ -61,7 +60,6 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     memoryGuidance = '',
     memoryContext = '',
     sessionBrowserEnabled = false,
-    discordCommunicationEnabled = false,
     executionContext,
     runCodeEnabled = false,
     editorSurface = 'none',
@@ -71,7 +69,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     return {
       basePromptContent: profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : '',
       fragmentFiles: [],
-      inlineSections: discordCommunicationEnabled ? [getDiscordCommunicationSection()] : [],
+      inlineSections: [],
     };
   }
   // Runtime modes are intentionally absent from model-family profile selection.
@@ -80,10 +78,6 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   const promptProfile = selectPromptProfile({ model });
   const fragmentFiles = [...(promptProfile.fragmentFiles ?? [])];
   const inlineSections: string[] = [];
-
-  if (discordCommunicationEnabled) {
-    inlineSections.push(getDiscordCommunicationSection());
-  }
 
   // Every model-family prompt states how the approval layer works. Without it a
   // model has no mechanism for "requires confirmation" other than stopping the
@@ -144,7 +138,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   };
 }
 
-function getDiscordCommunicationSection(): string {
+export function getDiscordCommunicationSection(): string {
   return [
     '## Communicating through Discord',
     'The human sees only messages posted to Discord (your final reply and discord_send), not tool calls, terminal output, reasoning, or background work.',

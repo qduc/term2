@@ -115,6 +115,7 @@ export interface AgentFactoryDeps {
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
   discordSend?: DiscordSend;
+  isDiscordInputEnabled?: () => boolean;
   requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
   configureTaskCheckIn?: (params: any) => any;
   setTaskCheckInPolicy?: (
@@ -527,6 +528,7 @@ export function buildAgent(
       allowAskUser: deps.allowAskUser,
       sessionBrowser: deps.sessionBrowser,
       discordSend: deps.discordSend,
+      isDiscordInputEnabled: deps.isDiscordInputEnabled,
       ...(deps.requestSessionRollover ? { requestSessionRollover: deps.requestSessionRollover } : {}),
       configureTaskCheckIn: deps.configureTaskCheckIn,
       setTaskCheckInPolicy: deps.setTaskCheckInPolicy,

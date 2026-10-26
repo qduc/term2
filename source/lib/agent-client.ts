@@ -793,6 +793,7 @@ export class AgentClient {
       /** Supplied only by the interactive CLI root composition. */
       sessionBrowser?: import('../services/conversation/session-browser.js').SessionBrowser;
       discordSend?: import('../services/discord/discord-outbound.js').DiscordSend;
+      isDiscordInputEnabled?: () => boolean;
       /** Supplied only by an owned root session client. */
       requestCapture?: ProviderRequestCapture;
       /** Provider definitions scoped to this client/runtime. */
@@ -878,6 +879,7 @@ export class AgentClient {
         allowAskUser,
         sessionBrowser: deps.sessionBrowser,
         discordSend: deps.discordSend,
+        isDiscordInputEnabled: deps.isDiscordInputEnabled,
         onConfigChanged: (_changedKey?: string) => {
           // Models capture provider/settings at creation time.
           this.#clearStreamedModelCache();

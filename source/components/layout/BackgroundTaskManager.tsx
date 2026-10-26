@@ -13,6 +13,7 @@ import { sanitizeBackgroundTaskToolLabel } from '../../services/background-task-
 import { formatBackgroundTaskElapsed } from './BackgroundTasksPanel.js';
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 import { MenuFooter } from '../common/MenuContainer.js';
+import { MESSAGE_HORIZONTAL_PADDING } from '../message/MessageList.js';
 import { useTheme } from '../theme.js';
 import { useSkin } from '../../skins/SkinContext.js';
 
@@ -209,7 +210,8 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
 }) => {
   const theme = useTheme();
   const { stdout } = useStdout();
-  const labelColumns = stdout.columns || 80;
+  // The manager is rendered inside an outer Box with this horizontal padding.
+  const labelColumns = Math.max(1, (stdout.columns || 80) - MESSAGE_HORIZONTAL_PADDING * 2);
   const { MenuFrame } = useSkin();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedOrdinal, setSelectedOrdinal] = useState(0);

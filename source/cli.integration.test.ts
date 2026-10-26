@@ -2151,7 +2151,8 @@ it.each(['flag', 'config'])(
       expect(system).toContain('read the SKILL.md at its\nlocation with the shell');
       expect(system).not.toContain('activate_skill');
       expect(system).toContain(`cwd (you're already here, don't \`cd\` to it): ${repo}`);
-      expect(system).toContain('Follow required independent review policies');
+      expect(system).toContain("follow the project's review policy");
+      expect(system).toContain('Make the simplest change that fully meets the request');
       expect(system).not.toContain('run_code');
       expect(mock.capturedModels()).toHaveLength(2);
       const emitted = result.stdout

@@ -1497,7 +1497,7 @@ const { waitUntilExit } = render(
             controlSessionMetadata={() => ({
               workspaceRoot: executionContext?.getHomeWorkspace() ?? null,
               version: String(cli.pkg.version ?? ''),
-              createdAt: effectiveCreatedAt,
+              createdAt: conversationService.sessionStartedAt,
               logPath: path.join(logWriterDir, `${effectiveSessionId ?? conversationService.sessionId}.jsonl`),
             })}
             settingsService={settings}

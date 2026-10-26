@@ -765,7 +765,7 @@ export const getAgentDefinition = (
     environmentEnabled ? `Environment: ${envInfo}` : ''
   }${agentsInstructions}${skillsInstructions}${
     !allowAskUser
-      ? '\n\nUnattended mode: Never ask the user questions or wait for clarification, verifier selection, or workflow approval. Choose reasonable low-risk interpretations within existing permissions, continue the task, and state any assumptions in your final response. If material requirements or authorization are missing, report blocked and state what is needed. If required independent verification cannot run, report completion as unverified and clearly say "independent verification not performed"; do not claim required review passed. These unattended instructions take precedence over interactive workflow guidance.'
+      ? '\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.'
       : ''
   }`;
   return {

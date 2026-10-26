@@ -2140,10 +2140,9 @@ it.each(['flag', 'config'])(
         .join('\n');
       expect(system.length).toBeLessThan(4000);
       expect(system).toContain('Unattended mode: Never ask');
-      // AGENTS.md is read on demand, not injected.
-      expect(system).not.toContain('PROJECT_GUIDANCE_SENTINEL');
-      expect(system).not.toContain('GLOBAL_GUIDANCE_SENTINEL');
-      expect(system).toContain('They are not preloaded');
+      // Like pi, Bare injects AGENTS.md (global and project) instead of carrying policy.
+      expect(system).toContain('PROJECT_GUIDANCE_SENTINEL');
+      expect(system).toContain('GLOBAL_GUIDANCE_SENTINEL');
       expect(system).toContain('report blocked');
       expect(system).toContain('No durable session goal is set');
       expect(system).toContain('do not call goal_check');
@@ -2151,8 +2150,7 @@ it.each(['flag', 'config'])(
       expect(system).toContain('read the SKILL.md at its\nlocation with the shell');
       expect(system).not.toContain('activate_skill');
       expect(system).toContain(`cwd (you're already here, don't \`cd\` to it): ${repo}`);
-      expect(system).toContain("follow the project's review policy");
-      expect(system).toContain('Make the simplest change that fully meets the request');
+      expect(system).toContain('Use the shell to read, search, and edit files');
       expect(system).not.toContain('run_code');
       expect(mock.capturedModels()).toHaveLength(2);
       const emitted = result.stdout

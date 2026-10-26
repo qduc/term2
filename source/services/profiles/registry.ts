@@ -136,11 +136,10 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
           content: prompt('bare.md'),
         },
       },
-      // Project instructions are read on demand (bare.md says when), not
-      // injected, so Bare also serves as the general terminal profile.
       context: {
         kind: 'context',
         sources: [
+          { id: 'project-instructions', source: 'project-instructions' },
           { id: 'skills-catalog', source: 'skills-catalog' },
           { id: 'environment', source: 'environment' },
         ],

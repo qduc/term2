@@ -1414,7 +1414,7 @@ if (controlSocketRequested) {
       controlSocket = new ControlSocketServer({
         name: controlSocketName,
         discordInput,
-        sessionId: () => effectiveSessionId ?? conversationService.sessionId,
+        sessionId: () => conversationService.sessionId,
       });
       await controlSocket.listen();
       activeControlSocketServer = controlSocket;
@@ -1475,7 +1475,7 @@ const { waitUntilExit } = render(
                 server = new ControlSocketServer({
                   name,
                   discordInput: true,
-                  sessionId: () => effectiveSessionId ?? conversationService.sessionId,
+                  sessionId: () => conversationService.sessionId,
                 });
                 await server.listen();
                 controlSocket = server;

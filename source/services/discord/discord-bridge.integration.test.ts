@@ -27,6 +27,8 @@ import { AgentClient } from '../../lib/agent-client.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { SessionContextService } from '../session/session-context-service.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
+import { createConversationLogWriter } from '../logging/conversation-log-writer.js';
+import { rotateSessionLog } from '../conversation/session-log-lifecycle.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
 import { registerProvider, unregisterProvider } from '../../providers/registry.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
@@ -1200,6 +1202,70 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
   expect(active?.discordInputEnabled).toBe(true);
   command.action('disconnect');
   await new Promise<void>((resolve) => setImmediate(resolve));
+});
+
+it('keeps public control identity across internal rollover but changes it for explicit new sessions', async () => {
+  const f = await fixture();
+  await f.cycle();
+  const service = f.sessions.coord!.service;
+  const socket = f.sessions.coord!.socket;
+  const publicSessionId = service.sessionId;
+  const publicStartedAt = service.sessionStartedAt;
+  const conversationsDir = path.join(f.root, 'conversations');
+  fs.mkdirSync(conversationsDir, { recursive: true });
+  const writer = createConversationLogWriter({
+    sessionId: publicSessionId,
+    dir: conversationsDir,
+    logger,
+    saveLast: () => {},
+  });
+  writer.init({ id: publicSessionId, createdAt: '2026-01-01T00:00:00.000Z', projectPath: f.root });
+  writer.append({
+    type: 'user_message',
+    message: { id: 'prior-fact', sender: 'user', text: 'retain this useful predecessor context' },
+  });
+  cleanup.push(() => writer.close());
+
+  const successorId = 'internal-context-segment';
+  const commitContextRollover = service.prepareRolloverWithNewId(successorId);
+  rotateSessionLog(writer, successorId, {
+    id: successorId,
+    createdAt: '2026-01-01T00:01:00.000Z',
+    projectPath: f.root,
+    rolloverFrom: publicSessionId,
+  });
+  commitContextRollover();
+  writer.append({
+    type: 'user_message',
+    message: { id: 'rollover-brief', sender: 'user', text: 'carry forward the retained predecessor context' },
+  });
+  socket.refreshAdvertisement();
+
+  expect(fs.readFileSync(path.join(conversationsDir, `${publicSessionId}.jsonl`), 'utf8')).toContain(
+    'retain this useful predecessor context',
+  );
+  const successorLog = fs.readFileSync(path.join(conversationsDir, `${successorId}.jsonl`), 'utf8');
+  expect(successorLog).toContain(`"rolloverFrom":"${publicSessionId}"`);
+  expect(successorLog).toContain('carry forward the retained predecessor context');
+  expect(writer.sessionId).toBe(successorId);
+  expect(service.sessionId).toBe(publicSessionId);
+  expect(service.sessionHandle.sessionId).toBe(publicSessionId);
+  expect(service.sessionStartedAt).toBe(publicStartedAt);
+  expect(service.sessionHandle.sessionStartedAt).toBe(publicStartedAt);
+  expect(socket.binding.sessionId).toBe(publicSessionId);
+  expect(await callDiscordControl(socket.socketPath, 'status')).toMatchObject({ sessionId: publicSessionId });
+
+  f.human('continue after internal context rollover');
+  await f.cycle(4);
+  expect(f.received.coord).toHaveLength(1);
+  expect(f.journal().jobs.at(-1).state).toBe('done');
+  expect(f.posted.some((message) => message.content === '[coord] coord answer')).toBe(true);
+
+  service.resetWithNewId('explicit-new-conversation');
+  socket.refreshAdvertisement();
+  expect(service.sessionId).toBe('explicit-new-conversation');
+  expect(service.sessionHandle.sessionId).toBe('explicit-new-conversation');
+  expect((await callDiscordControl(socket.socketPath, 'status')).sessionId).toBe('explicit-new-conversation');
 });
 
 it('requires process opt-in, pins session identity and preserves the ordinary control peer rejection', async () => {

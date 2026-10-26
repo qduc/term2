@@ -208,8 +208,12 @@ export class ConversationService {
     this.#attachRolloverQueueBoundary();
     const service = this;
     this.#sessionHandle = {
-      sessionId: this.sessionId,
-      sessionStartedAt: this.sessionStartedAt,
+      get sessionId() {
+        return service.sessionId;
+      },
+      get sessionStartedAt() {
+        return service.sessionStartedAt;
+      },
       prepare: (input, ids) => service.prepareMessage(input, ids),
       commit: (leaseId) => service.commitMessage(leaseId),
       cancelPrepared: (leaseId) => service.cancelPreparedMessage(leaseId),
@@ -286,12 +290,13 @@ export class ConversationService {
     return this.#clientHandle.agentClient.answerBackgroundSubagentQuestion?.(runId, messageId, answer) === true;
   }
 
+  /** Stable public identity; internal context rollovers do not rebind clients. */
   get sessionId(): string {
-    return this.#runtime.sessionId;
+    return this.#runtime.publicSessionId;
   }
 
   get sessionStartedAt(): string {
-    return this.#runtime.sessionStartedAt;
+    return this.#runtime.publicSessionStartedAt;
   }
 
   /** The gateway-facing projection over this service's already-built runtime. */
@@ -584,7 +589,7 @@ export class ConversationService {
       type: 'session_rollover',
       phase: 'blocked',
       rolloverId: request.rolloverId,
-      sourceSessionId: this.sessionId,
+      sourceSessionId: this.#runtime.sessionId,
       ...(request.reason ? { reason: request.reason } : {}),
       briefSize: request.brief.length,
       ...(request.providerInputTokens !== undefined ? { providerInputTokens: request.providerInputTokens } : {}),

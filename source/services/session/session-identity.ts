@@ -1,19 +1,34 @@
 /**
- * Mutable identity shared by the retained session graph.  A rollover changes
- * the persistence/telemetry identity, but does not replace the graph that owns
- * tools, permissions, or live background work.
+ * Identity shared by the retained session graph. An internal context rollover
+ * moves the current conversation/persistence identity while the public process
+ * session identity remains fixed; an explicit new-session action constructs a
+ * new instance.
  */
 export class SessionIdentity {
   #value: string;
   #startedAt: string;
+  readonly #publicId: string;
+  readonly #publicStartedAt: string;
   #promptCacheKey: string;
 
   constructor(value: string, startedAt = new Date().toISOString(), promptCacheKey = value) {
     this.#value = value;
     this.#startedAt = startedAt;
+    this.#publicId = value;
+    this.#publicStartedAt = startedAt;
     this.#promptCacheKey = promptCacheKey;
   }
 
+  /** Stable external session identity for the lifetime of this retained graph. */
+  get publicId(): string {
+    return this.#publicId;
+  }
+
+  get publicStartedAt(): string {
+    return this.#publicStartedAt;
+  }
+
+  /** Current persisted conversation identity; changes on internal context rollover. */
   get current(): string {
     return this.#value;
   }

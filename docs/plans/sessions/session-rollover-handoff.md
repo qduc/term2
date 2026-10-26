@@ -64,6 +64,8 @@ separate no-replay bullet were dropped as restating what a good brief already
 carries. The live-handle guidance now appears only when the inventory lists
 live tasks. Like the 09-25 wording, this version is unmeasured.
 
+Internal context rollover advances the persisted conversation ID to a successor log, but keeps the retained process's public session ID stable. The successor's `session_init.rolloverFrom` points to the prior conversation ID and the first-turn briefing carries useful state forward. Explicit new-conversation actions such as `/clear` still construct a new runtime identity. Control clients remain attached to the process identity while the active conversation log path advances.
+
 The implementation slice is complete. The session-tool retrieval study is also
 complete: `e8015e7a` captured the seven-session/79-call naturalistic baseline,
 and the later controlled phase ran six serial interactive cells across three
@@ -343,7 +345,7 @@ never automatic, retry.
 
 ### Provider/cache implications (favorable)
 
-A new session id means a fresh `providerHistoryKey`, so provider continuity
+A new persisted conversation id means a fresh `providerHistoryKey`, so provider continuity
 starts clean — no `previous_response_id` to drop, no chain recovery, and the
 briefing turn is a tiny request. The old session's server-side state/cache is
 simply abandoned (writes were already paid; nothing is re-billed). Compare

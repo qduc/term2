@@ -307,8 +307,12 @@ export type BackgroundSubagentApprovalChannel = Pick<
  * details.
  */
 export type SessionRuntime = {
+  /** Current persisted conversation id; advances on in-process context rollover. */
   readonly sessionId: string;
   readonly sessionStartedAt: string;
+  /** Stable external identity for this retained runtime; explicit reset creates a new one. */
+  readonly publicSessionId: string;
+  readonly publicSessionStartedAt: string;
   /** Read-only projection of tool calls that still lack results in this turn. */
   getUnsettledToolExecutions: () => { callId: string; toolName: string; status: string }[];
   turns: {
@@ -960,7 +964,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       // This is intentionally the same root-state reset used by clear, but it
       // does not dispose the graph. The retained client owns live background
       // work, permissions, and approval registries; only transcript and
-      // provider/turn continuity are freshened.
+      // provider/turn continuity are freshened. The current persisted
+      // conversation id advances; SessionIdentity.publicId remains process-stable.
       state.resetSession({ clearConversations: false, rollover: true });
       identity.replace(newSessionId, newStartedAt);
       agentClient.resetMemoryContextForNewSession?.();
@@ -1302,6 +1307,12 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     },
     get sessionStartedAt() {
       return internals.identity.startedAt;
+    },
+    get publicSessionId() {
+      return internals.identity.publicId;
+    },
+    get publicSessionStartedAt() {
+      return internals.identity.publicStartedAt;
     },
     getUnsettledToolExecutions: internals.getUnsettledToolExecutions,
     turns: {

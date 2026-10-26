@@ -13561,6 +13561,325 @@
         "resolves_run_ids": []
       },
       "notes": "Author verification only; parent independent source and failure/recovery review remains pending. Focused provider subset only: broad suite not run for this candidate; prior registry broad suite strict-guard UnixIPC failure remains parent-owned, not waived. Side effect exactly once, 4 requests in interrupted close->timeout->healthy case; configured0/1/2/5 -> 1/2/3/6 requests. Only measured silence excluded from90s overhead. Original source927 unchanged; 437/441 protected files unchanged, four discord-bridge peer Git paths changed externally; no restoration attempted."
+    },
+    {
+      "id": "2026-10-26-task-menu-live-pty-red",
+      "task_ids": [
+        "2026-10-26-task-menu-live-keyboard-verification"
+      ],
+      "commit": null,
+      "snapshot": "dirty working tree based on 0082cf7c20a7bcc3130c98338e48cf3289b2d376; temporary probe removed; verification ledgers/evidence are working-tree artifacts, not a clean commit",
+      "timestamp": "2026-10-26T07:09:33+07:00",
+      "environment": "Linux; Node v24.19.0; pnpm; built CLI from assigned worktree; PTY configured COLUMNS=80, LINES=24, but helper left kernel TIOCGWINSZ at 0x0 (actual ioctl size unset). Local OpenAI-compatible fixture; no live provider.",
+      "commands": [
+        {
+          "argv": [
+            "pnpm",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "build"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--reporter=verbose",
+            "--config",
+            "vitest.e2e.config.ts",
+            "source/task-menu-live.e2e.test.ts"
+          ],
+          "exit": 1,
+          "containment": "local fixture",
+          "failure": "background task row should not wrap at configured COLUMNS=80: expected true to be false"
+        },
+        {
+          "argv": [
+            "pnpm",
+            "test:integration"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--reporter=verbose",
+            "--config",
+            "vitest.e2e.config.ts",
+            "source/cli-tool-rows.e2e.test.ts"
+          ],
+          "exit": 0
+        }
+      ],
+      "results": {
+        "build": {
+          "exit_code": 0
+        },
+        "live_pty_journey": {
+          "exit_code": 1,
+          "passed": 0,
+          "failed": 1,
+          "requests": 6,
+          "observed": [
+            "Ctrl+G opens task manager",
+            "Down/Up navigation and Enter/Escape function",
+            "foreground task transfers to background with “Moved to background” feedback",
+            "two background tasks settle and settled rows disappear",
+            "old “Task is no longer transferable” error absent"
+          ],
+          "failed_criterion": "long background task label wrapped at configured/effective 80-column fallback"
+        },
+        "integration": {
+          "exit_code": 0,
+          "passed": 309,
+          "skipped": 1,
+          "files": 31
+        },
+        "focused_existing_e2e": {
+          "exit_code": 0,
+          "passed": 1,
+          "files": 1
+        },
+        "terminal_geometry": {
+          "configured_cols": 80,
+          "configured_rows": 24,
+          "ioctl_cols": 0,
+          "ioctl_rows": 0,
+          "uncertainty": "layout was observed under environment fallback, not a confirmed physical 80x24 PTY window"
+        }
+      },
+      "comparison": {
+        "red_run_id": null,
+        "resolves_run_ids": []
+      }
+    },
+    {
+      "id": "2026-10-26-task-menu-row-wrap-red",
+      "task_ids": [
+        "2026-10-26-task-menu-row-wrap-fix"
+      ],
+      "commit": null,
+      "snapshot": "dirty tree based on 0082cf7c20a7bcc3130c98338e48cf3289b2d376; test and PTY geometry helper present; BackgroundTaskManager restored to original HEAD source for red; no implementation fix applied during this run",
+      "timestamp": "2026-10-26T07:26:05+07:00",
+      "environment": "Linux; Node v24.19.0; pnpm 11.7.0; built CLI, local OpenAI-compatible fixture; PTY TIOCSWINSZ set and Node stdout reported 80x24; test uses 80 columns × 24 rows.",
+      "commands": [
+        {
+          "argv": [
+            "pnpm",
+            "build"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--reporter=verbose",
+            "--config",
+            "vitest.e2e.config.ts",
+            "source/task-menu-row-wrap.e2e.test.ts"
+          ],
+          "exit": 1,
+          "containment": "local fixture",
+          "failure": "test row assertion: expected active status on the same line; actual selected row ended with “·”, with “active” on following line"
+        }
+      ],
+      "results": {
+        "actual_pty_row": {
+          "exit_code": 1,
+          "failed": 1,
+          "passed": 0,
+          "geometry_probe": "stdout.columns=80, stdout.rows=24",
+          "evidence": "task-menu-live-evidence/fix-red.log"
+        },
+        "claim": "Reproduces the task-menu status wrap on original BackgroundTaskManager source at actual 80x24 PTY geometry."
+      },
+      "comparison": {
+        "red_run_id": null,
+        "resolves_run_ids": []
+      }
+    },
+    {
+      "id": "2026-10-26-task-menu-row-wrap-green",
+      "task_ids": [
+        "2026-10-26-task-menu-row-wrap-fix"
+      ],
+      "commit": null,
+      "snapshot": "dirty working tree based on 0082cf7c20a7bcc3130c98338e48cf3289b2d376; UI, PTY helper, persistent e2e, and ledger changes uncommitted; built CLI from this tree",
+      "timestamp": "2026-10-26T07:26:13+07:00",
+      "environment": "Linux; Node v24.19.0; pnpm 11.7.0; local OpenAI-compatible fixture; PTY TIOCSWINSZ set; geometry probe confirmed Node stdout.columns=80 and stdout.rows=24.",
+      "commands": [
+        {
+          "argv": [
+            "pnpm",
+            "build"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--reporter=verbose",
+            "--config",
+            "vitest.e2e.config.ts",
+            "source/task-menu-row-wrap.e2e.test.ts"
+          ],
+          "exit": 0
+        }
+      ],
+      "results": {
+        "actual_pty_regression": {
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "geometry": "80x24 via TIOCSWINSZ; Node stdout confirmed 80 columns and 24 rows",
+          "journey": [
+            "foreground shell task started",
+            "Ctrl+G opened manager",
+            "b armed foreground-to-background transfer",
+            "Enter transferred it",
+            "status “active” asserted on same physical menu row as [Shell] command",
+            "“Moved to background” observed"
+          ],
+          "evidence": "task-menu-live-evidence/fix-green.log"
+        },
+        "unresolved": {
+          "independent_review": "Sol review requested by user but not performed in this work session; no self-acceptance claimed",
+          "full_e2e_tier": "not run; relevant PTY and existing CLI e2e cases plus full integration and static guard checks were run"
+        }
+      },
+      "comparison": {
+        "red_run_id": "2026-10-26-task-menu-row-wrap-red",
+        "resolves_run_ids": [
+          "2026-10-26-task-menu-row-wrap-red",
+          "2026-10-26-task-menu-live-pty-red"
+        ],
+        "resolves_defect_ids": [
+          "2026-10-26-task-menu-long-row-wrap"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-26-task-menu-row-wrap-checks",
+      "task_ids": [
+        "2026-10-26-task-menu-row-wrap-fix"
+      ],
+      "commit": null,
+      "snapshot": "dirty working tree based on 0082cf7c20a7bcc3130c98338e48cf3289b2d376; application row fix, PTY helper, and regression test present",
+      "timestamp": "2026-10-26T07:23:42+07:00",
+      "environment": "Linux; Node v24.19.0; pnpm 11.7.0; project package scripts set NODE_ENV=test.",
+      "commands": [
+        {
+          "argv": [
+            "pnpm",
+            "typecheck"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "test"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "test:integration",
+            "--",
+            "source/components/layout/BackgroundTaskManager.integration.test.tsx"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "test:e2e",
+            "--",
+            "source/task-menu-row-wrap.e2e.test.ts",
+            "source/cli-tool-rows.e2e.test.ts",
+            "source/cli.e2e.test.ts"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "eslint",
+            "source/components/layout/BackgroundTaskManager.tsx",
+            "source/test-helpers/terminal-e2e.ts",
+            "source/task-menu-row-wrap.e2e.test.ts"
+          ],
+          "exit": 0,
+          "warnings": 1
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "prettier",
+            "--check",
+            "source/components/layout/BackgroundTaskManager.tsx",
+            "source/test-helpers/terminal-e2e.ts",
+            "source/task-menu-row-wrap.e2e.test.ts"
+          ],
+          "exit": 0
+        }
+      ],
+      "results": {
+        "static_guards": {
+          "exit_code": 0,
+          "passed": 28,
+          "files": 7
+        },
+        "typecheck": {
+          "exit_code": 0
+        },
+        "prettier": {
+          "exit_code": 0
+        },
+        "focused_integration": {
+          "exit_code": 0,
+          "passed": 309,
+          "skipped": 1,
+          "files": 31
+        },
+        "eslint": {
+          "exit_code": 0,
+          "errors": 0,
+          "warnings": 1,
+          "warning": "existing react-hooks/set-state-in-effect at BackgroundTaskManager.tsx:261; untouched by this change"
+        },
+        "related_e2e": {
+          "exit_code": 0,
+          "passed": 37,
+          "skipped": 0,
+          "files": 7
+        }
+      },
+      "comparison": {
+        "red_run_id": "2026-10-26-task-menu-row-wrap-red",
+        "resolves_run_ids": []
+      }
     }
   ]
 }

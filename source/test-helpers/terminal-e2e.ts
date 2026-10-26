@@ -46,14 +46,53 @@ function tailOf(text: string, max = 800): string {
   return stripped.length > max ? `…${stripped.slice(-max)}` : stripped;
 }
 
-const PYTHON_PTY_BRIDGE = ['import pty', 'import sys', 'sys.exit(pty.spawn(sys.argv[1:]))'].join('; ');
+const PYTHON_PTY_BRIDGE = `
+import fcntl
+import os
+import pty
+import select
+import struct
+import sys
+import termios
+
+rows, cols = int(sys.argv[1]), int(sys.argv[2])
+argv = sys.argv[3:]
+pid, master = pty.fork()
+if pid == 0:
+    os.execvp(argv[0], argv)
+fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
+stdin_open = True
+while True:
+    readers = [master] + ([sys.stdin.fileno()] if stdin_open else [])
+    readable, _, _ = select.select(readers, [], [])
+    if master in readable:
+        try:
+            chunk = os.read(master, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        os.write(sys.stdout.fileno(), chunk)
+    if stdin_open and sys.stdin.fileno() in readable:
+        chunk = os.read(sys.stdin.fileno(), 4096)
+        if chunk:
+            os.write(master, chunk)
+        else:
+            stdin_open = False
+_, status = os.waitpid(pid, 0)
+sys.exit(os.waitstatus_to_exitcode(status))
+`;
 
 export function spawnTerminal(command: string, args: string[], options: SpawnTerminalOptions = {}): TerminalSession {
-  const terminal = spawn('python3', ['-u', '-c', PYTHON_PTY_BRIDGE, command, ...args], {
-    cwd: options.cwd ?? process.cwd(),
-    env: createTestChildEnv(options.env),
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  const terminal = spawn(
+    'python3',
+    ['-u', '-c', PYTHON_PTY_BRIDGE, String(options.rows ?? 24), String(options.cols ?? 80), command, ...args],
+    {
+      cwd: options.cwd ?? process.cwd(),
+      env: createTestChildEnv(options.env),
+      stdio: ['pipe', 'pipe', 'pipe'],
+    },
+  );
 
   let output = '';
   let exitState: TerminalExit | null = null;

@@ -380,7 +380,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
                 candidate.kind === 'shell' ? 'Shell' : candidate.role
               } · foreground] `,
               ' · running',
-            )}{' '}
+            )}
             · running
           </Text>
         ))}
@@ -397,7 +397,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
                 labelColumns,
                 `${displayIndex === selectedIndex ? '❯' : ' '} [${task.kind === 'shell' ? 'Shell' : task.role}] `,
                 ` · ${statusText(task)}`,
-              )}{' '}
+              )}
               · {statusText(task)}
             </Text>
           );

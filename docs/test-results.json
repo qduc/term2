@@ -13880,6 +13880,289 @@
         "red_run_id": "2026-10-26-task-menu-row-wrap-red",
         "resolves_run_ids": []
       }
+    },
+    {
+      "id": "2026-10-26-task-menu-row-wrap-padding-red",
+      "recorded_on": "2026-10-26",
+      "run_at": "2026-10-26T07:51:56+07:00",
+      "task_ids": [
+        "2026-10-26-task-menu-row-wrap-padding-followup"
+      ],
+      "commit": "354bc3eb148bcad37b13111380d83ab18ce247c9",
+      "revision_kind": "pre-fix-author-red-reproduction",
+      "snapshot": "Strengthened two-active-task e2e oracle run against the original reviewed source at 354bc3eb; only the test was expanded before this red run.",
+      "environment": "Linux; Node v24.19.0; pnpm 11.7.0; local OpenAI-compatible loopback fixture; kernel PTY TIOCSWINSZ=80x24 verified by Node stdout.",
+      "commands": [
+        {
+          "argv": [
+            "pnpm",
+            "build"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--reporter=verbose",
+            "--config",
+            "vitest.e2e.config.ts",
+            "source/task-menu-row-wrap.e2e.test.ts"
+          ],
+          "exit": 1
+        }
+      ],
+      "results": {
+        "two_active_task_row_oracle": {
+          "exit_code": 1,
+          "passed": 0,
+          "failed": 1,
+          "failure": "Initially unselected background row ended in separator only; the same-row status assertion failed at actual 80x24.",
+          "evidence": "task-menu-live-evidence/followup/red-pty-e2e.log"
+        }
+      },
+      "notes": "This is the expected red baseline for the retained strict two-active-task reproduction, not a passing check.",
+      "comparison": {
+        "resolves_run_ids": [],
+        "resolves_defect_ids": [
+          "2026-10-26-task-menu-long-row-wrap"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-26-task-menu-row-wrap-padding-green",
+      "recorded_on": "2026-10-26",
+      "run_at": "2026-10-26T07:51:56+07:00",
+      "task_ids": [
+        "2026-10-26-task-menu-row-wrap-padding-followup"
+      ],
+      "commit": "10dde9e4",
+      "revision_kind": "author_candidate_committed_unchanged",
+      "snapshot": "Build and PTY runs were executed before commit on the same tracked source/test bytes later committed as 10dde9e4; commit hooks ran eslint/prettier and left no tracked changes. Untracked evidence/report artifacts remain.",
+      "environment": "Linux; Node v24.19.0; pnpm 11.7.0; local OpenAI-compatible loopback fixture; kernel PTY TIOCSWINSZ=80x24 verified by Node stdout.",
+      "commands": [
+        {
+          "argv": [
+            "pnpm",
+            "build"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--reporter=verbose",
+            "--config",
+            "vitest.e2e.config.ts",
+            "source/task-menu-row-wrap.e2e.test.ts"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--import",
+            "tsx",
+            "task-menu-live-evidence/followup/live-probe-green.mjs"
+          ],
+          "exit": 0
+        }
+      ],
+      "results": {
+        "persistent_real_cli_pty": {
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "geometry": "80x24 TIOCSWINSZ, confirmed by child process.stdout.columns and rows.",
+          "journey": [
+            "two active shells",
+            "Ctrl+G menu open",
+            "initial rows checked",
+            "Down selection checked",
+            "details then Up selection checked",
+            "foreground-to-background transfer checked",
+            "actual shell file side effects and contents checked",
+            "settled rows disappear",
+            "clean CLI exit"
+          ],
+          "evidence": "task-menu-live-evidence/followup/green-pty-e2e.log"
+        },
+        "strict_live_probe": {
+          "exit_code": 0,
+          "requests": 6,
+          "actual_completion": "Both shell commands wrote files with exact contents one/two before their task rows disappeared.",
+          "evidence": "task-menu-live-evidence/followup/strict-pty-green.log",
+          "raw_screens": [
+            "task-menu-live-evidence/followup/live-01-open.raw.ansi",
+            "task-menu-live-evidence/followup/live-02-down.raw.ansi",
+            "task-menu-live-evidence/followup/live-03-details.raw.ansi",
+            "task-menu-live-evidence/followup/live-04-transfer.raw.ansi",
+            "task-menu-live-evidence/followup/live-05-settled.raw.ansi"
+          ]
+        }
+      },
+      "comparison": {
+        "red_run_id": "2026-10-26-task-menu-row-wrap-padding-red",
+        "resolves_run_ids": [
+          "2026-10-26-task-menu-row-wrap-padding-red"
+        ],
+        "resolves_defect_ids": [
+          "2026-10-26-task-menu-long-row-wrap"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-26-task-menu-row-wrap-padding-checks",
+      "recorded_on": "2026-10-26",
+      "run_at": "2026-10-26T07:51:56+07:00",
+      "task_ids": [
+        "2026-10-26-task-menu-row-wrap-padding-followup"
+      ],
+      "commit": "10dde9e4",
+      "revision_kind": "author_candidate_committed_unchanged",
+      "snapshot": "Relevant checks ran on the committed source/test content; no tracked changes followed commit 10dde9e4.",
+      "environment": "Linux; Node v24.19.0; pnpm 11.7.0; local OpenAI-compatible loopback fixture; kernel PTY TIOCSWINSZ=80x24 verified by Node stdout.",
+      "commands": [
+        {
+          "argv": [
+            "pnpm",
+            "typecheck"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "test"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "env",
+            "NODE_ENV=test",
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--reporter=verbose",
+            "--config",
+            "vitest.integration.config.ts",
+            "source/components/layout/BackgroundTaskManager.integration.test.tsx"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "test:e2e",
+            "--",
+            "source/task-menu-row-wrap.e2e.test.ts",
+            "source/cli-tool-rows.e2e.test.ts",
+            "source/cli.e2e.test.ts"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "eslint",
+            "source/components/layout/BackgroundTaskManager.tsx",
+            "source/task-menu-row-wrap.e2e.test.ts"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "exec",
+            "prettier",
+            "--check",
+            "source/components/layout/BackgroundTaskManager.tsx",
+            "source/task-menu-row-wrap.e2e.test.ts"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "build"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "pnpm",
+            "check:no-unit-tests"
+          ],
+          "exit": 0
+        },
+        {
+          "argv": [
+            "git",
+            "diff",
+            "--check",
+            "354bc3eb148bcad37b13111380d83ab18ce247c9..10dde9e4"
+          ],
+          "exit": 0
+        }
+      ],
+      "results": {
+        "typecheck": {
+          "exit_code": 0
+        },
+        "static_guards": {
+          "exit_code": 0,
+          "passed": 28,
+          "files": 7
+        },
+        "focused_integration": {
+          "exit_code": 0,
+          "passed": 1,
+          "files": 1,
+          "notes": "React act/JSX environment warnings only."
+        },
+        "e2e_script": {
+          "exit_code": 0,
+          "passed": 37,
+          "failed": 0,
+          "files": 7
+        },
+        "eslint": {
+          "exit_code": 0,
+          "errors": 0,
+          "warnings": 1,
+          "warning": "Existing react-hooks/set-state-in-effect warning at BackgroundTaskManager.tsx:263."
+        },
+        "prettier": {
+          "exit_code": 0
+        },
+        "build": {
+          "exit_code": 0
+        },
+        "no_unit_tests": {
+          "exit_code": 0
+        },
+        "commit_diff_check": {
+          "exit_code": 0
+        }
+      },
+      "notes": "An initial shell wrapper invocation attempted to execute NODE_ENV=test as a command (exit 127), so it did not run Vitest. The focused integration command was rerun correctly using env NODE_ENV=test and passed; the failure and retry are retained in checks-status.txt and integration.log.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-26-task-menu-row-wrap-padding-red",
+          "2026-10-26-task-menu-row-wrap-padding-green"
+        ],
+        "resolves_defect_ids": [
+          "2026-10-26-task-menu-long-row-wrap"
+        ]
+      }
     }
   ]
 }

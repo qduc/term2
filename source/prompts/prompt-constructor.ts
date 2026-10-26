@@ -23,6 +23,7 @@ type PromptConstructorBaseOptions = {
   memoryGuidance?: string;
   memoryContext?: string;
   sessionBrowserEnabled?: boolean;
+  discordCommunicationEnabled?: boolean;
   executionContext?: ExecutionContext;
 };
 
@@ -60,6 +61,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     memoryGuidance = '',
     memoryContext = '',
     sessionBrowserEnabled = false,
+    discordCommunicationEnabled = false,
     executionContext,
     runCodeEnabled = false,
     editorSurface = 'none',
@@ -69,7 +71,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     return {
       basePromptContent: profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : '',
       fragmentFiles: [],
-      inlineSections: [],
+      inlineSections: discordCommunicationEnabled ? [getDiscordCommunicationSection()] : [],
     };
   }
   // Runtime modes are intentionally absent from model-family profile selection.
@@ -78,6 +80,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   const promptProfile = selectPromptProfile({ model });
   const fragmentFiles = [...(promptProfile.fragmentFiles ?? [])];
   const inlineSections: string[] = [];
+
+  if (discordCommunicationEnabled) {
+    inlineSections.push(getDiscordCommunicationSection());
+  }
 
   // Every model-family prompt states how the approval layer works. Without it a
   // model has no mechanism for "requires confirmation" other than stopping the
@@ -136,4 +142,15 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     fragmentFiles,
     inlineSections,
   };
+}
+
+function getDiscordCommunicationSection(): string {
+  return [
+    '## Communicating through Discord',
+    'The human sees only messages posted to Discord (your final reply and discord_send), not tool calls, terminal output, reasoning, or background work.',
+    'Before substantial work, acknowledge it with discord_send; during long work, send only sparse useful milestones, blockers, and completion updates—not a running transcript.',
+    'Make the final reply stand alone: say what you did, the result, and what happens next. Explain when a decision or approval needs the terminal, or when work continues in the background and how you will report back.',
+    'Use mobile-friendly short paragraphs; avoid wide tables and keep code blocks minimal.',
+    'For turns started in the terminal, behave normally there; do not mirror them to Discord unless a notification is warranted.',
+  ].join('\n');
 }

@@ -420,6 +420,12 @@ export const getAgentDefinition = (
       snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
     },
   );
+  const discordSendEnabled =
+    Boolean(deps.discordSend) &&
+    !readOnly &&
+    hasCapability('discord-send') &&
+    !profile.enforcement.denials.has('discord-send') &&
+    !profile.enforcement.denials.has('filesystem-mutation');
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     profile,
@@ -435,6 +441,7 @@ export const getAgentDefinition = (
     memoryGuidance: hasCapability('memory') ? memoryCapability.guidance : '',
     memoryContext: memoryCapability.context,
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
+    discordCommunicationEnabled: discordSendEnabled,
     executionContext,
     runCodeEnabled: hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
@@ -678,13 +685,7 @@ export const getAgentDefinition = (
     );
   }
 
-  if (
-    deps.discordSend &&
-    !readOnly &&
-    hasCapability('discord-send') &&
-    !profile.enforcement.denials.has('discord-send') &&
-    !profile.enforcement.denials.has('filesystem-mutation')
-  ) {
+  if (discordSendEnabled && deps.discordSend) {
     tools.push(createDiscordSendToolDefinition(deps.discordSend));
   }
 

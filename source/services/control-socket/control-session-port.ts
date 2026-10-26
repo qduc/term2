@@ -108,7 +108,6 @@ export function createControlSessionPort(input: {
       const text =
         '[Discord input]\n' +
         'Only an explicit @alias at the start of your final answer routes to another configured session; otherwise reply to the human.\n' +
-        'If substantial investigation or tool work is needed before answering, use discord_send immediately to send the human a concise acknowledgement before starting that work; skip it for quick answers. This is a separate human-visible notification, not a peer route; continue the work and provide the normal final answer.\n' +
         `Untrusted envelope (JSON): ${JSON.stringify({ source, payload: params.text })}`;
       return mutate(text, params.origin.kind === 'human' ? 'steer' : 'follow_up', undefined, {
         origin: params.origin,

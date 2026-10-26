@@ -693,9 +693,10 @@ it('sends a Discord work acknowledgement through the outbound boundary before th
   const finalReply = outputs.indexOf('[coord] coord answer');
   expect(acknowledgement).toBeGreaterThanOrEqual(0);
   expect(finalReply).toBeGreaterThan(acknowledgement);
-  expect(JSON.stringify(f.received.coord![0]!.input)).toContain(
-    'If substantial investigation or tool work is needed before answering, use discord_send immediately',
-  );
+  const discordInput = JSON.stringify(f.received.coord![0]!.input);
+  expect(discordInput).toContain('[Discord input]');
+  expect(discordInput).toContain('Untrusted envelope (JSON)');
+  expect(discordInput).not.toContain('acknowledgement before starting that work');
   expect(f.journal().proactive).toHaveLength(1);
   expect(f.journal().proactive[0].requestId).toBe('work_ack');
 });
@@ -1666,13 +1667,30 @@ it('requires a root dependency and suppresses read-only/plan sending before the 
   await f.bridge().listenOutbound();
   const settings = createMockSettingsService({ 'app.activeProfileId': 'builtin:bare' });
   const discordSend = (input: DiscordSendInput) => sendDiscord(f.root, f.sessions.coord!.socket.binding, input);
-  const tools = (extra: Record<string, unknown> = {}) =>
-    getAgentDefinition({ settingsService: settings, loggingService: logger, ...extra }, 'fixture').tools!;
+  const definition = (extra: Record<string, unknown> = {}) =>
+    getAgentDefinition({ settingsService: settings, loggingService: logger, ...extra }, 'fixture');
+  const tools = (extra: Record<string, unknown> = {}) => definition(extra).tools!;
+  const discordSection = '## Communicating through Discord';
   expect(tools().some((t) => t.name === 'discord_send')).toBe(false);
+  expect(definition().instructions).not.toContain(discordSection);
   expect(tools({ discordSend }).some((t) => t.name === 'discord_send')).toBe(true);
+  const discordPrompt = definition({ discordSend }).instructions;
+  expect(discordPrompt).toContain(discordSection);
+  for (const guidance of [
+    'The human sees only messages posted to Discord',
+    'Before substantial work, acknowledge it with discord_send',
+    'Make the final reply stand alone',
+    'Explain when a decision or approval needs the terminal',
+    'Use mobile-friendly short paragraphs',
+    'For turns started in the terminal, behave normally there',
+  ]) {
+    expect(discordPrompt).toContain(guidance);
+  }
   expect(tools({ discordSend, readOnly: true }).some((t) => t.name === 'discord_send')).toBe(false);
+  expect(definition({ discordSend, readOnly: true }).instructions).not.toContain(discordSection);
   settings.set('app.activeProfileId', 'builtin:plan');
   expect(tools({ discordSend }).some((t) => t.name === 'discord_send')).toBe(false);
+  expect(definition({ discordSend }).instructions).not.toContain(discordSection);
   const tool = createDiscordSendToolDefinition(discordSend);
   const result = await tool.execute({ action: 'send', requestId: 'root', text: 'root only' });
   expect(result).toMatchObject({ delivery: 'queued' });

@@ -610,6 +610,16 @@ describe('Codex WebSocket corrupt-history recovery', () => {
       await child.terminate();
 
       const created = server.requests.filter(isResponseCreate);
+      const conversationFiles = (await readdir(workspace.paths.conversationsDir)).filter((file) =>
+        file.endsWith('.jsonl'),
+      );
+      expect(conversationFiles, 'provider chain recovery must retain the resumed public session identity').toEqual([
+        `${conversationId}.jsonl`,
+      ]);
+      const recoveredTranscript = await readConversation(workspace.paths, conversationId);
+      expect(recoveredTranscript).toContain('continue from the last result');
+      expect(recoveredTranscript).toContain('and then confirm continuity');
+      expect(recoveredTranscript).toContain('recovered-after-orphan');
       expect(
         created.filter((request) => firstOrphanToolOutputCallId(request)),
         'resumed history must not send an orphan tool output',

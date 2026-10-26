@@ -809,6 +809,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   const breakChaining = (reason: Extract<ClassifiedFailure, { kind: 'chain_recovery' }>['cause']): void => {
+    // A rejected provider checkpoint is request-local recovery, not a new
+    // conversation: clear only provider continuity and retain session identity/history.
     providerContinuity.breakChaining();
     const configuredTransport = settingsService?.get('agent.transport');
     logger.warn('Provider continuity invalidated; rebuilding from full history', {

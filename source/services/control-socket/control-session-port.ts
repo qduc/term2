@@ -93,7 +93,13 @@ export function createControlSessionPort(input: {
       }
       const source =
         params.origin.kind === 'human'
-          ? { kind: 'human', identity: 'configured Discord human', permissions: 'session permissions apply' }
+          ? {
+              kind: 'human',
+              identity: `configured Discord human ${params.origin.sender}`,
+              discordMessageId: params.origin.discordMessageId,
+              ...(params.origin.relayedBy ? { relayedVia: params.origin.relayedBy } : {}),
+              permissions: 'session permissions apply',
+            }
           : {
               kind: 'agent',
               identity: `agent session ${params.origin.sender}`,

@@ -157,6 +157,13 @@ reinterpreting it.
   targets that peer. The response remains visibly attributed as `[coord] ...`.
   The recipient receives `agent session coord` in an untrusted server-data envelope,
   **not** a human instruction or approval. It may reply explicitly `@coord ...`.
+  When that peer route is part of a newly admitted human Discord job, the bridge
+  carries the configured human ID and original Discord message ID through the
+  causal job chain; the next recipient sees `human <id>, relayed via <alias>` and
+  the original message ID, and admission follows the human steer path. This root
+  provenance is attached by bridge ingress, not inferred from agent text or a
+  self-asserted origin. Peer jobs without that bridge-recorded root remain
+  `agent session <alias>` data and use queued follow-up admission.
 * Ordinary finals are visible but wake nobody. Quoted/code-fenced targets and
   mentions in the middle of a reply are not routing commands. No broadcast route.
 * All fetched bot and webhook messages—including the bridge's own posts—are ignored.
@@ -175,7 +182,10 @@ retains its own tool/approval posture; do not opt in a session whose autonomous
 capabilities you do not want remotely reachable.
 
 Human input uses term2's existing steer admission when a turn is busy and ordinary
-submission when idle. Peer-agent input remains a queued follow-up. Steering does
+submission when idle. An explicitly routed peer delivery inherits human authority
+only while its bridge job retains the verified Discord human/message causal root;
+that delivery also uses steer admission. Peer-agent input without that root remains
+a queued follow-up. Steering does
 not abort a running tool: input becomes visible at a supported request boundary,
 or falls back to a queued turn if the active turn cannot take it. Each accepted
 human request observes the terminal result of the turn it joined, not the steer

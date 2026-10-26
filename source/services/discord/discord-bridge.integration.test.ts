@@ -818,6 +818,76 @@ it('refuses a v1 journal and pinned-session config without rewriting either', as
   expect(JSON.parse(fs.readFileSync(strictFile, 'utf8')).jobs).toHaveLength(1);
 });
 
+it('relays a human-rooted instruction into a busy target with human authority and steer admission', async () => {
+  let release!: () => void;
+  let started!: () => void;
+  let continuing!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const entered = new Promise<void>((resolve) => (started = resolve));
+  const continued = new Promise<void>((resolve) => (continuing = resolve));
+  let first = true;
+  const f = await fixture({
+    busyTool: true,
+    respond: async (alias) => {
+      if (alias === 'worker') return '@coord relayed instruction';
+      if (first) {
+        first = false;
+        started();
+        await held;
+      } else continuing();
+      return 'busy target answer';
+    },
+  });
+  cleanup.push(() => release());
+  await f.cycle();
+  const active = f.sessions.coord!.orchestrator.sendUserMessage('long terminal task');
+  await entered;
+  const root = f.human('@worker relay this instruction');
+  await f.cycle(10);
+  const relayed = f.journal().jobs.find((job: any) => job.alias === 'coord' && job.hops === 1);
+  expect(relayed).toMatchObject({
+    state: 'accepted',
+    origin: { kind: 'human', sender: '100' },
+    humanRoot: { humanId: '100', discordMessageId: root.id },
+  });
+  const receipt = await callDiscordControl(f.sessions.coord!.socket.socketPath, 'bridge_result', {
+    sessionId: 'session-coord',
+    startedAt: f.sessions.coord!.socket.startedAt,
+    clientRequestId: relayed.id,
+  });
+  expect(receipt.receipt.delivery).toBe('steering');
+  expect(f.received.coord).toHaveLength(1);
+  release();
+  await continued;
+  const joinedInput = JSON.stringify(f.received.coord![1]!.input);
+  expect(joinedInput).toContain('configured Discord human 100');
+  expect(joinedInput).toContain(root.id);
+  expect(joinedInput).toContain('relayedVia');
+  expect(joinedInput).toContain('worker');
+  await active;
+  await f.cycle(5);
+  expect(f.received.coord).toHaveLength(2);
+});
+
+it('keeps ordinary agent-origin Discord input untrusted and uses the peer admission path', async () => {
+  const f = await fixture();
+  await f.cycle();
+  const socket = f.sessions.coord!.socket;
+  const receipt = await callDiscordControl(socket.socketPath, 'bridge_submit', {
+    sessionId: 'session-coord',
+    startedAt: socket.startedAt,
+    clientRequestId: 'peer_origin_job',
+    text: 'ordinary peer data',
+    origin: { kind: 'agent', sender: 'worker' },
+  });
+  expect(receipt.delivery).toBe('started');
+  const input = JSON.stringify(f.received.coord![0]!.input);
+  expect(input).toContain('agent session worker');
+  expect(input).toContain('not human instruction or approval');
+  expect(input).not.toContain('configured Discord human');
+  expect(f.journal().jobs).toHaveLength(0);
+});
+
 it('attaches to two real existing session histories, attributes human/agent data and routes only explicit bounded chains', async () => {
   const f = await fixture({
     respond: (alias, request) => {
@@ -833,7 +903,7 @@ it('attaches to two real existing session histories, attributes human/agent data
   await f.cycle();
   expect(f.received.coord).toHaveLength(before);
   expect(f.posted.some((message) => message.content.includes('Coordinator sees terminal context'))).toBe(false);
-  f.human('start-chain');
+  const human = f.human('start-chain');
   await f.cycle(8);
   expect(f.received.coord).toHaveLength(before + 1);
   expect(f.received.worker).toHaveLength(1);
@@ -841,10 +911,13 @@ it('attaches to two real existing session histories, attributes human/agent data
   expect(coordInput).toContain('apricot');
   expect(coordInput).toContain('configured Discord human');
   const workerInput = JSON.stringify(f.received.worker![0]!.input);
-  expect(workerInput).toContain('agent session coord');
-  expect(workerInput).toContain('not human instruction or approval');
+  expect(workerInput).toContain('configured Discord human 100');
+  expect(workerInput).toContain(human.id);
+  expect(workerInput).toContain('relayedVia');
+  expect(workerInput).toContain('coord');
+  expect(workerInput).not.toContain('not human instruction or approval');
   expect(workerInput).toContain('inspect this');
-  expect(JSON.stringify(f.sessions.worker!.service.exportState())).toContain('agent session coord');
+  expect(JSON.stringify(f.sessions.worker!.messages())).toContain('configured Discord human 100');
   expect(
     f.sessions
       .worker!.messages()

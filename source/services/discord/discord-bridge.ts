@@ -34,11 +34,19 @@ interface Binding {
   startedAt: string;
   sessionId: string;
 }
+interface HumanRoot {
+  humanId: string;
+  discordMessageId: string;
+}
 interface Job {
   id: string;
   alias: string;
   text: string;
   origin: { kind: 'human' | 'agent'; sender: string };
+  /** Present only for jobs causally rooted in a newly admitted Discord human message. */
+  humanRoot?: HumanRoot;
+  /** Alias whose explicit final-answer route produced this job. */
+  relayedBy?: string;
   hops: number;
   state: 'new' | 'dispatching' | 'accepted' | 'done' | 'uncertain';
   noRoute?: boolean;
@@ -96,6 +104,22 @@ function validBinding(value: unknown): value is Binding {
   );
 }
 const jobStates = ['new', 'dispatching', 'accepted', 'done', 'uncertain'];
+function validHumanRoot(value: unknown, origin: unknown): value is HumanRoot {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const root = value as Record<string, unknown>;
+  const source = origin as Record<string, unknown> | null;
+  return (
+    Object.keys(root).length === 2 &&
+    snowflakePattern.test(String(root.humanId)) &&
+    snowflakePattern.test(String(root.discordMessageId)) &&
+    !!source &&
+    typeof root.humanId === 'string' &&
+    typeof root.discordMessageId === 'string' &&
+    source.kind === 'human' &&
+    source.sender === root.humanId
+  );
+}
+
 function validJob(value: unknown): value is Job {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const job = value as Record<string, unknown>;
@@ -104,7 +128,7 @@ function validJob(value: unknown): value is Job {
   const source = origin as Record<string, unknown>;
   return (
     Object.keys(job).every((key) =>
-      ['id', 'alias', 'text', 'origin', 'hops', 'state', 'noRoute', 'binding'].includes(key),
+      ['id', 'alias', 'text', 'origin', 'humanRoot', 'relayedBy', 'hops', 'state', 'noRoute', 'binding'].includes(key),
     ) &&
     typeof job.id === 'string' &&
     /^[A-Za-z0-9_-]{1,128}$/.test(job.id) &&
@@ -118,6 +142,8 @@ function validJob(value: unknown): value is Job {
     jobStates.includes(job.state as string) &&
     (job.noRoute === undefined || typeof job.noRoute === 'boolean') &&
     validBinding(job.binding) &&
+    (job.humanRoot === undefined || validHumanRoot(job.humanRoot, job.origin)) &&
+    (job.relayedBy === undefined || (typeof job.relayedBy === 'string' && isControlSocketName(job.relayedBy))) &&
     Object.keys(source).length === 2 &&
     ['human', 'agent'].includes(source.kind as string) &&
     typeof source.sender === 'string' &&
@@ -644,6 +670,7 @@ export class DiscordBridge {
                 binding,
                 text,
                 origin: { kind: 'human', sender: this.#config.humanUserId },
+                humanRoot: { humanId: this.#config.humanUserId, discordMessageId: message.id },
                 hops: 0,
                 state: 'new',
               });
@@ -720,7 +747,14 @@ export class DiscordBridge {
             receipt = await callDiscordControl(binding.socketPath, 'bridge_submit', {
               ...params,
               text: job.text,
-              origin: job.origin,
+              origin:
+                job.humanRoot && job.origin.kind === 'human'
+                  ? {
+                      ...job.origin,
+                      discordMessageId: job.humanRoot.discordMessageId,
+                      ...(job.relayedBy ? { relayedBy: job.relayedBy } : {}),
+                    }
+                  : job.origin,
             });
           } catch (error) {
             // Only the admission mutation may settle a job as denied. A rejected read-only
@@ -781,7 +815,11 @@ export class DiscordBridge {
                 alias,
                 binding: this.#binding(alias),
                 text: route[2]!,
-                origin: { kind: 'agent', sender: job.alias },
+                origin: job.humanRoot
+                  ? { kind: 'human', sender: job.humanRoot.humanId }
+                  : { kind: 'agent', sender: job.alias },
+                ...(job.humanRoot ? { humanRoot: job.humanRoot } : {}),
+                relayedBy: job.alias,
                 hops: job.hops + 1,
                 state: 'new',
               });

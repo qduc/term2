@@ -675,6 +675,31 @@ it('never delivers an admitted job to a replacement process reusing the alias', 
   ).toBe('replacement-session');
 });
 
+it('sends a Discord work acknowledgement through the outbound boundary before the automatic final reply', async () => {
+  const f = await fixture({
+    proactive: true,
+    profile: 'builtin:bare',
+    proactiveScripts: [
+      'return await tools.discord_send({action:"send",requestId:"work_ack",text:"I received this and am investigating."})',
+    ],
+  });
+  await f.bridge().listenOutbound();
+  await f.cycle();
+  f.human('Investigate this involved issue and tell me what you find.');
+  await f.cycle(12);
+
+  const outputs = f.posted.map((message) => message.content);
+  const acknowledgement = outputs.indexOf('[coord] I received this and am investigating.');
+  const finalReply = outputs.indexOf('[coord] coord answer');
+  expect(acknowledgement).toBeGreaterThanOrEqual(0);
+  expect(finalReply).toBeGreaterThan(acknowledgement);
+  expect(JSON.stringify(f.received.coord![0]!.input)).toContain(
+    'If substantial investigation or tool work is needed before answering, use discord_send immediately',
+  );
+  expect(f.journal().proactive).toHaveLength(1);
+  expect(f.journal().proactive[0].requestId).toBe('work_ack');
+});
+
 it('delivers a late-attached session discord_send with attribution and consistent status replay', async () => {
   const f = await fixture({
     attach: [],

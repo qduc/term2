@@ -3252,9 +3252,13 @@ const PROJECTION_COMMAND_OUTPUT_MAX = 16_384;
 const PROJECTION_COMMAND_ERROR_MAX = 10_000;
 
 // The web client's transcript validator rejects NUL and DEL anywhere in a string,
-// so tool output carrying them would make the whole session unreadable.
+// so projected text carrying them would make the whole session unreadable.
+function projectionText(value: unknown, max: number): string {
+  return boundedText(value, max).replace(/[\u0000\u007f]/gu, '\uFFFD');
+}
+
 function projectionCommandText(value: unknown, max: number): string | undefined {
-  const bounded = boundedText(value, max).replace(/[\u0000\u007f]/gu, '\uFFFD');
+  const bounded = projectionText(value, max);
   return bounded.length > 0 ? bounded : undefined;
 }
 
@@ -3318,7 +3322,7 @@ function projectTranscriptMessages(
     const projectedMessage: Record<string, unknown> = {
       id: boundedText(id, 256),
       role: 'bot',
-      text: boundedText(text, 16_384),
+      text: projectionText(text, 16_384),
     };
     const commands = currentTurnId ? commandsByTurn.get(currentTurnId) : undefined;
     if (commands && commands.length > 0 && !attachedTurns.has(currentTurnId!)) {
@@ -3383,7 +3387,7 @@ function projectTranscriptMessages(
       continue;
 
     if (sender === 'user') {
-      projected.push({ id: boundedText(record.id, 256), role: 'user', text: boundedText(record.text, 16_384) });
+      projected.push({ id: boundedText(record.id, 256), role: 'user', text: projectionText(record.text, 16_384) });
     } else {
       projected.push(botMessage(record.id, record.text));
     }

@@ -221,7 +221,7 @@ export function Term2FolderSelector({ onSelected }: { onSelected?: (workspace: S
               className={`rounded px-1 py-0.5 hover:underline ${
                 breadcrumbs.length === 0
                   ? 'font-semibold text-zinc-800 dark:text-zinc-200'
-                  : 'text-blue-600 dark:text-blue-400'
+                  : 'text-teal-700 dark:text-teal-400'
               }`}
             >
               Root
@@ -238,7 +238,7 @@ export function Term2FolderSelector({ onSelected }: { onSelected?: (workspace: S
                     className={`rounded px-1 py-0.5 ${
                       isLast
                         ? 'font-semibold text-zinc-800 dark:text-zinc-200'
-                        : 'text-blue-600 hover:underline dark:text-blue-400'
+                        : 'text-teal-700 hover:underline dark:text-teal-400'
                     }`}
                   >
                     {crumb.label}

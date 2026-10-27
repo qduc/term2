@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelLeft, Square } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Copy, PanelLeft, Square } from 'lucide-react';
 import { useTerm2Session } from '../../hooks/useTerm2Session';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
-import { Term2CommandCard } from './Term2CommandCard';
+import { Term2ToolGroup } from './Term2ToolGroup';
+import { Term2Markdown } from './Term2Markdown';
+import { describeCommand } from './Term2CommandCard';
 import { Term2SubagentCard } from './Term2SubagentCard';
 import { Term2SessionList } from './Term2SessionList';
 import { Term2StatusBanner } from './Term2StatusBanner';
@@ -232,6 +234,65 @@ export function Term2SessionShell({
   const canAbort = session.view.status === 'running' || session.view.status === 'connected';
   const hasStreamingTurn = session.view.turns.some((turn) => turn.status === 'streaming' || turn.status === 'pending');
 
+  const sessionConfig = (settings?.session ?? null) as SessionConfigRecord | null;
+  const totalTokens = session.view.turns.reduce((sum, turn) => sum + (turn.usage?.totalTokens ?? 0), 0);
+  const lastTurn = session.view.turns[session.view.turns.length - 1];
+  const liveStatus = interactionPending
+    ? 'Waiting for your approval'
+    : lastTurn?.transientStatus
+      ? lastTurn.transientStatus
+      : lastTurn && (lastTurn.status === 'streaming' || lastTurn.status === 'pending')
+        ? (() => {
+            const active = [...lastTurn.commands].reverse().find((c) => c.status === 'running' || c.status === 'pending');
+            if (active) {
+              const { verb, target } = describeCommand(active);
+              return `${verb}${target ? ` ${target}` : ''}…`;
+            }
+            return lastTurn.text ? null : lastTurn.reasoning ? 'Thinking…' : 'Working…';
+          })()
+        : null;
+
+  // Follow the stream only while the reader is at the bottom; scrolling up
+  // releases it and shows a jump-to-latest control.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [pinned, setPinned] = useState(true);
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setPinned(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+  };
+  const scrollToLatest = () => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    setPinned(true);
+  };
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (pinned && el) el.scrollTop = el.scrollHeight;
+  }, [session.view.turns, session.view.pendingInteraction, liveStatus, pinned]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPinned(true);
+  }, [sessionId]);
+
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [input]);
+
+  const [copiedTurn, setCopiedTurn] = useState<string | null>(null);
+  const copyTurn = (turnId: string, text: string) => {
+    void navigator.clipboard
+      ?.writeText(text)
+      .then(() => {
+        setCopiedTurn(turnId);
+        window.setTimeout(() => setCopiedTurn((id) => (id === turnId ? null : id)), 1500);
+      })
+      .catch(() => undefined);
+  };
+
   return (
     <main className="relative flex h-dvh max-h-dvh overflow-hidden bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
       <div
@@ -249,7 +310,7 @@ export function Term2SessionShell({
       >
         <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">ChatForge</p>
+            <p className="text-[10px] uppercase tracking-wider text-zinc-500">term2</p>
             <h2 className="font-semibold">Agent</h2>
           </div>
           <button
@@ -342,7 +403,7 @@ export function Term2SessionShell({
           showModelSelector={false}
           title="Agent"
           subtitle={
-            selectedWorkspaceInfo.displayName ? `ChatForge · ${selectedWorkspaceInfo.displayName}` : 'ChatForge'
+            selectedWorkspaceInfo.displayName ? `term2 · ${selectedWorkspaceInfo.displayName}` : 'term2'
           }
           subtitleTooltip={selectedWorkspaceInfo.fullPath || undefined}
           onExit={onExit}
@@ -378,7 +439,7 @@ export function Term2SessionShell({
           aria-live="polite"
           className="relative flex min-h-0 flex-1 flex-col"
         >
-          <div className="flex-1 overflow-y-auto px-3 pb-36 pt-6 sm:px-6">
+          <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-3 pb-44 pt-6 sm:px-6">
             <div className="mx-auto w-full max-w-3xl space-y-5">
               {!sessionId && (
                 <div className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center dark:border-zinc-700">
@@ -387,43 +448,67 @@ export function Term2SessionShell({
                 </div>
               )}
               {session.view.turns.map((turn) => (
-                <article key={turn.turnId} className="space-y-3">
+                <article key={turn.turnId} className="group space-y-4">
                   {turn.userText !== undefined && (
-                    <div className="ml-auto max-w-[85%] rounded-2xl bg-zinc-100 px-4 py-3 dark:bg-zinc-800">
-                      <div className="mb-1 text-xs text-zinc-500">You</div>
-                      <p className="whitespace-pre-wrap text-sm">{turn.userText}</p>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="max-w-[85%] rounded-2xl bg-zinc-100 px-4 py-2.5 dark:bg-zinc-800">
+                        <p className="whitespace-pre-wrap break-words text-[15px] leading-6">{turn.userText}</p>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Copy message"
+                        className="rounded p-1 text-zinc-400 opacity-0 transition-opacity hover:text-zinc-700 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 dark:hover:text-zinc-200"
+                        onClick={() => copyTurn(`${turn.turnId}:user`, turn.userText ?? '')}
+                      >
+                        {copiedTurn === `${turn.turnId}:user` ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      </button>
                     </div>
                   )}
-                  <div className="max-w-[92%] rounded-2xl px-1 py-1">
-                    <div className="mb-1 text-xs font-medium text-zinc-500">
-                      Agent{turn.status !== 'completed' ? ` · ${turn.status}` : ''}
-                      {turn.transientStatus ? ` · ${turn.transientStatus}` : ''}
-                    </div>
+                  <div className="min-w-0 space-y-3">
                     {turn.reasoning && (
-                      <details className="mb-2 text-xs text-zinc-500">
-                        <summary>Reasoning</summary>
-                        <p className="whitespace-pre-wrap pt-1">{turn.reasoning}</p>
+                      <details className="text-xs text-zinc-500">
+                        <summary className="cursor-pointer select-none">
+                          {turn.status === 'streaming' && !turn.text ? 'Thinking…' : 'Thought process'}
+                        </summary>
+                        <Term2Markdown text={turn.reasoning} className="!text-xs !leading-5 pt-1 text-zinc-500" />
                       </details>
                     )}
-                    {turn.text && <p className="whitespace-pre-wrap text-sm leading-6">{turn.text}</p>}
-                    {turn.commands.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {turn.commands.map((command) => (
-                          <Term2CommandCard key={command.callId} command={command} />
-                        ))}
-                      </div>
-                    )}
+                    {turn.commands.length > 0 && <Term2ToolGroup commands={turn.commands} />}
                     {(turn.subagents ?? []).length > 0 && (
-                      <div className="mt-3 space-y-2">
+                      <div className="space-y-2">
                         {(turn.subagents ?? []).map((card) => (
                           <Term2SubagentCard key={card.agentId} card={card} />
                         ))}
                       </div>
                     )}
-                    {turn.error && <p className="mt-2 text-sm text-red-700">{turn.error}</p>}
+                    {turn.text && <Term2Markdown text={turn.text} />}
+                    {turn.status !== 'completed' && turn.status !== 'streaming' && turn.status !== 'pending' && (
+                      <p className="text-xs text-zinc-500">Turn {turn.status}</p>
+                    )}
+                    {turn.error && <p className="text-sm text-red-700 dark:text-red-400">{turn.error}</p>}
+                    {turn.text && turn.status !== 'streaming' && (
+                      <div className="flex items-center gap-2 text-zinc-400 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+                        <button
+                          type="button"
+                          aria-label="Copy reply"
+                          className="rounded p-1 hover:text-zinc-700 dark:hover:text-zinc-200"
+                          onClick={() => copyTurn(turn.turnId, turn.text)}
+                        >
+                          {copiedTurn === turn.turnId ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                        {turn.usage?.totalTokens ? (
+                          <span className="text-xs tabular-nums">{turn.usage.totalTokens.toLocaleString()} tokens</span>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 </article>
               ))}
+              {liveStatus && (
+                <p role="status" className="animate-pulse text-sm text-zinc-500">
+                  {liveStatus}
+                </p>
+              )}
               {session.view.pendingInteraction?.state === 'pending' && (
                 <Term2InteractionPanel
                   key={`${session.view.pendingInteraction.interaction.interactionId}:${session.view.pendingInteraction.interaction.revision}:${session.view.pendingInteraction.interaction.askUser?.currentQuestionIndex ?? 0}`}
@@ -445,6 +530,16 @@ export function Term2SessionShell({
           </div>
 
           <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-white via-white/95 to-transparent px-3 pb-3 pt-8 dark:from-zinc-900 dark:via-zinc-900/95 sm:px-6">
+            {!pinned && (
+              <button
+                type="button"
+                aria-label="Jump to latest"
+                className="absolute -top-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                onClick={scrollToLatest}
+              >
+                <ArrowDown className="h-3 w-3" /> Jump to latest
+              </button>
+            )}
             {sessionId && (
               <div className="mx-auto mb-2 max-w-3xl">
                 <Term2CommandMenu
@@ -455,43 +550,63 @@ export function Term2SessionShell({
                 />
               </div>
             )}
-            <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+            <div className="mx-auto max-w-3xl rounded-2xl border border-zinc-200 bg-white shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-zinc-700 dark:bg-zinc-950">
               <textarea
+                ref={composerRef}
+                rows={1}
                 aria-label="Agent message"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
+                  // Enter confirms an IME candidate; it must not send.
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
                     void submit();
                   }
                 }}
                 disabled={composerDisabled}
-                className="min-h-12 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed"
-                placeholder="Message the agent…"
+                className="block max-h-60 min-h-12 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-[15px] outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed"
+                placeholder={sessionId ? 'Message term2…' : 'Create a session to start'}
               />
-              {canAbort && hasStreamingTurn ? (
-                <button
-                  type="button"
-                  aria-label="Stop agent turn"
-                  className="rounded-xl border border-red-300 p-3 text-red-700 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950/30"
-                  onClick={() => void session.abort()}
-                >
-                  <Square className="h-4 w-4 fill-current" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  aria-label="Send agent message"
-                  className="rounded-xl bg-zinc-900 p-3 text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-                  disabled={composerDisabled || !input.trim()}
-                  onClick={() => void submit()}
-                >
-                  Send
-                </button>
-              )}
+              <div className="flex items-center gap-2 px-3 pb-2 text-xs text-zinc-500">
+                {sessionConfig && (
+                  <>
+                    <span className="truncate rounded-md bg-zinc-100 px-2 py-0.5 font-mono dark:bg-zinc-800" title="Model">
+                      {sessionConfig.modelId}
+                    </span>
+                    <span className="rounded-md bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800" title="Mode">
+                      {sessionConfig.mode}
+                    </span>
+                  </>
+                )}
+                {totalTokens > 0 && (
+                  <span className="tabular-nums" title="Tokens used in this session">
+                    {totalTokens.toLocaleString()} tokens
+                  </span>
+                )}
+                <span className="ml-auto hidden sm:inline">Enter to send · Shift+Enter for a new line</span>
+                {canAbort && hasStreamingTurn ? (
+                  <button
+                    type="button"
+                    aria-label="Stop agent turn"
+                    className="ml-auto rounded-lg border border-red-300 p-2 text-red-700 hover:bg-red-50 sm:ml-0 dark:border-red-800 dark:hover:bg-red-950/30"
+                    onClick={() => void session.abort()}
+                  >
+                    <Square className="h-4 w-4 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label="Send agent message"
+                    className="ml-auto rounded-lg bg-teal-600 p-2 text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40 sm:ml-0 dark:bg-teal-500 dark:text-zinc-950 dark:hover:bg-teal-400"
+                    disabled={composerDisabled || !input.trim()}
+                    onClick={() => void submit()}
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
-            <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-zinc-500">Agent messages are text only.</p>
           </div>
         </section>
       </div>

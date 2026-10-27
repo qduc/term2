@@ -31,8 +31,17 @@ SIGKILL/fresh-process stale-owner recovery, retained queued output, reverse REST
 pages, duplicate IDs and unauthorized/bot/webhook inputs. Existing tests retain
 inbox capacity, error/backoff, pinned-job and ambiguous POST controls. Verification
 results are recorded in `docs/test-results.json`; independent review is separate.
-Rollback boundary: the availability checks and their integration contract; no
-journal format or launcher change to undo.
+Author boundary verification on source `70c9ba2a0a9b63210efd9e10b90ddd4295169a2f`
+(production repair `db72e3267f9215d35db5673d19389f381c4483fb`): the same
+five-case red selection passes; `pnpm test:integration` passes 384 tests with
+one skip, including all 93 bridge and four runner cases. The runner fixtures now
+advertise a real opted-in default so their existing REST/Gateway assertions
+remain exercised rather than bypassing this gate. The rebuilt serialized
+provider black-box suite passes 222 tests with one skip. An earlier concurrent
+provider run timed out in the unrelated repeated-question PTY journey; its exact
+signature and resolving run are retained without inferring baseline persistence
+or load causation. Independent acceptance remains separate. Rollback boundary: the availability checks and their integration
+contract; no journal format or launcher change to undo.
 
 ## Discord Gateway doorbell adoption (2026-10-27)
 

@@ -15049,6 +15049,621 @@
         "/home/qduc/coord/term2/tasks/pr-37/evidence/fix-final-state.json"
       ],
       "notes": "Only production change: terminate abandoned optional Gateway transports instead of graceful close. No heartbeat threshold, reconnect/backoff, REST cursor, jobs/outbox, approval, credential or provider policy changes. Quiet acknowledged peer survives multiple heartbeats. Lint:0errors/31warnings. Integration:1skipped; provider:1skipped (openai-websocket reasoning: no application-owned response traffic persisted). No live Discord/mobile, real credentials or paid APIs; no push/publication/deployment. Source tests and exact reviewer probe use loopback network/process boundaries. Original task row and all prior evidence preserved; this records rework round1, not a duplicate delivery or independent acceptance. Later evidence-only commit is not a rerun of behavioral tiers."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-red",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "revision_kind": "dirty_test_only_base",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "red",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t 'waits before first|retains initialized|retains a fetched|stops mid-page'",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 5,
+        "skipped": 87,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "waits before first ingress without a coordinator and still skips history on fresh initialization",
+          "actual": "Unexpected GET/cursor advance while coordinator absent; commands consumed after disappearance"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "retains initialized ingress until the configured coordinator opts back in",
+          "actual": "Unexpected GET/cursor advance while coordinator absent; commands consumed after disappearance"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "retains a fetched page when the coordinator disappears during REST (fresh=false)",
+          "actual": "Unexpected GET/cursor advance while coordinator absent; commands consumed after disappearance"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "retains a fetched page when the coordinator disappears during REST (fresh=true)",
+          "actual": "Unexpected GET/cursor advance while coordinator absent; commands consumed after disappearance"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "stops mid-page at coordinator loss without consuming later commands, invalid inputs or targets",
+          "actual": "Unexpected GET/cursor advance while coordinator absent; commands consumed after disappearance"
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-red.log"],
+      "notes": "5 selected cases fail on unchanged production: first GETs3 instead of0; initialized read count grows6 instead of3; fetched cursors advance0->10 and empty->10; midpage cursor10->14 and pausedfalse->true. Tests only; 87 skipped."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-focused-initial",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "revision_kind": "dirty_prefix_guard_snapshot",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "focused-initial",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 83,
+        "failed": 9,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "accepts any supported control-socket name as an alias and reopens its journal",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "requires process opt-in, pins session identity and preserves the ordinary control peer rejection",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure reset across HTTP and child-process boundaries",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure 401 across HTTP and child-process boundaries",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure 403 across HTTP and child-process boundaries",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure 502 across HTTP and child-process boundaries",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure 404 across HTTP and child-process boundaries",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure bad-429 across HTTP and child-process boundaries",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure bad-200 across HTTP and child-process boundaries",
+          "actual": "Supported Worker alias not admitted; opt-out no longer emits refusal; ENOENT stat isolated discord-request-*/runtime"
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-focused.log"],
+      "notes": "Initial 7-line gate + early tests; not final tree. Two old tests assumed no default attachment; seven request-error fixtures missing private runtime mkdir. Repaired before final acceptance."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-crash-oracle",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "revision_kind": "dirty_crash_test_snapshot",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "crash-oracle",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t 'survives SIGKILL'",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 92,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "survives SIGKILL while waiting, drains admitted output and consumes ordered backlog once after coordinator recovery",
+          "actual": "Cursor expected16 actual17 (bot echo)"
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-crash.log"],
+      "notes": "Oracle too strict: already-admitted output creates a bot echo with higher ID. Changed cursor equality to >= plus exact admitted IDs, order and count. No production adjustment."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-focused-callback",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "revision_kind": "dirty_prefix_guard_snapshot",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "focused-callback",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 86,
+        "failed": 7,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure reset across HTTP and child-process boundaries",
+          "actual": "TypeError: this[#options].sessionId is not a function"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure 401 across HTTP and child-process boundaries",
+          "actual": "TypeError: this[#options].sessionId is not a function"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure 403 across HTTP and child-process boundaries",
+          "actual": "TypeError: this[#options].sessionId is not a function"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure 502 across HTTP and child-process boundaries",
+          "actual": "TypeError: this[#options].sessionId is not a function"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure 404 across HTTP and child-process boundaries",
+          "actual": "TypeError: this[#options].sessionId is not a function"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure bad-429 across HTTP and child-process boundaries",
+          "actual": "TypeError: this[#options].sessionId is not a function"
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "reports redacted request startup failure bad-200 across HTTP and child-process boundaries",
+          "actual": "TypeError: this[#options].sessionId is not a function"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-focused-final.log"
+      ],
+      "notes": "86 pass including all new outage/crash cases; seven request-error fixtures passed a string rather than sessionId callback. Corrected before source commit."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-provider-prefinal",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "revision_kind": "dirty_prefix_guard_build",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "provider-prefinal",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 25,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-provider.log"],
+      "notes": "First provider build preceded final attachment-snapshot refinement; 222 pass/1skip. Not claimed as final-source build evidence."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-integration-runner-prerequisite",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "db72e3267f9215d35db5673d19389f381c4483fb",
+      "revision_kind": "precommit_tree_matches_source_commit",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "integration-runner-prerequisite",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 380,
+        "failed": 4,
+        "skipped": 1,
+        "files_passed": 33,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-command.integration.test.ts",
+          "test": "runs the real Discord runner offline with Gateway push and releases ownership on SIGTERM",
+          "actual": "Runner REST responses.length expected1 actual0 after5000ms"
+        },
+        {
+          "file": "source/services/discord/discord-command.integration.test.ts",
+          "test": "runs the real Discord runner offline with Gateway off and releases ownership on SIGTERM",
+          "actual": "Runner REST responses.length expected1 actual0 after5000ms"
+        },
+        {
+          "file": "source/services/discord/discord-command.integration.test.ts",
+          "test": "runs the real Discord runner offline with Gateway blackhole-recovery and releases ownership on SIGTERM",
+          "actual": "Runner REST responses.length expected1 actual0 after5000ms"
+        },
+        {
+          "file": "source/services/discord/discord-command.integration.test.ts",
+          "test": "runs the real Discord runner offline with Gateway blackhole-stop and releases ownership on SIGTERM",
+          "actual": "Runner REST responses.length expected1 actual0 after5000ms"
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-integration.log"],
+      "notes": "380pass/4fail/1skip; all93 bridge cases passed. Four Gateway runner tests had no default so observed zero GETs. This is an intentional new gate prerequisite, not a baseline failure. Runner fixture updated in 70c9ba2a."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-focused-runner-incomplete-edit",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "db72e3267f9215d35db5673d19389f381c4483fb",
+      "revision_kind": "dirty_runner_import_only_snapshot",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "focused-runner-incomplete-edit",
+      "command": "pnpm test:integration source/services/discord/discord-command.integration.test.ts source/services/discord/discord-bridge.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 93,
+        "failed": 4,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-command.integration.test.ts",
+          "test": "runs the real Discord runner offline with Gateway push and releases ownership on SIGTERM",
+          "actual": "Runner REST responses.length expected1 actual0 after5000ms"
+        },
+        {
+          "file": "source/services/discord/discord-command.integration.test.ts",
+          "test": "runs the real Discord runner offline with Gateway off and releases ownership on SIGTERM",
+          "actual": "Runner REST responses.length expected1 actual0 after5000ms"
+        },
+        {
+          "file": "source/services/discord/discord-command.integration.test.ts",
+          "test": "runs the real Discord runner offline with Gateway blackhole-recovery and releases ownership on SIGTERM",
+          "actual": "Runner REST responses.length expected1 actual0 after5000ms"
+        },
+        {
+          "file": "source/services/discord/discord-command.integration.test.ts",
+          "test": "runs the real Discord runner offline with Gateway blackhole-stop and releases ownership on SIGTERM",
+          "actual": "Runner REST responses.length expected1 actual0 after5000ms"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-bridge-runner-final.log"
+      ],
+      "notes": "93 bridge cases pass; four runner failures persist because initial scripted prerequisite edit inserted only the import (incorrect match). Follow-up asserted match and added actual socket, amended only own local test commit; no production change."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-runner-corrected",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "70c9ba2a0a9b63210efd9e10b90ddd4295169a2f",
+      "revision_kind": "committed_source",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "runner-corrected",
+      "command": "pnpm test:integration source/services/discord/discord-command.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-runner-corrected.log"
+      ],
+      "notes": "All4 runner push/off/blackhole-recovery/blackhole-stop lifecycle cases pass with live opted-in default fixture."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-provider-concurrent",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "db72e3267f9215d35db5673d19389f381c4483fb",
+      "revision_kind": "committed_production_with_later_test_only_edits",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "provider-concurrent",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 221,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 24,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/turn-decisions.blackbox.ts",
+          "test": "resumes repeated questions once per decision and settles cancellation before the next turn",
+          "actual": "Timed out waiting for PTY child state after40000ms; repeated-question Amber/Violet flow"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-provider-final.log"
+      ],
+      "notes": "221pass/1fail/1skip; concurrent full integration and static work. Similar historical repeated-question timeout in apply-pr37 reviewed, but no identical-base reproduction; cause unresolved, not classified pre-existing."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-green",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "70c9ba2a0a9b63210efd9e10b90ddd4295169a2f",
+      "revision_kind": "committed_source",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "green",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t 'waits before first|retains initialized|retains a fetched|stops mid-page'",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 88,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-green.log"],
+      "notes": "Identical five-case red selection passes on fixed production. Extra crash case added since initial red accounts for one additional unselected test."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-integration-final",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "70c9ba2a0a9b63210efd9e10b90ddd4295169a2f",
+      "revision_kind": "committed_source",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "integration-final",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 384,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 34,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-integration-final.log"
+      ],
+      "notes": "Full final integration, including all93 bridge and4 runner cases. Runtime code unchanged since db72e326; test tree includes runner prerequisite correction."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-provider-serialized",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "70c9ba2a0a9b63210efd9e10b90ddd4295169a2f",
+      "revision_kind": "committed_source_with_later_docs_only_edits",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "provider-serialized",
+      "command": "pnpm build && pnpm exec vitest run --config vitest.provider-black-box.config.ts --reporter=verbose --bail=1 --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 25,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-provider-serialized.log"
+      ],
+      "notes": "Serialized fake-provider suite after integration completion; records resolving result without inferring cause of preceding concurrent PTY timeout."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-static",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "70c9ba2a0a9b63210efd9e10b90ddd4295169a2f",
+      "revision_kind": "committed_source_with_docs_only_edits",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "static",
+      "command": "pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-guards-tree-final.log"
+      ],
+      "notes": "28static tests passed. Final pnpm typecheck passed; pnpm lint passed0errors/31warnings; check:no-unit-tests passed. Source unchanged; runner correction separately typechecked/precommit ESLint+Prettier. Additional logs beside this log."
+    },
+    {
+      "id": "2026-10-27-discord-ingress-static-callback-red",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "revision_kind": "dirty_request_fixture_snapshot",
+      "base_commit": "f7294ca656fc55b75f10e5115010f72efe5e962e",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree, loopback Discord/provider fixtures, private temp runtimes; synthetic credentials only. No live bridge/API. Provider concurrency noted per run."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "actual": "TS2322: Type 'string' is not assignable to type '() => string' (sessionId fixture option)"
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-typecheck.log"],
+      "notes": "Repaired fixture callback; final-source typecheck passes."
     }
   ]
 }

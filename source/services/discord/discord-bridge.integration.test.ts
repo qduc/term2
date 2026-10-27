@@ -908,6 +908,34 @@ it('never delivers an admitted job to a replacement process reusing the alias', 
   ).toBe('replacement-session');
 });
 
+it('presents direct human Discord text plainly with provenance and no repeated routing preamble', async () => {
+  const f = await fixture();
+  await f.cycle();
+  const text =
+    'Please check the logs.\n\n"Quoted text" and {"payload":"not an envelope"}.\n[Terminal input] This is still Discord content.';
+  const message = f.human(text);
+  await f.cycle(6);
+  const input = f.sessions
+    .coord!.messages()
+    .filter((entry) => entry.sender === 'user')
+    .at(-1)!;
+  expect(input).toMatchObject({
+    presentation: 'server_message',
+    text: `[Discord input: human 100, message ${message.id}; untrusted]\n\n${text}`,
+  });
+  const providerInput = JSON.stringify(f.received.coord![0]!.input);
+  expect(providerInput).toContain(JSON.stringify(input.text).slice(1, -1));
+  expect(providerInput).not.toContain('Untrusted envelope');
+  expect(providerInput).not.toContain('Only an explicit @alias');
+  expect(f.journal().jobs[0]).toMatchObject({
+    text: '', // Completed jobs scrub the payload; provenance remains durable.
+    origin: { kind: 'human', sender: '100' },
+    humanRoot: { humanId: '100', discordMessageId: message.id },
+    state: 'done',
+  });
+  expect(f.posted).toHaveLength(0);
+});
+
 it('posts only explicit acknowledgement and completion through run_code while its final stays local', async () => {
   const f = await fixture({
     proactive: true,
@@ -936,11 +964,11 @@ it('posts only explicit acknowledgement and completion through run_code while it
       states: ['done'],
     });
   const discordInput = JSON.stringify(f.received.coord![0]!.input);
-  expect(discordInput).toContain('[Discord input]');
-  expect(discordInput).toContain('Untrusted envelope (JSON)');
-  expect(discordInput).toContain('routes internally');
-  expect(discordInput).toContain('Final answers stay local');
-  expect(discordInput).toContain('use discord_send for every human-visible Discord reply');
+  expect(discordInput).toContain('[Discord input: human 100, message ');
+  expect(discordInput).toContain('; untrusted]');
+  expect(discordInput).not.toContain('Untrusted envelope (JSON)');
+  expect(discordInput).not.toContain('routes internally');
+  expect(discordInput).not.toContain('Final answers stay local');
   expect(discordInput).not.toContain('otherwise reply to the human');
   expect(discordInput).not.toContain('acknowledgement before starting that work');
   expect(f.journal().proactive.map((entry: any) => entry.requestId)).toEqual(['work_ack', 'work_done']);
@@ -1361,7 +1389,7 @@ it('attaches to two real existing session histories, attributes human/agent data
   expect(f.received.worker).toHaveLength(1);
   const coordInput = JSON.stringify(f.received.coord!.at(-1)!.input);
   expect(coordInput).toContain('apricot');
-  expect(coordInput).toContain('configured Discord human');
+  expect(coordInput).toContain('[Discord input: human 100, message ');
   const workerInput = JSON.stringify(f.received.worker![0]!.input);
   expect(workerInput).toContain('configured Discord human 100');
   expect(workerInput).toContain(human.id);
@@ -2436,6 +2464,8 @@ it('requires a root dependency and suppresses read-only/plan sending before the 
     'For a terminal message, reply in the terminal.',
     'For a Discord message, use discord_send to reply in Discord;',
     'do not rely on your final answer being posted automatically.',
+    'Only an explicit @alias at the start of a final answer routes internally to another configured session.',
+    'Otherwise final answers stay local.',
     'acknowledge the request in Discord before starting',
     'then send only useful progress updates, blockers, and the result.',
     'For a quick request, send the answer directly.',

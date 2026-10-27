@@ -346,6 +346,13 @@ replayed or admitted later. Refusals do not enter the outbox or post to Discord.
 All bridge-origin notices, including control responses, are local-only; some failures
 occur before a model turn and cannot be reported remotely by an agent.
 
+Direct human messages reach the session as readable text beneath a short Discord
+provenance line (human ID, message ID and untrusted-input label), not a JSON payload.
+Relayed human requests and agent-origin data retain an explicit provenance/trust
+envelope. None of these messages can answer a terminal approval prompt. Reply and
+internal-routing guidance lives in the attached session's Discord instructions,
+not a repeated preamble on every message.
+
 Each human input is one causal root. At most `maxHops` peer deliveries may follow;
 on reaching the limit the bridge logs locally and waits for a new human request.
 There is no ambient agent subscription and no autonomous cross-session broadcast.

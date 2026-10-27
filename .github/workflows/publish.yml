@@ -5,7 +5,8 @@ on:
     tags:
       - 'v*'
   # Allow a failed tag-triggered release to be retried after its blocker is
-  # fixed, without moving or recreating the already-pushed release tag.
+  # fixed. The selected ref must still be the clean, exact-tag release source;
+  # untagged corrective main builds are rejected by prepublishOnly.
   workflow_dispatch:
 
 # npm Trusted Publishing exchanges a short-lived OIDC token for publish
@@ -70,5 +71,7 @@ jobs:
 
       - name: Publish package
         # Tag checkouts are detached; pnpm's git checks would reject them.
+        # prepublishOnly checks the built identity before any registry write,
+        # for both tag pushes and manual dispatch (do not use --ignore-scripts).
         # npm generates provenance automatically for GitHub OIDC publishing.
         run: pnpm publish --access public --no-git-checks

@@ -67,6 +67,7 @@
     "test:vitest:coverage": "cross-env NODE_ENV=test vitest run --coverage",
     "lint": "eslint . && prettier --check .",
     "lint-fix": "eslint --fix . && prettier --write .",
+    "prepublishOnly": "node scripts/check-release-identity.mjs",
     "post-build": "cp -r source/prompts dist/ && mkdir -p dist/providers && cp source/providers/provider-presets.json dist/providers/ && chmod +x dist/cli.js",
     "release": "./scripts/release.sh",
     "logs": "node tools/log_viewer/src/server.js",

@@ -53,8 +53,12 @@ The publish workflow builds its selected ref. `scripts/write-build-info.mjs` mar
 build as a release only when the checkout is clean and HEAD has the exact
 `v<package-version>` tag. A corrective commit on untagged `main` still builds a
 `<version>-dev+<hash>` CLI, even when `package.json` has the intended npm version.
-Before dispatching a publish recovery from another ref, inspect that build-identity
-path and verify the artifact's `dist/build-info.json` and CLI `--version`; passing
+The package `prepublishOnly` hook rejects publication unless the built metadata matches
+the clean, exact-tag checkout and package version; this applies to both workflow
+routes and local publication. A manual recovery must select properly tagged
+release source, not untagged corrective `main`. Do not bypass the hook with
+`--ignore-scripts`. Before dispatching a publish recovery from another ref, inspect
+that build-identity path and verify the artifact's `dist/build-info.json` and CLI `--version`; passing
 tests alone do not establish release identity. Resolve how the tested source and
 release artifact will stay aligned before dispatching. Do not assume the generic
 manual-dispatch retry is sufficient for a corrected, untagged source ref.

@@ -192,6 +192,7 @@ function transcriptTurns(projection: SessionProjection): Term2TurnView[] {
         role: item.role === 'user' ? ('user' as const) : ('assistant' as const),
         text: text(item.text ?? item.content),
         commands: transcriptCommands(item.commands),
+        aborted: item.role === 'bot' && item.status === 'aborted',
       },
     ];
   });
@@ -208,7 +209,7 @@ function transcriptTurns(projection: SessionProjection): Term2TurnView[] {
         userText: current.text,
         text: syntheticInterruption && stillRunning ? '' : next.text,
         reasoning: '',
-        status: stillRunning && index + 1 === parsed.length - 1 ? 'streaming' : 'completed',
+        status: next.aborted ? 'aborted' : stillRunning && index + 1 === parsed.length - 1 ? 'streaming' : 'completed',
         commands: next.commands,
       });
       index += 1;

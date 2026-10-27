@@ -3308,9 +3308,13 @@ const PROJECTION_COMMAND_BODY_BUDGET = 2 * 1024 * 1024;
 const PROJECTION_TRUNCATED_MARKER = '[truncated: session transcript size limit]';
 
 // The web client's transcript validator rejects NUL and DEL anywhere in a string,
-// so tool output carrying them would make the whole session unreadable.
+// so projected text carrying them would make the whole session unreadable.
+function projectionText(value: unknown, max: number): string {
+  return boundedText(value, max).replace(/[\u0000\u007f]/gu, '\uFFFD');
+}
+
 function projectionCommandText(value: unknown, max: number): string | undefined {
-  const bounded = boundedText(value, max).replace(/[\u0000\u007f]/gu, '\uFFFD');
+  const bounded = projectionText(value, max);
   if (bounded.length === 0) return undefined;
   return PROJECTION_CREDENTIAL_PATTERN.test(bounded) ? PROJECTION_WITHHELD_MARKER : bounded;
 }
@@ -3365,6 +3369,7 @@ function applyCommandBodyBudget(messages: Record<string, unknown>[]): Record<str
 function projectTranscriptMessages(
   transcript: SessionProjectionSource['transcript'],
   journalCommands: ReadonlyMap<string, readonly ProjectionCommand[]>,
+  abortedTurns: ReadonlyMap<string, string>,
 ): Record<string, unknown>[] {
   if (!transcript) return [];
   const commandsByTurn = new Map<string, ProjectionCommand[]>();
@@ -3407,7 +3412,29 @@ function projectTranscriptMessages(
 
   const projected: Record<string, unknown>[] = [];
   let currentTurnId: string | null = null;
+  let currentTurnHasReply = false;
   const attachedTurns = new Set<string>();
+  const botMessage = (id: unknown, text: unknown): Record<string, unknown> => {
+    const projectedMessage: Record<string, unknown> = {
+      id: boundedText(id, 256),
+      role: 'bot',
+      text: projectionText(text, 16_384),
+    };
+    const commands = currentTurnId ? commandsByTurn.get(currentTurnId) : undefined;
+    if (commands && commands.length > 0 && !attachedTurns.has(currentTurnId!)) {
+      projectedMessage.commands = commands;
+      attachedTurns.add(currentTurnId!);
+    }
+    return projectedMessage;
+  };
+  // A stopped turn settles only the journal, so the transcript holds its user
+  // message and at most a synthetic "interrupted" note. Project the journal's
+  // partial answer in that note's place, marked as stopped.
+  const flushAbortedTurn = (): void => {
+    const partial = currentTurnId && !currentTurnHasReply ? abortedTurns.get(currentTurnId) : undefined;
+    if (partial === undefined) return;
+    projected.push({ ...botMessage(`aborted-${currentTurnId}`, partial), status: 'aborted' });
+  };
   for (const message of transcript.messages) {
     const record = message as unknown as {
       id?: unknown;
@@ -3422,7 +3449,9 @@ function projectTranscriptMessages(
     };
     const sender = typeof record.sender === 'string' ? record.sender : record.role;
     if (sender === 'user') {
+      flushAbortedTurn();
       currentTurnId = typeof record.id === 'string' ? record.id : null;
+      currentTurnHasReply = false;
     }
     if (sender === 'command' || sender === 'reasoning') {
       if (
@@ -3442,20 +3471,24 @@ function projectTranscriptMessages(
       }
       continue;
     }
+    if (sender === 'bot') currentTurnHasReply = true;
+    if (
+      sender === 'system' &&
+      currentTurnId &&
+      !currentTurnHasReply &&
+      abortedTurns.has(currentTurnId) &&
+      typeof record.id === 'string' &&
+      record.id.startsWith('system-interrupted-')
+    )
+      continue;
 
-    const role = sender === 'user' ? 'user' : 'bot';
-    const projectedMessage: Record<string, unknown> = {
-      id: boundedText(record.id, 256),
-      role,
-      text: boundedText(record.text, 16_384),
-    };
-    const commands = role === 'bot' && currentTurnId ? commandsByTurn.get(currentTurnId) : undefined;
-    if (commands && commands.length > 0 && !attachedTurns.has(currentTurnId!)) {
-      projectedMessage.commands = commands;
-      attachedTurns.add(currentTurnId!);
+    if (sender === 'user') {
+      projected.push({ id: boundedText(record.id, 256), role: 'user', text: projectionText(record.text, 16_384) });
+    } else {
+      projected.push(botMessage(record.id, record.text));
     }
-    projected.push(projectedMessage);
   }
+  flushAbortedTurn();
   return applyCommandBodyBudget(projected.slice(-200));
 }
 
@@ -3468,7 +3501,7 @@ function projectTranscriptMessages(
  */
 function toSessionProjection(source: SessionProjectionSource): Record<string, unknown> {
   const transcript = source.transcript;
-  const messages = projectTranscriptMessages(transcript, source.journalCommands);
+  const messages = projectTranscriptMessages(transcript, source.journalCommands, source.abortedTurns);
   const interaction = source.interaction
     ? {
         ...source.interaction,

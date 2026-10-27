@@ -267,7 +267,10 @@ Read returns `{session:<projection>}`. A projection has `id`, `workspaceId`,
 `status` (`idle`, `running`, `awaiting_interaction`, `interrupted`, or `closed`),
 `createdAt`, `updatedAt`, `latestSequence`, `earliestReplayableSequence`,
 `projectionSequence`, `transcript`, and `interaction`. `transcript.messages` are
-bounded `{id,role:"user"|"bot",text,commands?}` entries; a command entry has
+bounded `{id,role:"user"|"bot",text,status?,commands?}` entries. A turn the user
+stopped has no reply in the transcript, so its bot entry carries the partial answer
+the journal streamed and `status:"aborted"`; a turn that was interrupted without a
+stop keeps the synthetic "Previous turn was interrupted" note. A command entry has
 `callId`, `toolName`, and `status` (`completed`, `failed`, `aborted`, or `unknown`),
 plus optional `output` (the tool result body, at most 16,384 characters) and `error`
 (at most 10,000 characters) when the turn recorded them. One projection carries at most

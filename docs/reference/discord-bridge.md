@@ -107,7 +107,7 @@ session that does not opt in is never discovered, even if its socket exists.
 An alias is the opted-in session's control socket name: 1–64 ASCII letters,
 digits, `_` or `-` (case-sensitive), the same grammar `/bridge connect` accepts. `coordinator` is only the default alias name for unaddressed human input; it
 does not pin a socket, session ID or process. Unaddressed text is delivered only
-while a live opted-in session with that name is attached; otherwise it is visibly
+while a live opted-in session with that name is attached; otherwise it is locally
 refused and no job is created. There is no queue for a future process.
 
 `maxHops` is 1–8, default 4. `stateDir` must be absolute, owned by this OS user,
@@ -144,10 +144,11 @@ Version 1 journals remain unsupported. Older bridge executables cannot open the
 upgraded fingerprint: preserve a pre-upgrade backup for rollback, and reconcile
 any work admitted since that backup rather than replaying it blindly.
 
-Wait for `[bridge] Ready` in Discord **before sending new work**. First startup
+Check local bridge stderr for `[bridge] Ready` **before sending new work**;
+readiness is never posted to Discord. First startup
 establishes a current-channel watermark; historical messages deliberately do not
 activate anything. The bridge opens successfully with no attached sessions and
-reports `No sessions attached` in `!bridge status`. A session attached later is
+reports `No sessions attached` locally for `!bridge status` (no channel response). A session attached later is
 addressable immediately without restarting the bridge. Restart with unchanged
 config/state preserves the cursor, pending input and outbox. Do not delete the
 journal to “fix” an uncertain delivery.
@@ -172,7 +173,7 @@ reinterpreting it.
 * `What is the current task and recent progress?` → coordinator's existing context.
 * `@worker Inspect the current implementation` → worker's existing context.
 * A session's **final answer** starting `@worker Please inspect this` explicitly
-  targets that peer. The response remains visibly attributed as `[coord] ...`.
+  targets that peer internally; it is not posted to Discord.
   The recipient receives `agent session coord` in an untrusted server-data envelope,
   **not** a human instruction or approval. It may reply explicitly `@coord ...`.
   When that peer route is part of a newly admitted human Discord job, the bridge
@@ -182,7 +183,7 @@ reinterpreting it.
   provenance is attached by bridge ingress, not inferred from agent text or a
   self-asserted origin. Peer jobs without that bridge-recorded root remain
   `agent session <alias>` data and use queued follow-up admission.
-* Ordinary finals are visible but wake nobody. Quoted/code-fenced targets and
+* Ordinary finals stay in terminal history and wake nobody. Quoted/code-fenced targets and
   mentions in the middle of a reply are not routing commands. No broadcast route.
 * All fetched bot and webhook messages—including the bridge's own posts—are ignored.
   Only the configured human can originate channel input. Unknown/malformed targets
@@ -208,10 +209,11 @@ not abort a running tool: input becomes visible at a supported request boundary,
 or falls back to a queued turn if the active turn cannot take it. Each accepted
 human request observes the terminal result of the turn it joined, not the steer
 admission acknowledgment or a later unrelated turn. Multiple human requests that
-join the same turn each receive that turn's final (not separate model turns).
+join the same turn each settle against that turn's final (not separate model turns).
+These results are internal accounting/routing data, not Discord posts.
 Approval pauses still require the terminal; Discord input cannot answer them.
-Busy sessions acknowledge `queued` and answer when admitted. Remote input—human or
-peer—never answers an outstanding question/approval. The bridge visibly refuses it;
+Busy-session admission records `queued` internally and runs when admitted. Remote input—human or
+peer—never answers an outstanding question/approval. The bridge refuses it with a local diagnostic;
 resolve or cancel through the terminal, then send a new request if wanted. Existing
 large-input/surge confirmation guards can also refuse bridge input.
 
@@ -219,7 +221,8 @@ large-input/surge confirmation guards can also refuse bridge input.
 
 Only the configured human can issue:
 
-* `!bridge status`: bridge running/paused state and pending count. This is not a
+* `!bridge status`: writes bridge running/paused state and pending count locally,
+  with no channel response. This is not a
   real-time dump of session tools/history. Ask the session for contextual progress.
 * `!bridge pause`: prevent **new dispatch**. Already accepted work continues; new
   human input is retained within the bounded inbox, and retained peer requests can
@@ -236,17 +239,18 @@ Only the configured human can issue:
   as a fresh interrupt against later work. Resume is always explicit.
 
 The work inbox admits at most 128 unsettled bridge jobs. At capacity, additional
-ordinary human requests receive a refusal identifying the Discord message ID and
-explicitly stating **NOT accepted**: no job is queued or sent to a session. Existing
+ordinary human requests produce a local diagnostic identifying the Discord message ID
+and explicitly stating **NOT accepted**: no job is queued or sent to a session. Existing
 admitted jobs and their journal evidence are untouched by overflow. The shared
 channel cursor continues, so authorized status/resume/stop commands remain reachable
 even after excess ordinary messages and across bridge restart. Once capacity is
 available, resend wanted refused work as a new human message; it is never silently
-replayed or admitted later. Refusal notifications use the existing durable outbox
-and the same ambiguous-POST quarantine/non-replay policy as other output.
+replayed or admitted later. Refusals do not enter the outbox or post to Discord.
+All bridge-origin notices, including control responses, are local-only; some failures
+occur before a model turn and cannot be reported remotely by an agent.
 
 Each human input is one causal root. At most `maxHops` peer deliveries may follow;
-on reaching the limit the bridge posts a notice and waits for a new human request.
+on reaching the limit the bridge logs locally and waits for a new human request.
 There is no ambient agent subscription and no autonomous cross-session broadcast.
 
 ## Delivery, reconnect and explicit uncertainty
@@ -255,9 +259,10 @@ REST polling is serial: normally one GET and at most one POST per one-second cyc
 with bounded ten-second requests. Failures back off exponentially to 60 seconds;
 429 `retry_after` and exhausted-bucket reset hints delay further requests. No tight
 poll/retry loop and no automatic POST retransmission after an ambiguous outcome.
-Final text is capped by the control wire at 16,384 characters, visibly marked if
-truncated, split without breaking UTF-16 surrogate pairs, and attributed on every
-chunk. Truncated finals never route to a peer. `allowed_mentions` is empty on every
+Internal final text is capped by the control wire at 16,384 characters and marked
+if truncated. It is observed only for job settlement and peer routing, never
+automatically posted. Truncated finals never route to a peer. Explicit sends are
+split without breaking UTF-16 surrogate pairs and attributed on every chunk. `allowed_mentions` is empty on every
 POST; alias syntax is not an actual Discord mention.
 
 The private journal is written atomically and synced before an input mutation or
@@ -269,32 +274,35 @@ cursor/outbox prevent ordinary replay on restart. Crash ambiguity is **not** an
 exactly-once guarantee:
 
 * Accepted input with a recoverable same-process result is read, not resubmitted.
-* Unknown/expired result or changed session identity is retained with an explicit
-  reconciliation notice. Original undecided input remains in the journal.
+* Unknown/expired result or changed session identity is retained with a local
+  reconciliation diagnostic. Original undecided input remains in the journal.
 * A POST interrupted before its acknowledgement is `uncertain`, never automatically
   retried. Inspect channel history and the private outbox before deciding whether a
   manual resend is appropriate. Discord nonce dedup alone is not permanent proof.
 * An admitted job keeps the socket/session/start identity captured at admission.
   Each dispatch rechecks that the live opted-in advertisement for its alias still
   matches exactly. A detached or replaced process never receives it; the job is
-  retained with a visible notice. A replacement session that deliberately reuses an
+  retained with a local diagnostic. A replacement session that deliberately reuses an
   alias receives only new messages addressed to it after it attaches. Reconnecting
   the original process identity is the only automatic continuation. Automated
   cross-process exactly-once recovery is intentionally absent.
 
-Final-feed limitation: only bridge-submitted turns and their explicit peer chains
-are correlated/forwarded. Independent terminal turns, later approval continuations,
+Internal result observation: only bridge-submitted turns and their explicit peer chains
+are correlated for settlement and internal routing, not forwarded to the channel. Independent terminal turns, later approval continuations,
 background worker completion notifications and other unsolicited session events are
 **not** an ambient Discord feed. A mobile query still runs in the real current session
 and sees its available context/history; it does not manufacture a separate chatbot.
 
-## Explicit proactive notifications
+## Explicit Discord output
 
-It does not automatically collect finals from arbitrary terminal turns. For explicit
-proactive notifications, an opted-in interactive root gets `discord_send` when its
+Only explicit `discord_send` calls may produce channel posts: quick answers,
+acknowledgements, useful progress, completions and terminal-required explanations
+all need a send. An ordinary final stays local; a leading final `@alias` routes
+internally only. For explicit notifications, an opted-in interactive root gets `discord_send` when its
 effective profile includes `discord-send`. Read-only and plan profiles suppress it;
 nested/script-launched agents and non-interactive roots do not inherit the root
-callback. The normal registry projection exposes it through `tools.discord_send`
+callback. Sessions without sending capability can still receive Discord input,
+but their answers remain terminal-only. The normal registry projection exposes it through `tools.discord_send`
 in `run_code` (including Bare), not a new JavaScript global. No bridge need be
 running when the agent is constructed.
 
@@ -304,7 +312,7 @@ most 16,384 UTF-16 units, never silently truncated. Use a fresh key for a new
 notification. Reuse the same key only to reconcile that notification. The bridge resolves
 `[alias]` attribution and channel by matching the caller's full socket/session/start
 binding against a currently live opted-in session; there is no separate identity map. Text beginning `@worker` is literal notification text, not peer routing.
-Explicit sends and automatic Discord-job finals are separate intentional outputs.
+Final answers never substitute for an explicit send, including Discord-submitted turns.
 
 Discovery is a private Unix RPC under `$XDG_RUNTIME_DIR/term2-discord`: directory
 0700, socket and advertisement 0600, no credentials or payloads in advertisements.
@@ -333,7 +341,17 @@ scale) and a projected 16 MiB serialized journal. There is **no 512-lifetime-sen
 ceiling**: accepted indexes and associated sent/uncertain chunks are retained,
 including beyond ordinary settled-output trimming. Capacity reports kind, usage
 and effective limit. It affects only new proactive admission; duplicate/status
-reconciliation, ingress recovery and already-accepted output remain available.
+reconciliation, ingress recovery and already-accepted **explicit** output remain available.
+Queued legacy automatic outputs (including finals and bridge notices) without a
+persisted explicit-send index are withheld, not deleted or marked sent. The bridge
+logs their count locally on open; it skips them so later indexed explicit sends
+can drain. Their bytes still count toward the journal budget. Sent and uncertain
+evidence remains intact; crash-recovered `sending` rows still become `uncertain`.
+A pre-index journal is accepted but none of its queued output is deliverable.
+Reconcile/archival is operator-owned; no automatic pruning or replay is added.
+An older binary can post those retained queued rows again: reconcile/back up state
+before rollback; rollback is not output-safe by default.
+
 These conservative local-resource bounds are not measured workload limits. A
 long-lived journal can reach the byte budget: the operator must reconcile and
 archive it before deliberately provisioning fresh state. Never delete uncertainty
@@ -358,11 +376,13 @@ No tokens, production provider calls or external Discord traffic.
 After independent review and authorized bot/channel access, verify **on mobile**:
 
 1. Record both existing session IDs and a harmless terminal-only context fact in each.
-   Attach/resume explicitly as above, verify the same IDs, then wait for Ready.
+   Attach/resume explicitly as above, verify the same IDs, then check local readiness (no Discord Ready post).
 2. Ask an unaddressed question about the coordinator fact; target `@worker` for its
-   different fact. Compare actual persisted history and visible `[alias]` responses.
+   different fact. Have each session explicitly send its answer; compare persisted history and
+   visible `[alias]` sends. Verify unsent final text stays local.
 3. Ask coordinator to finalize `@worker ...`; worker explicitly targets coordinator
-   back. Observe attribution in both sessions and bounded cycles, not bot echo wakes.
+   back. Observe internal delivery in both sessions and bounded cycles, not bot echo
+   wakes; neither final should post without an explicit send.
 4. Send an ordinary untargeted reply, unknown alias, unauthorized-user message and
    message in another channel. Confirm only intended accepted inputs appear.
 5. Exercise busy queue, terminal approval refusal, pause/resume and native stop.
@@ -378,6 +398,6 @@ rate-limit behavior, actual mobile rendering and actual AI-to-AI reasoning remai
 unverified until this authorized exercise is performed. Offline fixtures do not
 establish them.
 
-Routine started/queued receipts are not posted for accepted human or peer jobs.
-Final replies, readiness and meaningful refusals/errors remain. Previously persisted
-receipt outbox entries may drain once; upgrading does not rewrite the journal.
+No automatic receipts, final replies, readiness or bridge-origin refusals/errors
+are posted. Previously persisted automatic outbox entries are retained but withheld;
+only indexed explicit-send chunks may drain.

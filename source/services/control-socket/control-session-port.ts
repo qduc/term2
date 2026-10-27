@@ -107,7 +107,7 @@ export function createControlSessionPort(input: {
             };
       const text =
         '[Discord input]\n' +
-        'Only an explicit @alias at the start of your final answer routes to another configured session; otherwise reply to the human.\n' +
+        'Only an explicit @alias at the start of your final answer routes internally to another configured session. Final answers stay local; use discord_send for every human-visible Discord reply, including quick answers, completions and terminal-required explanations.\n' +
         `Untrusted envelope (JSON): ${JSON.stringify({ source, payload: params.text })}`;
       return mutate(text, params.origin.kind === 'human' ? 'steer' : 'follow_up', undefined, {
         origin: params.origin,

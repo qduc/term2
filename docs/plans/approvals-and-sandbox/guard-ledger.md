@@ -3976,8 +3976,21 @@ legitimate large or long-lived notification histories can hit them, while many
 small sends below the bound are not evidence of safe content.
 
 Only new proactive work is refused. Existing index/outbox evidence, duplicate
-replay/status, normal ingress controls and accepted output are retained. There is
-no 512-lifetime-send ceiling, TTL or automatic eviction. Operator recovery is
+replay/status, normal ingress controls and accepted explicit output are retained.
+Only persisted `discord_send` index references authorize channel POSTs at
+`DiscordBridge.#outputs`; legacy unindexed queued automatic finals/notices are
+withheld, retained locally and skipped without starving later explicit chunks.
+Open logs a count, not content. This is a direct output-consent boundary, not a
+timeout or new capacity limit; there is no setting, schema version or override.
+The operator owns reconciliation/archival; withheld bytes still consume the
+existing journal budget. Sent/uncertain evidence and `sending` crash recovery
+are unchanged. An older binary can send those rows on rollback: preserve state
+and reconcile it first. No live activation is implied.
+Boundary evidence: `discord-bridge.integration.test.ts` asserts every loopback POST
+has explicit index provenance and covers mixed legacy/indexed output across
+repeated restart, including journals lacking the optional index. Base-bridge red
+proof rejects automatic POSTs; final commands/counts are recorded in the task report.
+There is no 512-lifetime-send ceiling, TTL or automatic eviction. Operator recovery is
 explicit reconciliation/archival and deliberate fresh state, never deleting or
 replaying uncertain effects. Capacity diagnostics expose kind, used and limit,
 not payload. A durable write failure poisons this bridge instance: no subsequent

@@ -440,6 +440,10 @@ export class DiscordBridge {
         )
           throw stateError('journal_state', 'Invalid proactive Discord journal; reconciliation required');
       }
+      const explicit = new Set(this.#journal.proactive.flatMap((entry) => entry.outputs));
+      const withheld = this.#journal.outbox.filter((output) => output.state === 'queued' && !explicit.has(output.id));
+      if (withheld.length)
+        this.#warn(`${withheld.length} legacy automatic Discord outputs withheld; retained locally for reconciliation`);
       // Upgrade only a fully validated journal whose old whole-config hash matched.
       // Legacy state must first be opened with its original default; never guess it.
       this.#journal.fingerprint = fingerprint;
@@ -553,7 +557,7 @@ export class DiscordBridge {
         .update(JSON.stringify([params.binding, params.requestId]))
         .digest('hex');
     const before = this.#journal.outbox.length;
-    this.#post(seed, `[${alias}] ${params.text!}`);
+    this.#enqueue(seed, `[${alias}] ${params.text!}`);
     const entry: Proactive = {
       binding: { ...params.binding },
       requestId: params.requestId,
@@ -573,7 +577,7 @@ export class DiscordBridge {
     return status(entry);
   }
 
-  #post(id: string, text: string): void {
+  #enqueue(id: string, text: string): void {
     const pieces = chunks(text);
     const label = /^\[[^\]]{1,64}\]/.exec(text)?.[0] ?? '[bridge]';
     for (const [index, piece] of pieces.entries()) {
@@ -645,8 +649,7 @@ export class DiscordBridge {
     }
     if (!this.#journal.cursor) {
       this.#journal.cursor = messages[0]?.id ?? '0';
-      this.#post(
-        'ready',
+      this.#warn(
         '[bridge] Ready. Only new messages from the configured human are accepted. Use @alias text; !bridge pause/resume/status/stop.',
       );
       this.#save();
@@ -664,18 +667,16 @@ export class DiscordBridge {
           const alias = route?.[1] ?? this.#config.coordinator;
           const text = route ? route[2]!.trim() : message.content;
           if ((message.content.startsWith('@') && !route) || !text || text.length > 32_000) {
-            this.#post(`reject_${message.id}`, '[bridge] Unknown target, empty or oversized message; not delivered.');
+            this.#warn('[bridge] Unknown target, empty or oversized message; not delivered.');
           } else if (this.#journal.jobs.filter((job) => !['done', 'uncertain'].includes(job.state)).length >= 128) {
             // Bound work admission, never the shared cursor carrying human recovery controls.
-            this.#post(
-              `overflow_${message.id}`,
+            this.#warn(
               `[bridge → ${alias}] Work inbox full (128 pending). Message ${message.id} NOT accepted: not queued or sent to a session. Resend after the backlog drains. !bridge status/resume/stop remain available.`,
             );
           } else {
             const binding = this.#attached()[alias];
             if (!binding)
-              this.#post(
-                `reject_${message.id}`,
+              this.#warn(
                 `[bridge] Target ${alias} is not attached; message ${message.id} NOT accepted and not delivered.`,
               );
             else
@@ -727,15 +728,13 @@ export class DiscordBridge {
       this.#journal.stopPending = !stopped;
       this.#save();
     } else if (command !== 'status') {
-      this.#post(
-        `command_${message.id}`,
+      this.#warn(
         '[bridge] Commands: !bridge pause | resume | status | stop. Stop pauses routing and interrupts attached sessions; approvals stay terminal-owned.',
       );
       return;
     }
     const attached = Object.keys(this.#attached());
-    this.#post(
-      `command_${message.id}`,
+    this.#warn(
       `[bridge] ${this.#journal.paused ? 'Paused' : 'Running'}; pending ${
         this.#journal.jobs.filter((job) => !['done', 'uncertain'].includes(job.state)).length
       }. ${
@@ -776,8 +775,7 @@ export class DiscordBridge {
             // result query below keeps the retained/uncertain recovery path instead.
             if ((error as { code?: string }).code) {
               job.state = 'done';
-              this.#post(
-                `${job.id}_denied`,
+              this.#warn(
                 `[bridge → ${job.alias}] Control rejected admission; check session opt-in. Original input retained in journal, not retried.`,
               );
               this.#save();
@@ -787,8 +785,7 @@ export class DiscordBridge {
           }
           if (!['started', 'queued', 'steering'].includes(receipt.delivery)) {
             job.state = 'done';
-            this.#post(
-              `${job.id}_rejected`,
+            this.#warn(
               `[bridge → ${job.alias}] Not accepted (${
                 receipt.reason ?? 'rejected'
               }); original input retained in journal. Use the terminal for approval/confirmation.`,
@@ -802,8 +799,7 @@ export class DiscordBridge {
         const result = await callDiscordControl(binding.socketPath, 'bridge_result', params);
         if (result.state === 'missing') {
           job.state = 'uncertain';
-          this.#post(
-            `${job.id}_missing`,
+          this.#warn(
             `[bridge → ${job.alias}] Result no longer available. Input retained; check terminal history before manual recovery. NOT resubmitted.`,
           );
           this.#save();
@@ -816,14 +812,12 @@ export class DiscordBridge {
         }
         if (result.state === 'final') {
           const text = typeof result.text === 'string' ? result.text : '';
-          if (text.trim()) this.#post(`${job.id}_final`, `[${job.alias}] ${text}`);
           const route = /^@([A-Za-z0-9_-]+)\s+([\s\S]+)$/.exec(text);
           if (route && !job.noRoute && !result.truncated) {
             const alias = route[1]!;
-            if (!this.#attached()[alias])
-              this.#post(`${job.id}_target`, `[bridge] Unknown agent target ${alias}; not delivered.`);
+            if (!this.#attached()[alias]) this.#warn(`[bridge] Unknown agent target ${alias}; not delivered.`);
             else if (job.hops >= this.#config.maxHops)
-              this.#post(`${job.id}_limit`, '[bridge] Peer hop limit reached; waiting for the human.');
+              this.#warn('[bridge] Peer hop limit reached; waiting for the human.');
             else
               this.#journal.jobs.push({
                 id: `${job.id}_p`,
@@ -839,8 +833,7 @@ export class DiscordBridge {
                 state: 'new',
               });
           }
-        } else
-          this.#post(`${job.id}_outcome`, `[${job.alias}] ${result.state}; inspect the terminal. No peer activation.`);
+        } else this.#warn(`[${job.alias}] ${result.state}; inspect the terminal. No peer activation.`);
         job.state = 'done';
         job.text = '';
         this.#save();
@@ -850,8 +843,7 @@ export class DiscordBridge {
         // If the session was temporarily unavailable after a dispatch, read-only recovery
         // on the next tick is safe; never send a second mutation automatically.
         if (job.state === 'new') {
-          this.#post(
-            `${job.id}_waiting`,
+          this.#warn(
             `[bridge → ${job.alias}] Target is not attached right now. Input retained and NOT delivered; only the exact admitted process identity may receive it. Reconcile in the terminal otherwise.`,
           );
           this.#save();
@@ -860,8 +852,7 @@ export class DiscordBridge {
         const live = this.#attached()[job.alias];
         if (!live || !sameDiscordBinding(live, job.binding)) {
           job.state = 'uncertain';
-          this.#post(
-            `${job.id}_uncertain`,
+          this.#warn(
             `[bridge → ${job.alias}] Session identity changed or disconnected. Input retained for reconciliation; NOT resubmitted. Reconcile after checking terminal history.`,
           );
           this.#save();
@@ -873,9 +864,12 @@ export class DiscordBridge {
   }
 
   async #outputs(): Promise<void> {
+    // Only durable discord_send admissions authorize channel posts. Old automatic
+    // rows remain evidence, but must neither post nor starve explicit output.
+    const explicit = new Set(this.#journal.proactive!.flatMap((entry) => entry.outputs));
     for (const outgoing of this.#journal.outbox) {
       if (Date.now() < this.#retryAt) return;
-      if (outgoing.state !== 'queued') continue;
+      if (outgoing.state !== 'queued' || !explicit.has(outgoing.id)) continue;
       outgoing.state = 'sending';
       this.#save();
       try {

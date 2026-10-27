@@ -214,6 +214,7 @@ async function fixture(
   for (const alias of options.attach ?? ['coord', 'worker']) await attach(alias);
   const messages: any[] = [];
   const posted: any[] = [];
+  const unauthorizedPosts: string[] = [];
   const headers: string[] = [];
   let nextId = 10n;
   let reads = 0;
@@ -242,6 +243,12 @@ async function fixture(
       let body = '';
       for await (const chunk of request) body += chunk;
       const value = JSON.parse(body);
+      // Check the durable authorization at request arrival, including failed/429
+      // attempts, rather than inferring it from a journal written after the POST.
+      const saved = JSON.parse(fs.readFileSync(path.join(root, 'bridge', 'journal.json'), 'utf8'));
+      const explicit = (saved.proactive ?? []).some((entry: any) => entry.outputs.includes(value.nonce));
+      if (!explicit || !saved.outbox.some((output: any) => output.id === value.nonce && output.state === 'sending'))
+        unauthorizedPosts.push(value.nonce);
       if (posts429 > 0) {
         posts429--;
         response.writeHead(429);
@@ -301,6 +308,7 @@ async function fixture(
     for (let i = 0; i < count; i++) {
       await bridge.tick();
       await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unauthorizedPosts).toEqual([]);
     }
   };
   const restart = () => {
@@ -357,7 +365,7 @@ it('refuses inherited object names as absent aliases and keeps the journal reope
   await f.cycle();
   const refused = f.human('@constructor inspect status');
   await f.cycle();
-  expect(f.posted.some((message) => message.content.includes('Target constructor is not attached'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('Target constructor is not attached'))).toBe(true);
   expect(f.journal().jobs).toHaveLength(0);
   expect(BigInt(f.journal().cursor) >= BigInt(refused.id)).toBe(true);
   expect(() => f.restart()).not.toThrow();
@@ -371,7 +379,8 @@ it('accepts any supported control-socket name as an alias and reopens its journa
   f.human('@Worker hello');
   await f.cycle(6);
   expect(f.received.Worker).toHaveLength(1);
-  expect(f.posted.some((message) => message.content === '[Worker] Worker answer')).toBe(true);
+  expect(f.posted).toHaveLength(0);
+  expect(f.journal().jobs.at(-1).state).toBe('done');
   expect(f.journal().jobs.at(-1).binding).toEqual(f.binding('Worker'));
   expect(() => f.restart()).not.toThrow();
   await f.cycle(3);
@@ -398,7 +407,7 @@ it('moves an accepted job to uncertainty when its alias is replaced', async () =
   await f.attach('worker', { sessionId: 'replacement-session' });
   await f.cycle(3);
   expect(f.journal().jobs.find((entry: any) => entry.id === job.id).state).toBe('uncertain');
-  expect(f.posted.some((message) => message.content.includes('Session identity changed or disconnected'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('Session identity changed or disconnected'))).toBe(true);
   expect(f.posted.some((message) => message.content.includes('worker done'))).toBe(false);
   // Only the original process received the admitted turn.
   expect(f.received.worker).toHaveLength(1);
@@ -476,8 +485,8 @@ it('keeps a recovered dispatching job uncertain when its read-only result query 
   f.restart();
   await f.cycle(3);
   expect(f.journal().jobs.find((entry: any) => entry.id === 'discord_recovered').state).toBe('uncertain');
-  expect(f.posted.some((message) => message.content.includes('Session identity changed or disconnected'))).toBe(true);
-  expect(f.posted.some((message) => message.content.includes('Control rejected admission'))).toBe(false);
+  expect(f.warnings.some((message) => message.includes('Session identity changed or disconnected'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('Control rejected admission'))).toBe(false);
   expect(methods).not.toContain('bridge_submit');
   // Uncertainty is durable: a reload neither delivers nor queries the replacement again.
   const queried = methods.length;
@@ -591,16 +600,17 @@ it('opens without an attached session, refuses unaddressed input and attaches a 
   const f = await fixture({ attach: [] });
   await f.cycle();
   expect(f.journal().jobs).toHaveLength(0);
-  expect(f.posted.map((message) => message.content).join('\n')).toContain('[bridge] Ready');
+  expect(f.warnings.join('\n')).toContain('[bridge] Ready');
+  expect(f.posted).toHaveLength(0);
   const refused = f.human('no coordinator attached yet');
   f.human('!bridge status');
   await f.cycle();
   expect(
-    f.posted.some((message) =>
-      message.content.includes(`Target coord is not attached; message ${refused.id} NOT accepted and not delivered`),
+    f.warnings.some((message) =>
+      message.includes(`Target coord is not attached; message ${refused.id} NOT accepted and not delivered`),
     ),
   ).toBe(true);
-  expect(f.posted.some((message) => message.content.includes('No sessions attached'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('No sessions attached'))).toBe(true);
   expect(f.journal().jobs).toHaveLength(0);
   expect(BigInt(f.journal().cursor) >= BigInt(refused.id)).toBe(true);
   // Explicit opt-in later makes the session addressable without restarting the bridge.
@@ -608,7 +618,7 @@ it('opens without an attached session, refuses unaddressed input and attaches a 
   f.human('now reach the coordinator');
   await f.cycle(4);
   expect(f.received.coord).toHaveLength(1);
-  expect(f.posted.some((message) => message.content === '[coord] coord answer')).toBe(true);
+  expect(f.posted).toHaveLength(0);
   expect(f.journal().jobs.at(-1)).toMatchObject({ alias: 'coord', state: 'done' });
   expect(f.journal().jobs.at(-1).binding).toEqual(f.binding('coord'));
 });
@@ -619,7 +629,7 @@ it('ignores a live control socket that did not opt in to Discord input', async (
   await f.attach('coord', { optIn: false });
   f.human('not opted in');
   await f.cycle();
-  expect(f.posted.some((message) => message.content.includes('Target coord is not attached'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('Target coord is not attached'))).toBe(true);
   expect(f.journal().jobs).toHaveLength(0);
   expect(f.received.coord).toHaveLength(0);
   expect(JSON.parse(fs.readFileSync(f.sessions.coord!.socket.advertisementPath, 'utf8')).discordInput).toBeUndefined();
@@ -628,7 +638,7 @@ it('ignores a live control socket that did not opt in to Discord input', async (
   f.human('now opted in');
   await f.cycle(4);
   expect(f.received.coord).toHaveLength(1);
-  expect(f.posted.some((message) => message.content === '[coord] coord answer')).toBe(true);
+  expect(f.posted).toHaveLength(0);
 });
 
 it('routes @name to a session that attached after the bridge opened', async () => {
@@ -636,14 +646,14 @@ it('routes @name to a session that attached after the bridge opened', async () =
   await f.cycle();
   f.human('@late too early');
   await f.cycle();
-  expect(f.posted.some((message) => message.content.includes('Target late is not attached'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('Target late is not attached'))).toBe(true);
   expect(f.journal().jobs).toHaveLength(0);
   await f.attach('late');
   f.human('@late inspect the queue');
   await f.cycle(6);
   expect(f.received.late).toHaveLength(1);
   expect(JSON.stringify(f.received.late![0]!.input)).toContain('inspect the queue');
-  expect(f.posted.some((message) => message.content === '[late] late answer')).toBe(true);
+  expect(f.posted).toHaveLength(0);
   expect(f.journal().jobs.find((job: any) => job.alias === 'late').binding).toEqual(f.binding('late'));
 });
 
@@ -665,7 +675,7 @@ it('never delivers an admitted job to a replacement process reusing the alias', 
   await f.cycle(4);
   expect(f.journal().jobs.find((job: any) => job.id === id).state).toBe('new');
   expect(JSON.stringify(f.received.worker)).not.toContain('queued for the original');
-  expect(f.posted.some((message) => message.content.includes('Target is not attached right now'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('Target is not attached right now'))).toBe(true);
   f.human('@worker new work for the replacement');
   await f.cycle(6);
   expect(f.received.worker).toHaveLength(1);
@@ -678,12 +688,12 @@ it('never delivers an admitted job to a replacement process reusing the alias', 
   ).toBe('replacement-session');
 });
 
-it('sends a Discord work acknowledgement through the outbound boundary before the automatic final reply', async () => {
+it('posts only explicit acknowledgement and completion through run_code while its final stays local', async () => {
   const f = await fixture({
     proactive: true,
     profile: 'builtin:bare',
     proactiveScripts: [
-      'return await tools.discord_send({action:"send",requestId:"work_ack",text:"I received this and am investigating."})',
+      'const ack = await tools.discord_send({action:"send",requestId:"work_ack",text:"I received this and am investigating."}); const done = await tools.discord_send({action:"send",requestId:"work_done",text:"Investigation complete."}); return {ack, done}',
     ],
   });
   await f.bridge().listenOutbound();
@@ -692,16 +702,92 @@ it('sends a Discord work acknowledgement through the outbound boundary before th
   await f.cycle(12);
 
   const outputs = f.posted.map((message) => message.content);
-  const acknowledgement = outputs.indexOf('[coord] I received this and am investigating.');
-  const finalReply = outputs.indexOf('[coord] coord answer');
-  expect(acknowledgement).toBeGreaterThanOrEqual(0);
-  expect(finalReply).toBeGreaterThan(acknowledgement);
+  expect(outputs).toEqual(['[coord] I received this and am investigating.', '[coord] Investigation complete.']);
+  expect(f.journal().jobs.map((job: any) => job.state)).toEqual(['done']);
   const discordInput = JSON.stringify(f.received.coord![0]!.input);
   expect(discordInput).toContain('[Discord input]');
   expect(discordInput).toContain('Untrusted envelope (JSON)');
+  expect(discordInput).toContain('routes internally');
+  expect(discordInput).toContain('Final answers stay local');
+  expect(discordInput).toContain('use discord_send for every human-visible Discord reply');
+  expect(discordInput).not.toContain('otherwise reply to the human');
   expect(discordInput).not.toContain('acknowledgement before starting that work');
-  expect(f.journal().proactive).toHaveLength(1);
-  expect(f.journal().proactive[0].requestId).toBe('work_ack');
+  expect(f.journal().proactive.map((entry: any) => entry.requestId)).toEqual(['work_ack', 'work_done']);
+});
+
+it.each([false, true])(
+  'withholds legacy automatic output across restart (explicit index present: %s)',
+  async (indexed) => {
+    const f = await fixture();
+    await f.cycle();
+    f.human('settled before restart');
+    await f.cycle();
+    const cursor = f.journal().cursor;
+    const jobs = f.journal().jobs;
+    if (indexed) {
+      await f.bridge().listenOutbound();
+      await sendDiscord(f.root, f.binding('coord'), {
+        action: 'send',
+        requestId: 'legacy_explicit',
+        text: 'explicit after legacy',
+      });
+    }
+    f.bridge().close();
+    const file = path.join(f.config.stateDir, 'journal.json');
+    const journal = f.journal();
+    const legacy = [
+      { id: 'a'.repeat(24), content: '[coord] private legacy final', state: 'queued' },
+      { id: 'b'.repeat(24), content: '[bridge] Ready legacy notice', state: 'queued' },
+      { id: 'c'.repeat(24), content: '[coord] ambiguous legacy final', state: 'sending' },
+      { id: 'd'.repeat(24), content: '[coord] acknowledged legacy final', state: 'sent' },
+      { id: 'e'.repeat(24), content: '[coord] uncertain legacy final', state: 'uncertain' },
+    ];
+    journal.outbox.unshift(...legacy);
+    if (!indexed) delete journal.proactive;
+    fs.writeFileSync(file, JSON.stringify(journal), { mode: 0o600 });
+    f.restart();
+    if (indexed) await f.bridge().listenOutbound();
+    await f.cycle(8);
+    expect(f.posted.map((post) => post.content)).toEqual(indexed ? ['[coord] explicit after legacy'] : []);
+    expect(f.journal().outbox.slice(0, legacy.length)).toEqual(
+      legacy.map((row) => ({ ...row, state: row.state === 'sending' ? 'uncertain' : row.state })),
+    );
+    // Explicit sends may advance the cursor past our ignored bot echo.
+    expect(BigInt(f.journal().cursor)).toBeGreaterThanOrEqual(BigInt(cursor));
+    expect(f.journal().jobs).toEqual(jobs);
+    expect(f.received.coord).toHaveLength(1);
+    expect(f.warnings.join()).toContain('2 legacy automatic Discord outputs withheld');
+    expect(f.warnings.join()).not.toContain('private legacy final');
+    if (indexed)
+      expect(
+        await sendDiscord(f.root, f.binding('coord'), { action: 'status', requestId: 'legacy_explicit' }),
+      ).toMatchObject({ delivery: 'sent' });
+    f.restart();
+    await f.cycle(8);
+    expect(f.posted).toHaveLength(indexed ? 1 : 0);
+    expect(f.received.coord).toHaveLength(1);
+  },
+);
+
+it.each([
+  'ordinary final',
+  '',
+  '@missing do not activate',
+  'quoted @worker not a route',
+  '```@worker not a route```',
+  'mid-text @worker not a route',
+])('settles final %j without a channel post or unintended peer activation', async (text) => {
+  const f = await fixture({ respond: () => text });
+  await f.cycle();
+  f.human('answer silently');
+  await f.cycle();
+  await f.sessions.coord!.orchestrator.sendUserMessage('ordinary terminal turn');
+  await f.cycle();
+  expect(f.posted).toHaveLength(0);
+  expect(f.journal().outbox).toEqual([]);
+  expect(f.journal().jobs.map((job: any) => job.state)).toEqual(['done']);
+  expect(f.received.coord).toHaveLength(2);
+  expect(f.received.worker).toHaveLength(0);
 });
 
 it('delivers a late-attached session discord_send with attribution and consistent status replay', async () => {
@@ -861,7 +947,7 @@ it('migrates a legacy fingerprint before changing the default without resetting 
   expect(f.received.worker).toHaveLength(1);
   expect(f.posted).toHaveLength(posts);
   expect(f.journal().jobs).toEqual(settled.jobs);
-  expect(f.posted.filter((post) => post.content.includes('[bridge] Ready.'))).toHaveLength(1);
+  expect(f.posted).toHaveLength(0);
 });
 
 it('recovers an accepted old-default job after a default change without resubmitting it', async () => {
@@ -887,7 +973,7 @@ it('recovers an accepted old-default job after a default change without resubmit
   expect(f.received.coord).toHaveLength(1);
   expect(f.received.worker).toHaveLength(1);
   expect(f.journal().jobs.every((job: any) => job.state === 'done')).toBe(true);
-  expect(f.posted.filter((post) => post.content === '[coord] coord recovered answer')).toHaveLength(1);
+  expect(f.posted).toHaveLength(0);
 });
 
 it('does not move old-default pending work to a replacement session or the new default', async () => {
@@ -907,7 +993,7 @@ it('does not move old-default pending work to a replacement session or the new d
   expect(f.received.coord).toHaveLength(0);
   expect(f.received.worker).toHaveLength(1);
   expect(f.journal().jobs[0]).toEqual(original);
-  expect(f.posted.some((post) => post.content.includes('only the exact admitted process identity'))).toBe(true);
+  expect(f.warnings.some((post) => post.includes('only the exact admitted process identity'))).toBe(true);
 });
 
 it('keeps channel, human, state directory and hop-limit fingerprint protection after default changes', async () => {
@@ -1059,7 +1145,8 @@ it('attaches to two real existing session histories, attributes human/agent data
       .filter((message) => message.sender === 'user')
       .at(-1),
   ).toMatchObject({ presentation: 'server_message' });
-  expect(f.posted.some((message) => message.content.startsWith('[worker] Worker result'))).toBe(true);
+  expect(f.journal().jobs.every((job: any) => job.state === 'done')).toBe(true);
+  expect(f.posted).toHaveLength(0);
   expect(f.posted.every((message) => message.allowed_mentions.parse.length === 0)).toBe(true);
   const counts = [f.received.coord!.length, f.received.worker!.length];
   await f.cycle(3);
@@ -1081,10 +1168,11 @@ it('rejects unauthorized/bot/webhook/unknown/wrong-channel messages without waki
   await f.cycle();
   expect(f.received.coord).toHaveLength(0);
   expect(f.received.worker).toHaveLength(0);
-  expect(f.posted.filter((message) => message.content.includes('Unknown target, empty or oversized'))).toHaveLength(1);
-  expect(f.posted.filter((message) => message.content.includes('Target missing is not attached'))).toHaveLength(1);
-  expect(f.posted.filter((message) => message.content.includes('not delivered'))).toHaveLength(2);
+  expect(f.warnings.filter((message) => message.includes('Unknown target, empty or oversized'))).toHaveLength(1);
+  expect(f.warnings.filter((message) => message.includes('Target missing is not attached'))).toHaveLength(1);
+  expect(f.warnings.filter((message) => message.includes('not delivered'))).toHaveLength(2);
   expect(f.journal().jobs).toHaveLength(0);
+  expect(f.posted).toHaveLength(0);
   const cursor = f.journal().cursor;
   f.wrongChannel();
   await f.cycle(1);
@@ -1102,7 +1190,7 @@ it('bounds cyclic explicitly targeted exchanges and implements pause/resume/stop
   f.human('!bridge resume');
   await f.cycle(10);
   expect(f.received.coord!.length + f.received.worker!.length).toBe(3);
-  expect(f.posted.some((message) => message.content.includes('hop limit reached'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('hop limit reached'))).toBe(true);
   f.human('!bridge stop');
   f.human('queued while stopped');
   await f.cycle();
@@ -1171,19 +1259,12 @@ it.each([false, true])(
     await active;
     await f.cycle();
     expect(f.received.coord).toHaveLength(2);
-    expect(f.posted.map((row) => row.content)).toEqual(
-      fail
-        ? [
-            '[coord] interrupted; inspect the terminal. No peer activation.',
-            '[coord] interrupted; inspect the terminal. No peer activation.',
-          ]
-        : ['[coord] Joined human answer', '[coord] Joined human answer'],
-    );
+    expect(f.posted).toHaveLength(0);
     expect(f.journal().jobs.map((job: any) => job.state)).toEqual(['done', 'done']);
     if (!fail) await f.sessions.coord!.orchestrator.sendUserMessage('Unrelated later terminal turn');
     await f.restart();
     await f.cycle();
-    expect(f.posted).toHaveLength(2);
+    expect(f.posted).toHaveLength(0);
   },
 );
 
@@ -1226,7 +1307,7 @@ it('uses real busy-session follow-up admission and rejects remote approval answe
   await f.cycle();
   expect(f.received.worker).toHaveLength(0);
   expect(f.sessions.worker!.service.getPendingInteractionSnapshot()).not.toBeNull();
-  expect(f.posted.some((message) => message.content.includes('terminal_interaction_required'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('terminal_interaction_required'))).toBe(true);
 }, 20_000);
 
 it('fails closed without an opted-in socket and delegates outbound only with opt-in', async () => {
@@ -1414,7 +1495,7 @@ it('keeps public control identity across internal rollover but changes it for ex
   await f.cycle(4);
   expect(f.received.coord).toHaveLength(1);
   expect(f.journal().jobs.at(-1).state).toBe('done');
-  expect(f.posted.some((message) => message.content === '[coord] coord answer')).toBe(true);
+  expect(f.posted).toHaveLength(0);
 
   service.resetWithNewId('explicit-new-conversation');
   socket.refreshAdvertisement();
@@ -1429,7 +1510,7 @@ it('requires process opt-in, pins session identity and preserves the ordinary co
   f.human('not allowed');
   await f.cycle();
   expect(f.received.coord).toHaveLength(0);
-  expect(f.posted.some((message) => message.content.includes('Target coord is not attached'))).toBe(true);
+  expect(f.warnings.some((message) => message.includes('Target coord is not attached'))).toBe(true);
   expect(f.journal().jobs).toHaveLength(0);
   const socket = f.sessions.coord!.socket;
   await expect(
@@ -1451,13 +1532,18 @@ it('requires process opt-in, pins session identity and preserves the ordinary co
   await expect(callDiscordControl(socket.socketPath, 'bridge_submit', changed)).rejects.toThrow();
 });
 
-it('chunks Unicode finals, quarantines ambiguous output and never replays an uncertain POST on restart', async () => {
-  const f = await fixture({ respond: () => '😀'.repeat(2100) });
+it('chunks explicit Unicode sends, quarantines ambiguous output and never replays an uncertain POST on restart', async () => {
+  const f = await fixture();
   await f.cycle();
   f.dropPost();
-  f.human('large final');
+  await f.bridge().listenOutbound();
+  await sendDiscord(f.root, f.binding('coord'), { action: 'send', requestId: 'unicode', text: '😀'.repeat(2100) });
   await f.cycle(5);
   expect(f.journal().outbox.some((entry: any) => entry.state === 'uncertain')).toBe(true);
+  expect(f.posted).toHaveLength(3);
+  expect(
+    f.posted.every((message) => message.content.startsWith('[coord]') && message.allowed_mentions.parse.length === 0),
+  ).toBe(true);
   expect(f.posted.every((message) => message.content.length <= 1800)).toBe(true);
   expect(f.posted.every((message) => !/[\uD800-\uDBFF]$/.test(message.content))).toBe(true);
   const count = f.posted.length;
@@ -1469,6 +1555,8 @@ it('chunks Unicode finals, quarantines ambiguous output and never replays an unc
 
 it('honors Discord retry_after instead of retrying within a tight tick loop', async () => {
   const f = await fixture();
+  await f.bridge().listenOutbound();
+  await sendDiscord(f.root, f.binding('coord'), { action: 'send', requestId: 'throttled', text: 'retry later' });
   f.throttlePost();
   await f.cycle(1);
   const reads = f.reads();
@@ -1514,7 +1602,7 @@ it('deduplicates real session admission, rejects changed bodies and recovers an 
   await f.cycle(4);
   expect(f.received.coord).toHaveLength(1);
   expect(f.journal().jobs.find((job: any) => job.id === 'discord_70').state).toBe('done');
-  expect(f.posted.filter((output) => output.content === '[coord] coord answer')).toHaveLength(1);
+  expect(f.posted).toHaveLength(0);
 });
 
 it('quarantines missing admission outcomes and changed real session identity without replaying into replacement history', async () => {
@@ -1535,7 +1623,7 @@ it('quarantines missing admission outcomes and changed real session identity wit
   await f.cycle(3);
   expect(f.received.coord).toHaveLength(0);
   expect(f.journal().jobs[0]).toMatchObject({ state: 'uncertain', text: 'uncertain original' });
-  expect(f.posted.some((output) => output.content.includes('NOT resubmitted'))).toBe(true);
+  expect(f.warnings.some((output) => output.includes('NOT resubmitted'))).toBe(true);
   f.human('@worker queued target');
   f.human('!bridge pause');
   await f.cycle(1);
@@ -1562,18 +1650,14 @@ it('silently completes successful empty finals without placeholder or peer routi
   expect(f.received.worker).toHaveLength(0);
 });
 
-it('does not route a truncated final and keeps attribution and mention suppression on every chunk', async () => {
+it('settles a truncated final without posting it or activating a peer', async () => {
   const f = await fixture({ respond: () => '@worker ' + 'x'.repeat(20_000) });
   await f.cycle();
   f.human('long peer request');
   await f.cycle(16);
   expect(f.received.worker).toHaveLength(0);
-  const finals = f.posted.filter((output) => output.content.startsWith('[coord]'));
-  expect(finals.length).toBeGreaterThan(1);
-  expect(finals.every((output) => output.content.length <= 2000 && output.allowed_mentions.parse.length === 0)).toBe(
-    true,
-  );
-  expect(finals.at(-1).content).toContain('[truncated by session control]');
+  expect(f.posted).toHaveLength(0);
+  expect(f.journal().jobs.map((job: any) => job.state)).toEqual(['done']);
 });
 
 it('advances through a paged backlog without waking for history, bot echoes or unauthorized inputs', async () => {
@@ -1638,11 +1722,11 @@ it('native stop aborts actual in-flight work, keeps the bridge paused and suppre
   expect(aborts).toBe(1);
   expect(f.journal().paused).toBe(true);
   expect(f.received.worker).toHaveLength(0);
-  expect(f.posted.some((output) => output.content.includes('interrupted'))).toBe(true);
+  expect(f.warnings.some((output) => output.includes('interrupted'))).toBe(true);
 }, 20_000);
 
 it.each(['resume', 'stop'])(
-  'full paused inbox visibly refuses excess work, preserves admission evidence across restart and keeps %s reachable',
+  'full paused inbox locally refuses excess work, preserves admission evidence across restart and keeps %s reachable',
   async (command) => {
     const f = await fixture();
     await f.cycle();
@@ -1657,10 +1741,10 @@ it.each(['resume', 'stop'])(
     await f.cycle(3);
     expect(f.journal().jobs).toEqual(admitted);
     expect(BigInt(f.journal().cursor) >= BigInt(status.id)).toBe(true);
-    const refused = () => f.posted.filter((output) => output.content.includes(`Message ${excess.id} NOT accepted`));
+    const refused = () => f.warnings.filter((output) => output.includes(`Message ${excess.id} NOT accepted`));
     expect(refused()).toHaveLength(1);
-    expect(refused()[0].content).toContain('not queued or sent to a session');
-    expect(refused()[0].allowed_mentions.parse).toEqual([]);
+    expect(refused()[0]).toContain('not queued or sent to a session');
+    expect(f.posted).toHaveLength(0);
     expect(f.received.coord).toHaveLength(0);
     expect(f.received.worker).toHaveLength(0);
     f.restart();
@@ -1683,7 +1767,7 @@ it.each(['resume', 'stop'])(
   30_000,
 );
 
-it('overflow refusal keeps ambiguous POST quarantine across restart without replay or repeated admission', async () => {
+it('overflow refusal stays local across restart without output or repeated admission', async () => {
   const f = await fixture();
   await f.cycle();
   f.human('!bridge pause');
@@ -1691,25 +1775,26 @@ it('overflow refusal keeps ambiguous POST quarantine across restart without repl
   await f.cycle(5);
   const admitted = f.journal().jobs;
   const excess = f.human('refused after lost acknowledgement');
-  f.dropPost();
   await f.cycle(1);
-  const notice = (output: any) => output.content.includes(`Message ${excess.id} NOT accepted`);
-  expect(f.posted.filter(notice)).toHaveLength(1);
-  const quarantined = f.journal().outbox.find(notice);
-  expect(quarantined.state).toBe('uncertain');
+  const notice = (output: string) => output.includes(`Message ${excess.id} NOT accepted`);
+  expect(f.warnings.filter(notice)).toHaveLength(1);
+  expect(f.journal().outbox).toEqual([]);
+  expect(f.posted).toHaveLength(0);
   expect(f.journal().jobs).toEqual(admitted);
   f.restart();
   await f.cycle(4);
-  expect(f.posted.filter(notice)).toHaveLength(1);
-  expect(f.journal().outbox.find(notice)).toEqual(quarantined);
+  expect(f.warnings.filter(notice)).toHaveLength(1);
+  expect(f.journal().outbox).toEqual([]);
+  expect(f.posted).toHaveLength(0);
   expect(f.journal().jobs).toEqual(admitted);
   expect(f.received.coord).toHaveLength(0);
   const stop = f.human('!bridge stop');
   await f.cycle(3);
   expect(BigInt(f.journal().cursor) >= BigInt(stop.id)).toBe(true);
   expect(f.journal().jobs.map((job: any) => job.id)).toEqual(admitted.map((job: any) => job.id));
-  expect(f.posted.filter(notice)).toHaveLength(1);
-  expect(f.journal().outbox.find(notice).state).toBe('uncertain');
+  expect(f.warnings.filter(notice)).toHaveLength(1);
+  expect(f.journal().outbox).toEqual([]);
+  expect(f.posted).toHaveLength(0);
 });
 
 it.each(['builtin:bare', 'builtin:standard'])(

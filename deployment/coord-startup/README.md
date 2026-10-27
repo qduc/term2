@@ -3,7 +3,9 @@
 Inactive deployment sources, retained with the accepted Discord runtime. No files
 here install or enable a service. Original candidate and independent acceptance:
 `/home/qduc/coord/term2/tasks/discord-durability/startup/`, `startup-recheck.md`.
-Those originals remain untouched. This copy changes only `stop_bridge` grace:
+Those originals remain untouched. Selector formatting and explicit Node built-in
+imports adapt the copy to repository linting without changing selection. The only
+behavior change is `stop_bridge` grace:
 8 seconds to 12 seconds, inside the unchanged unit's 15-second outer stop timeout.
 
 ## Contract and limits

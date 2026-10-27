@@ -2,7 +2,10 @@
 // Read-only pinned-lineage selector. No resume/list APIs, migration or repair.
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, URL } from 'node:url';
+import { Buffer } from 'node:buffer';
+import process from 'node:process';
+import console from 'node:console';
 
 export async function select(config) {
   const { decodeLogEnvelope } = await import(

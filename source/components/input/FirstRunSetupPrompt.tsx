@@ -29,7 +29,7 @@ export function FirstRunSetupPrompt({ phase, provider }: FirstRunSetupPromptProp
             <Text color={theme.warning}>
               {provider === 'grok'
                 ? 'Log in to Grok in your browser with `term2 --grok-login`, then reselect Grok.'
-                : `Select ${providerLabel} to enter its API key, or choose another provider.`}
+                : `Select a provider to configure its credentials. If it is not listed, choose Add Provider and select its template.`}
             </Text>
           )}
         </>

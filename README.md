@@ -69,6 +69,11 @@ Continue a saved session headlessly with `term2 --resume <session-id> "Follow-up
 
 A command-line prompt runs non-interactively, with tool execution disabled by default. `--auto-approve` enables tools without interactive confirmation; use it only when you intend unattended execution. See [scripting](https://qduc.github.io/term2/using-term2/non-interactive/) and [SSH setup](https://qduc.github.io/term2/remote/ssh/).
 
+The optional [Discord bridge (candidate)](docs/reference/discord-bridge.md#first-run-checklist-candidate)
+attaches existing opted-in terminal sessions. Start with `term2 discord --help`.
+Replies require explicit `discord_send`; status, approvals and questions stay local.
+Live Discord/mobile validation is still outstanding.
+
 ## Approvals and sandbox
 
 Interactive sessions default to shell auto-approval `off` and an enabled shell sandbox. You can change these settings, so the active configuration matters. The sandbox constrains shell commands; it does not cover providers, external MCP servers, or every tool.

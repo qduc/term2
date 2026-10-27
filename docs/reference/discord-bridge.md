@@ -7,6 +7,58 @@ per message. This candidate needs independent auth/session review
 and authorized live Discord validation before acceptance. No live bot setup was
 performed during implementation.
 
+## First-run checklist (candidate)
+
+**Discord replies are explicit, not automatic.** Ordinary final answers stay in
+term2. Ask, for example: **“Summarize the result and send it to this channel using
+`discord_send`.”** Only an accepted explicit send posts. `!bridge status` results,
+readiness/error diagnostics, approvals and questions must be checked in the local
+terminal; a quiet Discord channel does not mean nothing happened. Discord cannot
+approve a tool call or answer a local approval prompt.
+
+1. **Create/install a dedicated bot into your server**, only after authorization.
+   Follow Discord's official [Getting Started guide](https://docs.discord.com/developers/quick-start/getting-started)
+   for creating an application, obtaining its bot token and installing it to a
+   server. Use those setup sections only: term2 supplies the runtime, so you do
+   not need the guide's sample code, slash commands or public interaction endpoint.
+   Give it access only to your private channel with View Channel, Read Message
+   History and Send Messages; do not grant Administrator.
+2. **Enable Message Content Intent** for the application where Discord requires it.
+   See [Discord's privileged-intent documentation](https://docs.discord.com/developers/events/gateway#privileged-intents)
+   for enabling the intent and any approval requirements. Without access, REST
+   message content may be empty. This REST-polling bridge does not open a Gateway.
+3. **Obtain your channel ID and your own human user ID**, not names. Discord's
+   [official ID guide](https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID)
+   explains Developer Mode and copying user/channel IDs. UI labels and locations
+   can vary by client/version; the current Discord UI was not exercised here.
+4. **Create the private config** at `$XDG_CONFIG_HOME/term2/discord.json` (otherwise
+   `~/.config/term2/discord.json`), or choose one absolute path. Use the
+   [example below](#discord-setup-only-after-authorization), replacing IDs/path and
+   choosing the coordinator's control socket name (usually `coord`). Keep the
+   config directory user-owned and 0700; choose a fresh absolute private `stateDir`.
+   Do not put the token in JSON.
+5. **Enroll the token locally** with `term2 discord --save-token` on an interactive
+   terminal. For a custom config, pass the same absolute path to enrollment and
+   startup. Enrollment hides input, saves `discord.token` beside the config and
+   exits without connecting. An inherited `TERM2_DISCORD_BOT_TOKEN` overrides it.
+6. **Attach the intended existing session** in its own term2 terminal with
+   `/bridge connect coord`; see the [attachment reference](#attach-the-actual-session-not-a-blank-replacement)
+   for worker sessions, runtime-directory requirements and same-history resume.
+   Confirm identity/attachment locally using `/bridge status` and
+   `term2 control list --status`. Approvals remain local.
+7. **Start the standalone bridge** with `term2 discord` (or the same absolute
+   config path). Once authorized to test live, send a harmless question from the
+   configured human in the configured channel, explicitly requesting
+   `discord_send`. Check the terminal for status, errors and approvals if no reply
+   arrives. Live bot/mobile behavior remains unverified by the offline fixture.
+
+`term2 discord --help` summarizes these entry points without reading config or
+credentials or connecting to Discord. Setup failures distinguish missing config,
+malformed JSON/schema, missing token and non-TTY enrollment with redacted guidance;
+other failures retain generic diagnostics. Never paste credentials into bug reports.
+
+## Operational and advanced reference
+
 ## Attach the actual session, not a blank replacement
 
 Sessions must explicitly opt in to Discord input. This is intentionally not a
@@ -75,7 +127,7 @@ Both commands also accept one absolute config path; enrollment stores
 `discord.token` beside that config. Explicit enrollment replaces the stored token.
 The selected directory must be user-owned and private (0700); credential files
 must be user-owned regular private files (0600). Symlinks and unsafe existing
-permissions are refused, not repaired. Missing directories are created privately.
+permissions are refused, not repaired. Enrollment creates missing directories privately.
 Protect backups too: the stored credential is plaintext under filesystem access control.
 
 `TERM2_DISCORD_BOT_TOKEN` on the standalone bridge process takes precedence over
@@ -365,11 +417,14 @@ journal, and do not run this bridge against a version 1 journal.
 
 ```sh
 pnpm typecheck
-pnpm test:integration -- source/services/discord/discord-bridge.integration.test.ts
+NODE_ENV=test pnpm exec vitest run --reporter=minimal --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts
 pnpm test:provider-black-box
 ```
 
-The integration fixture uses a loopback fake Discord HTTP API, real Unix sockets,
+The command above selects only the Discord integration file under pnpm (no `--`
+separator). The other commands are separate, broader checks.
+
+The Discord integration fixture uses a loopback fake Discord HTTP API, real Unix sockets,
 real ConversationService/Orchestrator/AgentClient and a provider-boundary fixture.
 No tokens, production provider calls or external Discord traffic.
 

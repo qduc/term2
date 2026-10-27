@@ -151,7 +151,7 @@ function validJob(value: unknown): value is Job {
   );
 }
 
-export type DiscordStateErrorCode = 'pinned_session_schema' | 'journal_state';
+export type DiscordStateErrorCode = 'pinned_session_schema' | 'journal_state' | 'config_schema';
 
 /** Tag state/schema failures so callers map fixed guidance without parsing error text. */
 function stateError(code: DiscordStateErrorCode, message: string): Error {
@@ -161,7 +161,7 @@ function stateError(code: DiscordStateErrorCode, message: string): Error {
 /** Explicit discriminator for bridge schema/journal failures; everything else stays generic. */
 export function discordStateErrorCode(error: unknown): DiscordStateErrorCode | undefined {
   const code = (error as { code?: unknown } | null | undefined)?.code;
-  return code === 'pinned_session_schema' || code === 'journal_state' ? code : undefined;
+  return code === 'pinned_session_schema' || code === 'journal_state' || code === 'config_schema' ? code : undefined;
 }
 
 /** Validate a private single-channel bridge configuration; no token belongs in this file. */
@@ -187,9 +187,10 @@ export function parseDiscordBridgeConfig(value: unknown): DiscordBridgeConfig {
     typeof config.stateDir !== 'string' ||
     !path.isAbsolute(config.stateDir)
   )
-    throw new Error('Invalid Discord bridge config');
+    throw stateError('config_schema', 'Invalid Discord bridge config');
   const maxHops = config.maxHops ?? 4;
-  if (!Number.isInteger(maxHops) || maxHops < 1 || maxHops > 8) throw new Error('Invalid Discord hop limit');
+  if (!Number.isInteger(maxHops) || maxHops < 1 || maxHops > 8)
+    throw stateError('config_schema', 'Invalid Discord hop limit');
   return { ...config, maxHops };
 }
 

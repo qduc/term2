@@ -584,14 +584,14 @@ it('prints migration instructions from the CLI for an old config or v1 journal w
   // Unknown failures stay generic even when their own text or filename mentions journals.
   const missing = run(path.join(f.root, 'journal-missing.json'));
   expect(missing.status, missing.stderr).toBe(1);
-  expect(missing.stderr).toContain('check config, private state directory, credentials and attached sessions');
+  expect(missing.stderr).toContain('Missing config');
   expect(missing.stderr).not.toContain('archive the existing state directory unchanged');
 
   const brokenPath = path.join(f.root, 'broken-journal.json');
   fs.writeFileSync(brokenPath, '{"journal": bad}');
   const broken = run(brokenPath);
   expect(broken.status, broken.stderr).toBe(1);
-  expect(broken.stderr).toContain('check config, private state directory, credentials and attached sessions');
+  expect(broken.stderr).toContain('Malformed config JSON');
   expect(broken.stderr).not.toContain('archive the existing state directory unchanged');
   expect(broken.stdout + broken.stderr).not.toContain('FAKE_SECRET_MUST_NOT_PRINT');
 }, 40_000);
@@ -1669,6 +1669,99 @@ it('advances through a paged backlog without waking for history, bot echoes or u
   expect(f.received.coord).toHaveLength(1);
   expect(f.received.worker).toHaveLength(0);
   expect(JSON.stringify(f.received.coord![0]!.input)).toContain('new authorized message after backlog');
+});
+
+it.each([
+  ['missing-config', 'Missing config'],
+  ['malformed-json', 'Malformed config JSON'],
+  ['invalid-schema', 'Invalid config schema'],
+  ['invalid-hop-limit', 'Invalid config schema'],
+  ['missing-token', 'Missing bot token'],
+  ['non-tty-enrollment', 'Token enrollment requires a TTY'],
+  ['config-io-error', 'check config, private state directory, credentials and attached sessions'],
+  ['unsafe-token-directory', 'check config, private state directory, credentials and attached sessions'],
+  ['unsafe-token-file', 'check config, private state directory, credentials and attached sessions'],
+  ['symlink-token', 'check config, private state directory, credentials and attached sessions'],
+  ['empty-env-token', 'check config, private state directory, credentials and attached sessions'],
+  ['--help', 'Discord bridge (candidate)'],
+  ['-h', 'Discord bridge (candidate)'],
+])('categorizes offline setup %s in a clean child process without leaking values', (scenario, expected) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'discord-setup-'));
+  cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
+  const home = path.join(root, 'home');
+  const configDir = path.join(root, 'config', 'term2');
+  fs.mkdirSync(home, { mode: 0o700 });
+  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  const configFile = path.join(configDir, 'discord.json');
+  const stateDir = path.join(root, 'STATE_PATH_MUST_NOT_PRINT');
+  const config = { channelId: '200', humanUserId: '100', coordinator: 'coord', stateDir };
+  fs.writeFileSync(configFile, JSON.stringify(config), { mode: 0o600 });
+  const secret = 'DUMMY_SECRET_MUST_NOT_PRINT';
+  const payload = 'DUMMY_PAYLOAD_MUST_NOT_PRINT';
+  const env: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH,
+    NODE_ENV: 'test',
+    HOME: home,
+    XDG_CONFIG_HOME: path.dirname(configDir),
+    XDG_DATA_HOME: path.join(root, 'data'),
+    XDG_STATE_HOME: path.join(root, 'state'),
+    XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+  };
+  if (scenario === 'missing-config') fs.unlinkSync(configFile);
+  if (scenario === 'malformed-json') fs.writeFileSync(configFile, '{' + payload);
+  if (scenario === 'invalid-schema') fs.writeFileSync(configFile, JSON.stringify({ ...config, humanUserId: payload }));
+  if (scenario === 'invalid-hop-limit') fs.writeFileSync(configFile, JSON.stringify({ ...config, maxHops: 0 }));
+  if (scenario === 'config-io-error') {
+    fs.unlinkSync(configFile);
+    fs.mkdirSync(configFile);
+  }
+  if (scenario === 'unsafe-token-directory') fs.chmodSync(configDir, 0o755);
+  if (scenario === 'unsafe-token-file')
+    fs.writeFileSync(path.join(configDir, 'discord.token'), secret, { mode: 0o644 });
+  if (scenario === 'symlink-token') {
+    const target = path.join(root, 'secret');
+    fs.writeFileSync(target, secret, { mode: 0o600 });
+    fs.symlinkSync(target, path.join(configDir, 'discord.token'));
+  }
+  if (scenario === 'empty-env-token') env.TERM2_DISCORD_BOT_TOKEN = '';
+  const isHelp = scenario === '--help' || scenario === '-h';
+  const args = isHelp ? [scenario] : scenario === 'non-tty-enrollment' ? ['--save-token'] : [];
+  // Help must ignore even malformed config and an invalid inherited credential.
+  if (isHelp) {
+    fs.writeFileSync(configFile, '{' + payload);
+    env.TERM2_DISCORD_BOT_TOKEN = secret + ' ';
+  }
+  const before = fs.statSync(configFile, { throwIfNoEntry: false });
+  const code =
+    'import {runDiscordBridge} from "./source/services/discord/discord-command.ts"; await runDiscordBridge(process.argv.slice(1));';
+  const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code, '--', ...args], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    timeout: 10_000,
+    env,
+  });
+  const output = child.stdout + child.stderr;
+  expect(child.status, output).toBe(isHelp ? 0 : 1);
+  expect(output).toContain(expected);
+  expect(output).toContain('docs/reference/discord-bridge.md');
+  for (const sensitive of [secret, payload, stateDir]) expect(output).not.toContain(sensitive);
+  if (isHelp) {
+    expect(child.stderr).toBe('');
+    expect(output).toContain('discord_send');
+    expect(output).toContain('stay local');
+    expect(output).toContain('--save-token');
+  } else {
+    expect(child.stdout).toBe('');
+    expect(output).toContain('Credentials and payloads redacted');
+  }
+  expect(fs.existsSync(stateDir)).toBe(false);
+  expect(fs.existsSync(path.join(root, 'runtime'))).toBe(false);
+  expect(fs.statSync(configFile, { throwIfNoEntry: false })?.mtimeMs).toBe(before?.mtimeMs);
+  if (scenario === 'non-tty-enrollment') expect(fs.existsSync(path.join(configDir, 'discord.token'))).toBe(false);
+  if (scenario === 'unsafe-token-file')
+    expect(fs.statSync(path.join(configDir, 'discord.token')).mode & 0o777).toBe(0o644);
+  if (scenario === 'symlink-token')
+    expect(fs.lstatSync(path.join(configDir, 'discord.token')).isSymbolicLink()).toBe(true);
 });
 
 it('rejects invalid file config in an isolated command process without exposing a token or creating sessions', async () => {

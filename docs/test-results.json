@@ -14552,6 +14552,253 @@
           "Independent post-fix acceptance and active author/verifier effort, tokens and monetary cost unknown; command wall seconds retained individually"
         ]
       }
+    },
+    {
+      "id": "2026-10-27-apply-pr-37-clean-source",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T10:29:23.802960+00:00",
+      "task_ids": ["2026-10-27-apply-pr-37"],
+      "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79",
+      "tree": "dcc391062c3a71ba433c63277ea40cef72a52e07",
+      "base_commit": "82dba8c8f11ddc5de23882c311b36b34c7fdf9fa",
+      "pr_head": "489cbd054618034aad51437e4a7ee8bd86cb2bf9",
+      "revision_kind": "clean-commit",
+      "suite": "PR37 integration all tiers",
+      "command": "serialized repository checks; see checks",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node": "v24.19.0",
+        "pnpm": "11.7.0"
+      },
+      "checks": [
+        {
+          "name": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0,
+          "seconds": 2.98,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/typecheck-final.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "lint",
+          "command": "pnpm lint",
+          "exit": 0,
+          "seconds": 38.52,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/lint-final.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "guards",
+          "command": "pnpm test",
+          "exit": 0,
+          "seconds": 3.03,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/guards-final.log",
+          "result": {
+            "passed": 28,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 7,
+            "files_failed": 0,
+            "files_skipped": 0
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "integration",
+          "command": "pnpm test:integration",
+          "exit": 0,
+          "seconds": 104.52,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/integration-final.log",
+          "result": {
+            "passed": 378,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 34,
+            "files_failed": 0,
+            "files_skipped": 1
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "build",
+          "command": "pnpm build",
+          "exit": 0,
+          "seconds": 3.62,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/build-final.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "cli-help",
+          "command": "node dist/cli.js discord --help",
+          "exit": 0,
+          "seconds": 0.67,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/cli-help-final.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm test:e2e",
+          "exit": 0,
+          "seconds": 27.28,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/e2e-final.log",
+          "result": {
+            "passed": 39,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 8,
+            "files_failed": 0,
+            "files_skipped": 0
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "provider-black-box",
+          "command": "pnpm test:provider-black-box",
+          "exit": 1,
+          "seconds": 119.69,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/provider-black-box-final.log",
+          "result": {
+            "passed": 221,
+            "failed": 1,
+            "skipped": 1,
+            "files_passed": 24,
+            "files_failed": 1,
+            "files_skipped": 0
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        }
+      ],
+      "failures": [
+        {
+          "test": "scripts/provider-black-box/turn-decisions.blackbox.ts > resumes repeated questions once per decision and settles cancellation before the next turn",
+          "diagnostic": "Timed out waiting for PTY child state after40000ms; SELECT_A_SECOND_COLOR visible, no third request observed.221passed/1failed/1skipped. Historical same-signature rows exist; no base reproduction or causal attribution."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/checks.json",
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/preservation.json",
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/retro.md"
+      ],
+      "notes": "No production Discord source changed from exact PR head. Release identity gate/caller and tests byte-identical to base. No live Discord, real credentials, paid providers, push, publication or deployment. Independent review remains coordinator-owned."
+    },
+    {
+      "id": "2026-10-27-apply-pr-37-followup",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T10:37:25.142789+00:00",
+      "task_ids": ["2026-10-27-apply-pr-37"],
+      "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79",
+      "revision_kind": "clean-commit product plus temporary built-CLI test harness",
+      "suite": "provider follow-up and shipped Discord CLI",
+      "command": "see checks",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node": "v24.19.0",
+        "pnpm": "11.7.0"
+      },
+      "checks": [
+        {
+          "name": "provider-turn-decisions-focused",
+          "command": "pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/turn-decisions.blackbox.ts",
+          "exit": 0,
+          "seconds": 6.05,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/provider-turn-decisions-focused.log",
+          "result": {
+            "passed": 1,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 1,
+            "files_failed": 0,
+            "files_skipped": 0
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "provider-black-box-rerun",
+          "command": "pnpm test:provider-black-box",
+          "exit": 0,
+          "seconds": 93.79,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/provider-black-box-rerun.log",
+          "result": {
+            "passed": 222,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 25,
+            "files_failed": 0,
+            "files_skipped": 0
+          },
+          "revision_kind": "clean-commit",
+          "commit": "ea05755e7027ce04aa3bde19d0213fba19c9cb79"
+        },
+        {
+          "name": "built-discord-runner",
+          "command": "python3 /home/qduc/coord/term2/tasks/pr-37/evidence/built-runner-check.py",
+          "exit": 0,
+          "result": {
+            "passed": 2,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 1,
+            "files_failed": 0,
+            "files_skipped": 0
+          },
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/built-runner.log",
+          "revision_kind": "committed product; temporary test-only entry replacement restored exactly"
+        }
+      ],
+      "failures": [],
+      "comparison": {
+        "resolves_run_ids": ["2026-10-27-apply-pr-37-clean-source"],
+        "scope": "Passing follow-up does not establish cause of initial PTY failure or erase it."
+      },
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/provider-followup.json",
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/built-runner-probe.ts.txt",
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/mutations.json"
+      ],
+      "notes": "Built CLI conventional SIGTERM143 plus owner removal verified in push/off modes. Initial temporary harness expected source-runner0 and failed only that assertion; corrected expected existing CLI143, no product change. Source runner tests use0. Intentional mutations removing sleep wake/mid-tick pending independently fail expected REST read counts2vs3/1vs2; restored. Initial runner fixture development had2failed tests (wrong ws host/TLS routing and1s default poll timeout), and typecheck reported two nullable pipe handles; corrected before source commit. No product defect attributed to these harness failures."
     }
   ]
 }

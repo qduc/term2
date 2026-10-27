@@ -3244,6 +3244,73 @@ function sanitizePublicInteraction(value: Record<string, unknown>): PendingInter
 }
 
 const PROJECTION_COMMAND_STATUSES = new Set(['completed', 'failed', 'aborted', 'unknown']);
+const PROJECTION_COMMAND_OUTPUT_MAX = 16_384;
+const PROJECTION_COMMAND_ERROR_MAX = 10_000;
+
+// Same credential shapes the event journal refuses to persist (event-journal.ts
+// assertSafePayload). A ledger-only body skips that check, so apply it here.
+const PROJECTION_CREDENTIAL_PATTERN = /^Bearer\s+|^sk-[A-Za-z0-9]/u;
+const PROJECTION_WITHHELD_MARKER = '[output withheld: looks like a credential]';
+// Total characters of command output + error one projection may carry. Bodies
+// beyond it are cut, newest turns first, so the response stays far below the
+// BFF's 32 MiB cap (worst case a few times this once JSON-escaped).
+const PROJECTION_COMMAND_BODY_BUDGET = 2 * 1024 * 1024;
+const PROJECTION_TRUNCATED_MARKER = '[truncated: session transcript size limit]';
+
+// The web client's transcript validator rejects NUL and DEL anywhere in a string,
+// so tool output carrying them would make the whole session unreadable.
+function projectionCommandText(value: unknown, max: number): string | undefined {
+  const bounded = boundedText(value, max).replace(/[\u0000\u007f]/gu, '\uFFFD');
+  if (bounded.length === 0) return undefined;
+  return PROJECTION_CREDENTIAL_PATTERN.test(bounded) ? PROJECTION_WITHHELD_MARKER : bounded;
+}
+
+function projectionCommandDetails(output: unknown, error: unknown): { output?: string; error?: string } {
+  const projectedOutput = projectionCommandText(output, PROJECTION_COMMAND_OUTPUT_MAX);
+  const projectedError = projectionCommandText(error, PROJECTION_COMMAND_ERROR_MAX);
+  return {
+    // A rejected approval records the same sentence as output and as failure
+    // reason; show it once.
+    ...(projectedOutput && projectedOutput !== projectedError ? { output: projectedOutput } : {}),
+    ...(projectedError ? { error: projectedError } : {}),
+  };
+}
+
+function fitToBudget(text: string, max: number, budget: { remaining: number }): string {
+  if (text.length <= budget.remaining) {
+    budget.remaining -= text.length;
+    return text;
+  }
+  const keep = Math.max(0, Math.min(budget.remaining, max - PROJECTION_TRUNCATED_MARKER.length - 1));
+  budget.remaining = 0;
+  return keep > 0 ? `${text.slice(0, keep)}\n${PROJECTION_TRUNCATED_MARKER}` : PROJECTION_TRUNCATED_MARKER;
+}
+
+// Walk the kept messages newest first and spend the budget on their command bodies.
+// A body that no longer fits is cut and ends with a visible marker.
+function applyCommandBodyBudget(messages: Record<string, unknown>[]): Record<string, unknown>[] {
+  const budget = { remaining: PROJECTION_COMMAND_BODY_BUDGET };
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const commands = messages[i].commands as ProjectionCommand[] | undefined;
+    if (!commands) continue;
+    const fitted = [...commands];
+    for (let j = fitted.length - 1; j >= 0; j--) {
+      const { output, error } = fitted[j];
+      if (output === undefined && error === undefined) continue;
+      // Charge the short error first so a large output cannot use up its budget.
+      const fittedError = error !== undefined ? fitToBudget(error, PROJECTION_COMMAND_ERROR_MAX, budget) : undefined;
+      const fittedOutput =
+        output !== undefined ? fitToBudget(output, PROJECTION_COMMAND_OUTPUT_MAX, budget) : undefined;
+      fitted[j] = {
+        ...fitted[j],
+        ...(fittedOutput !== undefined ? { output: fittedOutput } : {}),
+        ...(fittedError !== undefined ? { error: fittedError } : {}),
+      };
+    }
+    messages[i] = { ...messages[i], commands: fitted };
+  }
+  return messages;
+}
 
 function projectTranscriptMessages(
   transcript: SessionProjectionSource['transcript'],
@@ -3263,11 +3330,19 @@ function projectTranscriptMessages(
       callId: boundedText(command.callId, 256),
       toolName: boundedText(command.toolName, 256),
       status: boundedText(command.status, 32) as ProjectionCommand['status'],
+      ...projectionCommandDetails(command.output, command.failureReason),
     });
   }
   for (const [turnId, commands] of journalCommands) {
-    for (const command of commands) {
-      const existing = commandsByTurn.get(turnId)?.find((candidate) => candidate.callId === command.callId);
+    for (const journalCommand of commands) {
+      const existing = commandsByTurn.get(turnId)?.find((candidate) => candidate.callId === journalCommand.callId);
+      // The journal owns status; the result body comes from the journal when it
+      // recorded one, otherwise from the transcript ledger.
+      const { output, error, ...journalBase } = journalCommand;
+      const command: ProjectionCommand = {
+        ...journalBase,
+        ...projectionCommandDetails(output ?? existing?.output, error ?? existing?.error),
+      };
       if (existing) {
         const current = commandsByTurn.get(turnId)!;
         commandsByTurn.set(
@@ -3292,6 +3367,8 @@ function projectTranscriptMessages(
       callId?: unknown;
       toolName?: unknown;
       status?: unknown;
+      output?: unknown;
+      failureReason?: unknown;
     };
     const sender = typeof record.sender === 'string' ? record.sender : record.role;
     if (sender === 'user') {
@@ -3310,6 +3387,7 @@ function projectTranscriptMessages(
           callId: boundedText(record.callId, 256),
           toolName: boundedText(record.toolName, 256),
           status: boundedText(record.status, 32) as ProjectionCommand['status'],
+          ...projectionCommandDetails(record.output, record.failureReason),
         });
       }
       continue;
@@ -3328,13 +3406,15 @@ function projectTranscriptMessages(
     }
     projected.push(projectedMessage);
   }
-  return projected.slice(-200);
+  return applyCommandBodyBudget(projected.slice(-200));
 }
 
 /**
  * Session transcript wire shape: messages have `id`, `role` (`user` or `bot`),
  * and bounded `text`. A completed turn's first bot message may carry a bounded
- * `commands` array of `{callId, toolName, status}` entries for its tool cards.
+ * `commands` array of `{callId, toolName, status, output?, error?}` entries for
+ * its tool cards. `output` and `error` are bounded per command and by one total
+ * budget per projection (newest first); a cut body ends with a visible marker.
  */
 function toSessionProjection(source: SessionProjectionSource): Record<string, unknown> {
   const transcript = source.transcript;

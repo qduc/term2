@@ -268,7 +268,11 @@ Read returns `{session:<projection>}`. A projection has `id`, `workspaceId`,
 `createdAt`, `updatedAt`, `latestSequence`, `earliestReplayableSequence`,
 `projectionSequence`, `transcript`, and `interaction`. `transcript.messages` are
 bounded `{id,role:"user"|"bot",text,commands?}` entries; a command entry has
-`callId`, `toolName`, and `status` (`completed`, `failed`, `aborted`, or `unknown`).
+`callId`, `toolName`, and `status` (`completed`, `failed`, `aborted`, or `unknown`),
+plus optional `output` (the tool result body, at most 16,384 characters) and `error`
+(at most 10,000 characters) when the turn recorded them. One projection carries at most
+2 MiB of `output` and `error` text in total, newest turns first; a body cut by that limit
+ends with `[truncated: session transcript size limit]`.
 `interaction` is `null`, pending, or a recovered non-resolvable interaction (see
 below).
 

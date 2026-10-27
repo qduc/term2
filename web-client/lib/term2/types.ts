@@ -429,6 +429,7 @@ const TRANSCRIPT_KEYS = new Set([
   'name',
   'value',
   'commands',
+  'output',
 ]);
 const FORBIDDEN_KEYS = new Set([
   'ownerUserId',
@@ -466,7 +467,7 @@ function validateTranscriptCommands(value: unknown): void {
   if (!Array.isArray(value) || value.length > 64) throw new Term2ProtocolError('Invalid transcript commands');
   for (const item of value) {
     const command = objectValue(item);
-    exactKeys(command, ['callId', 'toolName', 'status']);
+    exactKeys(command, ['callId', 'toolName', 'status', 'output', 'error'], ['callId', 'toolName', 'status']);
     if (
       typeof command.callId !== 'string' ||
       command.callId.length === 0 ||

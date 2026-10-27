@@ -22,6 +22,10 @@ export type ProjectionCommand = Readonly<{
   callId: string;
   toolName: string;
   status: ProjectionCommandStatus;
+  /** Result body the live `command_message` carried; omitted when none was recorded. */
+  output?: string;
+  /** Failure reason the live `command_message` carried; omitted when none was recorded. */
+  error?: string;
 }>;
 
 export type InteractionProjection =
@@ -152,6 +156,23 @@ function commandsFromJournal(events: readonly AgentEventEnvelope[]): ReadonlyMap
         commands.push({ callId, toolName, status: 'unknown' });
       }
       commandsByTurn.set(turnId, commands);
+      continue;
+    }
+    if (event.type === 'command_message') {
+      const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null;
+      const callId = typeof event.payload.callId === 'string' ? event.payload.callId : null;
+      const commands = turnId ? commandsByTurn.get(turnId) : undefined;
+      if (!turnId || !callId || !commands) continue;
+      const output = typeof event.payload.output === 'string' ? event.payload.output : undefined;
+      const error = typeof event.payload.error === 'string' ? event.payload.error : undefined;
+      commandsByTurn.set(
+        turnId,
+        commands.map((command) =>
+          command.callId === callId
+            ? { ...command, ...(output ? { output } : {}), ...(error ? { error } : {}) }
+            : command,
+        ),
+      );
       continue;
     }
     const status = statusByTerminalEvent.get(event.type);

@@ -14799,6 +14799,256 @@
         "/home/qduc/coord/term2/tasks/pr-37/evidence/mutations.json"
       ],
       "notes": "Built CLI conventional SIGTERM143 plus owner removal verified in push/off modes. Initial temporary harness expected source-runner0 and failed only that assertion; corrected expected existing CLI143, no product change. Source runner tests use0. Intentional mutations removing sleep wake/mid-tick pending independently fail expected REST read counts2vs3/1vs2; restored. Initial runner fixture development had2failed tests (wrong ws host/TLS routing and1s default poll timeout), and typecheck reported two nullable pipe handles; corrected before source commit. No product defect attributed to these harness failures."
+    },
+    {
+      "recorded_on": "2026-10-27",
+      "task_ids": ["2026-10-27-apply-pr-37"],
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node": "v24.19.0",
+        "pnpm": "11.7.0"
+      },
+      "id": "2026-10-27-pr37-lifecycle-red",
+      "run_at": null,
+      "commit": null,
+      "tree": null,
+      "base_commit": "c3289dd2ac118515c0c274604a243fc8cda40d2b",
+      "revision_kind": "dirty test-only pre-fix snapshot; production unchanged from base_commit",
+      "suite": "PR37 blackholed Gateway lifecycle regression",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts",
+      "command_complete": true,
+      "result": {
+        "passed": 4,
+        "failed": 5,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 2,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "discord-command blackhole-recovery",
+          "diagnostic": "No Gateway push unavailable within 5s; runner REST fallback not reached."
+        },
+        {
+          "test": "discord-command blackhole-stop",
+          "diagnostic": "runDiscordBridge returned and owner removed, but child.exitCode remained null after 5s (expected 0)."
+        },
+        {
+          "test": "discord-gateway reconnect op7, non-resumable op9, missing-ACK zombie",
+          "diagnostic": "Three real paused-peer journeys each timed out waiting for recovery within 5s."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/fix-red.log",
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/reviewer-lifecycle-probe.log",
+        "/home/qduc/coord/term2/tasks/pr-37/review.md"
+      ],
+      "notes": "Pre-acceptance independent review finding, not an escaped defect or a second delivery. Original reviewer probe: live=true/connections=1 at 3.5s; SIGTERM runner returned in11ms but process exited in30029ms. Red suite replaces cooperative-close peers with real paused WebSockets and adds two source runner child journeys. Exact dirty tree and UTC start not retained; log local start17:41:51. Review rejected original implementation; repair acceptance remains coordinator-owned."
+    },
+    {
+      "recorded_on": "2026-10-27",
+      "task_ids": ["2026-10-27-apply-pr-37"],
+      "environment": {
+        "os": "Linux-7.0.14-17-pve-x86_64-with-glibc2.39",
+        "node": "v24.19.0",
+        "pnpm": "11.7.0"
+      },
+      "id": "2026-10-27-pr37-lifecycle-clean-source",
+      "run_at": "2026-10-27T10:44:40.200598+00:00",
+      "completed_at": "2026-10-27T10:49:38.160183+00:00",
+      "commit": "ee730ffe6956c2ab5350275f80b48101d9a02a6b",
+      "tree": "c4898472b5866c00e29dde4c2280b84236ce8ec9",
+      "base_commit": "c3289dd2ac118515c0c274604a243fc8cda40d2b",
+      "revision_kind": "clean-commit",
+      "suite": "PR37 lifecycle repair all tiers",
+      "command": "serialized repository checks; see checks",
+      "command_complete": true,
+      "checks": [
+        {
+          "name": "focused-discord",
+          "command": "pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts",
+          "exit": 0,
+          "seconds": 8.0,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/focused-discord-lifecycle.log",
+          "result": {
+            "passed": 9,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 2,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        },
+        {
+          "name": "reviewer-lifecycle-probe",
+          "command": "node --import tsx --input-type=module",
+          "exit": 0,
+          "seconds": 4.08,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/reviewer-lifecycle-probe-lifecycle.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          },
+          "stdin": "/home/qduc/coord/term2/tasks/pr-37/evidence/reviewer-lifecycle-probe.mjs"
+        },
+        {
+          "name": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0,
+          "seconds": 3.08,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/typecheck-lifecycle.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "lint",
+          "command": "pnpm lint",
+          "exit": 0,
+          "seconds": 38.55,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/lint-lifecycle.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "guards",
+          "command": "pnpm test",
+          "exit": 0,
+          "seconds": 3.17,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/guards-lifecycle.log",
+          "result": {
+            "passed": 28,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 7,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        },
+        {
+          "name": "integration",
+          "command": "pnpm test:integration",
+          "exit": 0,
+          "seconds": 122.63,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/integration-lifecycle.log",
+          "result": {
+            "passed": 380,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 34,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "build",
+          "command": "pnpm build",
+          "exit": 0,
+          "seconds": 3.69,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/build-lifecycle.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "cli-help",
+          "command": "node dist/cli.js discord --help",
+          "exit": 0,
+          "seconds": 0.67,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/cli-help-lifecycle.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm test:e2e",
+          "exit": 0,
+          "seconds": 21.21,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/e2e-lifecycle.log",
+          "result": {
+            "passed": 39,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 8,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        },
+        {
+          "name": "provider-black-box",
+          "command": "pnpm test:provider-black-box",
+          "exit": 0,
+          "seconds": 92.1,
+          "log": "/home/qduc/coord/term2/tasks/pr-37/evidence/provider-black-box-lifecycle.log",
+          "result": {
+            "passed": 222,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 25,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        }
+      ],
+      "failures": [],
+      "comparison": {
+        "resolves_run_ids": ["2026-10-27-pr37-lifecycle-red"],
+        "scope": "Same focused paused-peer checks red5failed/4passed before fix, green9passed after. Exact reviewer probe rerun: live=false at1581ms, connections2 at3.5s, runner return8ms, process exit19ms/code0. Earlier historical provider PTY failure retained; this passing full run does not establish its cause."
+      },
+      "verification": {
+        "independent": false,
+        "verifier": null,
+        "verdict": "author checks complete; coordinator independent post-fix review pending",
+        "rework_rounds": 1
+      },
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "author_completed_at": "2026-10-27T10:49:38.160183+00:00",
+          "accepted_at": null,
+          "accepted_commit": null,
+          "evidence_run_ids": ["2026-10-27-pr37-lifecycle-red", "2026-10-27-pr37-lifecycle-clean-source"]
+        },
+        "related_task_ids": ["2026-10-27-apply-pr-37"],
+        "unknowns": [
+          "Independent post-fix verification effort/verdict; active author/rework effort, tokens and cost not recorded"
+        ]
+      },
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/fix-checks.json",
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/fix-plan.md",
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/fix-retro.md",
+        "/home/qduc/coord/term2/tasks/pr-37/evidence/fix-final-state.json"
+      ],
+      "notes": "Only production change: terminate abandoned optional Gateway transports instead of graceful close. No heartbeat threshold, reconnect/backoff, REST cursor, jobs/outbox, approval, credential or provider policy changes. Quiet acknowledged peer survives multiple heartbeats. Lint:0errors/31warnings. Integration:1skipped; provider:1skipped (openai-websocket reasoning: no application-owned response traffic persisted). No live Discord/mobile, real credentials or paid APIs; no push/publication/deployment. Source tests and exact reviewer probe use loopback network/process boundaries. Original task row and all prior evidence preserved; this records rework round1, not a duplicate delivery or independent acceptance. Later evidence-only commit is not a rerun of behavioral tiers."
     }
   ]
 }

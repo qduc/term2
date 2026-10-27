@@ -1034,6 +1034,10 @@ export class Term2Gateway {
       ownerUserId,
       sessionId,
       journal: persisted.persistence.journal,
+      activeTurnId: (() => {
+        const live = this.#sessions.get(sessionId);
+        return live instanceof ServerSession ? live.activeTurnId : null;
+      })(),
       liveInteraction: () => {
         const session = this.#sessions.get(sessionId);
         if (!(session instanceof ServerSession)) return null;

@@ -5,6 +5,7 @@ import { replayEvents, type RestoredState } from '../../services/conversation/co
 import type { ConversationService } from '../../services/conversation/conversation-service.js';
 import {
   GatewayPersistenceError,
+  TERMINAL_AGENT_EVENT_TYPES,
   type AgentEventEnvelope,
   type GatewaySessionRecord,
   type ReplayLiveSubscription,
@@ -167,6 +168,32 @@ function commandsFromJournal(events: readonly AgentEventEnvelope[]): ReadonlyMap
   return commandsByTurn;
 }
 
+/**
+ * Sequence just before the live turn's `assistant_started`, or null when the
+ * turn has no retained start or already settled. A client that resumes from
+ * here replays the turn's text, tools and usage instead of skipping them.
+ */
+function beforeLiveTurn(events: readonly AgentEventEnvelope[], turnId: string): number | null {
+  let start: number | null = null;
+  for (const event of events) {
+    if (event.payload.turnId !== turnId) continue;
+    if (event.type === 'assistant_started' && start === null) start = event.id;
+    if (TERMINAL_AGENT_EVENT_TYPES.has(event.type)) return null;
+  }
+  return start === null ? null : start - 1;
+}
+
+function transcriptHasReply(transcript: RestoredState | null, turnId: string): boolean {
+  const messages = transcript?.messages ?? [];
+  const start = messages.findIndex((message) => message.sender === 'user' && message.id === turnId);
+  if (start < 0) return false;
+  for (const message of messages.slice(start + 1)) {
+    if (message.sender === 'user') return false;
+    if (message.sender === 'bot') return true;
+  }
+  return false;
+}
+
 function interactionFromJournal(journal: GatewayEventJournalImpl): InteractionProjection {
   let projection: InteractionProjection = null;
   const resolvedInteractionIds = new Set<string>();
@@ -253,6 +280,8 @@ export async function createSessionProjectionSource(options: {
   ownerUserId: string;
   sessionId: string;
   journal: GatewayEventJournalImpl;
+  /** Turn the live runtime is streaming now; its journal events are not in the durable transcript yet. */
+  activeTurnId?: string | null;
   liveInteraction?: () => Promise<{
     state: 'pending';
     interaction: PendingInteractionDto;
@@ -263,14 +292,24 @@ export async function createSessionProjectionSource(options: {
   const highWater: PersistenceHighWater = options.journal.highWater();
   const journalEvents = options.journal.events();
   const journalCommands = commandsFromJournal(journalEvents);
-  // The transcript is hydrated from the durable log, so it covers every
-  // published journal event. Report that coverage rather than the journal's
-  // optional checkpoint, which may still be zero after restart/compaction.
-  const projectionSequence = Math.max(
-    highWater.lastPublishedSequence,
-    highWater.firstRetainedEventSequence,
-    highWater.projectionSequence,
-  );
+  // The durable transcript records an assistant turn only when it settles, so
+  // it covers every published journal event except those of a turn that is
+  // still streaming. Report that coverage rather than the journal's optional
+  // checkpoint, which may still be zero after restart/compaction.
+  const directory = options.layout.existingSessionPath(session.ownerUserId, session.workspaceId, session.id);
+  if (!directory) throw new GatewayPersistenceError('not_found', 'session persistence directory not found');
+  const transcript = hydrateTranscript(directory, session.id);
+  // The settled reply is written before the terminal journal event. Between the
+  // two the transcript already holds the whole answer, so replaying its deltas
+  // would duplicate it.
+  const liveTurnFloor =
+    options.activeTurnId && !transcriptHasReply(transcript, options.activeTurnId)
+      ? beforeLiveTurn(journalEvents, options.activeTurnId)
+      : null;
+  const projectionSequence =
+    liveTurnFloor === null
+      ? Math.max(highWater.lastPublishedSequence, highWater.firstRetainedEventSequence, highWater.projectionSequence)
+      : Math.max(liveTurnFloor, highWater.firstRetainedEventSequence);
   let interaction = interactionFromJournal(options.journal);
   const resolvedInteractionIds = new Set<string>();
   for (const event of journalEvents) {
@@ -286,15 +325,13 @@ export async function createSessionProjectionSource(options: {
       // A disposed runtime is represented by the non-resolvable recovery projection.
     }
   }
-  const directory = options.layout.existingSessionPath(session.ownerUserId, session.workspaceId, session.id);
-  if (!directory) throw new GatewayPersistenceError('not_found', 'session persistence directory not found');
   return {
     session,
     latestSequence: highWater.lastPublishedSequence,
     earliestReplayableSequence: highWater.firstRetainedEventSequence,
     projectionSequence,
     journalCommands,
-    transcript: hydrateTranscript(directory, session.id),
+    transcript,
     interaction,
     resolvedInteractionIds,
     subscribeFrom: (after, listener) => options.journal.subscribeFrom(after, listener, session.transcriptGeneration),

@@ -48,6 +48,8 @@ export type SessionProjectionSource = {
   readonly projectionSequence: number;
   /** Journal-sourced terminal tool state, keyed by the owning turn ID. */
   readonly journalCommands: ReadonlyMap<string, readonly ProjectionCommand[]>;
+  /** Turns the user stopped, keyed by turn ID, with the partial answer the journal streamed. */
+  readonly abortedTurns: ReadonlyMap<string, string>;
   readonly transcript: RestoredState | null;
   readonly interaction: InteractionProjection;
   readonly resolvedInteractionIds: ReadonlySet<string>;
@@ -187,6 +189,30 @@ function commandsFromJournal(events: readonly AgentEventEnvelope[]): ReadonlyMap
     );
   }
   return commandsByTurn;
+}
+
+/**
+ * Partial answer of every turn that ended in `turn_aborted`. An abort settles
+ * only the journal, never the transcript, so this is the one durable copy of
+ * the text the user saw. A turn whose `assistant_started` was compacted away
+ * keeps an empty answer rather than a tail of it.
+ */
+const ABORTED_TEXT_MAX = 16_384;
+function abortedTurnsFromJournal(events: readonly AgentEventEnvelope[]): ReadonlyMap<string, string> {
+  const textByTurn = new Map<string, string>();
+  const aborted = new Map<string, string>();
+  for (const event of events) {
+    const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null;
+    if (!turnId) continue;
+    if (event.type === 'assistant_started') textByTurn.set(turnId, '');
+    else if (event.type === 'text_delta' && typeof event.payload.delta === 'string') {
+      const text = textByTurn.get(turnId);
+      if (text !== undefined && text.length < ABORTED_TEXT_MAX) textByTurn.set(turnId, text + event.payload.delta);
+    } else if (event.type === 'turn_aborted')
+      aborted.set(turnId, (textByTurn.get(turnId) ?? '').slice(0, ABORTED_TEXT_MAX));
+    else if (TERMINAL_AGENT_EVENT_TYPES.has(event.type)) aborted.delete(turnId);
+  }
+  return aborted;
 }
 
 /**
@@ -352,6 +378,7 @@ export async function createSessionProjectionSource(options: {
     earliestReplayableSequence: highWater.firstRetainedEventSequence,
     projectionSequence,
     journalCommands,
+    abortedTurns: abortedTurnsFromJournal(journalEvents),
     transcript,
     interaction,
     resolvedInteractionIds,

@@ -151,16 +151,17 @@ export function Term2SessionShell({
 
   // Align the workspace selector to the open session once per session. Re-running
   // on every selector change would undo the user's own pick of another workspace.
-  const alignedSessionIdRef = useRef<string | null>(null);
+  // The ref follows the open session id itself, so returning to a session after
+  // visiting one that is not in the loaded list aligns again.
+  const alignmentRef = useRef<{ sessionId: string | null; aligned: boolean }>({ sessionId: null, aligned: false });
   useEffect(() => {
-    if (!sessionId) {
-      alignedSessionIdRef.current = null;
-      return;
+    if (alignmentRef.current.sessionId !== sessionId) {
+      alignmentRef.current = { sessionId, aligned: false };
     }
-    if (alignedSessionIdRef.current === sessionId) return;
+    if (!sessionId || alignmentRef.current.aligned) return;
     const selected = session.sessions.find((item) => item.id === sessionId);
     if (!selected) return;
-    alignedSessionIdRef.current = sessionId;
+    alignmentRef.current.aligned = true;
     setSelectedWorkspaceId(selected.workspaceId);
   }, [session.sessions, setSelectedWorkspaceId, sessionId]);
 

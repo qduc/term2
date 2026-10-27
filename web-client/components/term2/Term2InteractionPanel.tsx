@@ -65,7 +65,8 @@ export function Term2InteractionPanel({
       return next;
     });
   // A multi-select answer is a JSON array of the chosen labels, in option order. The gateway validates
-  // it on the `custom` choice, and the TUI sends the same shape.
+  // it on the `custom` choice. The TUI sends the same shape (a JSON array of labels) but orders it by
+  // click order and allows an empty submit; the web orders by option and requires at least one.
   const submitSelection = () => {
     if (!question || selected.size === 0) return;
     const labels = question.options.filter((_, optionIndex) => selected.has(optionIndex)).map((option) => option.label);
@@ -131,7 +132,7 @@ export function Term2InteractionPanel({
             {multiSelect
               ? question?.options.map((option, optionIndex) => (
                   <label
-                    key={option.label}
+                    key={optionIndex}
                     className="inline-flex cursor-pointer items-center gap-2 rounded border border-amber-700 px-3 py-1 text-sm has-[:checked]:bg-amber-200"
                   >
                     <input
@@ -146,7 +147,7 @@ export function Term2InteractionPanel({
               : question?.options.map((option, optionIndex) => (
                   <button
                     type="button"
-                    key={option.label}
+                    key={optionIndex}
                     className="rounded border border-amber-700 px-3 py-1 text-sm"
                     disabled={disabled || busy}
                     onClick={() => void submit(`option:${optionIndex}`)}

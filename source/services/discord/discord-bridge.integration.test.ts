@@ -1159,6 +1159,10 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
       active = undefined;
     },
   });
+  command.action('status');
+  expect(messages.pop()).toContain(
+    'Bridge disconnected; session runtime-session; startup socket not created at startup',
+  );
   command.action('connect invalid/name');
   expect(messages.pop()).toContain('Invalid bridge socket name');
   command.action('connect runtime');
@@ -1170,23 +1174,38 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
     sessionId: 'runtime-session',
     socketPath: active!.socketPath,
   });
-  expect(messages.pop()).toContain('approvals and questions remain terminal-only');
+  expect(messages.pop()).toContain('Discord connectivity is not verified');
   command.action();
   const bareStatus = messages.pop()!;
   expect(bareStatus).toContain('Bridge connected: runtime');
+  expect(bareStatus).toContain('Discord connectivity not verified');
   expect(bareStatus).not.toContain('Usage: /bridge');
   command.action('   \t  ');
   const whitespaceStatus = messages.pop()!;
   expect(whitespaceStatus).toContain('Bridge connected: runtime');
   expect(whitespaceStatus).not.toContain('Usage: /bridge');
   command.action('status');
-  expect(messages.pop()).toContain('session runtime-session; startup socket no');
+  expect(messages.pop()).toContain(
+    'session runtime-session; startup socket not created at startup (a runtime connection may still be active)',
+  );
+  const startupDisconnectedCommand = createBridgeCommand({
+    getServer: () => undefined,
+    isStartup: true,
+    getSessionId: () => 'startup-session',
+    addSystemMessage: (message) => messages.push(message),
+  });
+  startupDisconnectedCommand.action('status');
+  expect(messages.pop()).toContain(
+    'Bridge disconnected; session startup-session; startup socket created at startup. To enable remote input, use /bridge connect [name] if that socket name is available.',
+  );
   const startupCommand = createBridgeCommand({
     getServer: () => active,
     isStartup: true,
     getSessionId: () => 'runtime-session',
     addSystemMessage: (message) => messages.push(message),
   });
+  startupCommand.action('status');
+  expect(messages.pop()).toContain('startup socket created at startup');
   startupCommand.action('disconnect');
   expect(messages.pop()).toContain('startup control socket cannot be disconnected');
   expect(active).toBeDefined();
@@ -1196,7 +1215,11 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(active).toBeUndefined();
   expect(fs.existsSync(path.join(root, 'term2', 'control', 'runtime.json'))).toBe(false);
-  expect(messages.pop()).toContain('Bridge disconnected');
+  expect(messages.pop()).toContain('Bridge disconnected: runtime');
+  command.action('status');
+  expect(messages.pop()).toContain(
+    'Bridge disconnected; session runtime-session; startup socket not created at startup (a runtime connection may still be active). To enable remote input, use /bridge connect [name] if that socket name is available.',
+  );
   command.action('connect runtime');
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(active?.discordInputEnabled).toBe(true);

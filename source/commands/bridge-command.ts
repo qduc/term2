@@ -35,7 +35,7 @@ export function createBridgeCommand(input: {
           .connect(name)
           .then((connected) => {
             input.addSystemMessage(
-              `Bridge connected: ${connected.name} (${connected.socketPath}). Discord input is enabled: remote human input can reach this session; approvals and questions remain terminal-only.`,
+              `Bridge connected: ${connected.name}; local control socket available at ${connected.socketPath}. Discord input enabled; Discord connectivity is not verified. Approvals and questions remain terminal-only.`,
             );
           })
           .catch((error: unknown) => {
@@ -68,12 +68,15 @@ export function createBridgeCommand(input: {
         input.addSystemMessage('Usage: /bridge [status|connect [name]|disconnect]');
         return true;
       }
+      const startupSocket = input.isStartup
+        ? 'created at startup'
+        : 'not created at startup (a runtime connection may still be active)';
       input.addSystemMessage(
         server
-          ? `Bridge connected: ${server.name} (${server.socketPath}); Discord input ${
+          ? `Bridge connected: ${server.name}; local control socket available at ${server.socketPath}; Discord input ${
               server.discordInputEnabled ? 'enabled' : 'disabled'
-            }; session ${input.getSessionId()}; startup socket ${input.isStartup ? 'yes' : 'no'}.`
-          : `Bridge disconnected; session ${input.getSessionId()}; startup socket no.`,
+            } (Discord connectivity not verified); session ${input.getSessionId()}; startup socket ${startupSocket}.`
+          : `Bridge disconnected; session ${input.getSessionId()}; startup socket ${startupSocket}. To enable remote input, use /bridge connect [name] if that socket name is available.`,
       );
       return true;
     },

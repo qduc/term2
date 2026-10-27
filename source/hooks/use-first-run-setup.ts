@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { MenuController } from '../components/input/menu-types.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { hasProviderCredentials } from '../utils/ai/provider-credentials.js';
+import { getModelSettingConfig } from '../utils/ai/model-settings.js';
 
 export type FirstRunSetupPhase = 'provider' | 'model';
 
@@ -30,6 +31,9 @@ const hasInspectableCredentials = (settingsService: SettingsService, provider: s
   return hasProviderCredentials(settingsService, provider);
 };
 
+// Programmatic bound menus must retain a real text trigger: reconciliation
+// otherwise dismisses them on the next editor edit or registry refresh.
+const modelTrigger = getModelSettingConfig('agent.modelSelection')!.trigger;
 const modelFrame = {
   kind: 'model' as const,
   target: {
@@ -38,8 +42,8 @@ const modelFrame = {
   },
   back: { type: 'close-clear-input' as const },
   binding: {
-    trigger: { range: { start: 0, end: 0 }, text: '' },
-    queryStart: 0,
+    trigger: { range: { start: 0, end: modelTrigger.length }, text: modelTrigger },
+    queryStart: modelTrigger.length,
     queryEnd: 'cursor' as const,
     replacement: { start: 0, end: 'buffer-end' as const },
   },
@@ -50,6 +54,9 @@ const modelFrame = {
  * selection, editing, credential persistence, and typed-model behavior.
  */
 export function useFirstRunSetupGate({ settingsService, controller }: Dependencies): FirstRunSetupGate {
+  const subscribe = useCallback((listener: () => void) => controller.subscribe(listener), [controller]);
+  const getSnapshot = useCallback(() => controller.getSnapshot(), [controller]);
+  const topFrame = useSyncExternalStore(subscribe, getSnapshot, getSnapshot).stack.at(-1);
   const initialProvider = useMemo(() => getMainProvider(settingsService), [settingsService]);
   const [active, setActive] = useState(() => !hasInspectableCredentials(settingsService, initialProvider));
   const [phase, setPhase] = useState<FirstRunSetupPhase | null>(() =>
@@ -97,8 +104,7 @@ export function useFirstRunSetupGate({ settingsService, controller }: Dependenci
         return;
       }
 
-      const top = controller.getSnapshot().stack.at(-1);
-      if (top?.kind !== 'providers') {
+      if (topFrame?.kind !== 'providers') {
         controller.closeAll();
         controller.open({ kind: 'providers' });
       }
@@ -110,12 +116,14 @@ export function useFirstRunSetupGate({ settingsService, controller }: Dependenci
       return;
     }
 
-    const top = controller.getSnapshot().stack.at(-1);
-    if (top?.kind !== 'model') {
+    if (topFrame?.kind !== 'model') {
       controller.closeAll();
-      controller.replace(modelFrame, { buffer: { type: 'replace', text: '', cursor: 0 } });
+      controller.replace(
+        { ...modelFrame, defaultProvider: provider },
+        { buffer: { type: 'replace', text: modelTrigger, cursor: modelTrigger.length } },
+      );
     }
-  }, [active, controller, phase, provider, settingsRevision, settingsService]);
+  }, [active, controller, phase, provider, settingsRevision, settingsService, topFrame]);
 
   const currentProvider = getMainProvider(settingsService);
   const currentProviderUnavailable = !hasInspectableCredentials(settingsService, currentProvider);

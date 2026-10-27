@@ -35,7 +35,7 @@ export function FirstRunSetupPrompt({ phase, provider }: FirstRunSetupPromptProp
         </>
       ) : (
         <Text>
-          Credentials found for {providerLabel}. Choose a model to finish setup; typed custom model IDs are accepted.
+          Provider {providerLabel} is ready. Choose a model to finish setup; typed custom model IDs are accepted.
         </Text>
       )}
       <Text color={theme.textSubtle}>Normal chat is disabled until setup completes.</Text>

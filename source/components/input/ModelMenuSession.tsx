@@ -42,6 +42,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
       const current = modelsRef.current;
       const selectedProvider = current.getSelectedItem()?.provider;
       if (selectedProvider) return selectedProvider;
+      if (frame.defaultProvider) return frame.defaultProvider;
       return settingsService.get('agent.modelSelection').provider;
     };
 

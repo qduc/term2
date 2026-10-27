@@ -90,6 +90,8 @@ export type MenuFrame =
   | {
       id: FrameId;
       kind: 'model';
+      /** Provider for typed IDs when this picker was opened for an explicit provider. */
+      defaultProvider?: string;
       target: { type: 'command' } | { type: 'setting'; config: ModelSettingConfig };
       binding: TextBinding;
       back: BackPolicy;

@@ -699,11 +699,22 @@ it('posts only explicit acknowledgement and completion through run_code while it
   await f.bridge().listenOutbound();
   await f.cycle();
   f.human('Investigate this involved issue and tell me what you find.');
-  await f.cycle(12);
-
-  const outputs = f.posted.map((message) => message.content);
-  expect(outputs).toEqual(['[coord] I received this and am investigating.', '[coord] Investigation complete.']);
-  expect(f.journal().jobs.map((job: any) => job.state)).toEqual(['done']);
+  // Bridge ticks admit work but do not await the session's asynchronous tool execution.
+  await expect
+    .poll(
+      async () => {
+        await f.cycle();
+        return {
+          outputs: f.posted.map((message) => message.content),
+          states: f.journal().jobs.map((job: any) => job.state),
+        };
+      },
+      { timeout: 5_000 },
+    )
+    .toEqual({
+      outputs: ['[coord] I received this and am investigating.', '[coord] Investigation complete.'],
+      states: ['done'],
+    });
   const discordInput = JSON.stringify(f.received.coord![0]!.input);
   expect(discordInput).toContain('[Discord input]');
   expect(discordInput).toContain('Untrusted envelope (JSON)');

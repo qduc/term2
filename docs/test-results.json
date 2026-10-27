@@ -16627,6 +16627,562 @@
         "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/independent-review/independent-startup.log"
       ],
       "notes": "Independent verifier stern-newt-781 accepts scoped inactive candidate/composition; fresh4cases53.253s+27cases29.507s.10.047sGET/10.061sPOST exit143cleanup, noncooperative12.034s. No source/probe/build edits. Prior read-only verifier inspected but could not execute; only this fresh writable evidence-only run supplies acceptance. No manager/activation/boot/live or total-tick-drain acceptance."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-initial-oracles",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "precommit_dirty_snapshot",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "integration-test",
+      "command": "env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/before-after.py (initial fixture)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 2,
+        "skipped": 186,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "presents direct human Discord text plainly with provenance and no repeated routing preamble",
+          "signature": "Old formatter fails exact natural-text assertion; new formatter reaches incorrect expectation that completed journal still retains job.text. Existing completion policy scrubs payload.",
+          "classification": "temporary test-oracle error, not escaped product defect"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/initial-before.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/initial-after.log"
+      ],
+      "notes": "Two separate selected-test executions: each1failed/93skipped. Corrected only completed-journal expectation to require scrubbing with provenance retained; original evidence kept."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-before",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_base_formatter_with_new_test",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "integration-test",
+      "command": "env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/before-after.py (old formatter phase)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 93,
+        "files_passed": null,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "presents direct human Discord text plainly with provenance and no repeated routing preamble",
+          "signature": "Exact natural text/server_message assertion receives old explanatory preamble and JSON payload",
+          "classification": "expected red; demonstrates sensitivity to old presentation"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/before.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/before-after.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/before-after.py"
+      ],
+      "notes": "Temporary base formatter plus new integration assertion; deliberately mixed/dirty source, not a clean base-commit suite run."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-after",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_comparison_snapshot",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "integration-test",
+      "command": "env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/before-after.py (new formatter phase)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 93,
+        "files_passed": 1,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/after.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/before-after.json"
+      ],
+      "notes": "Working tree restored to eventual a20ec0cb content after temporary old-formatter substitution. Treated as dirty comparison; independent/final clean-source runs follow."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-minimal-home-build",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "build",
+      "command": "env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/minimal-home-dispatch-run-checks.py",
+      "command_complete": false,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "pnpm build emitted no output under synthetic HOME; exact owned child stopped after68.20s, exit-15",
+          "classification": "incomplete package-manager dispatch attempt; deeper cause unproven; not compiler/build failure"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/minimal-home-dispatch-build.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/minimal-home-dispatch-checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/minimal-home-dispatch-run-checks.py"
+      ],
+      "notes": "Inspected owned process before stopping only its child; runner cleaned synthetic root. Normal repository pnpm build subsequently passed; no source fix."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-build",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/build-normal.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/install.log"
+      ],
+      "notes": "Normal own-worktree build passed. dist/build-info.json identifies0.39.0-dev+a20ec0c, exact sourcea20ec0cb. No rebuild after later documentation-only ledger commit."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-typecheck",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "typecheck",
+      "command": "/home/qduc/term2/.worktrees/discord-input-simple/node_modules/.bin/tsc --noEmit",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/typecheck.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/run-checks.py"
+      ],
+      "notes": "Exit0; wall2.27s. Invoked by env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/run-checks.py."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-static-guards",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "static-guards",
+      "command": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node scripts/run-test.mjs --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/static-guards.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/run-checks.py"
+      ],
+      "notes": "Exit0; wall3.12s. Invoked by env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/run-checks.py."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-discord-integration",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "discord-integration",
+      "command": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node node_modules/vitest/vitest.mjs run --reporter=verbose --maxWorkers=1 --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-command.integration.test.ts source/services/discord/discord-gateway.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 103,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/discord-integration.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/run-checks.py"
+      ],
+      "notes": "Exit0; wall92.32s. Invoked by env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/run-checks.py. All3Discord files; full repository integration tier not claimed. Includes HTTP->bridge/journal->Unix RPC->real session/orchestrator->fake provider and persisted UI provenance assertion."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-built-cli",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "built-cli",
+      "command": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node node_modules/vitest/vitest.mjs run --reporter=verbose --maxWorkers=1 --config vitest.e2e.config.ts source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/built-cli.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/run-checks.py"
+      ],
+      "notes": "Exit0; wall69.89s. Invoked by env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/run-checks.py. Actual built Discord CLI signal/drain/restart compatibility; full e2e tier not claimed."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-provider-black-box",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "provider-black-box",
+      "command": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node node_modules/vitest/vitest.mjs run --reporter=verbose --maxWorkers=1 --config vitest.provider-black-box.config.ts --bail=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 221,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 24,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/provider-record-security.test.ts",
+          "test": "refuses an Anthropic credential for the OpenCode provider",
+          "signature": "provider-record-security.test.ts:32 expects result.status2, receives null; spawnSync pnpm exec tsx timeout10000ms",
+          "classification": "matches recorded durability-integration-provider isolation/package-manager stall; original tier remains FAILED; deeper pnpm cause unproven"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/provider-black-box.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/run-checks.py"
+      ],
+      "notes": "Exit1; wall187.30s. Invoked by env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/run-checks.py. Exact file/test/assertion/status-null/timeout signature and synthetic offline HOME match prior2026-10-27-discord-durability-integration-provider run (2fd9f67c). git diff2fd9f67c..a20ec0cb is empty for scripts/provider-black-box, package.json, pnpm-lock.yaml and vitest.provider-black-box.config.ts. No intervening recorder/provider fix. This identifies an existing verification-environment limitation, not proof of a pre-existing source defect or a green provider tier. Prior task direct-installed-tsx intent probe is not rerun or counted here."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-eslint",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "eslint",
+      "command": "/home/qduc/term2/.worktrees/discord-input-simple/node_modules/.bin/eslint .",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/eslint.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/run-checks.py"
+      ],
+      "notes": "Exit0; wall23.78s. Invoked by env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/run-checks.py. Full ESLint0errors31warnings."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-prettier",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "prettier",
+      "command": "/home/qduc/term2/.worktrees/discord-input-simple/node_modules/.bin/prettier --check .",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/prettier.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/run-checks.py"
+      ],
+      "notes": "Exit0; wall14.63s. Invoked by env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/run-checks.py."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-no-unit-tests",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "no-unit-tests",
+      "command": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node scripts/check-no-unit-tests.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/no-unit-tests.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/checks-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/evidence/run-checks.py"
+      ],
+      "notes": "Exit0; wall0.03s. Invoked by env -i PATH=/usr/bin:/bin unshare -Urn python3 evidence/run-checks.py."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-independent-initial-prompt",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "independent-process-verification",
+      "command": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node /home/qduc/term2/.worktrees/discord-input-simple/node_modules/vitest/vitest.mjs run --config /home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/prompt.config.mjs --configLoader native --reporter=verbose -t 'independent: request instructions'",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "Attached request assertions pass, then detach assertion fails because fixture closes socket without clearing active opt-in object reference",
+          "classification": "reviewer fixture mismatch with CLI disconnect callback; no product source finding"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/initial-prompt.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/initial-prompt-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/oracle-correction.md"
+      ],
+      "notes": "Corrected only external reviewer fixture to match production callback clearing active reference. Original artifacts retained. Command executed inside private unshare -Urnm namespace; initial fixture preserved under independent-review/initial-prompt*."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-independent-focused",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "independent-process-verification",
+      "command": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node /home/qduc/term2/.worktrees/discord-input-simple/node_modules/vitest/vitest.mjs run --config /home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/vitest.config.mjs --configLoader native --reporter=verbose -t 'independent:|presents direct human|posts only explicit acknowledgement|relays a human-rooted|keeps ordinary agent-origin|attaches to two real|rejects unauthorized/bot|bounds cyclic explicitly|uses real busy-session|requires a root dependency|deduplicates real session admission'",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 84,
+        "files_passed": 2,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/focused-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/focused.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/report.md"
+      ],
+      "notes": "Independent term2/codex gpt-6.1-sol high verifier: ACCEPT scoped; no must-fix/source edits. Private user/network/mount namespace; synthetic HOME and private /tmp. 10existing journeys +2new boundary probes: missing optional ID/quotes/backslash/emoji/user role and direct-human busy steering/provenance. Covers relay/peer, approvals, explicit output/routing, replay/dedup and gates."
+    },
+    {
+      "id": "2026-10-27-discord-input-simplicity-independent-prompt",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "a20ec0cbd667eb994bfdaa69ffeb508d86d7ae0c",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "3f460dc6bf0292980e99bc34382aeac8841e6a1e",
+      "task_ids": ["2026-10-27-discord-input-simplicity"],
+      "suite": "independent-process-verification",
+      "command": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node /home/qduc/term2/.worktrees/discord-input-simple/node_modules/vitest/vitest.mjs run --config /home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/prompt.config.mjs --configLoader native --reporter=verbose -t 'independent: request instructions'",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "New normal .worktrees/discord-input-simple checkout with own frozen offline pnpm install (671 reused, no downloads). Behavioral checks used private user/network namespaces, loopback HTTP and real Unix control socket/session/orchestrator, allowlisted synthetic HOME/XDG and fake provider. Installed entry points avoid package-manager bootstrap. No live Discord/provider calls, credentials, production configuration or retained-runtime changes; no merge/push/deployment."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/prompt-results.json",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/prompt.log",
+        "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/report.md"
+      ],
+      "notes": "Independent term2/codex gpt-6.1-sol high verifier: ACCEPT scoped; no must-fix/source edits. Private user/network/mount namespace; synthetic HOME and private /tmp. Actual AgentClient/session/provider request: fragment exactly once, payload separate, explicit-send/alias/local-final/untrusted guidance present, clearing active reference on detach removes fragment. No real model obedience/live Discord claim."
     }
   ]
 }

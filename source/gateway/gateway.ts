@@ -3297,10 +3297,14 @@ function applyCommandBodyBudget(messages: Record<string, unknown>[]): Record<str
     for (let j = fitted.length - 1; j >= 0; j--) {
       const { output, error } = fitted[j];
       if (output === undefined && error === undefined) continue;
+      // Charge the short error first so a large output cannot use up its budget.
+      const fittedError = error !== undefined ? fitToBudget(error, PROJECTION_COMMAND_ERROR_MAX, budget) : undefined;
+      const fittedOutput =
+        output !== undefined ? fitToBudget(output, PROJECTION_COMMAND_OUTPUT_MAX, budget) : undefined;
       fitted[j] = {
         ...fitted[j],
-        ...(output !== undefined ? { output: fitToBudget(output, PROJECTION_COMMAND_OUTPUT_MAX, budget) } : {}),
-        ...(error !== undefined ? { error: fitToBudget(error, PROJECTION_COMMAND_ERROR_MAX, budget) } : {}),
+        ...(fittedOutput !== undefined ? { output: fittedOutput } : {}),
+        ...(fittedError !== undefined ? { error: fittedError } : {}),
       };
     }
     messages[i] = { ...messages[i], commands: fitted };

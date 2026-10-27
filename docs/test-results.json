@@ -13962,6 +13962,346 @@
         "/home/qduc/coord/term2/tasks/next-release/evidence/release-warning-verification.md"
       ],
       "notes": "Dirty documentation/ledger snapshot after clean source commit37892570. Website27 pages/all internal links pass. Consumer artifact inspection substantiates publication caveat. Independent warning verifier accepted source inspection only; activation does not prove future real-use behavior. Historical310 run values preserved, no unrelated primary records merged. These checks precede adding this self-referential ledger entry; formatting/diff checks rerun afterward. No deployment."
+    },
+    {
+      "id": "2026-10-27-release-identity-check-red",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "653bae7af5eff44734d2b470e1273728f233c0f3",
+      "task_ids": ["2026-10-27-release-identity-check"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "isolation": "release-identity-check worktree with own dependencies; no live provider/registry writes"
+      },
+      "suite": "publication-identity-baseline",
+      "command": "pnpm test:integration scripts/release-identity.integration.test.ts",
+      "command_complete": true,
+      "result": {
+        "passed": 0,
+        "failed": 16,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "signature": "All 13 invalid-identity dry-run publication cases exited0; missing guard success marker also failed the3 valid cases",
+          "classification": "expected-red; baseline publication identity boundary was unchecked"
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/release-identity-check/evidence/red.log"],
+      "notes": "Test-only dirty snapshot on653bae7a before adding prepublishOnly. Real Git/build-info writer and workflow publish command; no registry requests. This is baseline proof, not an escaped defect or a failed final guard."
+    },
+    {
+      "id": "2026-10-27-release-identity-check-all-tiers",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T08:14:08.875918+00:00",
+      "commit": null,
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "653bae7af5eff44734d2b470e1273728f233c0f3",
+      "task_ids": ["2026-10-27-release-identity-check"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "isolation": "release-identity-check worktree with own dependencies; no live provider/registry writes"
+      },
+      "suite": "release-guard-all-tiers",
+      "command": "pnpm build; pnpm typecheck; pnpm lint; pnpm test; pnpm check:no-unit-tests; pnpm test:integration; pnpm test:e2e; pnpm test:provider-black-box",
+      "command_complete": true,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/reference-approval.blackbox.ts",
+          "test": "bare reference approval preserves user context and enforces authorized advice",
+          "signature": "ENOENT dist/providers/oauth-pkce.js",
+          "classification": "verification orchestration interference, not classified as pre-existing",
+          "cause": "Separately launched postcommit pnpm build replaced dist while provider black-box processes were reading it; build-output.mjs renames/removes dist before compilation. See retained timing/retro."
+        }
+      ],
+      "source_commit": "ef33c5275c4be6affcfe4f9b91fcb7dfb52c3086",
+      "source_sha256": {
+        "package.json": "d28a0220f91492950c68612bd5955d395a2553212686a1a245407de785c2e1eb",
+        ".github/workflows/publish.yml": "208b2a5cec97040b3fc3622f2d8e07e3e1473bc7caa3f391605eb5d4db5c15ce",
+        "scripts/check-release-identity.mjs": "0e432ba96b777217caddb65e3b2a8eccf813e824b29efff2e7f9d60ffc45f9e5",
+        "scripts/release-identity.integration.test.ts": "0721a0dbbff29e2a5f0e9a25bf5db928269ab29b397fa12bcb59ae9a549fa956",
+        ".agents/skills/release/SKILL.md": "ba99ff94775f49d5ab3d02e805368ce32c016c44f2dc8646c3fd9b2a922cd03c"
+      },
+      "checks": [
+        {
+          "name": "build",
+          "command": "pnpm build",
+          "exit": 0,
+          "seconds": 3.68,
+          "run_at": "2026-10-27T08:14:08.875918+00:00",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/build.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0,
+          "seconds": 3.23,
+          "run_at": "2026-10-27T08:14:12.553693+00:00",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/typecheck.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "lint",
+          "command": "pnpm lint",
+          "exit": 0,
+          "seconds": 38.56,
+          "run_at": "2026-10-27T08:14:15.782441+00:00",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/lint.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "static",
+          "command": "pnpm test",
+          "exit": 0,
+          "seconds": 3.02,
+          "run_at": "2026-10-27T08:14:54.338675+00:00",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/static.log",
+          "result": {
+            "passed": 28,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 7,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        },
+        {
+          "name": "no-unit",
+          "command": "pnpm check:no-unit-tests",
+          "exit": 0,
+          "seconds": 0.87,
+          "run_at": "2026-10-27T08:14:57.363960+00:00",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/no-unit.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "integration",
+          "command": "pnpm test:integration",
+          "exit": 0,
+          "seconds": 91.1,
+          "run_at": "2026-10-27T08:14:58.230614+00:00",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/integration.log",
+          "result": {
+            "passed": 367,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 31,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm test:e2e",
+          "exit": 0,
+          "seconds": 27.44,
+          "run_at": "2026-10-27T08:16:29.334241+00:00",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/e2e.log",
+          "result": {
+            "passed": 39,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 8,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        },
+        {
+          "name": "provider-black-box",
+          "command": "pnpm test:provider-black-box",
+          "exit": 1,
+          "seconds": 76.93,
+          "run_at": "2026-10-27T08:16:56.770142+00:00",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/provider-black-box.log",
+          "result": {
+            "passed": 173,
+            "failed": 1,
+            "skipped": 10,
+            "files_passed": 12,
+            "files_failed": 1,
+            "files_skipped": 0
+          }
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/checks.json",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/retro.md",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/pack-summary.json",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/cli-version.log"
+      ],
+      "notes": "Initial dirty source snapshot on653bae7a; hashes match subsequently committed ef33c527 exactly. Commit occurred during final provider tier; a concurrent postcommit build interfered with dist. Build/typecheck/lint/static/no-unit/integration/e2e passed. Lint0errors/31warnings; integration367pass/1skip; e2e39pass; static28pass. Provider failed1/passed173/skipped10 and bailed early. Do not interpret wrapper exit0 as all checks passing. Pack inspector initially raised KeyError expecting a prepublishOnly field pnpm strips; corrected inspection passed. No metadata override or registry write."
+    },
+    {
+      "id": "2026-10-27-release-identity-check-postcommit",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "ef33c5275c4be6affcfe4f9b91fcb7dfb52c3086",
+      "revision_kind": "clean-commit",
+      "base_commit": null,
+      "task_ids": ["2026-10-27-release-identity-check"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "isolation": "release-identity-check worktree with own dependencies; no live provider/registry writes"
+      },
+      "suite": "publication-identity-postcommit",
+      "command": "pnpm test:integration scripts/release-identity.integration.test.ts; pnpm build; node dist/cli.js --version; pnpm run prepublishOnly",
+      "command_complete": true,
+      "result": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "checks": [
+        {
+          "name": "postcommit-seam",
+          "command": "pnpm test:integration scripts/release-identity.integration.test.ts",
+          "exit": 0,
+          "expected_exit": 0,
+          "seconds": 16.81,
+          "commit": "ef33c5275c4be6affcfe4f9b91fcb7dfb52c3086",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/postcommit-seam.log"
+        },
+        {
+          "name": "postcommit-build",
+          "command": "pnpm build",
+          "exit": 0,
+          "expected_exit": 0,
+          "seconds": 4.3,
+          "commit": "ef33c5275c4be6affcfe4f9b91fcb7dfb52c3086",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/postcommit-build.log"
+        },
+        {
+          "name": "postcommit-version",
+          "command": "node dist/cli.js --version",
+          "exit": 0,
+          "expected_exit": 0,
+          "seconds": 0.67,
+          "commit": "ef33c5275c4be6affcfe4f9b91fcb7dfb52c3086",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/postcommit-version.log"
+        },
+        {
+          "name": "postcommit-refusal",
+          "command": "pnpm run prepublishOnly",
+          "exit": 1,
+          "expected_exit": 1,
+          "seconds": 0.92,
+          "commit": "ef33c5275c4be6affcfe4f9b91fcb7dfb52c3086",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/postcommit-refusal.log"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/postcommit-checks.json",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/postcommit-seam.log",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/postcommit-version.log",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/postcommit-refusal.log"
+      ],
+      "notes": "18 real process cases pass:3 valid tagged acceptances,15 refusals including tag/manual untagged non-dry-run commands; registry is a loopback sink and requests remain zero. Both workflow entry routes inspected/extracted from YAML. Scratch Git tags only, no project refs changed. Actual normal build reports0.39.0-dev+ef33c52; untagged real source correctly refuses prepublishOnly with exit1 (expected, not a test failure). No live publication, Actions or OIDC exercise. This build overlapped the first provider run; see separate resolving serialized rerun."
+    },
+    {
+      "id": "2026-10-27-release-identity-check-provider-serialized",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T08:19:25.513786+00:00",
+      "commit": "ef33c5275c4be6affcfe4f9b91fcb7dfb52c3086",
+      "revision_kind": "clean-commit",
+      "base_commit": null,
+      "task_ids": ["2026-10-27-release-identity-check"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "isolation": "release-identity-check worktree with own dependencies; no live provider/registry writes"
+      },
+      "suite": "provider-black-box-serialized",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 25,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "checks": [
+        {
+          "name": "provider-black-box-serialized",
+          "command": "pnpm test:provider-black-box",
+          "exit": 0,
+          "seconds": 92.61,
+          "run_at": "2026-10-27T08:19:25.513786+00:00",
+          "commit": "ef33c5275c4be6affcfe4f9b91fcb7dfb52c3086",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/provider-black-box-serialized.log",
+          "isolation": "No concurrent build or dist writer; prior postcommit jobs have completed."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/provider-black-box-serialized.log",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/provider-rerun.json",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/retro.md"
+      ],
+      "comparison": {
+        "resolves_run_ids": ["2026-10-27-release-identity-check-all-tiers"],
+        "scope": "Provider verification rerun without concurrent dist writers; preserves prior interference failure, not a product-source fix."
+      },
+      "notes": "All postcommit jobs finished before this standalone provider run. No other build/dist writer launched during the suite. Independent review remains coordinator-owned and pending. No claim to repair already-published npm0.39.0."
     }
   ]
 }

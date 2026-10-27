@@ -15664,6 +15664,436 @@
       ],
       "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/ingress-evidence/discord-ingress-typecheck.log"],
       "notes": "Repaired fixture callback; final-source typecheck passes."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-baseline-build",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "revision_kind": "committed_source",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "build",
+      "command": "PATH=/home/qduc/term2/node_modules/.bin:$PATH pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/build-base.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/baseline-identity.txt"
+      ],
+      "notes": "Exit0; accepted source build, before production edits. Unexpected implicit dependency installation/prepare violated explicit no-install constraint;671 reused/0downloaded. Disclosed and retained, not claimed no installation."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-red",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "revision_kind": "accepted_baseline_build_with_untracked_test_fixture",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "built-cli-e2e",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --config vitest.e2e.config.ts --reporter=verbose source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 8,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-cli.e2e.test.ts",
+          "tests": "Both SIGTERM/SIGINT x get-release/get-timeout/post-ack/post-timeout",
+          "actual": "Early held-request assertion: expected child.exitCode null; received143 for SIGTERM or130 for SIGINT. SIGINT also printed global session token usage."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/red.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/baseline-identity.txt"
+      ],
+      "notes": "Actual accepted-baseline dist/cli.js SHA25662131294878e07cabbcd976bf6b86709af3f561ba9b0a7c48af4884d83635d4e. New test untracked; production edits during test were not compiled until red completed. Later tightened unused output assertion Tokens: -> Token usage:, not the failing assertion/matrix."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-compiler-entrypoint-error",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "revision_kind": "dirty_implementation_and_probe_snapshot",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "build-and-typecheck",
+      "command": "sh .term2/shutdown-evidence/build-local.sh; sh .term2/shutdown-evidence/check-static.sh (first versions)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": ".term2/shutdown-evidence/build-local.sh",
+          "actual": "MODULE_NOT_FOUND: node_modules/typescript/bin/tsc. The typescript alias exposes tsc6; installed .bin/tsc selects typescript-7."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/build-fixed.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/typecheck.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/eslint.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/prettier.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/no-unit.log"
+      ],
+      "notes": "Initial direct build did not reach e2e; initial typecheck failed with same path error. Initial ESLint0errors/31warnings, Prettier and no-unit guard passed. Later compiler-shim build/typecheck pass; no source capability failure inferred."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-green-dirty",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "revision_kind": "dirty_implementation_and_new_e2e_snapshot",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "built-cli-e2e",
+      "command": "sh .term2/shutdown-evidence/build-local.sh && NODE_ENV=test node node_modules/vitest/vitest.mjs run --config vitest.e2e.config.ts --reporter=verbose source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/build-fixed-resolved.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/green-first.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/typecheck-resolved.log"
+      ],
+      "notes": "Eight actual built CLI signal/held-boundary cases passed including same-journal restart and duplicate send replay; typecheck passed via actual installed compiler shim. Pre-commit snapshot; later fixture-only SIGTERM expectation update does not affect this matrix."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-integration-initial",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "revision_kind": "dirty_implementation_before_REST_fixture_exit_expectation_update",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "integration",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts --reporter=minimal",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": 374,
+        "failed": 10,
+        "skipped": 1,
+        "files_passed": 32,
+        "files_failed": 2,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "tests": "Seven redacted request startup failure cases reset/401/403/502/404/bad-429/bad-200",
+          "actual": "expected status0, received143 after real SIGTERM; fixture expectation updated to preserved conventional status143."
+        },
+        {
+          "file": "scripts/release-local.integration.test.ts",
+          "tests": "--publish-local resumes with create tag / existing tag / build failure before publication",
+          "actual": "Expected clean git status, received ?? node_modules/ and ?? pnpm-lock.yaml in isolated fixture repositories after pnpm bootstrap."
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/integration.log"],
+      "notes": "Release fixture copied unchanged package/release/build metadata scripts; loopback registry refuses publication. Not reproduced on base because repeating this fixture repeats forbidden installation; not classified a proven base failure. Three release cases remain unresolved/excluded from final integration; no claim full-tier green. Seven Discord expectations repaired."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-scratch-lint",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "e4497cecf66c7f0447c0f6bfb1afa64d60ff5c53",
+      "revision_kind": "committed_source_with_ignored_probe",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "lint",
+      "command": "node node_modules/eslint/bin/eslint.js .; node node_modules/prettier/bin-prettier.js --check .; node scripts/check-no-unit-tests.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": ".term2/shutdown-evidence/non-discord-signals.mjs",
+          "actual": "ESLint5errors only in ignored temporary probe: undefined setTimeout/process/console, unused res.31warnings in source; no committed-source lint errors. Prettier/no-unit guard passed."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/eslint-clean.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/prettier-clean.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/no-unit-clean.log"
+      ],
+      "notes": "Committed source e4497cec plus ignored executable probe. After probe execution retained inert as .mjs.txt, no new lint exclusion/production workaround."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-integration-final",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "e4497cecf66c7f0447c0f6bfb1afa64d60ff5c53",
+      "revision_kind": "committed_source",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "integration-excluding-release",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts --exclude scripts/release-local.integration.test.ts --reporter=minimal",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": 381,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 33,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/integration-final.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/tested-commit.txt"
+      ],
+      "notes": "Clean committed source. Includes all93 Discord bridge,4 imported-runner cases and CLI/ACP/gateway integration surfaces. Excludes only3 install-prone release cases; repairs7 prior SIGTERM status expectations, does not resolve release failures."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-provider-final",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "e4497cecf66c7f0447c0f6bfb1afa64d60ff5c53",
+      "revision_kind": "committed_source",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --config vitest.provider-black-box.config.ts --maxWorkers=1 --reporter=minimal",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 25,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/provider-final.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/tested-commit.txt"
+      ],
+      "notes": "Clean source; fake-provider checks serialized after integration. Provider recorder security test internally uses pnpm exec with existing dependencies; no additional bootstrap observed."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-e2e-final",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "e4497cecf66c7f0447c0f6bfb1afa64d60ff5c53",
+      "revision_kind": "committed_source",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "built-cli-and-fake-codex-e2e",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --config vitest.e2e.config.ts --reporter=verbose source/services/discord/discord-cli.e2e.test.ts scripts/fake-codex-server.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": 24,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/build-clean.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/e2e-clean.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/built-sha256.txt",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/source-sha256.txt",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/tested-commit.txt"
+      ],
+      "notes": "Clean source rebuilt by direct compiler plus build metadata/prompts/provider preset/chmod/embed-agent-wire steps (build-local.sh.txt). Eight Discord cases,16fake-Codex cases. Actual code143/130 exits with signalnull; owned file/socket removed. GET release cursor10 or timeout empty; acknowledged POST sent, lost-ack POST uncertain BEFORE exit. Exactly1POST per post scenario including restart+same-key replay; no jobs invented. No timer stretching; existing10s request deadline exercised. Repeated opposite signal does not shorten drainage or replace status.",
+      "comparison": {
+        "resolves_run_ids": ["2026-10-27-discord-cli-shutdown-red"]
+      }
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-other-mode-signals",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "e4497cecf66c7f0447c0f6bfb1afa64d60ff5c53",
+      "revision_kind": "committed_source",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "built-cli-non-discord-signal-control",
+      "command": "node .term2/shutdown-evidence/non-discord-signals.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/non-discord-signals.mjs.txt",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/non-discord-signals.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/non-discord-clean.log"
+      ],
+      "notes": "Two real dist/cli.js --list-models --provider fixture --refresh children with held loopback models GET. SIGTERM exits143/no usage; SIGINT exits130/usage printed. No fixture credential in output. Both repeated on clean source. Probe retained as inert .mjs.txt after execution."
+    },
+    {
+      "id": "2026-10-27-discord-cli-shutdown-static-final",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "e4497cecf66c7f0447c0f6bfb1afa64d60ff5c53",
+      "revision_kind": "committed_source_with_later_evidence_only_edits",
+      "base_commit": "78c696065a330e26b72227b01f6f2eea1a89d421",
+      "task_ids": ["2026-10-27-discord-cli-shutdown"],
+      "suite": "static-and-lint",
+      "command": "node_modules/.bin/tsc --noEmit; node node_modules/eslint/bin/eslint.js .; node node_modules/prettier/bin-prettier.js --check .; node scripts/check-no-unit-tests.mjs; NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=minimal",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Isolated worktree; synthetic credentials, private HOME/XDG/TMP roots, loopback HTTP/Unix control fixtures. Actual dist/cli.js children only signaled by owned handles. Final provider suite serialized. Initial pnpm build unexpectedly installed671 packages from local store (zero downloaded), ran prepare; release fixtures also bootstrap scratch repositories. Subsequent entry points direct, release fixture excluded. No live Discord/credentials/paid APIs/push/deploy/activation."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/typecheck-clean.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/eslint-final.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/prettier-final.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/no-unit-final.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/shutdown-evidence/guards-final.log"
+      ],
+      "notes": "Source e4497cec; final documentation-only ledger edits formatted/checked separately. Typecheck passes. Full ESLint0errors/31warnings after temporary probe retained inert; full formatting and tracked no-unit guard pass.7static guard files28checks pass. Direct lint-staged/no-unit guard ran before source commit; HUSKY=0 avoids pnpm hook wrapper. No new permanent unit test/static guard.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-27-discord-cli-shutdown-compiler-entrypoint-error",
+          "2026-10-27-discord-cli-shutdown-scratch-lint"
+        ]
+      }
     }
   ]
 }

@@ -7,9 +7,9 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
-## 0.39.0 release candidate - October 27, 2026
+## 0.39.0 - October 27, 2026
 
-These changes are prepared for the next release; check the package version and changelog before relying on publication.
+Published on npm as `@qduc/term2@0.39.0`. A recovery publish built from untagged `main`, so this package reports `0.39.0-dev+3789257` in `term2 --version` and records a development build identity. Fresh installation and CLI help checks passed; this does not establish live Discord/mobile acceptance.
 
 - Opt existing terminal sessions into the [Discord bridge](/term2/remote/discord/) with runtime attachment, allowlisted input, private token enrollment, and explicit channel sends. Approvals and questions remain local; live Discord/mobile acceptance is still outstanding.
 - Model and subagent-pool pickers share catalog loading and isolate provider discovery failures. First-run provider setup proceeds to model selection.

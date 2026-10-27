@@ -47,4 +47,21 @@ Deciding whether a publish actually happened is easy to get wrong, because a 404
 
 ## Recovery
 
+### Check build identity before a manual publish retry
+
+The publish workflow builds its selected ref. `scripts/write-build-info.mjs` marks a
+build as a release only when the checkout is clean and HEAD has the exact
+`v<package-version>` tag. A corrective commit on untagged `main` still builds a
+`<version>-dev+<hash>` CLI, even when `package.json` has the intended npm version.
+Before dispatching a publish recovery from another ref, inspect that build-identity
+path and verify the artifact's `dist/build-info.json` and CLI `--version`; passing
+tests alone do not establish release identity. Resolve how the tested source and
+release artifact will stay aligned before dispatching. Do not assume the generic
+manual-dispatch retry is sufficient for a corrected, untagged source ref.
+
+Once the registry has accepted a version, its artifact cannot be repaired in place.
+Do not republish, move the tag, or cut another version without the appropriate
+release authority to conceal a build-identity mistake. Record the actual artifact
+identity and any separate follow-up release decision.
+
 The release script is designed for reruns and skips completed steps. After a failure, inspect repository state and script output before retrying; do not manually duplicate commits, tags, or publishes. If npm publish may have succeeded despite a lost response, check whether that version is published before retrying — and read **Judging publish success** first, because a 404 may only mean the version is not yet readable. Preserve unrelated working-tree changes throughout.

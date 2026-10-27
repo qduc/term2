@@ -13522,6 +13522,446 @@
         "/home/qduc/coord/term2/tasks/next-release/evidence/cli-checks.json"
       ],
       "notes": "Pre-commit/dirty documentation and changelog snapshot, package still0.38.0. Runtime source byte-identical to 3e8c80b8 (no unrelated primary registry delta). Documentation wording corrected during tiers; final website build includes corrections, release script will revalidate final changelog. ESLint zero errors/31 warnings. Website27 pages/all internal links pass. CLI help/version checked with isolated credential-free HOME. Independent source-to-docs verification accepted after two narrow corrections; not independent live behavioral acceptance. No live Discord/providers, paid calls or deployment. Fresh exercise evidence supplied separately at /home/qduc/coord/term2/tasks/discord-usability/fresh-next-report.md."
+    },
+    {
+      "id": "2026-10-27-release-039-ci-failed",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T07:47:51.858518+00:00",
+      "commit": "92486adf06fba95c77721d97ef34ccd51e873792",
+      "revision_kind": "clean-commit",
+      "base_commit": null,
+      "task_ids": ["2026-10-27-release-039"],
+      "environment": {
+        "os": "GitHub ubuntu-latest",
+        "node_version": "24 (patch unknown)",
+        "pnpm_version": "11.7.0",
+        "notes": "Remote CI/publish runner; see retained workflow logs."
+      },
+      "suite": "integration-gate",
+      "command": "GitHub Actions 40466926076: pnpm test:integration",
+      "command_complete": true,
+      "result": {
+        "passed": 348,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 29,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "signature": "source/services/discord/discord-bridge.integration.test.ts > posts only explicit acknowledgement and completion through run_code while its final stays local: expected [] to deeply equal two ordered explicit posts",
+          "classification": "fixture synchronization race",
+          "evidence": "Same signature reproduced with temporary 250ms fixture model delay; repaired poll waits for exact output and persisted done state."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-failed.log",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-run.json"
+      ],
+      "notes": "Exact release commit/tag. Only integration counts represented here. Both workflows failed the same asynchronous test synchronization assumption. Tag publish did not reach the Publish package step. Not a lost npm write.",
+      "workflow_url": "https://github.com/qduc/term2/actions/runs/40466926076"
+    },
+    {
+      "id": "2026-10-27-release-039-tag-publish-failed",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T07:47:51.858518+00:00",
+      "commit": "92486adf06fba95c77721d97ef34ccd51e873792",
+      "revision_kind": "clean-commit",
+      "base_commit": null,
+      "task_ids": ["2026-10-27-release-039"],
+      "environment": {
+        "os": "GitHub ubuntu-latest",
+        "node_version": "24 (patch unknown)",
+        "pnpm_version": "11.7.0",
+        "notes": "Remote CI/publish runner; see retained workflow logs."
+      },
+      "suite": "integration-gate",
+      "command": "GitHub Actions 40466935643: pnpm test:integration",
+      "command_complete": true,
+      "result": {
+        "passed": 348,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 29,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        {
+          "signature": "source/services/discord/discord-bridge.integration.test.ts > posts only explicit acknowledgement and completion through run_code while its final stays local: expected [] to deeply equal two ordered explicit posts",
+          "classification": "fixture synchronization race",
+          "evidence": "Same signature reproduced with temporary 250ms fixture model delay; repaired poll waits for exact output and persisted done state."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/next-release/evidence/publish-failed.log",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/publish-run.json"
+      ],
+      "notes": "Exact release commit/tag. Only integration counts represented here. Both workflows failed the same asynchronous test synchronization assumption. Tag publish did not reach the Publish package step. Not a lost npm write.",
+      "workflow_url": "https://github.com/qduc/term2/actions/runs/40466935643"
+    },
+    {
+      "id": "2026-10-27-release-039-ci-sync-probes",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T07:47:51.858518+00:00",
+      "commit": null,
+      "revision_kind": "temporary-dirty-probes",
+      "base_commit": "92486adf06fba95c77721d97ef34ccd51e873792",
+      "task_ids": ["2026-10-27-release-039", "2026-10-27-release-039-ci-sync"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release repair worktree; no product source changes."
+      },
+      "suite": "temporary-fault-injection",
+      "command": "CI=true pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t 'posts only explicit acknowledgement'",
+      "command_complete": true,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "source/services/discord/discord-bridge.integration.test.ts > posts only explicit acknowledgement and completion through run_code while its final stays local: expected [] to deeply equal two ordered explicit posts",
+          "classification": "expected red fault-injection control"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-fix-delayed-red.log",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-fix-delayed-green.log",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-fix-focused-baseline.log",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-fix-verification.md"
+      ],
+      "notes": "Temporary 250ms model latency: original synchronization failed (0 pass/1 fail/87 filtered skips), repaired synchronization passed (1 pass/0 fail/87 filtered skips). Cold undelayed original also passed 1/87 skips, explaining why local preflight missed timing sensitivity. Temporary delay/diagnostics removed. Not clean-commit test evidence.",
+      "comparison": {
+        "red": {
+          "passed": 0,
+          "failed": 1,
+          "skipped": 87
+        },
+        "green": {
+          "passed": 1,
+          "failed": 0,
+          "skipped": 87
+        },
+        "controlled_variable": "fixed cycles vs outcome polling; same injected model latency"
+      }
+    },
+    {
+      "id": "2026-10-27-release-039-ci-sync-local",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T07:47:51.858518+00:00",
+      "commit": null,
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "92486adf06fba95c77721d97ef34ccd51e873792",
+      "task_ids": ["2026-10-27-release-039", "2026-10-27-release-039-ci-sync"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release repair worktree; no product source changes."
+      },
+      "suite": "repair-local-checks",
+      "command": "CI=true pnpm typecheck; CI=true pnpm exec eslint source/services/discord/discord-bridge.integration.test.ts; CI=true pnpm exec prettier --check source/services/discord/discord-bridge.integration.test.ts; CI=true pnpm check:no-unit-tests; CI=true pnpm test:integration",
+      "command_complete": true,
+      "result": {
+        "passed": 349,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 30,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-fix-checks.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-fix-integration.log",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/ci-fix-verification.md"
+      ],
+      "notes": "Pre-commit test-only repair tree later committed unchanged as 37892570. All five commands exit0. Typecheck, scoped ESLint/Prettier, no-unit guard and full integration. Independent lustrous-hibiscus-340 accepted source inspection; its attempted test command was blocked by read-only harness, so no independent passing execution is claimed.",
+      "checks": [
+        {
+          "suite": "ci-fix-typecheck",
+          "command": "CI=true pnpm typecheck",
+          "exit": 0,
+          "seconds": 3.78
+        },
+        {
+          "suite": "ci-fix-lint",
+          "command": "CI=true pnpm exec eslint source/services/discord/discord-bridge.integration.test.ts",
+          "exit": 0,
+          "seconds": 5.59
+        },
+        {
+          "suite": "ci-fix-format",
+          "command": "CI=true pnpm exec prettier --check source/services/discord/discord-bridge.integration.test.ts",
+          "exit": 0,
+          "seconds": 1.52
+        },
+        {
+          "suite": "ci-fix-no-unit",
+          "command": "CI=true pnpm check:no-unit-tests",
+          "exit": 0,
+          "seconds": 0.87
+        },
+        {
+          "suite": "ci-fix-integration",
+          "command": "CI=true pnpm test:integration",
+          "exit": 0,
+          "seconds": 84.38
+        }
+      ],
+      "source_commit_after_check": "3789257012aec1adfef1566236555b945746fe53"
+    },
+    {
+      "id": "2026-10-27-release-039-recovery-ci",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T07:47:51.858518+00:00",
+      "commit": "3789257012aec1adfef1566236555b945746fe53",
+      "revision_kind": "clean-commit",
+      "base_commit": null,
+      "task_ids": ["2026-10-27-release-039"],
+      "environment": {
+        "os": "GitHub ubuntu-latest",
+        "node_version": "24 (patch unknown)",
+        "pnpm_version": "11.7.0",
+        "notes": "Remote CI/publish runner; see retained workflow logs."
+      },
+      "suite": "ci-all-required-jobs",
+      "command": "GitHub Actions 40467905711: pnpm test; pnpm test:integration; pnpm test:e2e; pnpm test:provider-black-box",
+      "command_complete": true,
+      "result": {
+        "passed": 634,
+        "failed": 0,
+        "skipped": 6,
+        "files_passed": 69,
+        "files_failed": 0,
+        "files_skipped": 2
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/next-release/evidence/recovery-ci-run.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/recovery-ci-full.log"
+      ],
+      "notes": "All four jobs SUCCESS at clean commit37892570. Product sources unchanged from v0.39.0; only integration test differs. Hosted e2e35 pass/4skip, not local39 pass. No live Discord or provider credentials exercised.",
+      "checks": [
+        {
+          "suite": "static",
+          "result": {
+            "passed": 28,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 7,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        },
+        {
+          "suite": "integration",
+          "result": {
+            "passed": 349,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 30,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "suite": "e2e",
+          "result": {
+            "passed": 35,
+            "failed": 0,
+            "skipped": 4,
+            "files_passed": 7,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "suite": "provider-black-box",
+          "result": {
+            "passed": 222,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 25,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        }
+      ],
+      "comparison": {
+        "resolves_run_ids": ["2026-10-27-release-039-ci-failed", "2026-10-27-release-039-tag-publish-failed"],
+        "scope": "Corrected main CI gates only; original tag workflow remains failed."
+      },
+      "workflow_url": "https://github.com/qduc/term2/actions/runs/40467905711"
+    },
+    {
+      "id": "2026-10-27-release-039-publication",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T07:47:51.858518+00:00",
+      "commit": "3789257012aec1adfef1566236555b945746fe53",
+      "revision_kind": "clean-commit",
+      "base_commit": null,
+      "task_ids": ["2026-10-27-release-039"],
+      "environment": {
+        "publish": "GitHub ubuntu-latest, Node24, pnpm11.7.0",
+        "consumer": {
+          "os": "Linux 7.0.14-17-pve",
+          "node_version": "24.19.0",
+          "pnpm_version": "11.7.0",
+          "notes": "Isolated release repair worktree; no product source changes."
+        },
+        "isolation": "Fresh temporary npm prefix and HOME/XDG without provider credentials."
+      },
+      "suite": "trusted-publication-and-registry-consumer",
+      "command": "gh workflow run publish.yml --ref main --repo qduc/term2; pnpm view @qduc/term2@0.39.0 version dist.tarball dist.integrity --json; scratch npm install; term2 --version; term2 --help; term2 discord --help",
+      "command_complete": true,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "npm package0.39.0 embeds version0.39.0-dev+3789257, release:false",
+          "classification": "pre-acceptance release execution/build-identity defect",
+          "introducing_task": "2026-10-27-release-039",
+          "cause": "Manual recovery built untagged main; build identity was not checked before dispatch. Immutable artifact not repaired.",
+          "followup": "Separate release decision needed for corrected release identity."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/next-release/evidence/recovery-publish-run.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/recovery-publish-full.log",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/npm-visibility-history.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/npm-visible-metadata.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/published-package-smoke.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/published-build-info.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/recovery-identity-retro.md",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/release-warning-verification.md"
+      ],
+      "notes": "Registry accepted publication at 07:37:04.962Z; Publish package and integration steps SUCCESS, workflow conclusion CANCELLED after agent requested cancellation too late to stop the write. Read surface visible on attempt13. Fresh npm-prefix install and all three credential-free CLI commands exit0. Actual artifact build identity is 0.39.0-dev+3789257/release:false despite npm package version0.39.0. Release identity criterion FAIL; not a fully successful release workflow. No duplicate publish, retag or unapproved second version. This resolves preflight publication-pending with a verified publication plus known defect, not clean release identity.",
+      "workflow_url": "https://github.com/qduc/term2/actions/runs/40467905900",
+      "publication": {
+        "package": "@qduc/term2",
+        "version": "0.39.0",
+        "accepted_at": "2026-10-27T07:37:04.9621864Z",
+        "workflow_conclusion": "cancelled",
+        "publish_step_conclusion": "success",
+        "registry_visible": true,
+        "artifact": {
+          "package": {
+            "name": "@qduc/term2",
+            "version": "0.39.0"
+          },
+          "build_info": {
+            "version": "0.39.0-dev+3789257",
+            "commit": "3789257012aec1adfef1566236555b945746fe53",
+            "release": false,
+            "limitation": null
+          },
+          "checks": [
+            {
+              "command": "term2 --version",
+              "exit": 0,
+              "version_output": "0.39.0-dev+3789257"
+            },
+            {
+              "command": "term2 --help",
+              "exit": 0,
+              "version_output": null
+            },
+            {
+              "command": "term2 discord --help",
+              "exit": 0,
+              "version_output": null
+            }
+          ],
+          "install_exit": 0,
+          "isolation": "Temporary npm prefix; env-i equivalent fresh HOME/XDG and no provider credentials; no live Discord/model call."
+        }
+      },
+      "comparison": {
+        "resolves_run_ids": ["2026-10-27-release-039-preflight"],
+        "scope": "Publication no longer pending; release identity remains failed. Original failed tag workflow not rewritten."
+      }
+    },
+    {
+      "id": "2026-10-27-release-039-final-docs",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T07:49:57.111502+00:00",
+      "commit": null,
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "3789257012aec1adfef1566236555b945746fe53",
+      "task_ids": ["2026-10-27-release-039"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; website manager selects pnpm11.20.0."
+      },
+      "suite": "final-release-documentation",
+      "command": "pnpm --dir website build; pnpm exec prettier --check docs/test-results.json; pnpm exec prettier --ignore-path /dev/null --check .agents/skills/release/SKILL.md website/src/content/docs/getting-started/whats-new.md; git diff --check",
+      "command_complete": true,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "checks": [
+        {
+          "suite": "final-website",
+          "command": "pnpm --dir website build",
+          "exit": 0,
+          "seconds": 4.74,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/final-website.log"
+        },
+        {
+          "suite": "final-ledger-format",
+          "command": "pnpm exec prettier --check docs/test-results.json",
+          "exit": 0,
+          "seconds": 1.27,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/final-ledger-format.log"
+        },
+        {
+          "suite": "final-doc-format",
+          "command": "pnpm exec prettier --ignore-path /dev/null --check .agents/skills/release/SKILL.md website/src/content/docs/getting-started/whats-new.md",
+          "exit": 0,
+          "seconds": 1.12,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/final-doc-format.log"
+        },
+        {
+          "suite": "final-diff",
+          "command": "git diff --check",
+          "exit": 0,
+          "seconds": 0.03,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/final-diff.log"
+        }
+      ],
+      "source_sha256": {
+        ".agents/skills/release/SKILL.md": "81a2582223cc7379a46ff0f6b2f09a01f47914587306ff267d02090983f3f012",
+        "website/src/content/docs/getting-started/whats-new.md": "3bc2f2fa07c80dc5b8043950729cb72c03a8f7badfa48bd334a1cba3fd339252"
+      },
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/next-release/evidence/final-doc-checks.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/final-website.log",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/release-warning-verification.md"
+      ],
+      "notes": "Dirty documentation/ledger snapshot after clean source commit37892570. Website27 pages/all internal links pass. Consumer artifact inspection substantiates publication caveat. Independent warning verifier accepted source inspection only; activation does not prove future real-use behavior. Historical310 run values preserved, no unrelated primary records merged. These checks precede adding this self-referential ledger entry; formatting/diff checks rerun afterward. No deployment."
     }
   ]
 }

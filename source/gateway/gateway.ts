@@ -3244,6 +3244,24 @@ function sanitizePublicInteraction(value: Record<string, unknown>): PendingInter
 }
 
 const PROJECTION_COMMAND_STATUSES = new Set(['completed', 'failed', 'aborted', 'unknown']);
+const PROJECTION_COMMAND_OUTPUT_MAX = 16_384;
+const PROJECTION_COMMAND_ERROR_MAX = 10_000;
+
+// The web client's transcript validator rejects NUL and DEL anywhere in a string,
+// so tool output carrying them would make the whole session unreadable.
+function projectionCommandText(value: unknown, max: number): string | undefined {
+  const bounded = boundedText(value, max).replace(/[\u0000\u007f]/gu, '\uFFFD');
+  return bounded.length > 0 ? bounded : undefined;
+}
+
+function projectionCommandDetails(output: unknown, error: unknown): { output?: string; error?: string } {
+  const projectedOutput = projectionCommandText(output, PROJECTION_COMMAND_OUTPUT_MAX);
+  const projectedError = projectionCommandText(error, PROJECTION_COMMAND_ERROR_MAX);
+  return {
+    ...(projectedOutput ? { output: projectedOutput } : {}),
+    ...(projectedError ? { error: projectedError } : {}),
+  };
+}
 
 function projectTranscriptMessages(
   transcript: SessionProjectionSource['transcript'],
@@ -3263,11 +3281,18 @@ function projectTranscriptMessages(
       callId: boundedText(command.callId, 256),
       toolName: boundedText(command.toolName, 256),
       status: boundedText(command.status, 32) as ProjectionCommand['status'],
+      ...projectionCommandDetails(command.output, command.failureReason),
     });
   }
   for (const [turnId, commands] of journalCommands) {
-    for (const command of commands) {
-      const existing = commandsByTurn.get(turnId)?.find((candidate) => candidate.callId === command.callId);
+    for (const journalCommand of commands) {
+      const existing = commandsByTurn.get(turnId)?.find((candidate) => candidate.callId === journalCommand.callId);
+      // The journal owns status; the result body comes from the journal when it
+      // recorded one, otherwise from the transcript ledger.
+      const command: ProjectionCommand = {
+        ...journalCommand,
+        ...projectionCommandDetails(journalCommand.output ?? existing?.output, journalCommand.error ?? existing?.error),
+      };
       if (existing) {
         const current = commandsByTurn.get(turnId)!;
         commandsByTurn.set(
@@ -3292,6 +3317,8 @@ function projectTranscriptMessages(
       callId?: unknown;
       toolName?: unknown;
       status?: unknown;
+      output?: unknown;
+      failureReason?: unknown;
     };
     const sender = typeof record.sender === 'string' ? record.sender : record.role;
     if (sender === 'user') {
@@ -3310,6 +3337,7 @@ function projectTranscriptMessages(
           callId: boundedText(record.callId, 256),
           toolName: boundedText(record.toolName, 256),
           status: boundedText(record.status, 32) as ProjectionCommand['status'],
+          ...projectionCommandDetails(record.output, record.failureReason),
         });
       }
       continue;

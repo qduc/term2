@@ -168,6 +168,8 @@ function transcriptCommands(value: unknown): Term2Command[] {
         callId: text(item.callId, 256),
         toolName: text(item.toolName, 256),
         status: status as Term2Command['status'],
+        ...(typeof item.output === 'string' && item.output.length > 0 ? { output: text(item.output) } : {}),
+        ...(typeof item.error === 'string' && item.error.length > 0 ? { error: text(item.error, 10_000) } : {}),
       },
     ];
   });

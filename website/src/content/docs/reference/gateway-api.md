@@ -389,7 +389,10 @@ fresh `details.session` projection. Other journal/generation failures return
 `503 gateway_unavailable` with the same reload hint. Reload the session projection,
 then reconnect from that projection's `projectionSequence`. This cursor is the
 projection-covered boundary and avoids replaying events already represented by the
-reloaded projection. Omitting `after` means start live from the current high-water
+reloaded projection. While a turn is still streaming, the transcript holds only its
+user message (the reply is written when the turn settles), so `projectionSequence`
+stops just before that turn's `assistant_started` and replay delivers the turn's text,
+tools, and usage. Omitting `after` means start live from the current high-water
 mark; it does not mean “replay from the retention floor”.
 
 ### Frozen event types and payloads

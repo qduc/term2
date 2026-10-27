@@ -15049,6 +15049,45 @@
         "/home/qduc/coord/term2/tasks/pr-37/evidence/fix-final-state.json"
       ],
       "notes": "Only production change: terminate abandoned optional Gateway transports instead of graceful close. No heartbeat threshold, reconnect/backoff, REST cursor, jobs/outbox, approval, credential or provider policy changes. Quiet acknowledged peer survives multiple heartbeats. Lint:0errors/31warnings. Integration:1skipped; provider:1skipped (openai-websocket reasoning: no application-owned response traffic persisted). No live Discord/mobile, real credentials or paid APIs; no push/publication/deployment. Source tests and exact reviewer probe use loopback network/process boundaries. Original task row and all prior evidence preserved; this records rework round1, not a duplicate delivery or independent acceptance. Later evidence-only commit is not a rerun of behavioral tiers."
+    },
+    {
+      "recorded_on": "2026-10-27",
+      "task_ids": ["2026-10-27-web-client-chat-ui"],
+      "environment": {
+        "os": "Linux 6.18 (cloud container)",
+        "node": null,
+        "pnpm": "10.28.0"
+      },
+      "id": "2026-10-27-web-client-chat-ui-tsc-and-browser",
+      "commit": "3c2f4c2c3aaf9ebe8ad09f85277b19654c9495fb",
+      "tree": "73d86c75de47232d5c3c6da13d99eb4db47b2e54",
+      "revision_kind": "clean-commit",
+      "suite": "web-client typecheck plus temporary browser render",
+      "command": "cd web-client && npx tsc --noEmit; temporary /preview page rendered with Playwright chromium (light and dark), page removed before commit",
+      "command_complete": true,
+      "checks": [
+        {
+          "name": "web-client-tsc",
+          "command": "npx tsc --noEmit",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0,
+            "skipped": null
+          }
+        },
+        {
+          "name": "temporary-browser-render",
+          "command": "playwright chromium screenshots of markdown, tool group, session list fixtures",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0,
+            "skipped": null
+          },
+          "notes": "No console errors in light or dark. Full session shell, live streaming and approvals were not exercised: no gateway was available."
+        }
+      ]
     }
   ]
 }

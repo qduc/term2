@@ -149,12 +149,20 @@ export function Term2SessionShell({
     void reloadControlPlane();
   }, [reloadControlPlane]);
 
+  // Align the workspace selector to the open session once per session. Re-running
+  // on every selector change would undo the user's own pick of another workspace.
+  const alignedSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const selected = session.sessions.find((item) => item.id === sessionId);
-    if (selected && session.selectedWorkspaceId !== selected.workspaceId) {
-      setSelectedWorkspaceId(selected.workspaceId);
+    if (!sessionId) {
+      alignedSessionIdRef.current = null;
+      return;
     }
-  }, [session.sessions, session.selectedWorkspaceId, setSelectedWorkspaceId, sessionId]);
+    if (alignedSessionIdRef.current === sessionId) return;
+    const selected = session.sessions.find((item) => item.id === sessionId);
+    if (!selected) return;
+    alignedSessionIdRef.current = sessionId;
+    setSelectedWorkspaceId(selected.workspaceId);
+  }, [session.sessions, setSelectedWorkspaceId, sessionId]);
 
   useEffect(() => {
     if (!localControlEnabled) return;

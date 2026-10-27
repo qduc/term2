@@ -222,11 +222,14 @@ async function fixture(
   let droppedPost = false;
   let holdPost = false;
   let wrongChannel = false;
+  let beforeRead: (() => void | Promise<void>) | undefined;
+  let onWarning: ((warning: string) => void) | undefined;
   const http: Server = createServer(async (request, response) => {
     headers.push(String(request.headers.authorization));
     const url = new URL(request.url!, 'http://localhost');
     if (request.method === 'GET') {
       reads++;
+      await beforeRead?.();
       const after = BigInt(url.searchParams.get('after') ?? '0');
       const limit = Number(url.searchParams.get('limit') ?? 50);
       const rows = messages
@@ -294,7 +297,10 @@ async function fixture(
     new DiscordBridge(config, 'OFFLINE_FIXTURE_TOKEN', {
       runtimeDir: root,
       apiBase: `http://127.0.0.1:${address.port}`,
-      warn: (warning) => warnings.push(warning),
+      warn: (warning) => {
+        warnings.push(warning);
+        onWarning?.(warning);
+      },
     });
   let bridge = makeBridge();
   bridge.open();
@@ -342,12 +348,19 @@ async function fixture(
     posted,
     warnings,
     human,
+    duplicate: (message: object) => messages.push({ ...message }),
     cycle,
     restart,
     journal,
     headers,
     bridge: () => bridge,
     reads: () => reads,
+    beforeRead: (callback: () => void | Promise<void>) => {
+      beforeRead = callback;
+    },
+    onWarning: (callback: (warning: string) => void) => {
+      onWarning = callback;
+    },
     wrongChannel: () => {
       wrongChannel = true;
     },
@@ -361,7 +374,7 @@ async function fixture(
 }
 
 it('refuses inherited object names as absent aliases and keeps the journal reopenable', async () => {
-  const f = await fixture({ attach: [] });
+  const f = await fixture({ attach: ['coord'] });
   await f.cycle();
   const refused = f.human('@constructor inspect status');
   await f.cycle();
@@ -373,7 +386,7 @@ it('refuses inherited object names as absent aliases and keeps the journal reope
 });
 
 it('accepts any supported control-socket name as an alias and reopens its journal', async () => {
-  const f = await fixture({ attach: [] });
+  const f = await fixture({ attach: ['coord'] });
   await f.cycle();
   await f.attach('Worker');
   f.human('@Worker hello');
@@ -596,53 +609,260 @@ it('prints migration instructions from the CLI for an old config or v1 journal w
   expect(broken.stdout + broken.stderr).not.toContain('FAKE_SECRET_MUST_NOT_PRINT');
 }, 40_000);
 
-it('opens without an attached session, refuses unaddressed input and attaches a live session later', async () => {
+it('waits before first ingress without a coordinator and still skips history on fresh initialization', async () => {
   const f = await fixture({ attach: [] });
+  const history = f.human('history before the first successful read');
   await f.cycle();
-  expect(f.journal().jobs).toHaveLength(0);
-  expect(f.warnings.join('\n')).toContain('[bridge] Ready');
-  expect(f.posted).toHaveLength(0);
-  const refused = f.human('no coordinator attached yet');
-  f.human('!bridge status');
-  await f.cycle();
-  expect(
-    f.warnings.some((message) =>
-      message.includes(`Target coord is not attached; message ${refused.id} NOT accepted and not delivered`),
-    ),
-  ).toBe(true);
-  expect(f.warnings.some((message) => message.includes('No sessions attached'))).toBe(true);
-  expect(f.journal().jobs).toHaveLength(0);
-  expect(BigInt(f.journal().cursor) >= BigInt(refused.id)).toBe(true);
-  // Explicit opt-in later makes the session addressable without restarting the bridge.
+  expect(f.reads()).toBe(0);
+  expect(f.journal()).toMatchObject({ cursor: '', jobs: [] });
+  expect(f.warnings.join('\n')).not.toContain('[bridge] Ready');
   await f.attach('coord');
-  f.human('now reach the coordinator');
-  await f.cycle(4);
-  expect(f.received.coord).toHaveLength(1);
+  await f.cycle();
+  expect(f.journal().cursor).toBe(history.id);
+  expect(f.received.coord).toHaveLength(0);
+  f.human('new input after initialization');
+  await expect
+    .poll(async () => {
+      await f.cycle();
+      return f.received.coord.length;
+    })
+    .toBe(1);
+  expect(JSON.stringify(f.received.coord)).not.toContain(history.content);
   expect(f.posted).toHaveLength(0);
-  expect(f.journal().jobs.at(-1)).toMatchObject({ alias: 'coord', state: 'done' });
-  expect(f.journal().jobs.at(-1).binding).toEqual(f.binding('coord'));
 });
 
-it('ignores a live control socket that did not opt in to Discord input', async () => {
-  const f = await fixture({ attach: [] });
+it('retains initialized ingress until the configured coordinator opts back in', async () => {
+  const f = await fixture();
   await f.cycle();
+  const cursor = f.journal().cursor;
+  const reads = f.reads();
+  await f.detach('coord');
   await f.attach('coord', { optIn: false });
-  f.human('not opted in');
+  const waiting = f.human('wait for configured coordinator');
+  f.human('@worker ordered behind default outage');
+  f.human('!bridge pause');
   await f.cycle();
-  expect(f.warnings.some((message) => message.includes('Target coord is not attached'))).toBe(true);
-  expect(f.journal().jobs).toHaveLength(0);
+  expect(f.reads()).toBe(reads);
+  expect(f.journal()).toMatchObject({ cursor, paused: false, jobs: [] });
   expect(f.received.coord).toHaveLength(0);
-  expect(JSON.parse(fs.readFileSync(f.sessions.coord!.socket.advertisementPath, 'utf8')).discordInput).toBeUndefined();
+  expect(f.received.worker).toHaveLength(0);
+  expect(f.warnings.join('\n')).not.toContain('NOT accepted');
   await f.detach('coord');
   await f.attach('coord');
-  f.human('now opted in');
-  await f.cycle(4);
+  await f.cycle();
+  expect(f.journal().paused).toBe(true);
+  expect(f.journal().jobs.map((job: any) => job.alias)).toEqual(['coord', 'worker']);
+  expect(f.journal().jobs[0]).toMatchObject({ id: `discord_${waiting.id}`, binding: f.binding('coord') });
+  f.human('!bridge resume');
+  await expect
+    .poll(async () => {
+      await f.cycle();
+      return [f.received.coord.length, f.received.worker.length];
+    })
+    .toEqual([1, 1]);
+  await f.cycle();
   expect(f.received.coord).toHaveLength(1);
   expect(f.posted).toHaveLength(0);
 });
 
+it.each([false, true])(
+  'retains a fetched page when the coordinator disappears during REST (fresh=%s)',
+  async (fresh) => {
+    const f = await fixture();
+    if (!fresh) await f.cycle();
+    const cursor = f.journal().cursor;
+    const waiting = f.human('survive coordinator loss during read');
+    let detached = false;
+    f.beforeRead(async () => {
+      if (!detached) {
+        detached = true;
+        await f.detach('coord');
+      }
+    });
+    await f.cycle(1);
+    expect(detached).toBe(true);
+    expect(f.journal()).toMatchObject({ cursor, jobs: [] });
+    expect(f.received.coord).toHaveLength(0);
+    const reads = f.reads();
+    await f.cycle();
+    expect(f.reads()).toBe(reads);
+    f.restart();
+    await f.attach('coord');
+    await f.cycle();
+    if (fresh) {
+      expect(f.journal().cursor).toBe(waiting.id);
+      expect(f.received.coord).toHaveLength(0); // Fresh initialization still skips history.
+      f.human('new input after fresh read');
+    }
+    await expect
+      .poll(async () => {
+        await f.cycle();
+        return f.received.coord.length;
+      })
+      .toBe(1);
+    await f.cycle();
+    expect(f.received.coord).toHaveLength(1);
+    expect(f.journal().jobs[0].binding).toEqual(f.binding('coord'));
+  },
+);
+
+it('stops mid-page at coordinator loss without consuming later commands, invalid inputs or targets', async () => {
+  const f = await fixture();
+  await f.cycle();
+  const consumed = f.human('@ invalid route');
+  const waiting = f.human('held default input');
+  f.human('@coord held explicit default');
+  f.human('@missing still refused after recovery');
+  f.human('!bridge pause');
+  f.onWarning((warning) => {
+    if (warning.includes('Unknown target')) fs.unlinkSync(f.sessions.coord!.socket.advertisementPath);
+  });
+  await f.cycle(1);
+  expect(f.journal()).toMatchObject({ cursor: consumed.id, paused: false, jobs: [] });
+  await f.detach('coord');
+  await f.attach('coord');
+  await f.cycle();
+  expect(f.journal().paused).toBe(true);
+  expect(f.journal().jobs.map((job: any) => job.id)).toEqual([
+    `discord_${waiting.id}`,
+    `discord_${BigInt(waiting.id) + 1n}`,
+  ]);
+  expect(f.warnings.join('\n')).toContain('Target missing is not attached');
+  f.human('!bridge resume');
+  await expect
+    .poll(async () => {
+      await f.cycle();
+      return f.received.coord.length;
+    })
+    .toBe(2);
+  await f.cycle();
+  expect(f.received.coord).toHaveLength(2);
+  expect(f.posted).toHaveLength(0);
+});
+
+it('survives SIGKILL while waiting, drains admitted output and consumes ordered backlog once after coordinator recovery', async () => {
+  const f = await fixture();
+  await f.cycle();
+  await f.bridge().listenOutbound();
+  expect(
+    await sendDiscord(f.root, f.binding('coord'), {
+      action: 'send',
+      requestId: 'before_outage',
+      text: 'already authorized output',
+    }),
+  ).toMatchObject({ delivery: 'queued' });
+  const cursor = f.journal().cursor;
+  const reads = f.reads();
+  await f.detach('coord');
+  f.bridge().close();
+  const first = f.human('first default after outage');
+  f.duplicate(first);
+  f.human('unauthorized input', { id: '999' });
+  f.human('bot input', { id: '100', bot: true } as any);
+  f.human('webhook input', { id: '100' }, { webhook_id: 'webhook' });
+  f.human('@ malformed input');
+  f.human('@missing refuse explicit missing target');
+  const last = f.human('second default after outage');
+  const start = async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        '--input-type=module',
+        '-e',
+        `
+      import { DiscordBridge } from './source/services/discord/discord-bridge.ts';
+      const bridge = new DiscordBridge(${JSON.stringify(f.config)}, 'OFFLINE_CHILD_TOKEN', ${JSON.stringify({
+          runtimeDir: f.root,
+          apiBase: f.apiBase,
+        })});
+      bridge.open();
+      process.stdout.write('READY\\n');
+      for await (const chunk of process.stdin) {
+        await bridge.tick();
+        process.stdout.write('TICKED\\n');
+      }
+    `,
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          PATH: process.env.PATH,
+          NODE_ENV: 'test',
+          HOME: f.root,
+          XDG_CONFIG_HOME: path.join(f.root, 'config'),
+          XDG_DATA_HOME: path.join(f.root, 'data'),
+          XDG_STATE_HOME: path.join(f.root, 'state'),
+          XDG_RUNTIME_DIR: f.root,
+        },
+      },
+    );
+    cleanup.push(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    await expect.poll(() => stdout, { timeout: 10_000, message: 'fixture child startup' }).toContain('READY');
+    let ticks = 0;
+    return {
+      child,
+      tick: async () => {
+        child.stdin.write('tick\n');
+        ticks++;
+        await expect
+          .poll(() => (stdout.match(/TICKED/g) ?? []).length, { timeout: 10_000, message: stderr })
+          .toBe(ticks);
+      },
+      kill: async () => {
+        const exited = once(child, 'exit');
+        child.kill('SIGKILL');
+        expect(await exited).toEqual([null, 'SIGKILL']);
+      },
+    };
+  };
+  const before = await start();
+  await before.tick();
+  expect(f.reads()).toBe(reads);
+  expect(f.journal()).toMatchObject({ cursor, jobs: [] });
+  expect(f.posted.map((post) => post.content)).toEqual(['[coord] already authorized output']);
+  await before.kill();
+  const after = await start(); // A new OS process must reclaim the stale owner without resetting the journal.
+  expect(after.child.pid).not.toBe(before.child.pid);
+  await after.tick();
+  expect(f.reads()).toBe(reads);
+  expect(f.journal().cursor).toBe(cursor);
+  await f.attach('coord', { sessionId: 'recovered-coordinator' });
+  await after.tick();
+  await expect
+    .poll(async () => {
+      await after.tick();
+      return f.journal().jobs.every((job: any) => job.state === 'done');
+    })
+    .toBe(true);
+  expect(f.received.coord).toHaveLength(2);
+  expect(BigInt(f.journal().cursor)).toBeGreaterThanOrEqual(BigInt(last.id));
+  expect(f.journal().jobs.map((job: any) => job.id)).toEqual([`discord_${first.id}`, `discord_${last.id}`]);
+  expect(f.journal().jobs.every((job: any) => job.binding.sessionId === 'recovered-coordinator')).toBe(true);
+  expect(JSON.stringify(f.received.coord[0]!.input)).toContain(first.content);
+  expect(JSON.stringify(f.received.coord[0]!.input)).not.toContain(last.content);
+  expect(JSON.stringify(f.received.coord[1]!.input)).toContain(last.content);
+  await after.kill();
+  f.restart();
+  await f.cycle();
+  expect(f.received.coord).toHaveLength(2);
+  expect(f.posted).toHaveLength(1);
+}, 30_000);
+
 it('routes @name to a session that attached after the bridge opened', async () => {
-  const f = await fixture({ attach: [] });
+  const f = await fixture({ attach: ['coord'] });
   await f.cycle();
   f.human('@late too early');
   await f.cycle();
@@ -1521,7 +1741,8 @@ it('requires process opt-in, pins session identity and preserves the ordinary co
   f.human('not allowed');
   await f.cycle();
   expect(f.received.coord).toHaveLength(0);
-  expect(f.warnings.some((message) => message.includes('Target coord is not attached'))).toBe(true);
+  expect(f.reads()).toBe(0);
+  expect(f.journal().cursor).toBe('');
   expect(f.journal().jobs).toHaveLength(0);
   const socket = f.sessions.coord!.socket;
   await expect(
@@ -1711,6 +1932,14 @@ it.each([
     cleanup.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
     const address = server.address() as { port: number };
     fs.mkdirSync(path.join(root, 'runtime'), { mode: 0o700 });
+    const socket = new ControlSocketServer({
+      name: 'coord',
+      runtimeDir: path.join(root, 'runtime'),
+      sessionId: () => 'request-fixture',
+      discordInput: true,
+    });
+    await socket.listen();
+    cleanup.push(() => socket.close());
     const configFile = path.join(root, 'discord.json');
     const config = { channelId: '200', humanUserId: '100', coordinator: 'coord', stateDir: path.join(root, 'state') };
     fs.writeFileSync(configFile, JSON.stringify(config), { mode: 0o600 });

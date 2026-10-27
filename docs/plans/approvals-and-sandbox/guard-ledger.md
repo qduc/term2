@@ -1,5 +1,39 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Discord default ingress availability (2026-10-27)
+
+Harm: a known-absent configured coordinator previously caused successfully read
+human input to be refused and permanently passed by the cursor. Enforcement and
+recovery owner: `DiscordBridge.#ingress` / existing `tick` scheduling. Class:
+admission availability gate. Signal: current uncached live, opted-in control
+advertisements (`#attached`), not a timeout or proof of TUI/provider readiness.
+The configured `coordinator` name is the sole policy input; no new setting,
+threshold, clamping, schema migration, retry or fallback is added.
+
+When absent, skip ingress GET. Recheck before fresh initialization, each new
+message, and the target-binding snapshot; leave the affected cursor and
+unadmitted input on Discord. Commands and explicit targets wait in REST order.
+An explicit missing non-default alias is still refused/consumed once the default
+is present. Already admitted jobs/outbox continue their existing pinned identity,
+reconciliation and uncertain-send policy. Fresh journals still skip history;
+the gate is not a replacement for launcher admission readiness. Advertisement
+loss just after durable admission remains old pinned work, not automatic replay.
+No additional payload logging or per-tick warning/state is introduced; inspect
+existing advertisements, journal cursor and local attachment status during recovery.
+
+Red proof: `pnpm test:integration source/services/discord/discord-bridge.integration.test.ts
+-t 'waits before first|retains initialized|retains a fetched|stops mid-page'`
+failed all five new boundary cases on base `f7294ca656fc55b75f10e5115010f72efe5e962e`
+with test-only changes (unexpected GETs/cursor advance/command consumption).
+The integration matrix covers opted-out default, before-read and during-read
+loss, partial-page disappearance, first-read skip, explicit alias refusal,
+SIGKILL/fresh-process stale-owner recovery, retained queued output, reverse REST
+pages, duplicate IDs and unauthorized/bot/webhook inputs. Existing tests retain
+inbox capacity, error/backoff, pinned-job and ambiguous POST controls. Verification
+results are recorded in `docs/test-results.json`; independent review is separate.
+Rollback boundary: the availability checks and their integration contract; no
+journal format or launcher change to undo.
+
 ## Discord Gateway doorbell adoption (2026-10-27)
 
 Owner: `DiscordGatewayNudge` in `discord-gateway.ts`; recovery owner: the

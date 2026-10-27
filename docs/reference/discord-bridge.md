@@ -186,10 +186,19 @@ that explicitly opts in with `/bridge connect NAME` or the startup flags
 control advertisement is live and carries the `discordInput` opt-in marker. A
 session that does not opt in is never discovered, even if its socket exists.
 An alias is the opted-in session's control socket name: 1–64 ASCII letters,
-digits, `_` or `-` (case-sensitive), the same grammar `/bridge connect` accepts. `coordinator` is only the default alias name for unaddressed human input; it
-does not pin a socket, session ID or process. Unaddressed text is delivered only
-while a live opted-in session with that name is attached; otherwise it is locally
-refused and no job is created. There is no queue for a future process.
+digits, `_` or `-` (case-sensitive), the same grammar `/bridge connect` accepts. `coordinator` is the default alias name for unaddressed human input; it
+does not pin a socket, session ID or process. While that alias has no live opted-in
+advertisement, ingress waits without reading or advancing its cursor. Attachment
+is rechecked when consuming a REST page, including first-read initialization.
+Discord remains the backlog, not a new local queue. This holds later commands and
+explicit targets too, preserving REST order; use local administration during
+recovery. Once attached, unavailable explicit non-default aliases are still
+locally refused and consumed, not held for a future process. A fresh journal still
+skips history on its first successful read; this gate preserves outage backlog
+only after a cursor has been established. Advertisement presence is not proof of
+TUI admission readiness or provider health; startup must establish readiness
+separately. Jobs already admitted remain pinned to their original process, with
+existing reconciliation/uncertainty rules, even if the alias later returns.
 
 `maxHops` is 1–8, default 4. `stateDir` must be absolute, owned by this OS user,
 mode 0700. It is created if absent; its journal and ownership file are mode 0600.
@@ -381,7 +390,8 @@ exactly-once guarantee:
   Each dispatch rechecks that the live opted-in advertisement for its alias still
   matches exactly. A detached or replaced process never receives it; the job is
   retained with a local diagnostic. A replacement session that deliberately reuses an
-  alias receives only new messages addressed to it after it attaches. Reconnecting
+  alias receives only newly admitted messages (including unread outage backlog),
+  never jobs pinned to its predecessor. Reconnecting
   the original process identity is the only automatic continuation. Automated
   cross-process exactly-once recovery is intentionally absent.
 

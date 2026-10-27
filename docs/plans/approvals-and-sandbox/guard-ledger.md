@@ -1,5 +1,34 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Coordinator launcher bridge-stop grace (2026-10-28)
+
+Owner: `stop_bridge` in `deployment/coord-startup/startup.py`; recovery owner:
+existing Discord journal reconciliation plus manual inspection for ambiguity.
+Scope: this inactive deployment candidate's bridge child only. Class: containment
+budget. Harm prevented: an unresponsive child holding launcher shutdown forever;
+8s also prematurely killed a legitimate single 10s REST operation. Signal: elapsed
+wait after SIGTERM (proxy, not proof an effect failed). Effective fixed grace is
+12s, no configuration/override/clamp/migration; unchanged unit outer stop is15s.
+Action remains SIGTERM, finite wait, then SIGKILL/wait; no new retry or fallback.
+A `sending` output after forced death is uncertain on restart, not retried; journal
+and already-admitted bindings stay intact. No provider-continuity behavior changes.
+Inspect child exit, owner/outbound artifacts and journal state; no new payload or
+secret logging. Multi-operation ticks can exceed either deadline, so universal
+graceful drainage is expressly not promised. Rollback is the copied launcher's
+single grace change; preserved original candidate remains 8s and crash-aware.
+
+Red proof: isolated `assembled.py Assembled.test_launcher_grace_allows_post_deadline`
+under `tasks/discord-durability/integration-evidence/` reaches real passive TUI
+admission and real built CLI POST, withholds acknowledgement, then stops launcher.
+Original 8s copy kills before REST deadline: no143 exit, owner retained, output
+`sending` (`grace-red.log`). Final direct checks and independent disposition are
+recorded in the task integration report/test-results ledger, not inferred here.
+The fixed source is copied from the independently accepted startup candidate;
+original artifacts are unmodified. Deployment/installation is not authorized by
+this ledger entry. Threshold tests target the real10s request boundary plus a
+noncooperative child; exact12s scheduling edges are not a hard real-time promise.
+
+
 ## Discord default ingress availability (2026-10-27)
 
 Harm: a known-absent configured coordinator previously caused successfully read

@@ -63,6 +63,7 @@ export default defineConfig({
           items: [
             { label: 'Remote Development (SSH)', link: '/remote/ssh/' },
             { label: 'Web Gateway (term2 serve)', link: '/remote/web-gateway/' },
+            { label: 'Discord Bridge', link: '/remote/discord/' },
           ],
         },
         {

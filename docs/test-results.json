@@ -10908,9 +10908,7 @@
     {
       "id": "2026-10-25-goal-check-boundaries-red-cli-valid",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "pinned_base_runtime_with_candidate_tests",
@@ -10966,18 +10964,13 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-green-cli",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
@@ -11029,18 +11022,13 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-baseline-bare-cli",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "pinned_base_runtime_with_candidate_tests",
@@ -11092,18 +11080,13 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-green-cli-final",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
@@ -11135,9 +11118,7 @@
         "failed": 1,
         "skipped": 43
       },
-      "failures": [
-        " source/cli.integration.test.ts > no-goal Bare workflow stays ordinary (incidental check=true)"
-      ],
+      "failures": [" source/cli.integration.test.ts > no-goal Bare workflow stays ordinary (incidental check=true)"],
       "duration_seconds": 26.67,
       "evidence": "/home/qduc/coord/term2/tasks/goal-check/green-cli-final.log",
       "source_sha256": {
@@ -11154,29 +11135,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-implementation-lifecycle-probe",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "implementation-lifecycle-probe",
       "command": "pnpm exec tsx /home/qduc/coord/term2/tasks/goal-check/implementation-lifecycle-probe.mts",
-      "argv": [
-        "pnpm",
-        "exec",
-        "tsx",
-        "/home/qduc/coord/term2/tasks/goal-check/implementation-lifecycle-probe.mts"
-      ],
+      "argv": ["pnpm", "exec", "tsx", "/home/qduc/coord/term2/tasks/goal-check/implementation-lifecycle-probe.mts"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11209,18 +11180,13 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-completion-verification-integration",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
@@ -11267,27 +11233,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-typecheck",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "typecheck",
       "command": "pnpm typecheck",
-      "argv": [
-        "pnpm",
-        "typecheck"
-      ],
+      "argv": ["pnpm", "typecheck"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11324,27 +11282,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-lint",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "lint",
       "command": "pnpm lint",
-      "argv": [
-        "pnpm",
-        "lint"
-      ],
+      "argv": ["pnpm", "lint"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11377,27 +11327,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-static-guards",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "static-guards",
       "command": "pnpm test",
-      "argv": [
-        "pnpm",
-        "test"
-      ],
+      "argv": ["pnpm", "test"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11430,27 +11372,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-no-unit-tests",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "no-unit-tests",
       "command": "pnpm check:no-unit-tests",
-      "argv": [
-        "pnpm",
-        "check:no-unit-tests"
-      ],
+      "argv": ["pnpm", "check:no-unit-tests"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11483,27 +11417,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-integration",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "integration",
       "command": "pnpm test:integration",
-      "argv": [
-        "pnpm",
-        "test:integration"
-      ],
+      "argv": ["pnpm", "test:integration"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11542,27 +11468,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-provider-black-box",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "provider-black-box",
       "command": "pnpm test:provider-black-box",
-      "argv": [
-        "pnpm",
-        "test:provider-black-box"
-      ],
+      "argv": ["pnpm", "test:provider-black-box"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11597,27 +11515,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-fake-codex-e2e",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "fake-codex-e2e",
       "command": "pnpm test:codex-network",
-      "argv": [
-        "pnpm",
-        "test:codex-network"
-      ],
+      "argv": ["pnpm", "test:codex-network"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11650,18 +11560,13 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-baseline-four-bare-cli",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "pinned_base_runtime_with_candidate_tests",
@@ -11715,27 +11620,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-baseline-provider-build",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "pinned_base_runtime_with_candidate_tests",
       "suite": "baseline-provider-build",
       "command": "pnpm build",
-      "argv": [
-        "pnpm",
-        "build"
-      ],
+      "argv": ["pnpm", "build"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11768,18 +11665,13 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-baseline-turn-decisions",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "pinned_base_runtime_with_candidate_tests",
@@ -11826,27 +11718,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-final-typecheck",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "final-typecheck",
       "command": "pnpm typecheck",
-      "argv": [
-        "pnpm",
-        "typecheck"
-      ],
+      "argv": ["pnpm", "typecheck"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11879,18 +11763,13 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-final-cli",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
@@ -11939,27 +11818,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-final-lint",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "final-lint",
       "command": "pnpm lint",
-      "argv": [
-        "pnpm",
-        "lint"
-      ],
+      "argv": ["pnpm", "lint"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -11992,27 +11863,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-final-integration",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "final-integration",
       "command": "pnpm test:integration",
-      "argv": [
-        "pnpm",
-        "test:integration"
-      ],
+      "argv": ["pnpm", "test:integration"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -12050,27 +11913,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-final-provider-black-box",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "final-provider-black-box",
       "command": "pnpm test:provider-black-box",
-      "argv": [
-        "pnpm",
-        "test:provider-black-box"
-      ],
+      "argv": ["pnpm", "test:provider-black-box"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -12103,27 +11958,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-final-fake-codex-e2e",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "final-fake-codex-e2e",
       "command": "pnpm test:codex-network",
-      "argv": [
-        "pnpm",
-        "test:codex-network"
-      ],
+      "argv": ["pnpm", "test:codex-network"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -12156,27 +12003,19 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
       "id": "2026-10-25-goal-check-boundaries-final-static-guards",
       "recorded_on": "2026-10-25",
-      "task_ids": [
-        "2026-10-25-goal-check-boundaries"
-      ],
+      "task_ids": ["2026-10-25-goal-check-boundaries"],
       "commit": null,
       "base_commit": "49fbb3683538d74869a5807846077a13201c878b",
       "revision_kind": "uncommitted_dirty_candidate",
       "suite": "final-static-guards",
       "command": "pnpm test",
-      "argv": [
-        "pnpm",
-        "test"
-      ],
+      "argv": ["pnpm", "test"],
       "cwd": "/home/qduc/term2/.worktrees/goal-check-boundaries",
       "command_complete": true,
       "environment": {
@@ -12209,10 +12048,7 @@
           "accepted_at": null,
           "accepted_commit": null
         },
-        "unknowns": [
-          "Independent verifier effort/verdict",
-          "Active author effort, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier effort/verdict", "Active author effort, tokens, monetary cost"]
       }
     },
     {
@@ -13024,9 +12860,7 @@
     },
     {
       "id": "2026-10-25-client-scoped-provider-model-lookup-author",
-      "task_ids": [
-        "2026-10-25-client-scoped-provider-model-lookup"
-      ],
+      "task_ids": ["2026-10-25-client-scoped-provider-model-lookup"],
       "commit": "810badcea0188d9ade6cfed85a3eebc081b4ddff",
       "snapshot": "dirty independent candidate; source identity sha256:30daed8ac4bb1d7b3fba31e48094c7dfbebc952ec2cc96285bd82a7793239581; not a clean-commit run",
       "timestamp": "2026-10-25T07:09:53.779416+00:00",
@@ -13046,11 +12880,7 @@
         },
         {
           "name": "typecheck",
-          "argv": [
-            "node",
-            "node_modules/typescript/bin/tsc",
-            "--noEmit"
-          ],
+          "argv": ["node", "node_modules/typescript/bin/tsc", "--noEmit"],
           "exit": 1,
           "seconds": 0.032,
           "containment": "offline"
@@ -13082,22 +12912,14 @@
         },
         {
           "name": "guards",
-          "argv": [
-            "node",
-            "node_modules/vitest/vitest.mjs",
-            "run",
-            "--reporter=verbose"
-          ],
+          "argv": ["node", "node_modules/vitest/vitest.mjs", "run", "--reporter=verbose"],
           "exit": 0,
           "seconds": 2.911,
           "containment": "offline"
         },
         {
           "name": "no-unit-tests",
-          "argv": [
-            "node",
-            "scripts/check-no-unit-tests.mjs"
-          ],
+          "argv": ["node", "scripts/check-no-unit-tests.mjs"],
           "exit": 0,
           "seconds": 0.045,
           "containment": "offline"
@@ -13119,12 +12941,7 @@
         },
         {
           "name": "build-typescript",
-          "argv": [
-            "node",
-            "node_modules/typescript/bin/tsc",
-            "--project",
-            "tsconfig.build.json"
-          ],
+          "argv": ["node", "node_modules/typescript/bin/tsc", "--project", "tsconfig.build.json"],
           "exit": 1,
           "seconds": 0.034,
           "containment": "offline"
@@ -13143,11 +12960,7 @@
         },
         {
           "name": "typecheck",
-          "argv": [
-            "node",
-            "node_modules/typescript-7/bin/tsc",
-            "--noEmit"
-          ],
+          "argv": ["node", "node_modules/typescript-7/bin/tsc", "--noEmit"],
           "exit": 0,
           "seconds": 2.519,
           "containment": "offline"
@@ -13194,32 +13007,21 @@
         },
         {
           "name": "build-typescript",
-          "argv": [
-            "node",
-            "node_modules/typescript-7/bin/tsc",
-            "--project",
-            "tsconfig.build.json"
-          ],
+          "argv": ["node", "node_modules/typescript-7/bin/tsc", "--project", "tsconfig.build.json"],
           "exit": 0,
           "seconds": 2.464,
           "containment": "offline"
         },
         {
           "name": "build-info",
-          "argv": [
-            "node",
-            "scripts/write-build-info.mjs"
-          ],
+          "argv": ["node", "scripts/write-build-info.mjs"],
           "exit": 0,
           "seconds": 0.051,
           "containment": "offline"
         },
         {
           "name": "build-embed",
-          "argv": [
-            "node",
-            "scripts/embed-agent-wire.mjs"
-          ],
+          "argv": ["node", "scripts/embed-agent-wire.mjs"],
           "exit": 0,
           "seconds": 0.038,
           "containment": "offline"
@@ -13360,13 +13162,9 @@
           "author_completed_at": "2026-10-25T07:09:53.779416+00:00",
           "accepted_at": null,
           "accepted_commit": null,
-          "evidence_run_ids": [
-            "2026-10-25-client-scoped-provider-model-lookup-author"
-          ]
+          "evidence_run_ids": ["2026-10-25-client-scoped-provider-model-lookup-author"]
         },
-        "unknowns": [
-          "Independent verifier/rework effort, author active minutes, tokens, monetary cost"
-        ]
+        "unknowns": ["Independent verifier/rework effort, author active minutes, tokens, monetary cost"]
       }
     },
     {
@@ -13375,9 +13173,7 @@
       "commit": null,
       "revision_kind": "dirty-working-tree",
       "base_commit": "810badcea0188d9ade6cfed85a3eebc081b4ddff",
-      "task_ids": [
-        "2026-10-25-authorized-zero-frame-timeout-retry"
-      ],
+      "task_ids": ["2026-10-25-authorized-zero-frame-timeout-retry"],
       "environment": {
         "os": "linux",
         "node_version": "24.19.0",
@@ -13468,9 +13264,7 @@
       "commit": null,
       "revision_kind": "dirty-working-tree",
       "base_commit": "810badcea0188d9ade6cfed85a3eebc081b4ddff",
-      "task_ids": [
-        "2026-10-25-authorized-zero-frame-timeout-retry"
-      ],
+      "task_ids": ["2026-10-25-authorized-zero-frame-timeout-retry"],
       "environment": {
         "os": "linux",
         "node_version": "24.19.0",
@@ -13561,6 +13355,173 @@
         "resolves_run_ids": []
       },
       "notes": "Author verification only; parent independent source and failure/recovery review remains pending. Focused provider subset only: broad suite not run for this candidate; prior registry broad suite strict-guard UnixIPC failure remains parent-owned, not waived. Side effect exactly once, 4 requests in interrupted close->timeout->healthy case; configured0/1/2/5 -> 1/2/3/6 requests. Only measured silence excluded from90s overhead. Original source927 unchanged; 437/441 protected files unchanged, four discord-bridge peer Git paths changed externally; no restoration attempted."
+    },
+    {
+      "id": "2026-10-27-release-039-preflight",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T07:22:36.828134+00:00",
+      "commit": "3e8c80b837e210771f978bbe3aa682fa20709ddf",
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "3e8c80b837e210771f978bbe3aa682fa20709ddf",
+      "task_ids": ["2026-10-27-release-039"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Clean local clone under .worktrees/release-039, independent node_modules. Website dependency manager selected pnpm11.20.0. Primary checkout untouched."
+      },
+      "suite": "release-preflight-all-tiers",
+      "command": "pnpm typecheck; pnpm exec eslint source; pnpm exec prettier --check source package.json CHANGELOG.md; pnpm build; pnpm test; pnpm check:no-unit-tests; pnpm test:integration; pnpm test:e2e; pnpm test:provider-black-box; pnpm --dir website build",
+      "command_complete": true,
+      "result": {
+        "passed": 638,
+        "failed": 0,
+        "skipped": 2,
+        "files_passed": 70,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "checks": [
+        {
+          "suite": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0,
+          "seconds": 4.04,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/typecheck.log",
+          "passed": null,
+          "failed": null,
+          "skipped": null,
+          "files_passed": null,
+          "files_failed": null,
+          "files_skipped": null
+        },
+        {
+          "suite": "eslint",
+          "command": "pnpm exec eslint source",
+          "exit": 0,
+          "seconds": 27.9,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/eslint.log",
+          "passed": null,
+          "failed": null,
+          "skipped": null,
+          "files_passed": null,
+          "files_failed": null,
+          "files_skipped": null
+        },
+        {
+          "suite": "release-format",
+          "command": "pnpm exec prettier --check source package.json CHANGELOG.md",
+          "exit": 0,
+          "seconds": 14.65,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/release-format.log",
+          "passed": null,
+          "failed": null,
+          "skipped": null,
+          "files_passed": null,
+          "files_failed": null,
+          "files_skipped": null
+        },
+        {
+          "suite": "build",
+          "command": "pnpm build",
+          "exit": 0,
+          "seconds": 5.25,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/build.log",
+          "passed": null,
+          "failed": null,
+          "skipped": null,
+          "files_passed": null,
+          "files_failed": null,
+          "files_skipped": null
+        },
+        {
+          "suite": "static",
+          "command": "pnpm test",
+          "exit": 0,
+          "seconds": 3.62,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/static.log",
+          "passed": 28,
+          "failed": 0,
+          "skipped": 0,
+          "files_passed": 7,
+          "files_failed": 0,
+          "files_skipped": 0
+        },
+        {
+          "suite": "no-unit",
+          "command": "pnpm check:no-unit-tests",
+          "exit": 0,
+          "seconds": 1.02,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/no-unit.log",
+          "passed": null,
+          "failed": null,
+          "skipped": null,
+          "files_passed": null,
+          "files_failed": null,
+          "files_skipped": null
+        },
+        {
+          "suite": "integration",
+          "command": "pnpm test:integration",
+          "exit": 0,
+          "seconds": 99.89,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/integration.log",
+          "passed": 349,
+          "failed": 0,
+          "skipped": 1,
+          "files_passed": 30,
+          "files_failed": 0,
+          "files_skipped": 1
+        },
+        {
+          "suite": "e2e",
+          "command": "pnpm test:e2e",
+          "exit": 0,
+          "seconds": 30.22,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/e2e.log",
+          "passed": 39,
+          "failed": 0,
+          "skipped": 0,
+          "files_passed": 8,
+          "files_failed": 0,
+          "files_skipped": 0
+        },
+        {
+          "suite": "provider-black-box",
+          "command": "pnpm test:provider-black-box",
+          "exit": 0,
+          "seconds": 107.13,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/provider-black-box.log",
+          "passed": 222,
+          "failed": 0,
+          "skipped": 1,
+          "files_passed": 25,
+          "files_failed": 0,
+          "files_skipped": 0
+        },
+        {
+          "suite": "website",
+          "command": "pnpm --dir website build",
+          "exit": 0,
+          "seconds": 6.33,
+          "log": "/home/qduc/coord/term2/tasks/next-release/evidence/website.log",
+          "passed": null,
+          "failed": null,
+          "skipped": null,
+          "files_passed": null,
+          "files_failed": null,
+          "files_skipped": null
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/next-release/evidence/local-checks.json",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/preparation.diff",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/discord-page-snapshot.md",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/docs-verification.md",
+        "/home/qduc/coord/term2/tasks/next-release/evidence/cli-checks.json"
+      ],
+      "notes": "Pre-commit/dirty documentation and changelog snapshot, package still0.38.0. Runtime source byte-identical to 3e8c80b8 (no unrelated primary registry delta). Documentation wording corrected during tiers; final website build includes corrections, release script will revalidate final changelog. ESLint zero errors/31 warnings. Website27 pages/all internal links pass. CLI help/version checked with isolated credential-free HOME. Independent source-to-docs verification accepted after two narrow corrections; not independent live behavioral acceptance. No live Discord/providers, paid calls or deployment. Fresh exercise evidence supplied separately at /home/qduc/coord/term2/tasks/discord-usability/fresh-next-report.md."
     }
   ]
 }

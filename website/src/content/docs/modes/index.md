@@ -10,9 +10,9 @@ term2 provides built-in profiles for different stages of development and system 
 | Profile | Activation | Purpose | Observable Capabilities & Restrictions |
 | :--- | :--- | :--- | :--- |
 | **Standard** | Default (`term2`), `/profile standard` | Primary engineering mode for everyday development. | Full codebase context, file reading and editing, shell execution, subagents. |
-| **Bare** | `--profile bare`, `/profile bare` | Minimal system prompt baseline while retaining essential quality safeguards and completion verification. | Codebase tools with foreground shell execution, the skills catalog (`activate_skill`), and environment context; minimal prompt overhead, no extended persona instructions. |
+| **Bare** | `--profile bare`, `/profile bare` | Minimal system prompt baseline while retaining essential quality safeguards and completion verification. | Shell-led codebase work, `read_file` for images, project instructions, the skills catalog, and environment context; selected web, memory, session, MCP, and background-task capabilities are available through `run_code`. |
 | **Plan** | `/plan`, `Shift+Tab`, `/profile plan` | Architecture design, research, and code review. | Read-only operation: file modifications, file creations, and mutating shell commands are prevented. |
-| **Lite** | `term2 --lite`, `/lite`, `/profile lite` | Quick terminal operations, DevOps, and administration without codebase ingestion overhead. | Minimal prompt with session context only; codebase indexing, subagents, and mentor tools are disabled. |
+| **Lite** | `term2 --lite`, `/lite`, `/profile lite` | Compatibility alias for Bare. | Uses the same profile and capabilities as Bare. |
 | **Pair** | `/profile pair` | Work step by step with the user leading. | Standard tools with instructions to agree on the next step before acting. |
 | **Mentor** | `/mentor`, `/profile mentor` | Collaborative second-opinion consulting. Pairs primary model with an advisory strategic model. | Full codebase context, all standard development tools plus the `ask_mentor` advisory tool. |
 | **Orchestrator** | `/orchestrator`, `/profile orchestrator` | High-level task coordination and multi-agent delegation. | All implementation work is delegated to specialized subagents. |
@@ -25,7 +25,7 @@ term2 provides built-in profiles for different stages of development and system 
   Run `/profile` followed by the profile name (`standard`, `bare`, `plan`, `lite`, `pair`, `mentor`, `orchestrator`) or run bare `/profile` to open the interactive selection menu.
 - **Dedicated Slash Commands**:
   - `/plan`: Toggle Plan mode on or off.
-  - `/lite`: Toggle Lite mode on or off (switching mid-session requires confirmation or `/clear` to reset context).
+  - `/lite`: Toggle Bare mode on or off (the Lite name is retained for compatibility).
   - `/mentor`: Toggle Mentor mode on or off.
   - `/orchestrator`: Toggle Orchestrator mode on or off.
 

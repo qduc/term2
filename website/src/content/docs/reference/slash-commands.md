@@ -9,6 +9,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
+| **`/bridge`** | `[status\|connect [name]\|disconnect]` | Inspect or change local Discord session attachment. Connectivity to Discord is not verified by attachment status. |
 | **`/model`** | `[model-name]` | Change the active model (shortcut: `Ctrl+O`). |
 | **`/effort`** | `[level]` | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`) (shortcut: `Ctrl+T`). |
 | **`/plan`** | — | Toggle read-only Plan mode (shortcut: `Shift+Tab`). |

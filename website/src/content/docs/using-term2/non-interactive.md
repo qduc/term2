@@ -59,7 +59,7 @@ term2 --show-reasoning "Solve this mathematical recurrence relation"
 
 ### Minimal-Prompt Execution (`--lite`)
 
-`--lite` (or `-l`) is a compatibility alias for `--profile bare`. Bare uses a minimal prompt and reads project instructions on demand; it retains codebase tools and exposes selected capabilities through `run_code`. Tools still require `--auto-approve` in non-interactive mode:
+`--lite` (or `-l`) is a compatibility alias for `--profile bare`. Bare uses a minimal prompt with project instructions included; it retains codebase tools and exposes selected capabilities through `run_code`. Tools still require `--auto-approve` in non-interactive mode:
 
 ```bash
 term2 --lite "Explain the difference between disk usage and apparent file size"

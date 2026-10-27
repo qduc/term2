@@ -7,6 +7,24 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 0.39.0 release candidate - October 27, 2026
+
+These changes are prepared for the next release; check the package version and changelog before relying on publication.
+
+- Opt existing terminal sessions into the [Discord bridge](/term2/remote/discord/) with runtime attachment, allowlisted input, private token enrollment, and explicit channel sends. Approvals and questions remain local; live Discord/mobile acceptance is still outstanding.
+- Model and subagent-pool pickers share catalog loading and isolate provider discovery failures. First-run provider setup proceeds to model selection.
+- Active-task menus keep labels compact and support transferring foreground work to the background. Model-waiting and reasoning phases have distinct labels.
+- Session identity and creation time survive internal context rollover; queued input and repeated tool-call occurrences retain their ownership through recovery.
+- Bare includes project instructions and image reading while retaining its minimal shell-led prompt. Lite remains an alias for Bare.
+
+## 0.38.0 - October 24, 2026
+
+- Continue saved conversations non-interactively with an explicit session ID or `last`, including JSON output and forked continuations.
+- Lite is a compatibility alias for Bare; targeted session reads avoid refreshing the full project search index.
+- Empty paused queues release their pause, and headless commands defer loading the terminal renderer.
+
+See the [0.38.0 changelog](https://github.com/qduc/term2/blob/v0.38.0/CHANGELOG.md) for details.
+
 ## 0.37.0 - October 24, 2026
 
 - Local context compaction prefers a one-shot summary over the live request prefix when the conversation fits the input window, preserving prompt-cache and transport affinity on Codex, Grok, and OpenCode while keeping the serialized chunk reducer as the fallback for larger histories.

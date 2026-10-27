@@ -17,7 +17,7 @@ Usage:
 | `--provider <provider>` | `-p` | String | Configured | Override the configured provider (e.g. `openai`, `openrouter`, `grok`, `codex`). |
 | `--reasoning <effort>` | `-r` | String | Configured | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`). |
 | `--profile <name>` | — | String | Configured | Select `full`, `bare`, `plan`, `pair`, `mentor`, or `orchestrator`; `lite` is an alias for `bare`. |
-| `--lite` | `-l` | Boolean | `false` | Compatibility alias for `--profile bare` (minimal prompt, project instructions read on demand). |
+| `--lite` | `-l` | Boolean | `false` | Compatibility alias for `--profile bare` (minimal prompt with project instructions included). |
 | `--auto-approve` | — | Boolean | `false` | Opt out of implicit Bare selection and enable tools in non-interactive mode. This uses GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell commands remain refused. |
 | `--quiet` | `-q` | Boolean | `false` | Suppress non-error diagnostics on stderr in non-interactive mode. |
 | `--show-reasoning` | — | Boolean | `false` | Stream reasoning/thinking deltas to stderr in non-interactive mode. |
@@ -33,6 +33,7 @@ Usage:
 | `--goal <text>` | — | String | — | Set a durable session outcome (up to 2,000 characters). |
 | `--goal-criteria <text>` | — | String | — | Optional success criteria (up to 2,000 characters); requires `--goal`. |
 | `--profile <name>` | — | String | Configured | Select an operating profile (`full`, `bare`, `lite`, `plan`, `pair`, `mentor`, `orchestrator`). |
+| `--discord-input` | — | Boolean | `false` | Opt the interactive session into Discord input; requires a local control socket. See the [Discord bridge](/term2/remote/discord/). |
 | `--control-socket[=<name>]` | — | Boolean / String | `false` | Enable a local control socket for the interactive TUI. |
 | `--fork` | — | Boolean | `false` | Fork the resumed conversation into a new session branch (requires `--resume`). |
 | `--help` | `-h` | Boolean | `false` | Show help message and exit. |

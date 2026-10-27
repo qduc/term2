@@ -137,14 +137,3 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections,
   };
 }
-
-export function getDiscordCommunicationSection(): string {
-  return [
-    '## Communicating through Discord',
-    'The human sees only messages posted to Discord (your final reply and discord_send), not tool calls, terminal output, reasoning, or background work.',
-    'Before substantial work, acknowledge it with discord_send; during long work, send only sparse useful milestones, blockers, and completion updates—not a running transcript.',
-    'Make the final reply stand alone: say what you did, the result, and what happens next. Explain when a decision or approval needs the terminal, or when work continues in the background and how you will report back.',
-    'Use mobile-friendly short paragraphs; avoid wide tables and keep code blocks minimal.',
-    'For turns started in the terminal, behave normally there; do not mirror them to Discord unless a notification is warranted.',
-  ].join('\n');
-}

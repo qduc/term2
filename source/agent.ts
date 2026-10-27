@@ -64,7 +64,7 @@ import fs from 'fs';
 import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
-import { buildPromptSpec, getDiscordCommunicationSection } from './prompts/prompt-constructor.js';
+import { buildPromptSpec } from './prompts/prompt-constructor.js';
 import { ProfileResolutionError, resolveActiveProfile } from './services/profiles/index.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
@@ -773,7 +773,9 @@ export const getAgentDefinition = (
     deps.getGoal || deps.isDiscordInputEnabled
       ? () =>
           `${instructions}${
-            discordSendEnabled && deps.isDiscordInputEnabled?.() ? `\n\n${getDiscordCommunicationSection()}` : ''
+            discordSendEnabled && deps.isDiscordInputEnabled?.()
+              ? `\n\n${resolvePrompt(path.join(BASE_PROMPT_PATH, 'discord-communication.md'))}`
+              : ''
           }${deps.getGoal ? renderDurableGoalContext(deps.getGoal()) : ''}`
       : undefined;
   return {

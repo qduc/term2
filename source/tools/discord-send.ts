@@ -26,15 +26,14 @@ export function createDiscordSendToolDefinition(
   return {
     name: TOOL_NAME_DISCORD_SEND,
     description:
-      'Send a proactive human-visible notification to the mapped Discord channel, or inspect its delivery status. ' +
+      'Send a human-visible reply or proactive notification to the mapped Discord channel, or inspect its delivery status. ' +
       'Available only in an opted-in interactive root with the discord-send capability; the bridge may be offline. ' +
       'Use action send with a fresh requestId (1–64 ASCII letters/digits/_/-) and nonblank text (max 16,384 UTF-16 units). ' +
       'The bridge derives sender alias and channel; @worker is literal notification text, not peer routing. ' +
       'queued means durable local admission, NOT delivery; sent means all chunks acknowledged; uncertain means an ambiguous Discord POST that will not be retried. ' +
       'unknown means the bridge may have admitted the request before disconnection. Use action status with the SAME requestId to reconcile; ' +
       'never automatically send again with a replacement ID. Identical replay returns status; changed text conflicts. ' +
-      'unavailable means no mutation attempt; missing is not proof of non-delivery; rejected means no new admission. ' +
-      'This explicit notification is separate from any automatic final reply to a Discord-submitted turn. For substantial work on a Discord-submitted request, use it promptly for a concise acknowledgement before starting that work; quick replies do not need one.',
+      'unavailable means no mutation attempt; missing is not proof of non-delivery; rejected means no new admission.',
     parameters: discordSendParameters,
     scriptedReturnSchema: z
       .object({

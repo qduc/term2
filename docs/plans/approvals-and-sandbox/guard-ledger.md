@@ -28,6 +28,15 @@ original artifacts are unmodified. Deployment/installation is not authorized by
 this ledger entry. Threshold tests target the real10s request boundary plus a
 noncooperative child; exact12s scheduling edges are not a hard real-time promise.
 
+Verification disposition: runtime source `2c5291f8a23ba13174c1fc8140a9c40b63b60dd4`
+passes author assembled4/startup27 and independent fresh4/27. Independent scoped
+acceptance: `integration-evidence/independent-review/report.md` in the coordinator
+task. GET/POST deadline settlement exits143 with ownership/socket cleanup; the
+noncooperative control still dies at12s. Full lint/typecheck/format and unit syntax
+checks pass. Broader provider suite is221pass/1fail/1skip (offline pnpm recorder
+subprocess timeout); its direct installed recorder intent probe passes. Candidate
+remains inactive/unmerged; actual manager/cgroup stop and boot are not established.
+
 
 ## Discord default ingress availability (2026-10-27)
 

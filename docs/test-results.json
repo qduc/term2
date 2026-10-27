@@ -16094,6 +16094,539 @@
           "2026-10-27-discord-cli-shutdown-scratch-lint"
         ]
       }
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-build",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "install-build",
+      "command": "pnpm install --frozen-lockfile && pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/install-build.log"],
+      "notes": "Clean accepted combined2fd9 build. Explicit new user authority includes dependency installation. Final pnpm build after source commits is separate below."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-bootstrap",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "revision_kind": "accepted_application_source_with_external_fixtures",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "tool-bootstrap",
+      "command": "unshare -Urn python3 integration-evidence/run-checks.py (initial pnpm entry points)",
+      "command_complete": false,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "pnpm registry signature could not be verified; fetch failed for @pnpm/exe, @pnpm/linux-x64, pnpm11.7.0 in fresh isolated HOME",
+          "classification": "tool bootstrap needs registry under network isolation; application checks not reached; job cancelled"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/bootstrap-attempt-checks-summary.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/bootstrap-attempt-typecheck.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/bootstrap-attempt-static-guards.log"
+      ],
+      "notes": "Partial/cancelled, not a completed test tier. Replaced only package-manager test dispatch with installed tool entry points; namespace remained intact."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-compiler-path",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "revision_kind": "accepted_application_source_with_inactive_deployment_edits",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "tool-entrypoint",
+      "command": "node node_modules/typescript/bin/tsc --noEmit",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "MODULE_NOT_FOUND node_modules/typescript/bin/tsc",
+          "classification": "wrong compiler entry point; corrected installed node_modules/.bin/tsc succeeds"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/typecheck.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/typecheck-corrected.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/typecheck-final.log"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-grace-red",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "revision_kind": "accepted_application_build_original_external_launcher8s",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "assembled-process-red",
+      "command": "unshare -Urn python3 integration-evidence/assembled.py Assembled.test_launcher_grace_allows_post_deadline",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "expected bridge-exit[143], received[]; original launcher8s killed held real POST before REST10s; journal sending/owner retained",
+          "classification": "expected-red inactive supervisor deadline mismatch"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/grace-red.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/grace-red-artifacts/journal.json",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/grace-red-artifacts/owner.json"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-guards",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "static-guards",
+      "command": "NODE_ENV=test node scripts/run-test.mjs --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/static-guards.log"],
+      "notes": "Initial static source clean at2fd9; seven existing repository guards."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-discord",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "revision_kind": "accepted_application_build_with_inactive_deployment_edits_during_run",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "focused-integration",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=verbose --maxWorkers=1 --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-command.integration.test.ts source/services/discord/discord-gateway.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 102,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/discord-integration.log"],
+      "notes": "Application src/scripts/build/dependencies unchanged2fd9 through2c5291f8, and actual dist/cli.js SHAfe10127b5dc5181e70bb7451e8827f4319edd21f86f6bc756cbaa6c07b687243 is identical after final build. Deployment/docs added/committed during these longer runs; not claimed a clean whole-tree run at later HEAD. No full integration/e2e tier claimed."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-built-cli",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "revision_kind": "accepted_application_build_with_inactive_deployment_edits_during_run",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "focused-e2e",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=verbose --maxWorkers=1 --config vitest.e2e.config.ts source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/built-cli.log"],
+      "notes": "Application src/scripts/build/dependencies unchanged2fd9 through2c5291f8, and actual dist/cli.js SHAfe10127b5dc5181e70bb7451e8827f4319edd21f86f6bc756cbaa6c07b687243 is identical after final build. Deployment/docs added/committed during these longer runs; not claimed a clean whole-tree run at later HEAD. No full integration/e2e tier claimed."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-provider",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "revision_kind": "accepted_application_build_with_inactive_deployment_edits_during_run",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=verbose --maxWorkers=1 --config vitest.provider-black-box.config.ts --bail=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 221,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 24,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/provider-record-security.test.ts",
+          "test": "refuses an Anthropic credential for the OpenCode provider",
+          "signature": "expected null to be2 at result.status, spawnSync pnpm exec tsx timeout10000ms",
+          "classification": "exact package-manager subprocess also stalls65s in fresh offline HOME; direct installed tsx recorder probe exits2 with expected missing OpenCode credential; original suite remains failed, not classified as pre-existing source defect"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/provider-black-box.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/pnpm-subprocess-repro.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/recorder-boundary.log"
+      ],
+      "notes": "Application src/scripts/build/dependencies unchanged2fd9 through2c5291f8, and actual dist/cli.js SHAfe10127b5dc5181e70bb7451e8827f4319edd21f86f6bc756cbaa6c07b687243 is identical after final build. Deployment/docs added/committed during these longer runs; not claimed a clean whole-tree run at later HEAD. No full integration/e2e tier claimed. Total25files; one failed. Earlier isolated pnpm bootstrap emitted explicit registry-signature/fetch errors; exact recorder subprocess reproduction65s timed out silently, so deeper pnpm cause unproven. Direct recorder probe passes intent, does not relabel full suite green."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-lint-initial",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "8fd76fa4f63c8785c93ba36def65c662d765a5bf",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "lint",
+      "command": "node node_modules/eslint/bin/eslint.js .",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "copied deployment/coord-startup/lineage.mjs eight no-undef errors: Buffer/process/URL/console",
+          "classification": "new retained.mjs outside existing Node-global lint scope; fixed by explicit built-in imports; no lint relaxation"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/lint-format-guard.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/lint-format-guard-final.log"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-recovery-fixture-initial",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "8fd76fa4f63c8785c93ba36def65c662d765a5bf",
+      "revision_kind": "committed_deployment_with_external_fixture",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "assembled-fixture",
+      "command": "unshare -Urn python3 integration-evidence/assembled.py (initial3cases)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "expected uncertain, received sending after wrapper startup marker; later fixture waits new owner PID+REST rather than existing cursor",
+          "classification": "fixture observation race; no production repair needed"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/assembled-initial.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/recovery-recheck.log"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-final-static",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2c5291f8a23ba13174c1fc8140a9c40b63b60dd4",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "static-and-lint",
+      "command": "node_modules/.bin/tsc --noEmit; node node_modules/eslint/bin/eslint.js .; node node_modules/prettier/bin-prettier.js --check .; node scripts/check-no-unit-tests.mjs; node --check deployment/coord-startup/lineage.mjs; python3 -m py_compile deployment/coord-startup/startup.py; systemd-analyze --user verify deployment/coord-startup/units/herdr.service deployment/coord-startup/units/term2-coord-discord.service",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/typecheck-final.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/lint-format-guard-final.log"
+      ],
+      "notes": "All exit0; ESLint31warnings/0errors. Unit verifier only, no manager/service start. Compiler entry-point and copied selector errors resolved. No permanent unit tests/static guard added."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-final-build",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2c5291f8a23ba13174c1fc8140a9c40b63b60dd4",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/final-build.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/final-provenance.json"
+      ],
+      "notes": "Clean committed2c5291f8 source, metadata0.39.0-dev+2c5291f; final retained checkout/dependencies never cleaned or activated. Build serialized after provider and before final process exercises."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-assembled",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2c5291f8a23ba13174c1fc8140a9c40b63b60dd4",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "assembled-process",
+      "command": "unshare -Urn python3 integration-evidence/assembled.py",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/assembled.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/assembled-results.json",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/assembled-artifacts/test_recovery_cursor_order_uncertain_no_repost/wire.json"
+      ],
+      "notes": "Final exact direct dist entries plus conditional offline preload. GET10.094s/POST10.113s exit143 owner/socket cleanup; ignoring child killed12.035s. Recovery cursor10held then12 ordered, same-binding adoption/new-binding replacement, onePOST total, output and seeded old admitted job uncertain. Final snapshots clear only their own prior evidence dir; older stale copied owner snapshots retained under assembled-artifacts-before-cleanup, not final evidence. Real manager/Gateway/boot not exercised."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-startup",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2c5291f8a23ba13174c1fc8140a9c40b63b60dd4",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "startup-candidate",
+      "command": "unshare -Urn python3 integration-evidence/run-startup.py",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/startup-suite-final.log"],
+      "notes": "Copied accepted external suite against retained2c5291f8 CLI and exact copied runtime helpers. Mixed lineage/runtime/process/unit-file cases, not27realCLI journeys. No original artifacts modified or new permanent repository unit tests."
+    },
+    {
+      "id": "2026-10-27-discord-durability-integration-independent",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": "2c5291f8a23ba13174c1fc8140a9c40b63b60dd4",
+      "revision_kind": "clean_committed_source",
+      "base_commit": "2fd9f67c52cb4a7ade8cde708afede426a7c109d",
+      "task_ids": ["2026-10-27-discord-durability-integration"],
+      "suite": "independent-process-verification",
+      "command": "unshare -Urn python3 .term2/verify/assembled.py; unshare -Urn python3 .term2/verify/run-startup.py (owned verifier worktree)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "python_version": "3.12.3",
+        "herdr_version": "0.9.5",
+        "notes": "Retained normal worktree, own pnpm-installed node_modules. Behavioral checks user/network namespace with only loopback, synthetic allowlisted HOME/XDG/settings/logs/journal/runtime, isolated real Herdr. No live credentials, Discord/provider calls, services, paid API, merge/push. Direct installed test entry points avoid pnpm bootstrap; pnpm install/build ran separately with explicit authority."
+      },
+      "result": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/independent-review/report.md",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/independent-review/independent-assembled.log",
+        "/home/qduc/coord/term2/tasks/discord-durability/integration-evidence/independent-review/independent-startup.log"
+      ],
+      "notes": "Independent verifier stern-newt-781 accepts scoped inactive candidate/composition; fresh4cases53.253s+27cases29.507s.10.047sGET/10.061sPOST exit143cleanup, noncooperative12.034s. No source/probe/build edits. Prior read-only verifier inspected but could not execute; only this fresh writable evidence-only run supplies acceptance. No manager/activation/boot/live or total-tick-drain acceptance."
     }
   ]
 }

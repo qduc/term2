@@ -14302,6 +14302,256 @@
         "scope": "Provider verification rerun without concurrent dist writers; preserves prior interference failure, not a product-source fix."
       },
       "notes": "All postcommit jobs finished before this standalone provider run. No other build/dist writer launched during the suite. Independent review remains coordinator-owned and pending. No claim to repair already-published npm0.39.0."
+    },
+    {
+      "id": "2026-10-27-release-identity-check-local-caller-red",
+      "recorded_on": "2026-10-27",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "ac40c1b588a681911c4dc7dec3ed0593e62cd522",
+      "task_ids": ["2026-10-27-release-identity-check"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "isolation": "Own worktree dependencies; scratch Git/bare origin and loopback-only rejecting registry; serialized build/tests"
+      },
+      "suite": "local-release-caller-baseline",
+      "command": "pnpm test:integration scripts/release-local.integration.test.ts",
+      "command_complete": true,
+      "result": {
+        "passed": 0,
+        "failed": 3,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "signature": "All3 caller tests fail with ENOENT .git/local-build-count: release.sh never invokes the tagged build",
+          "classification": "expected-red supported-caller regression; independent review found release:false rejected through all publish retries",
+          "origin": "ef33c527 added the valid publication assertion without adapting the existing local release caller"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-red.log",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/reviewer-local-resume.log",
+        "/home/qduc/coord/term2/tasks/release-identity-check/review.md"
+      ],
+      "notes": "Test-only snapshot before the5-line release.sh correction. This is a pre-acceptance finding on the existing task, not a new escaped-defect delivery. Actual script, Git, pnpm lifecycle and production build-info writer; no project refs or live registry writes."
+    },
+    {
+      "id": "2026-10-27-release-identity-check-local-caller-fix",
+      "recorded_on": "2026-10-27",
+      "run_at": "2026-10-27T08:37:27.493791+00:00",
+      "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+      "revision_kind": "clean-commit",
+      "base_commit": "ac40c1b588a681911c4dc7dec3ed0593e62cd522",
+      "task_ids": ["2026-10-27-release-identity-check"],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "isolation": "Own worktree dependencies; scratch Git/bare origin and loopback-only rejecting registry; serialized build/tests"
+      },
+      "suite": "local-release-caller-correction",
+      "command": "bash -n scripts/release.sh; pnpm build; pnpm typecheck; pnpm lint; pnpm test; pnpm check:no-unit-tests; pnpm test:integration; pnpm exec prettier --ignore-path /dev/null --check .agents/skills/release/SKILL.md",
+      "command_complete": true,
+      "result": {
+        "passed": 370,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 32,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "checks": [
+        {
+          "name": "shell-syntax",
+          "command": "bash -n scripts/release.sh",
+          "exit": 0,
+          "seconds": 0.0,
+          "run_at": "2026-10-27T08:37:27.493791+00:00",
+          "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-shell-syntax.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "build",
+          "command": "pnpm build",
+          "exit": 0,
+          "seconds": 3.68,
+          "run_at": "2026-10-27T08:37:27.497754+00:00",
+          "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-build.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0,
+          "seconds": 3.08,
+          "run_at": "2026-10-27T08:37:31.175112+00:00",
+          "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-typecheck.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "lint",
+          "command": "pnpm lint",
+          "exit": 0,
+          "seconds": 38.55,
+          "run_at": "2026-10-27T08:37:34.255938+00:00",
+          "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-lint.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "static",
+          "command": "pnpm test",
+          "exit": 0,
+          "seconds": 3.12,
+          "run_at": "2026-10-27T08:38:12.805159+00:00",
+          "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-static.log",
+          "result": {
+            "passed": 28,
+            "failed": 0,
+            "skipped": 0,
+            "files_passed": 7,
+            "files_failed": 0,
+            "files_skipped": 0
+          }
+        },
+        {
+          "name": "no-unit",
+          "command": "pnpm check:no-unit-tests",
+          "exit": 0,
+          "seconds": 0.87,
+          "run_at": "2026-10-27T08:38:15.929619+00:00",
+          "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-no-unit.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        },
+        {
+          "name": "integration",
+          "command": "pnpm test:integration",
+          "exit": 0,
+          "seconds": 92.49,
+          "run_at": "2026-10-27T08:38:16.796456+00:00",
+          "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-integration.log",
+          "result": {
+            "passed": 370,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 32,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "release-guidance-format",
+          "command": "pnpm exec prettier --ignore-path /dev/null --check .agents/skills/release/SKILL.md",
+          "exit": 0,
+          "seconds": 1.07,
+          "run_at": "2026-10-27T08:39:49.287361+00:00",
+          "commit": "aaac286be1b16b2a1d23c1ee4f83352a7f1c225e",
+          "revision_kind": "clean-commit",
+          "log": "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-release-guidance-format.log",
+          "result": {
+            "passed": null,
+            "failed": null,
+            "skipped": null,
+            "files_passed": null,
+            "files_failed": null,
+            "files_skipped": null
+          }
+        }
+      ],
+      "source_sha256": {
+        "scripts/release.sh": "b4fa8c53e07db69517d420b95885fb98bdac9bf7a7d0abdb46897959b536ab3d",
+        "scripts/release-local.integration.test.ts": "f9f01e1bf2f6d6adc1cade436e36d34d739bad6fc9fde3158383cde09b6c2486",
+        ".agents/skills/release/SKILL.md": "c03aebe6bb7565eeb4f6eb9d4ee588afa395f18fee37ee560b8ae4a728a8abed"
+      },
+      "comparison": {
+        "resolves_run_ids": ["2026-10-27-release-identity-check-local-caller-red"],
+        "scope": "Supported local publication continuation, not the unchanged npm0.39.0 artifact. Supersedes the prior report treating a required out-of-band local rebuild as an acceptable limitation."
+      },
+      "review_input": {
+        "artifact": "/home/qduc/coord/term2/tasks/release-identity-check/review.md",
+        "pre_fix_verdict": "One medium supported --publish-local regression; no finding on tag/manual gate",
+        "post_fix_independent_review": "pending with coordinator"
+      },
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-checks.json",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-green.log",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-plan.md",
+        "/home/qduc/coord/term2/tasks/release-identity-check/evidence/local-fix-retro.md"
+      ],
+      "notes": "Production change: caller-owned pnpm run build once after release commit/tag creation/reuse, before retry3loop; gate unchanged. New3process journeys cover create/reuse-tag resumes with stale pre-tag identity, one build across3loopback403PUTs, valid dry-run afterward, and failed build exit23/zero registry requests. Combined focused gate/caller test21passed before commit; full integration rerun on clean source includes all21. Fixture build runs the real writer with a filesystem invocation counter rather than compiling the full app per case; separate normal pnpm build passes. No npm publication, project tag/push/deploy, provider or hosted Actions request. E2E/provider tiers not rerun for this script/test/guidance-only correction; original source-gate evidence remains historical, not claimed for a new run. All checks serialized to avoid prior dist collision. Existing task104th row remains verification-pending; no duplicate delivery or escaped defect added.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "author_completed_at": "2026-10-27T08:40:14.773747+00:00",
+          "accepted_at": null,
+          "accepted_commit": null,
+          "evidence_run_ids": [
+            "2026-10-27-release-identity-check-local-caller-red",
+            "2026-10-27-release-identity-check-local-caller-fix"
+          ]
+        },
+        "rework_round": 1,
+        "unknowns": [
+          "Independent post-fix acceptance and active author/verifier effort, tokens and monetary cost unknown; command wall seconds retained individually"
+        ]
+      }
     }
   ]
 }

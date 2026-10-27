@@ -292,6 +292,9 @@ function chunks(text: string): string[] {
   return result;
 }
 
+/** Safety-net REST read interval while Gateway push is live; nudges trigger reads immediately. */
+const PUSH_FALLBACK_POLL_MS = 30_000;
+
 /**
  * Serial Discord REST adapter attached to existing explicitly opted-in terminal sessions.
  * tick() is single-owner: durable state precedes effects; ambiguous effects are quarantined,
@@ -309,6 +312,9 @@ export class DiscordBridge {
   #retryAt = 0;
   #readFailures = 0;
   #running = false;
+  #pushLive = false;
+  #nudged = false;
+  #nextIngress = 0;
   #owned = false;
   #failed = false;
   #outbound?: DiscordOutboundServer;
@@ -930,27 +936,45 @@ export class DiscordBridge {
     }
   }
 
+  /** Report whether Gateway push is live; while it is, REST reads run on nudges plus a slow safety poll. */
+  setPushLive(live: boolean): void {
+    this.#pushLive = live;
+  }
+
+  /** Request a REST read on the next cycle. Content always comes from the cursor-based read. */
+  nudge(): void {
+    this.#nudged = true;
+  }
+
   /** Perform one bounded poll/admission/result/outbox cycle; call serially after open(). */
   async tick(): Promise<void> {
     if (!this.#owned || this.#failed || this.#running) throw new Error('Discord bridge not open or already ticking');
     if (Date.now() < this.#retryAt) return;
     this.#running = true;
     try {
-      try {
-        await this.#ingress();
-        this.#readFailures = 0;
-      } catch (error) {
-        this.#readFailures++;
-        this.#retryAt = Math.max(
-          this.#retryAt,
-          Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(6, this.#readFailures)),
-        );
-        this.#warn(
-          `${
-            discordRequestErrorGuidance(error) ?? 'Discord ingress unavailable or rejected'
-          }; cursor retained, bounded backoff active`,
-        );
-      }
+      // With Gateway push live, read only when nudged or on the slow safety poll;
+      // otherwise keep the original read-every-cycle behavior.
+      const ingressDue = !this.#pushLive || this.#nudged || Date.now() >= this.#nextIngress;
+      if (ingressDue)
+        try {
+          this.#nudged = false;
+          this.#nextIngress = Date.now() + PUSH_FALLBACK_POLL_MS;
+          await this.#ingress();
+          this.#readFailures = 0;
+        } catch (error) {
+          // Retry after the backoff instead of waiting for the next nudge or safety poll.
+          this.#nudged = true;
+          this.#readFailures++;
+          this.#retryAt = Math.max(
+            this.#retryAt,
+            Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(6, this.#readFailures)),
+          );
+          this.#warn(
+            `${
+              discordRequestErrorGuidance(error) ?? 'Discord ingress unavailable or rejected'
+            }; cursor retained, bounded backoff active`,
+          );
+        }
       await this.#jobs();
       if (Date.now() >= this.#retryAt) await this.#outputs();
       // Keep pending/uncertain evidence; trim only settled records behind the persisted cursor.

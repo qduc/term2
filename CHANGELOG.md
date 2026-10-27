@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Improvements
+- The Discord bridge now uses a Gateway connection as a wake-up signal, so new messages are read immediately instead of on the next one-second poll; REST reads drop to a 30-second safety poll while push is connected. Content still comes only from the cursor-based REST read. Set `TERM2_DISCORD_GATEWAY=off` to keep polling only.
+
 ## [0.39.0] - 2026-10-27
 
 ### Features

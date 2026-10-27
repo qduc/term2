@@ -26,7 +26,8 @@ approve a tool call or answer a local approval prompt.
 2. **Enable Message Content Intent** for the application where Discord requires it.
    See [Discord's privileged-intent documentation](https://docs.discord.com/developers/events/gateway#privileged-intents)
    for enabling the intent and any approval requirements. Without access, REST
-   message content may be empty. This REST-polling bridge does not open a Gateway.
+   message content may be empty. Message content is always read over REST; the
+   optional Gateway connection is only a wake-up signal (see [Gateway push](#gateway-push)).
 3. **Obtain your channel ID and your own human user ID**, not names. Discord's
    [official ID guide](https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID)
    explains Developer Mode and copying user/channel IDs. UI labels and locations
@@ -335,7 +336,23 @@ There is no ambient agent subscription and no autonomous cross-session broadcast
 
 ## Delivery, reconnect and explicit uncertainty
 
-REST polling is serial: normally one GET and at most one POST per one-second cycle,
+### Gateway push
+
+The standalone bridge also opens a Discord Gateway WebSocket as a doorbell. When the
+configured human posts in the configured channel, the Gateway event wakes the bridge,
+which immediately runs its normal cursor-based REST read; content, routing and
+deduplication never come from the Gateway. While push is connected, REST reads run
+only on those nudges plus a 30-second safety poll. If the Gateway disconnects, the
+bridge resumes the session (re-identifying when required) with jittered backoff and
+reads every one-second cycle until push returns; every (re)connect triggers a catch-up
+read. Authentication or intent rejections disable push for the process and leave REST
+polling in place. Only the non-privileged `GUILD_MESSAGES` intent is requested, the
+endpoint is fixed to `wss://gateway.discord.gg`, and resume URLs outside `discord.gg`
+are ignored. Set `TERM2_DISCORD_GATEWAY=off` on the bridge process to poll only.
+
+### REST cycle
+
+REST access is serial: at most one GET and at most one POST per one-second cycle,
 with bounded ten-second requests. Failures back off exponentially to 60 seconds;
 429 `retry_after` and exhausted-bucket reset hints delay further requests. No tight
 poll/retry loop and no automatic POST retransmission after an ambiguous outcome.

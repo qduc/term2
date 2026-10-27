@@ -559,6 +559,10 @@ Rules, and why they are shaped this way:
   writable only when both are true. A `read` binding therefore remains
   read-only across restart, while a `read_write` binding on an allow-write
   launcher remains write-capable.
+  Admission applies the same rule: the boundary probe's `writable` evidence
+  reports what the grant allows, not what the OS user could do to the folder,
+  so a `read` grant is admitted on a physically writable folder under
+  `--allow-write` and the runtime keeps its tools read-only.
 - **Absent vs corrupt (the legacy-record rule).** A session created before the
   sidecar existed has *no* record: restore falls back to the launcher's
   current snapshot, which is validated like any other, so the fallback can

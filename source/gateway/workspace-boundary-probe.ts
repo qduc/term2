@@ -13,7 +13,10 @@ const defaultFs: WorkspaceBoundaryProbeFs = { realpathSync, statSync, accessSync
 /**
  * Proves a local workspace using the canonical path and the OS user's access
  * checks. The launcher policy is deliberately part of the probe: a writable
- * filesystem is not a writable gateway grant when --allow-write is absent.
+ * filesystem is not a writable gateway grant when --allow-write is absent, and
+ * it is never a writable grant for a `read` grant. `writable` reports what the
+ * grant lets a session do, not what the OS user could do to the folder; the
+ * runtime refuses a `read` session's writes regardless.
  */
 export function createRealWorkspaceBoundaryProbe(options: {
   allowWrite: boolean;
@@ -28,7 +31,7 @@ export function createRealWorkspaceBoundaryProbe(options: {
       const physicallyWritable = canWrite(fs, actual);
       return {
         mountedRoot: actual,
-        writable: options.allowWrite && physicallyWritable,
+        writable: access === 'read_write' && options.allowWrite && physicallyWritable,
         ...(access === 'read_write' && !options.allowWrite ? { policy: 'read_only_launcher' as const } : {}),
       };
     } catch {

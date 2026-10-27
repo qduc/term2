@@ -788,6 +788,11 @@ else
         pnpm publish --access public --no-git-checks
     }
 
+    # Health checks build before the release commit/tag. Rebuild from the clean,
+    # tagged checkout once, including on resume, before any publish retries.
+    echo -e "${BLUE}Building tagged release for local publication...${NC}"
+    pnpm run build
+
     echo -e "${BLUE}Publishing to npm locally (--publish-local)...${NC}"
     if retry 3 2 -- do_publish; then
         if is_published_on_npm "$NEW_VERSION"; then

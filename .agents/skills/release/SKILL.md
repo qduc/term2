@@ -55,7 +55,9 @@ build as a release only when the checkout is clean and HEAD has the exact
 `<version>-dev+<hash>` CLI, even when `package.json` has the intended npm version.
 The package `prepublishOnly` hook rejects publication unless the built metadata matches
 the clean, exact-tag checkout and package version; this applies to both workflow
-routes and local publication. A manual recovery must select properly tagged
+routes and local publication. The local release script rebuilds once after the
+release commit/tag exist, before its publish retries, including on resume.
+A manual recovery must select properly tagged
 release source, not untagged corrective `main`. Do not bypass the hook with
 `--ignore-scripts`. Before dispatching a publish recovery from another ref, inspect
 that build-identity path and verify the artifact's `dist/build-info.json` and CLI `--version`; passing

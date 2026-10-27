@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { InteractionResolveRequest, PendingInteraction, Term2SubagentIdentity } from '../../lib/term2/types';
 
 const VARIANT_CONTEXT: Record<PendingInteraction['variant'], string> = {
@@ -32,6 +32,8 @@ export function Term2InteractionPanel({
   const [answer, setAnswer] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const questionId = useId();
+  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const submit = async (value: string, approvalAnswer?: string) => {
     const snapshot = { interactionId: interaction.interactionId, revision: interaction.revision };
     setBusy(true);
@@ -54,6 +56,21 @@ export function Term2InteractionPanel({
       </section>
     );
   const askUser = interaction.askUser;
+  const question = askUser?.questions[askUser.currentQuestionIndex];
+  const multiSelect = question?.multiSelect === true;
+  const toggleOption = (optionIndex: number) =>
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (!next.delete(optionIndex)) next.add(optionIndex);
+      return next;
+    });
+  // A multi-select answer is a JSON array of the chosen labels, in option order. The gateway validates
+  // it on the `custom` choice, and the TUI sends the same shape.
+  const submitSelection = () => {
+    if (!question || selected.size === 0) return;
+    const labels = question.options.filter((_, optionIndex) => selected.has(optionIndex)).map((option) => option.label);
+    void submit('custom', JSON.stringify(labels));
+  };
   return (
     <section
       aria-labelledby="term2-interaction-heading"
@@ -103,19 +120,52 @@ export function Term2InteractionPanel({
       </div>
       {askUser && (
         <div className="mt-3">
-          <p className="font-medium">{askUser.questions[askUser.currentQuestionIndex]?.question}</p>
+          <p id={questionId} className="font-medium">
+            {question?.question}
+          </p>
+          <div
+            className="mt-2 flex flex-wrap gap-2"
+            role={multiSelect ? 'group' : undefined}
+            aria-labelledby={multiSelect ? questionId : undefined}
+          >
+            {multiSelect
+              ? question?.options.map((option, optionIndex) => (
+                  <label
+                    key={option.label}
+                    className="inline-flex cursor-pointer items-center gap-2 rounded border border-amber-700 px-3 py-1 text-sm has-[:checked]:bg-amber-200"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(optionIndex)}
+                      disabled={disabled || busy}
+                      onChange={() => toggleOption(optionIndex)}
+                    />
+                    {option.label}
+                  </label>
+                ))
+              : question?.options.map((option, optionIndex) => (
+                  <button
+                    type="button"
+                    key={option.label}
+                    className="rounded border border-amber-700 px-3 py-1 text-sm"
+                    disabled={disabled || busy}
+                    onClick={() => void submit(`option:${optionIndex}`)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {askUser.questions[askUser.currentQuestionIndex]?.options.map((option, optionIndex) => (
+            {multiSelect && (
               <button
                 type="button"
-                key={option.label}
-                className="rounded border border-amber-700 px-3 py-1 text-sm"
-                disabled={disabled || busy}
-                onClick={() => void submit(`option:${optionIndex}`)}
+                className="rounded bg-amber-800 px-3 py-1 text-sm text-white disabled:opacity-50"
+                disabled={disabled || busy || selected.size === 0}
+                onClick={submitSelection}
               >
-                {option.label}
+                Submit answer
               </button>
-            ))}
+            )}
             {interaction.choices
               .filter((choice) => choice.id === 'decline' || choice.id === 'cancel')
               .map((choice) => (

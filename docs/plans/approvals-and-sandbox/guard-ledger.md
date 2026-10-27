@@ -6,7 +6,7 @@ Owner: `DiscordGatewayNudge` in `discord-gateway.ts`; recovery owner: the
 standalone runner plus the unchanged REST cursor/journal. This optional transport
 adds an ACK inactivity watchdog: after HELLO, the first heartbeat is jittered
 within the server interval (finite, at least 1000ms); an unacknowledged prior
-heartbeat closes only that socket. Quiet but acknowledged connections survive.
+heartbeat immediately terminates only that socket. Quiet but acknowledged connections survive.
 The WebSocket handshake deadline is 10s; the library payload bound is 4 MiB.
 These are transport containment, not conversation or tool budgets. Disconnects
 leave admitted work and persisted messages intact, restore one-second REST
@@ -30,6 +30,21 @@ catch-up, sleeping wake, fatal-close fallback, opt-out and SIGTERM ownership
 release). Runner wake coverage stretches only the external sleep boundary to
 60s while live, so missing wake wiring fails without a subsecond assertion.
 No existing guard threshold or security boundary is weakened.
+
+Lifecycle correction: a peer that cannot read/answer close frames must not keep
+push live, delay reconnect, or keep the runner process alive after return.
+`DiscordGatewayNudge` now terminates abandoned sockets rather than requesting a
+graceful close: missing ACK, malformed HELLO, server-requested reconnect,
+invalid-session restart, and final stop. Graceful-close acknowledgement is not a
+recovery dependency for this REST-authoritative doorbell. No heartbeat threshold,
+reconnect backoff, REST policy, setting, or persisted work changes.
+
+Red proof on pre-fix product `c3289dd2`: focused Gateway/runner integration run
+with paused real loopback peers produced 5 failures (zombie, op7, op9, runner
+fallback, process exit). Fixed checks use those same tests. Runner coverage
+separately observes return and child exit, not merely owner-file cleanup.
+See task-linked lifecycle runs in `docs/test-results.json`; post-fix independent
+acceptance remains coordinator-owned.
 
 ## Prefix-preserving local compaction (2026-10-23)
 

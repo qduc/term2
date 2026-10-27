@@ -101,9 +101,10 @@ it('identifies with only the non-privileged intent and nudges only for the confi
   g.dispatch(0, 6, 'MESSAGE_UPDATE', message({}));
   g.dispatch(0, 7, 'MESSAGE_CREATE', message({}));
   await g.until(() => events.nudges === 2);
-  // Heartbeats carry the latest sequence number.
-  await g.until(() => g.connections[0]!.frames.some((entry) => entry.op === 1));
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // A quiet, acknowledged connection survives multiple watchdog observations.
+  await g.until(() => g.connections[0]!.frames.filter((entry) => entry.op === 1).length >= 2);
+  expect(gateway.live).toBe(true);
+  expect(g.connections).toHaveLength(1);
   expect(events.nudges).toBe(2);
 });
 
@@ -116,6 +117,7 @@ it('resumes after a server reconnect request and ignores a foreign resume host',
   await g.until(() => events.nudges === 1);
 
   g.connections[0]!.socket.send(JSON.stringify({ op: 7 }));
+  g.connections[0]!.socket.pause(); // Cannot acknowledge a client close handshake.
   await g.until(() => !!g.frame(1, 6)());
   expect(g.frame(1, 2)()).toBeUndefined();
   expect(g.frame(1, 6)()!.d).toEqual({ token: 'OFFLINE_FIXTURE_TOKEN', session_id: 'session-1', seq: 41 });
@@ -133,6 +135,7 @@ it('re-identifies after a non-resumable invalid session', async () => {
   await g.until(() => !!g.frame(0, 2)());
   g.dispatch(0, 1, 'READY', { session_id: 'session-1', resume_gateway_url: g.url });
   g.connections[0]!.socket.send(JSON.stringify({ op: 9, d: false }));
+  g.connections[0]!.socket.pause();
   await g.until(() => !!g.frame(1, 2)());
   expect(g.frame(1, 6)()).toBeUndefined();
 });
@@ -143,7 +146,9 @@ it('reconnects a zombied connection whose heartbeats are never acknowledged', as
   gateway.start();
   await g.until(() => !!g.frame(0, 2)());
   g.dispatch(0, 5, 'READY', { session_id: 'session-1', resume_gateway_url: g.url });
-  await g.until(() => !!g.frame(1, 6)(), 8000);
+  await g.until(() => events.nudges === 1);
+  g.connections[0]!.socket.pause(); // A real blackhole, not just a peer withholding heartbeat ACKs.
+  await g.until(() => !!g.frame(1, 6)(), 5000);
   expect(g.frame(1, 6)()!.d.seq).toBe(5);
   expect(events.live).toEqual([true, false]);
 }, 10_000);

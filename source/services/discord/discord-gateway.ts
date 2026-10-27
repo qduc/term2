@@ -77,7 +77,7 @@ export class DiscordGatewayNudge {
   stop(): void {
     this.#stopped = true;
     clearTimeout(this.#reconnectTimer);
-    this.#teardown(1000);
+    this.#teardown();
     this.#setLive(false);
   }
 
@@ -143,15 +143,15 @@ export class DiscordGatewayNudge {
         // HELLO: start heartbeating with the first beat jittered, then IDENTIFY or RESUME.
         const interval = Number(payload.d?.heartbeat_interval);
         if (!Number.isFinite(interval) || interval < 1000) {
-          socket.close(4000);
+          socket.terminate();
           return;
         }
         this.#acked = true;
         clearInterval(this.#heartbeat);
         const beat = () => {
           if (!this.#acked) {
-            // Zombied connection: no ACK since the last beat. Reconnect and resume.
-            socket.close(4000);
+            // No ACK since the last beat: destroy the zombie without waiting for its close ACK.
+            socket.terminate();
             return;
           }
           this.#acked = false;
@@ -186,7 +186,7 @@ export class DiscordGatewayNudge {
         return;
       case 7:
         // Server asked us to reconnect; the session stays resumable.
-        socket.close(4000);
+        socket.terminate();
         return;
       case 9:
         // Invalid session: d=true means resumable, otherwise start fresh.
@@ -195,7 +195,7 @@ export class DiscordGatewayNudge {
           this.#resumeUrl = undefined;
           this.#seq = null;
         }
-        socket.close(4000);
+        socket.terminate();
         return;
       case 0:
         this.#dispatch(payload);
@@ -229,23 +229,18 @@ export class DiscordGatewayNudge {
     }
   }
 
-  #teardown(code: number): void {
+  // This doorbell owns no message delivery: abandonment must not wait for a peer close ACK.
+  #teardown(): void {
     clearTimeout(this.#heartbeat);
     clearInterval(this.#heartbeat);
     this.#heartbeat = undefined;
     const socket = this.#socket;
     this.#socket = undefined;
-    if (socket && socket.readyState !== WebSocket.CLOSED) {
-      try {
-        socket.close(code);
-      } catch {
-        socket.terminate();
-      }
-    }
+    if (socket && socket.readyState !== WebSocket.CLOSED) socket.terminate();
   }
 
   #onClose(code: number): void {
-    this.#teardown(1000);
+    this.#teardown();
     this.#setLive(false);
     if (this.#stopped) return;
     if (FATAL_CLOSE.has(code)) {

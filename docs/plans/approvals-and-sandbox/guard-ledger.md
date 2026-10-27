@@ -1,5 +1,36 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Discord Gateway doorbell adoption (2026-10-27)
+
+Owner: `DiscordGatewayNudge` in `discord-gateway.ts`; recovery owner: the
+standalone runner plus the unchanged REST cursor/journal. This optional transport
+adds an ACK inactivity watchdog: after HELLO, the first heartbeat is jittered
+within the server interval (finite, at least 1000ms); an unacknowledged prior
+heartbeat closes only that socket. Quiet but acknowledged connections survive.
+The WebSocket handshake deadline is 10s; the library payload bound is 4 MiB.
+These are transport containment, not conversation or tool budgets. Disconnects
+leave admitted work and persisted messages intact, restore one-second REST
+polling, and reconnect with half-to-full jitter on exponential 1s–60s backoff.
+READY/RESUMED resets backoff and nudges a catch-up REST read. Fatal authentication
+or intent close codes disable push for the process without stopping REST.
+
+`DiscordBridge.tick` gates ingress while push is live to nudges plus a 30s safety
+poll. Failed reads preserve the cursor, retain the nudge, and use the existing
+REST backoff. Content, routing, and dedup remain REST-owned. Production has no
+threshold override or persisted migration; `TERM2_DISCORD_GATEWAY=off` disables
+push and rolls back to polling. URLs are Discord-pinned, with loopback injection
+only for tests. Warnings expose connection availability/fatal codes, never tokens
+or frames. Status: offline paths exercised; live Discord and independent
+acceptance remain pending with coordinator-owned review.
+
+Evidence commands: `pnpm test:integration` (loopback Gateway tests cover ACK,
+zombie reconnect, resume, invalid session, fatal auth, filtering and endpoint
+pinning; bridge tests cover nudge gating; runner process tests cover mid-tick
+catch-up, sleeping wake, fatal-close fallback, opt-out and SIGTERM ownership
+release). Runner wake coverage stretches only the external sleep boundary to
+60s while live, so missing wake wiring fails without a subsecond assertion.
+No existing guard threshold or security boundary is weakened.
+
 ## Prefix-preserving local compaction (2026-10-23)
 
 Class: existing context/admission bound. `LocalContextCompactor.compactAtBoundary`

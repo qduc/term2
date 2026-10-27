@@ -8,6 +8,7 @@ import {
 } from './discord-credentials.js';
 import { setTimeout } from 'node:timers/promises';
 import { DiscordBridge, discordStateErrorCode, parseDiscordBridgeConfig } from './discord-bridge.js';
+import { DiscordGatewayNudge } from './discord-gateway.js';
 
 const reference = 'docs/reference/discord-bridge.md';
 const help = `Discord bridge (candidate) — attach existing opted-in terminal sessions.
@@ -43,9 +44,13 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
   }
   let guidance: string | undefined;
   let bridge: DiscordBridge | undefined;
+  let gateway: DiscordGatewayNudge | undefined;
   let stopping = false;
+  let wake: (() => void) | undefined;
+  let wakePending = false;
   const stop = () => {
     stopping = true;
+    wake?.();
   };
   try {
     const enroll = argv[0] === '--save-token';
@@ -97,9 +102,41 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
     await bridge.listenOutbound();
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
+    // Gateway push is a doorbell for the REST read; set TERM2_DISCORD_GATEWAY=off to poll only.
+    if (process.env.TERM2_DISCORD_GATEWAY !== 'off') {
+      const active = bridge;
+      gateway = new DiscordGatewayNudge({
+        token,
+        channelId: config.channelId,
+        humanUserId: config.humanUserId,
+        onNudge: () => {
+          active.nudge();
+          if (wake) wake();
+          else wakePending = true; // arrived mid-tick: skip the next sleep
+        },
+        onLiveChange: (live) => {
+          active.setPushLive(live);
+          process.stderr.write(`[discord] Gateway push ${live ? 'connected' : 'unavailable; polling every second'}.\n`);
+        },
+        warn: (message) => process.stderr.write(`[discord] ${message}\n`),
+      });
+      gateway.start();
+    }
     while (!stopping) {
       await bridge.tick();
-      if (!stopping) await setTimeout(1000);
+      if (stopping) break;
+      if (wakePending) {
+        wakePending = false;
+        continue;
+      }
+      // Sleep one cycle, but wake immediately when the Gateway reports a new message.
+      const controller = new AbortController();
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+        setTimeout(1000, undefined, { signal: controller.signal }).then(resolve, resolve);
+      });
+      wake = undefined;
+      controller.abort();
     }
   } catch (error) {
     // Fixed guidance only: never echo config values, credentials or arbitrary error text.
@@ -122,6 +159,7 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
+    gateway?.stop();
     bridge?.close();
   }
 }

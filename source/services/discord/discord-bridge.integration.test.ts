@@ -1733,6 +1733,7 @@ it.each([
         HOME: root,
         XDG_RUNTIME_DIR: path.join(root, 'runtime'),
         TERM2_DISCORD_BOT_TOKEN: secret,
+        TERM2_DISCORD_GATEWAY: 'off', // This REST-failure fixture must never open a live Gateway.
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -2483,3 +2484,23 @@ it.each([{ profile: 'builtin:plan' }, { profile: 'builtin:bare', readOnly: true 
     expect(f.posted).toHaveLength(0);
   },
 );
+
+it('with Gateway push live, reads only on a nudge and still delivers through the REST cursor', async () => {
+  const f = await fixture();
+  await f.cycle(1);
+  const ready = f.reads();
+  f.bridge().setPushLive(true);
+  f.human('hello from push');
+  await f.cycle(3);
+  // No nudge yet and the 30s safety poll is not due: no REST read, nothing admitted.
+  expect(f.reads()).toBe(ready);
+  expect(f.journal().jobs).toHaveLength(0);
+  f.bridge().nudge();
+  await f.cycle(6);
+  expect(f.reads()).toBe(ready + 1);
+  expect(JSON.stringify(f.received.coord)).toContain('hello from push');
+  // Push going away restores the original read-every-cycle behavior.
+  f.bridge().setPushLive(false);
+  await f.cycle(2);
+  expect(f.reads()).toBe(ready + 3);
+});

@@ -1978,7 +1978,7 @@ it.each([
       if (output.includes('bounded backoff active')) child.kill('SIGTERM');
     });
     const [status] = await once(child, 'exit');
-    expect(status, output).toBe(0);
+    expect(status, output).toBe(143);
     expect(output).toContain(expected);
     expect(output).toContain('cursor retained, bounded backoff active');
     for (const sensitive of [secret, payload, configFile, config.stateDir]) expect(output).not.toContain(sensitive);

@@ -149,36 +149,6 @@ let effectiveSessionId: string | undefined;
 let effectiveHasConversationContent = false;
 let sessionSummaryPrinted = false;
 
-// Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
-process.on('SIGINT', () => {
-  if (process.stdout.isTTY) {
-    process.stdout.write('\x1b[?1004l');
-  }
-  void Promise.all([
-    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
-    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
-    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
-    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
-  ]).finally(() => {
-    printUsageOnce();
-    process.exit(130);
-  });
-});
-
-process.on('SIGTERM', () => {
-  if (process.stdout.isTTY) {
-    process.stdout.write('\x1b[?1004l');
-  }
-  void Promise.all([
-    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
-    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
-    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
-    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
-  ]).finally(() => {
-    process.exit(143);
-  });
-});
-
 // Best-effort release of lock + close on uncatchable exits (caught process.exit).
 process.on('exit', () => {
   if (process.stdout.isTTY) {
@@ -418,6 +388,39 @@ if (cli.input[0] === 'discord') {
   await runDiscordBridge(controlArgv.slice(1));
   process.exit(process.exitCode ?? 0);
 }
+
+// Standalone Discord dispatch above owns and awaits its signal lifecycle.
+// Register force-exit session handlers only for the remaining CLI modes; a
+// competing listener would skip the bridge's in-flight tick and finally cleanup.
+// Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
+process.on('SIGINT', () => {
+  if (process.stdout.isTTY) {
+    process.stdout.write('\x1b[?1004l');
+  }
+  void Promise.all([
+    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
+    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
+    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
+  ]).finally(() => {
+    printUsageOnce();
+    process.exit(130);
+  });
+});
+
+process.on('SIGTERM', () => {
+  if (process.stdout.isTTY) {
+    process.stdout.write('\x1b[?1004l');
+  }
+  void Promise.all([
+    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
+    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
+    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
+  ]).finally(() => {
+    process.exit(143);
+  });
+});
 
 if (cli.input[0] === 'control') {
   const exitCode = await runControlCommand(controlArgv.slice(1), process.stdout, process.stderr);

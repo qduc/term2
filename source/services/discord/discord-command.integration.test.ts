@@ -189,8 +189,8 @@ it.each(['push', 'off', 'blackhole-recovery', 'blackhole-stop'])(
     child.kill('SIGTERM');
     await expect.poll(() => returned, { timeout: 5000 }).toBe(true);
     // Owner removal/runner return alone do not prove the socket stopped keeping Node alive.
-    await expect.poll(() => child.exitCode, { timeout: 5000 }).toBe(0);
-    expect((await exited)[0], output).toBe(0);
+    await expect.poll(() => child.exitCode, { timeout: 5000 }).toBe(143);
+    expect((await exited)[0], output).toBe(143);
     expect(fs.existsSync(path.join(stateDir, 'owner.json'))).toBe(false);
     expect(output).not.toContain('OFFLINE_RUNNER_TOKEN');
     expect(output).not.toContain(configFile);

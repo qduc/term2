@@ -246,8 +246,15 @@ journal to “fix” an uncertain delivery.
 Only one bridge owns a state directory, and generic mode assumes one bridge per
 runtime directory. `discord_send` from a session requires exactly one live bridge
 advertisement there; with zero it is unavailable, and with two or more it is
-ambiguous and unavailable rather than a guess. Ctrl-C/SIGTERM stops the bridge loop
-after the current bounded operation; it does **not** stop the terminal sessions.
+ambiguous and unavailable rather than a guess. The standalone `term2 discord` CLI
+owns SIGINT/SIGTERM: it lets the current tick settle, stops Gateway push, releases
+journal ownership and removes its outbound advertisement/socket before exiting
+(130 for SIGINT, 143 for SIGTERM). Repeated signals while draining do not force an
+early exit or replace the first signal's status. Existing request deadlines still
+apply; there is no new overall shutdown deadline. It does **not** stop the terminal
+sessions. A POST acknowledged during drainage becomes `sent`; an unacknowledged
+ambiguous POST becomes `uncertain`, not an automatic retry. SIGKILL/crashes cannot
+run this cleanup; preserve the journal for crash-aware recovery instead.
 
 ### Migration from the pinned-session schema
 

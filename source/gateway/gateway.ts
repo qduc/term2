@@ -91,6 +91,9 @@ import { loginToCodex } from '../providers/codex-auth.js';
 import { loginToGrok } from '../providers/grok-auth.js';
 
 const MAX_BUFFERED_SSE_EVENTS = 256;
+// How long the replay phase waits for a client that has stopped reading before
+// it is treated as a slow subscriber and closed.
+const SSE_REPLAY_DRAIN_TIMEOUT_MS = 10_000;
 const NONCRITICAL_RUNTIME_EVENT_TYPES = new Set<ConversationEvent['type']>(['text_delta', 'reasoning_delta']);
 let malformedCommandMessageDrops = 0;
 
@@ -1841,7 +1844,11 @@ export class Term2Gateway {
     const after = parseEventCursor(queryCursor ?? headerCursor);
     if (after.error) return publicError(400, after.error, 'event cursor is invalid');
     const source = await this.#projectionFor(claims.sub, claims.sessionId!);
+    // `activeResponse` is the socket to destroy; `liveWrites` flips on only once
+    // the replay and every event queued behind it have been written, so live
+    // events never overtake the replay.
     let activeResponse: import('node:http').ServerResponse | null = null;
+    let liveWrites = false;
     let closed = false;
     let buffered: import('./persistence/contracts.js').AgentEventEnvelope[] = [];
     let unsubscribe: () => void = () => undefined;
@@ -1861,7 +1868,7 @@ export class Term2Gateway {
     };
     const live = source.subscribeFrom(after.value, (event) => {
       if (closed) return;
-      if (!activeResponse) {
+      if (!liveWrites || !activeResponse) {
         if (buffered.length >= MAX_BUFFERED_SSE_EVENTS) return closeSlowSubscriber();
         buffered.push(event);
         return;
@@ -1894,16 +1901,55 @@ export class Term2Gateway {
       stream: {
         start: async (response: import('node:http').ServerResponse, request: import('node:http').IncomingMessage) => {
           activeResponse = response;
+          // The replay can be much larger than the socket's write buffer (a
+          // reload mid-way through a long turn replays the whole turn), so wait
+          // for drain between writes. A client that stops reading for
+          // SSE_REPLAY_DRAIN_TIMEOUT_MS is still closed as a slow subscriber.
+          // Live events that arrive meanwhile queue in `buffered` (bounded by
+          // MAX_BUFFERED_SSE_EVENTS) and are written after the replay, in order.
+          const writeAwaitingDrain = async (event: import('./persistence/contracts.js').AgentEventEnvelope) => {
+            if (!isPublicEventEnvelope(event)) return closeSlowSubscriber();
+            if (response.write(`id: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`)) return;
+            await new Promise<void>((resolve) => {
+              const finish = () => {
+                clearTimeout(timer);
+                response.off('drain', finish);
+                response.off('close', finish);
+                resolve();
+              };
+              const timer = setTimeout(() => {
+                closeSlowSubscriber();
+                finish();
+              }, SSE_REPLAY_DRAIN_TIMEOUT_MS);
+              response.once('drain', finish);
+              response.once('close', finish);
+            });
+          };
+          request.once('close', () => {
+            closed = true;
+          });
+          response.once('close', () => {
+            closed = true;
+          });
           for (const event of live.replay) {
             if (closed) break;
-            writeEvent(response, event);
+            await writeAwaitingDrain(event);
           }
-          const queued = buffered;
-          buffered = [];
-          for (const event of queued) {
-            if (closed) break;
-            writeEvent(response, event);
+          while (!closed && buffered.length > 0) {
+            const queued = buffered;
+            buffered = [];
+            for (const event of queued) {
+              if (closed) break;
+              await writeAwaitingDrain(event);
+            }
           }
+          if (closed) {
+            unsubscribe();
+            return;
+          }
+          // No await between the last empty check and this flag, so nothing
+          // can be queued after it and left unwritten.
+          liveWrites = true;
           const heartbeat = setInterval(() => {
             if (!response.writableEnded) {
               const accepted = response.write(`${GATEWAY_EVENT_STREAM_HEARTBEAT} ${new Date().toISOString()}\n\n`);

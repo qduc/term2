@@ -1,3 +1,21 @@
+## [0.39.0] - 2026-10-27
+
+### Features
+- Added an opt-in Discord bridge for existing interactive sessions, with allowlisted users and channels, private token enrollment, runtime `/bridge connect` attachment, and explicit `discord_send` replies. Approvals and questions remain local; real-account Discord/mobile validation is still outstanding.
+
+### Improvements
+- Model and subagent-pool pickers share catalog loading and isolate provider discovery failures; first-run provider setup proceeds to model selection.
+- Active-task menus keep task labels compact and allow foreground work to transfer to the background. Model-waiting and reasoning phases now have distinct labels, and rollover and shell notifications are more concise.
+- Bare uses a smaller shell-led prompt with project instructions included and image reading available; Lite remains a compatibility alias for Bare.
+- Removed the extra idle uncached-input confirmation; normal context-fit, budget, and approval controls remain in place.
+
+### Bug Fixes
+- Preserve public session identity and creation time across internal context rollover, and retain queued input ownership when continuing after rollover.
+- Recover repeated tool-call occurrences without collapsing distinct calls that reuse an identifier.
+- Retry typed zero-frame session timeouts and Codex capacity failures within the configured retry budget.
+- Honor injected provider registries when constructing agent clients.
+- Keep explicit durable-goal completion and rejected Discord bridge-result queries on their intended completion and recovery paths.
+
 ## [0.38.0] - 2026-10-24
 
 ### Features

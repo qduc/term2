@@ -3,12 +3,15 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+/** Identifies a non-absolute config path without exposing its value. */
+export class DiscordConfigPathError extends Error {}
+
 /** Resolve the default config without reading it; explicit paths must remain absolute. */
 export function discordConfigPath(explicit?: string): string {
   const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
   const selected = explicit ?? path.join(base, 'term2', 'discord.json');
   if (!path.isAbsolute(selected) || (!explicit && !path.isAbsolute(base))) {
-    throw new Error('Discord config path must be absolute');
+    throw new DiscordConfigPathError('Discord config path must be absolute');
   }
   return selected;
 }

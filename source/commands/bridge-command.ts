@@ -12,7 +12,7 @@ export function createBridgeCommand(input: {
 }): SlashCommand {
   return {
     name: 'bridge',
-    description: 'Connect or disconnect remote Discord bridge input',
+    description: 'Attach or detach this local session for Discord bridge input',
     action: (args = '') => {
       const trimmed = args.trim();
       const [action = 'status', ...rest] = trimmed ? trimmed.split(/\s+/) : [];
@@ -24,41 +24,41 @@ export function createBridgeCommand(input: {
           return true;
         }
         if (server) {
-          input.addSystemMessage(`Bridge already connected (${server.name}); disconnect it before connecting another.`);
+          input.addSystemMessage(`Session already attached (${server.name}); detach it before attaching another.`);
           return true;
         }
         if (!input.connect) {
-          input.addSystemMessage('Runtime bridge connection is unavailable in this session.');
+          input.addSystemMessage('Runtime session attachment is unavailable in this session.');
           return true;
         }
         void input
           .connect(name)
           .then((connected) => {
             input.addSystemMessage(
-              `Bridge connected: ${connected.name}; local control socket available at ${connected.socketPath}. Discord input enabled; Discord connectivity is not verified. Approvals and questions remain terminal-only.`,
+              `Session attached: ${connected.name}; local control socket available at ${connected.socketPath}. Discord input enabled; Discord connectivity is not verified. Approvals and questions remain terminal-only.`,
             );
           })
           .catch((error: unknown) => {
             input.addSystemMessage(
-              `Bridge connection failed: ${error instanceof Error ? error.message : String(error)}`,
+              `Session attachment failed: ${error instanceof Error ? error.message : String(error)}`,
             );
           });
         return true;
       }
       if (action === 'disconnect') {
         if (!server) {
-          input.addSystemMessage('Bridge is already disconnected.');
+          input.addSystemMessage('Session is already detached.');
         } else if (input.isStartup || !input.disconnect) {
           input.addSystemMessage('This startup control socket cannot be disconnected at runtime.');
         } else {
           void input
             .disconnect(server)
             .then(() => {
-              input.addSystemMessage(`Bridge disconnected: ${server.name}.`);
+              input.addSystemMessage(`Session detached: ${server.name}.`);
             })
             .catch((error: unknown) => {
               input.addSystemMessage(
-                `Bridge disconnect failed: ${error instanceof Error ? error.message : String(error)}`,
+                `Session detachment failed: ${error instanceof Error ? error.message : String(error)}`,
               );
             });
         }
@@ -73,10 +73,10 @@ export function createBridgeCommand(input: {
         : 'not created at startup (a runtime connection may still be active)';
       input.addSystemMessage(
         server
-          ? `Bridge connected: ${server.name}; local control socket available at ${server.socketPath}; Discord input ${
+          ? `Session attached: ${server.name}; local control socket available at ${server.socketPath}; Discord input ${
               server.discordInputEnabled ? 'enabled' : 'disabled'
             } (Discord connectivity not verified); session ${input.getSessionId()}; startup socket ${startupSocket}.`
-          : `Bridge disconnected; session ${input.getSessionId()}; startup socket ${startupSocket}. To enable remote input, use /bridge connect [name] if that socket name is available.`,
+          : `Session not attached; session ${input.getSessionId()}; startup socket ${startupSocket}. To enable remote input, use /bridge connect [name] if that socket name is available.`,
       );
       return true;
     },

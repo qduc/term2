@@ -1374,7 +1374,7 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
   });
   command.action('status');
   expect(messages.pop()).toContain(
-    'Bridge disconnected; session runtime-session; startup socket not created at startup',
+    'Session not attached; session runtime-session; startup socket not created at startup',
   );
   command.action('connect invalid/name');
   expect(messages.pop()).toContain('Invalid bridge socket name');
@@ -1390,12 +1390,12 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
   expect(messages.pop()).toContain('Discord connectivity is not verified');
   command.action();
   const bareStatus = messages.pop()!;
-  expect(bareStatus).toContain('Bridge connected: runtime');
+  expect(bareStatus).toContain('Session attached: runtime');
   expect(bareStatus).toContain('Discord connectivity not verified');
   expect(bareStatus).not.toContain('Usage: /bridge');
   command.action('   \t  ');
   const whitespaceStatus = messages.pop()!;
-  expect(whitespaceStatus).toContain('Bridge connected: runtime');
+  expect(whitespaceStatus).toContain('Session attached: runtime');
   expect(whitespaceStatus).not.toContain('Usage: /bridge');
   command.action('status');
   expect(messages.pop()).toContain(
@@ -1409,7 +1409,7 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
   });
   startupDisconnectedCommand.action('status');
   expect(messages.pop()).toContain(
-    'Bridge disconnected; session startup-session; startup socket created at startup. To enable remote input, use /bridge connect [name] if that socket name is available.',
+    'Session not attached; session startup-session; startup socket created at startup. To enable remote input, use /bridge connect [name] if that socket name is available.',
   );
   const startupCommand = createBridgeCommand({
     getServer: () => active,
@@ -1423,15 +1423,15 @@ it('runtime bridge command validates, advertises, refuses duplicates, disconnect
   expect(messages.pop()).toContain('startup control socket cannot be disconnected');
   expect(active).toBeDefined();
   command.action('connect second');
-  expect(messages.pop()).toContain('already connected');
+  expect(messages.pop()).toContain('already attached');
   command.action('disconnect');
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(active).toBeUndefined();
   expect(fs.existsSync(path.join(root, 'term2', 'control', 'runtime.json'))).toBe(false);
-  expect(messages.pop()).toContain('Bridge disconnected: runtime');
+  expect(messages.pop()).toContain('Session detached: runtime');
   command.action('status');
   expect(messages.pop()).toContain(
-    'Bridge disconnected; session runtime-session; startup socket not created at startup (a runtime connection may still be active). To enable remote input, use /bridge connect [name] if that socket name is available.',
+    'Session not attached; session runtime-session; startup socket not created at startup (a runtime connection may still be active). To enable remote input, use /bridge connect [name] if that socket name is available.',
   );
   command.action('connect runtime');
   await new Promise<void>((resolve) => setImmediate(resolve));
@@ -1672,6 +1672,85 @@ it('advances through a paged backlog without waking for history, bot echoes or u
 });
 
 it.each([
+  ['reset', 'before a usable HTTP response'],
+  ['401', 'bot authentication (HTTP 401)'],
+  ['403', 'channel access (HTTP 403)'],
+  ['502', 'server error (HTTP 5xx)'],
+  ['404', 'rejected the channel read'],
+  ['bad-429', 'Discord ingress unavailable or rejected'],
+  ['bad-200', 'Discord ingress unavailable or rejected'],
+])(
+  'reports redacted request startup failure %s across HTTP and child-process boundaries',
+  async (scenario, expected) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'discord-request-'));
+    cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
+    const secret = 'DUMMY_REQUEST_SECRET_MUST_NOT_PRINT';
+    const payload = 'DUMMY_RESPONSE_MUST_NOT_PRINT';
+    const server = createServer((req, res) => {
+      expect(req.headers.authorization).toBe(`Bot ${secret}`);
+      if (scenario === 'reset') {
+        req.socket.destroy();
+        return;
+      }
+      res.writeHead(scenario.startsWith('bad-') ? Number(scenario.slice(4)) : Number(scenario));
+      res.end(payload);
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    cleanup.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+    const address = server.address() as { port: number };
+    fs.mkdirSync(path.join(root, 'runtime'), { mode: 0o700 });
+    const configFile = path.join(root, 'discord.json');
+    const config = { channelId: '200', humanUserId: '100', coordinator: 'coord', stateDir: path.join(root, 'state') };
+    fs.writeFileSync(configFile, JSON.stringify(config), { mode: 0o600 });
+    // Redirect only the external boundary to a real loopback HTTP fixture.
+    // No production endpoint override or live credential is available to this child.
+    const code = `
+    const nativeFetch = globalThis.fetch;
+    globalThis.fetch = (url, options) => {
+      if (!String(url).startsWith('https://discord.com/api/v10/')) throw new Error('Unexpected endpoint');
+      return nativeFetch('http://127.0.0.1:${address.port}/messages', options);
+    };
+    const {runDiscordBridge} = await import('./source/services/discord/discord-command.ts');
+    await runDiscordBridge([${JSON.stringify(configFile)}]);
+  `;
+    const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], {
+      cwd: process.cwd(),
+      env: {
+        PATH: process.env.PATH,
+        NODE_ENV: 'test',
+        HOME: root,
+        XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+        TERM2_DISCORD_BOT_TOKEN: secret,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    cleanup.push(() => {
+      if (child.exitCode === null) child.kill('SIGKILL');
+    });
+    let output = '';
+    child.stdout.on('data', (data) => {
+      output += String(data);
+    });
+    child.stderr.on('data', (data) => {
+      output += String(data);
+      if (output.includes('bounded backoff active')) child.kill('SIGTERM');
+    });
+    const [status] = await once(child, 'exit');
+    expect(status, output).toBe(0);
+    expect(output).toContain(expected);
+    expect(output).toContain('cursor retained, bounded backoff active');
+    for (const sensitive of [secret, payload, configFile, config.stateDir]) expect(output).not.toContain(sensitive);
+    if (scenario !== 'reset') expect(output).not.toContain('check network');
+    expect(fs.existsSync(path.join(config.stateDir, 'owner.json'))).toBe(false);
+  },
+  20_000,
+);
+
+it.each([
+  ['relative-config', 'Config path must be absolute'],
+  ['relative-enrollment', 'Config path must be absolute'],
+  ['relative-xdg', 'Config path must be absolute'],
   ['missing-config', 'Missing config'],
   ['malformed-json', 'Malformed config JSON'],
   ['invalid-schema', 'Invalid config schema'],
@@ -1725,7 +1804,14 @@ it.each([
   }
   if (scenario === 'empty-env-token') env.TERM2_DISCORD_BOT_TOKEN = '';
   const isHelp = scenario === '--help' || scenario === '-h';
-  const args = isHelp ? [scenario] : scenario === 'non-tty-enrollment' ? ['--save-token'] : [];
+  let args = isHelp ? [scenario] : scenario === 'non-tty-enrollment' ? ['--save-token'] : [];
+  if (scenario === 'relative-config') args = ['./PRIVATE_CONFIG_MUST_NOT_PRINT.json'];
+  if (scenario === 'relative-enrollment') args = ['--save-token', './PRIVATE_CONFIG_MUST_NOT_PRINT.json'];
+  if (scenario === 'relative-xdg') {
+    env.XDG_CONFIG_HOME = './PRIVATE_CONFIG_MUST_NOT_PRINT';
+    args = [];
+  }
+
   // Help must ignore even malformed config and an invalid inherited credential.
   if (isHelp) {
     fs.writeFileSync(configFile, '{' + payload);
@@ -1744,7 +1830,8 @@ it.each([
   expect(child.status, output).toBe(isHelp ? 0 : 1);
   expect(output).toContain(expected);
   expect(output).toContain('docs/reference/discord-bridge.md');
-  for (const sensitive of [secret, payload, stateDir]) expect(output).not.toContain(sensitive);
+  for (const sensitive of [secret, payload, stateDir, 'PRIVATE_CONFIG_MUST_NOT_PRINT'])
+    expect(output).not.toContain(sensitive);
   if (isHelp) {
     expect(child.stderr).toBe('');
     expect(output).toContain('discord_send');

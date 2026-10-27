@@ -151,6 +151,27 @@ function validJob(value: unknown): value is Job {
   );
 }
 
+/** Safe request categories only; never retain credentials, URLs or response bodies. */
+class DiscordRequestError extends Error {
+  constructor(readonly kind: 'transport' | 'authentication' | 'permission' | 'service' | 'rejected') {
+    super('Discord request failed');
+  }
+}
+
+/** Map only bridge-owned request errors to fixed hints; unknown failures stay generic. */
+function discordRequestErrorGuidance(error: unknown): string | undefined {
+  if (!(error instanceof DiscordRequestError)) return undefined;
+  return {
+    transport:
+      'Discord request failed before a usable HTTP response; check network, DNS, TLS and proxy connectivity, then retry. Authentication was not verified',
+    authentication:
+      'Discord rejected bot authentication (HTTP 401); check or re-enroll the bot token and check TERM2_DISCORD_BOT_TOKEN overrides',
+    permission: 'Discord denied channel access (HTTP 403); check bot membership and channel permissions',
+    service: 'Discord service returned a server error (HTTP 5xx); retry later',
+    rejected: 'Discord rejected the channel read; check channel ID and bot access',
+  }[error.kind];
+}
+
 export type DiscordStateErrorCode = 'pinned_session_schema' | 'journal_state' | 'config_schema';
 
 /** Tag state/schema failures so callers map fixed guidance without parsing error text. */
@@ -590,28 +611,29 @@ export class DiscordBridge {
   }
 
   async #request(method: string, suffix: string, body?: unknown): Promise<Response> {
+    let response: Response;
     try {
-      const response = await fetch(`${this.#apiBase}/channels/${this.#config.channelId}/messages${suffix}`, {
+      response = await fetch(`${this.#apiBase}/channels/${this.#config.channelId}/messages${suffix}`, {
         method,
         headers: { Authorization: `Bot ${this.#token}`, 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(10_000),
         redirect: 'error',
       });
-      if (response.status === 429) {
-        const retry = (await response.json()) as { retry_after?: number };
-        const seconds =
-          typeof retry.retry_after === 'number' && Number.isFinite(retry.retry_after) ? retry.retry_after : 5;
-        this.#retryAt = Date.now() + Math.max(1, seconds) * 1000;
-      }
-      const reset = Number(response.headers.get('x-ratelimit-reset-after'));
-      if (response.headers.get('x-ratelimit-remaining') === '0' && Number.isFinite(reset) && reset > 0) {
-        this.#retryAt = Math.max(this.#retryAt, Date.now() + reset * 1000);
-      }
-      return response;
     } catch {
-      throw new Error('Discord transport unavailable (credentials and response body redacted)');
+      throw new DiscordRequestError('transport');
     }
+    if (response.status === 429) {
+      const retry = (await response.json()) as { retry_after?: number };
+      const seconds =
+        typeof retry.retry_after === 'number' && Number.isFinite(retry.retry_after) ? retry.retry_after : 5;
+      this.#retryAt = Date.now() + Math.max(1, seconds) * 1000;
+    }
+    const reset = Number(response.headers.get('x-ratelimit-reset-after'));
+    if (response.headers.get('x-ratelimit-remaining') === '0' && Number.isFinite(reset) && reset > 0) {
+      this.#retryAt = Math.max(this.#retryAt, Date.now() + reset * 1000);
+    }
+    return response;
   }
 
   /** Live aliases come only from explicitly opted-in control advertisements; there is no cache. */
@@ -634,7 +656,16 @@ export class DiscordBridge {
       'GET',
       this.#journal.cursor ? `?after=${this.#journal.cursor}&limit=50` : '?limit=1',
     );
-    if (!response.ok) throw new Error(`Discord read rejected (HTTP ${response.status})`);
+    if (!response.ok)
+      throw new DiscordRequestError(
+        response.status === 401
+          ? 'authentication'
+          : response.status === 403
+          ? 'permission'
+          : response.status >= 500
+          ? 'service'
+          : 'rejected',
+      );
     const messages = (await response.json()) as DiscordMessage[];
     if (
       !Array.isArray(messages) ||
@@ -908,13 +939,17 @@ export class DiscordBridge {
       try {
         await this.#ingress();
         this.#readFailures = 0;
-      } catch {
+      } catch (error) {
         this.#readFailures++;
         this.#retryAt = Math.max(
           this.#retryAt,
           Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(6, this.#readFailures)),
         );
-        this.#warn('Discord ingress unavailable or rejected; cursor retained, bounded backoff active');
+        this.#warn(
+          `${
+            discordRequestErrorGuidance(error) ?? 'Discord ingress unavailable or rejected'
+          }; cursor retained, bounded backoff active`,
+        );
       }
       await this.#jobs();
       if (Date.now() >= this.#retryAt) await this.#outputs();

@@ -1,5 +1,11 @@
 import fs from 'node:fs';
-import { discordConfigPath, loadDiscordToken, promptDiscordToken, saveDiscordToken } from './discord-credentials.js';
+import {
+  DiscordConfigPathError,
+  discordConfigPath,
+  loadDiscordToken,
+  promptDiscordToken,
+  saveDiscordToken,
+} from './discord-credentials.js';
 import { setTimeout } from 'node:timers/promises';
 import { DiscordBridge, discordStateErrorCode, parseDiscordBridgeConfig } from './discord-bridge.js';
 
@@ -18,7 +24,9 @@ stores discord.token beside the config, then exits without starting the bridge.
 The config directory must be user-owned/private (0700); token file private (0600).
 TERM2_DISCORD_BOT_TOKEN on the bridge process overrides the stored token.
 
-Sessions opt in locally with /bridge connect [name] (default: coord).
+Finish term2 provider setup first and keep an interactive term2 session running.
+In that session, opt in locally with /bridge connect [name] (default: coord).
+This attaches a local session; it does not verify the standalone bridge can reach Discord.
 Only explicit discord_send calls post to Discord; ordinary final answers do not.
 Ask: "Reply in Discord using discord_send." Status, approvals and questions stay local.
 
@@ -95,6 +103,9 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
     }
   } catch (error) {
     // Fixed guidance only: never echo config values, credentials or arbitrary error text.
+    if (error instanceof DiscordConfigPathError)
+      guidance =
+        'Config path must be absolute; pass /absolute/path/discord.json (XDG_CONFIG_HOME must also be absolute when used)';
     const code = discordStateErrorCode(error);
     guidance ??=
       code === 'config_schema'

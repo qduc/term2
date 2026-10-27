@@ -41,9 +41,14 @@ approve a tool call or answer a local approval prompt.
    terminal. For a custom config, pass the same absolute path to enrollment and
    startup. Enrollment hides input, saves `discord.token` beside the config and
    exits without connecting. An inherited `TERM2_DISCORD_BOT_TOKEN` overrides it.
-6. **Attach the intended existing session** in its own term2 terminal with
+6. **Finish term2 provider setup and keep an interactive session running.** On a
+   fresh install, start `term2` and complete its first-run provider/credential setup
+   before attempting attachment; normal chat and slash commands are unavailable
+   until setup completes. Use a working provider configuration for real chat.
+   **Attach that intended session** in its own term2 terminal with
    `/bridge connect coord`; see the [attachment reference](#attach-the-actual-session-not-a-blank-replacement)
    for worker sessions, runtime-directory requirements and same-history resume.
+   This attaches a local session, not a Discord connection; keep it running.
    Confirm identity/attachment locally using `/bridge status` and
    `term2 control list --status`. Approvals remain local.
 7. **Start the standalone bridge** with `term2 discord` (or the same absolute
@@ -53,9 +58,13 @@ approve a tool call or answer a local approval prompt.
    arrives. Live bot/mobile behavior remains unverified by the offline fixture.
 
 `term2 discord --help` summarizes these entry points without reading config or
-credentials or connecting to Discord. Setup failures distinguish missing config,
-malformed JSON/schema, missing token and non-TTY enrollment with redacted guidance;
-other failures retain generic diagnostics. Never paste credentials into bug reports.
+credentials or connecting to Discord. Setup failures distinguish non-absolute config paths, missing config,
+malformed JSON/schema, missing token and non-TTY enrollment with redacted guidance.
+Channel reads distinguish transport failures (no usable HTTP response), HTTP 401
+authentication, HTTP 403 access denial, server errors and other rejections. These
+are hints, not proof of a particular network cause; unknown failures stay generic.
+Read failures retain the cursor and use the existing bounded backoff; a diagnostic
+does not imply the process exited. Never paste credentials into bug reports.
 
 ## Operational and advanced reference
 
@@ -138,6 +147,25 @@ and does not include Discord response bodies or credentials in error messages.
 Session processes need no Discord token. Same-uid local access has the existing
 Unix-control threat model; this is not protection from a malicious same-uid agent
 or root. Persisted session permissions and approvals are still meaningful boundaries.
+
+For a safe scratch starting point, this creates a **fresh** private directory and
+an empty config, without changing an existing directory or overwriting a config:
+
+```sh
+config_dir="$(mktemp -d "$HOME/term2-discord.XXXXXX")"
+(umask 077; set -C; printf '%s\n' '{}' > "$config_dir/discord.json")
+printf 'Edit this config: %s\n' "$config_dir/discord.json"
+```
+
+The empty `{}` is not a usable config. Edit it to match the JSON below, replacing
+every example ID/path; choose a fresh absolute `stateDir` (for example, `state`
+inside the directory just created). Then use this same custom path for enrollment
+and startup in that shell:
+
+```sh
+term2 discord --save-token "$config_dir/discord.json"
+term2 discord "$config_dir/discord.json"
+```
 
 Example `/absolute/private/discord.json` (replace every example ID/path):
 

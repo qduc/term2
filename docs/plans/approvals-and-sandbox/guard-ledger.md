@@ -4013,3 +4013,32 @@ The same real-socket conflict check fails with direct string hashing and passes
 with canonical JSON hashing. Sibling config/request-identity/control-body digests
 already use JSON; chunk keys contain only host-generated ASCII IDs. The boundary
 regression and owner comment preserve this invariant without a new guard/service.
+
+## Discord default-target journal compatibility (2026-10-27)
+
+Owner: `DiscordBridge.open`; class: durable identity validation, not a workload
+budget. The fingerprint still binds `channelId`, `humanUserId`, `stateDir` and the
+parsed effective `maxHops` (default 4, valid range 1–8). It no longer binds
+`coordinator`, which is policy for newly admitted unaddressed messages, not the
+identity of previously admitted work. Job alias and socket/session/start bindings,
+opt-in, private-file checks and ambiguous-outcome recovery are unchanged.
+
+A legacy v2 whole-config hash is accepted only against the complete current
+config. Only after all journal/job/proactive validation succeeds is it replaced
+using the existing atomic save. Operators must open once with the unchanged old
+config before changing the default. An unverified legacy default change, changed
+channel/human/path/hop limit, unsupported version or malformed journal still fails
+closed without rewriting it. Recovery is restoring the original legacy config to
+upgrade, or preserving and reconciling incompatible state; never resetting the
+cursor or retargeting pending jobs. CLI guidance is fixed text, not raw config or
+payload diagnostics. No settings, environment overrides, retries, eviction or
+live activation are introduced.
+
+Red proof: four default-change integration cases failed against the old
+whole-config fingerprint; the legacy rejection case passed. The same real
+loopback Discord/Unix socket/conversation workflow checks paused and accepted old
+jobs, new-default/explicit routes, restart deduplication, replacement-session
+refusal and channel/human/path/hop-limit mismatch without journal rewrite.
+Commands and results are recorded in `docs/test-results.json`. Rollback of the
+binary alone cannot open the upgraded fingerprint; preserve a pre-upgrade backup
+and reconcile later effects rather than replaying it blindly.

@@ -343,7 +343,19 @@ export class DiscordBridge {
     }
     this.#owned = true;
     try {
-      const fingerprint = createHash('sha256').update(JSON.stringify(this.#config)).digest('hex');
+      // The default alias is admission policy, not durable identity: each job already
+      // pins its own alias and process binding. Keep every other config safeguard.
+      const fingerprint = createHash('sha256')
+        .update(
+          JSON.stringify({
+            channelId: this.#config.channelId,
+            humanUserId: this.#config.humanUserId,
+            stateDir,
+            maxHops: this.#config.maxHops,
+          }),
+        )
+        .digest('hex');
+      const legacyFingerprint = createHash('sha256').update(JSON.stringify(this.#config)).digest('hex');
       if (fs.existsSync(this.#file)) {
         const stateStat = fs.lstatSync(this.#file);
         if (!stateStat.isFile() || (stateStat.mode & 0o777) !== 0o600 || stateStat.uid !== process.getuid?.()) {
@@ -352,7 +364,7 @@ export class DiscordBridge {
         this.#journal = JSON.parse(fs.readFileSync(this.#file, 'utf8'));
         if (
           this.#journal.v !== 2 ||
-          this.#journal.fingerprint !== fingerprint ||
+          (this.#journal.fingerprint !== fingerprint && this.#journal.fingerprint !== legacyFingerprint) ||
           typeof this.#journal.cursor !== 'string' ||
           !/^([0-9]{1,24})?$/.test(this.#journal.cursor) ||
           typeof this.#journal.paused !== 'boolean' ||
@@ -428,6 +440,9 @@ export class DiscordBridge {
         )
           throw stateError('journal_state', 'Invalid proactive Discord journal; reconciliation required');
       }
+      // Upgrade only a fully validated journal whose old whole-config hash matched.
+      // Legacy state must first be opened with its original default; never guess it.
+      this.#journal.fingerprint = fingerprint;
       this.#retryAt = this.#journal.retryAt ?? 0;
       this.#save();
     } catch (error) {

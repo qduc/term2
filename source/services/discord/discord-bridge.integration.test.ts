@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createServer, type Server } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { once } from 'node:events';
+import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   DiscordBridge,
@@ -819,6 +820,137 @@ it('refuses a v1 journal and pinned-session config without rewriting either', as
     new DiscordBridge(strictConfig, 'SYNTHETIC_TOKEN', { runtimeDir: f.root, apiBase: f.apiBase }).open(),
   ).toThrow(/Invalid v2 Discord journal/);
   expect(JSON.parse(fs.readFileSync(strictFile, 'utf8')).jobs).toHaveLength(1);
+});
+
+it('migrates a legacy fingerprint before changing the default without resetting pending work or the cursor', async () => {
+  const f = await fixture();
+  await f.cycle();
+  f.human('!bridge pause');
+  const oldMessage = f.human('old default pending');
+  await f.cycle(1);
+  const file = path.join(f.config.stateDir, 'journal.json');
+  const legacy = f.journal();
+  legacy.fingerprint = createHash('sha256').update(JSON.stringify(f.config)).digest('hex');
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  f.restart();
+  const migrated = f.journal();
+  expect(migrated.fingerprint).not.toBe(legacy.fingerprint);
+  expect({ ...migrated, fingerprint: legacy.fingerprint }).toEqual(legacy);
+  expect(migrated).toMatchObject({ cursor: oldMessage.id, paused: true });
+  expect(migrated.jobs[0]).toMatchObject({ alias: 'coord', state: 'new', binding: f.sessions.coord!.socket.binding });
+
+  f.config.coordinator = 'worker';
+  f.restart();
+  expect(f.journal()).toEqual(migrated);
+  f.human('new default pending');
+  f.human('@coord explicitly addressed');
+  await f.cycle(1);
+  expect(f.received.coord).toHaveLength(0);
+  expect(f.received.worker).toHaveLength(0);
+  expect(f.journal().jobs.map((job: any) => job.alias)).toEqual(['coord', 'worker', 'coord']);
+  f.human('!bridge resume');
+  await f.cycle(6);
+  expect(f.received.coord).toHaveLength(2);
+  expect(f.received.worker).toHaveLength(1);
+  expect(f.journal().jobs.every((job: any) => job.state === 'done')).toBe(true);
+  const settled = f.journal();
+  const posts = f.posted.length;
+  f.restart();
+  await f.cycle(4);
+  expect(f.received.coord).toHaveLength(2);
+  expect(f.received.worker).toHaveLength(1);
+  expect(f.posted).toHaveLength(posts);
+  expect(f.journal().jobs).toEqual(settled.jobs);
+  expect(f.posted.filter((post) => post.content.includes('[bridge] Ready.'))).toHaveLength(1);
+});
+
+it('recovers an accepted old-default job after a default change without resubmitting it', async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const f = await fixture({
+    respond: async (alias) => {
+      if (alias === 'coord') await held;
+      return `${alias} recovered answer`;
+    },
+  });
+  cleanup.push(() => release());
+  await f.cycle();
+  f.human('old accepted input');
+  await f.cycle(1);
+  expect(f.journal().jobs[0]).toMatchObject({ alias: 'coord', state: 'accepted' });
+  expect(f.received.coord).toHaveLength(1);
+  f.config.coordinator = 'worker';
+  f.restart();
+  release();
+  f.human('new input');
+  await f.cycle(6);
+  expect(f.received.coord).toHaveLength(1);
+  expect(f.received.worker).toHaveLength(1);
+  expect(f.journal().jobs.every((job: any) => job.state === 'done')).toBe(true);
+  expect(f.posted.filter((post) => post.content === '[coord] coord recovered answer')).toHaveLength(1);
+});
+
+it('does not move old-default pending work to a replacement session or the new default', async () => {
+  const f = await fixture();
+  await f.cycle();
+  f.human('!bridge pause');
+  f.human('retain old binding');
+  await f.cycle(1);
+  const original = f.journal().jobs[0];
+  await f.detach('coord');
+  await f.attach('coord', { sessionId: 'replacement-coord' });
+  f.config.coordinator = 'worker';
+  f.restart();
+  f.human('!bridge resume');
+  f.human('only new input reaches worker');
+  await f.cycle(5);
+  expect(f.received.coord).toHaveLength(0);
+  expect(f.received.worker).toHaveLength(1);
+  expect(f.journal().jobs[0]).toEqual(original);
+  expect(f.posted.some((post) => post.content.includes('only the exact admitted process identity'))).toBe(true);
+});
+
+it('keeps channel, human, state directory and hop-limit fingerprint protection after default changes', async () => {
+  const f = await fixture();
+  await f.cycle();
+  f.config.coordinator = 'worker';
+  f.restart();
+  f.bridge().close();
+  const file = path.join(f.config.stateDir, 'journal.json');
+  const before = fs.readFileSync(file);
+  const otherState = path.join(f.root, 'other-state');
+  fs.mkdirSync(otherState, { mode: 0o700 });
+  const copied = path.join(otherState, 'journal.json');
+  fs.writeFileSync(copied, before, { mode: 0o600 });
+  for (const change of [{ channelId: '201' }, { humanUserId: '101' }, { maxHops: 3 }, { stateDir: otherState }]) {
+    const bridge = new DiscordBridge({ ...f.config, ...change }, 'OFFLINE_FIXTURE_TOKEN', {
+      runtimeDir: f.root,
+      apiBase: f.apiBase,
+    });
+    expect(() => bridge.open()).toThrow(/journal\/config mismatch/);
+    expect(fs.readFileSync(file)).toEqual(before);
+    expect(fs.readFileSync(copied)).toEqual(before);
+    expect(fs.existsSync(path.join(change.stateDir ?? f.config.stateDir, 'owner.json'))).toBe(false);
+  }
+});
+
+it('refuses an unverified legacy default change and malformed legacy jobs without rewriting the journal', async () => {
+  const f = await fixture();
+  f.bridge().close();
+  const file = path.join(f.config.stateDir, 'journal.json');
+  const legacy = f.journal();
+  legacy.fingerprint = createHash('sha256').update(JSON.stringify(f.config)).digest('hex');
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  const before = fs.readFileSync(file);
+  f.config.coordinator = 'worker';
+  expect(() => f.restart()).toThrow(/journal\/config mismatch/);
+  expect(fs.readFileSync(file)).toEqual(before);
+  f.config.coordinator = 'coord';
+  legacy.jobs.push({ id: 'discord_99', alias: 'coord', text: 'missing binding' });
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  const malformed = fs.readFileSync(file);
+  expect(() => f.restart()).toThrow(/Invalid v2 Discord journal/);
+  expect(fs.readFileSync(file)).toEqual(malformed);
 });
 
 it('relays a human-rooted instruction into a busy target with human authority and steer admission', async () => {

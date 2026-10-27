@@ -126,6 +126,24 @@ term2 discord
 term2 discord /absolute/private/discord.json
 ```
 
+Changing `coordinator` changes the default for **newly admitted unaddressed**
+messages after restarting the bridge with the edited config. Keep the same
+`stateDir`: its cursor, pending jobs, outbox and reconciliation records survive.
+Previously admitted jobs keep their original alias and exact process binding;
+explicit `@alias` messages are unaffected. A message sent while the bridge is down
+uses the default in effect when it is admitted, not when it was sent.
+
+For an existing v2 journal from before this behavior, first start the new bridge
+**once with the original unchanged config**. Only after that succeeds, stop it,
+change `coordinator`, and restart using the same `stateDir`. The old journal stored
+only a whole-config hash, not the original config, so changing the default before
+this one-time upgrade is refused without rewriting the journal. Restore the
+original config to perform the upgrade; do not delete pending work. Channel,
+human user, state-directory and hop-limit changes still fail fingerprint checks.
+Version 1 journals remain unsupported. Older bridge executables cannot open the
+upgraded fingerprint: preserve a pre-upgrade backup for rollback, and reconcile
+any work admitted since that backup rather than replaying it blindly.
+
 Wait for `[bridge] Ready` in Discord **before sending new work**. First startup
 establishes a current-channel watermark; historical messages deliberately do not
 activate anything. The bridge opens successfully with no attached sessions and

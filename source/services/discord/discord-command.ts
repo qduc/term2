@@ -41,7 +41,7 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
       code === 'pinned_session_schema'
         ? 'the pinned-session config schema was replaced; remove "sessions" from config, archive the old state directory unchanged and use a fresh stateDir'
         : code === 'journal_state'
-        ? 'journal version, shape or config fingerprint mismatch; archive the existing state directory unchanged and use a fresh stateDir'
+        ? 'journal version, shape or config fingerprint mismatch; for a legacy v2 journal, first start this version with the original config before changing coordinator; otherwise archive the existing state directory unchanged and use a fresh stateDir'
         : 'check config, private state directory, credentials and attached sessions. Enroll on a TTY with term2 discord --save-token [absolute-config-path]';
     process.stderr.write(`[discord] Bridge stopped: ${guidance}. Credentials and payloads redacted.\n`);
     process.exitCode = 1;

@@ -563,10 +563,14 @@ Rules, and why they are shaped this way:
   probe reports `writable: false` by construction, so a `read` grant is
   admitted on a physically writable folder under `--allow-write`. For a
   `read_write` grant the probe still requires both `--allow-write` and OS
-  write access to the folder. The runtime, not the probe, keeps a `read`
-  session's tools read-only, and only while the shell sandbox is enabled: with
-  `sandbox.enabled=false` in the launcher settings a `read` session can still
-  write into its workspace through `shell`.
+  write access to the folder. The runtime, not the probe, enforces the tool
+  boundary. A `read` session refuses shell execution unless the command runs
+  inside the filesystem sandbox; with `sandbox.enabled=false`, this includes
+  shell reads such as `cat`. Built-in read tools remain available. This
+  admission policy requires both the fail-closed shell guard and production
+  `allowWrite` forwarding. Disabling the sandbox for a `read_write` session
+  also removes shell filesystem confinement; admission's root checks do not
+  confine those commands.
 - **Absent vs corrupt (the legacy-record rule).** A session created before the
   sidecar existed has *no* record: restore falls back to the launcher's
   current snapshot, which is validated like any other, so the fallback can

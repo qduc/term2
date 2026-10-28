@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../services/settings/settings-service.js';
@@ -15,7 +15,8 @@ let observedAutoApprove: unknown;
 let observedSandbox: unknown;
 let observedTools: string[] = [];
 let observedRunCodeDescription = '';
-let attemptMode: 'direct' | 'nested' | 'subagent' | 'shell' | null = null;
+let attemptMode: 'direct' | 'nested' | 'subagent' | 'shell' | 'shell-script' | null = null;
+let attemptShellCommand = 'printf blocked > shell.txt';
 let attemptAllowWrite = false;
 let attemptStep = 0;
 let observedAttemptInputs: any[] = [];
@@ -75,12 +76,19 @@ const provider: ProviderDefinition = {
             };
             return;
           }
-          if (attemptMode === 'shell' && step === 0) {
+          if ((attemptMode === 'shell' || attemptMode === 'shell-script') && step === 0) {
             yield {
               type: 'tool_call' as const,
               id: 'f1-shell',
-              name: 'shell',
-              arguments: JSON.stringify({ command: 'printf blocked > shell.txt' }),
+              name: attemptMode === 'shell-script' ? 'run_code' : 'shell',
+              arguments: JSON.stringify(
+                attemptMode === 'shell-script'
+                  ? {
+                      code: `return await tools.shell(${JSON.stringify({ command: attemptShellCommand })});`,
+                      description: 'scripted sandbox control',
+                    }
+                  : { command: attemptShellCommand },
+              ),
             };
             return;
           }
@@ -125,6 +133,8 @@ function tempRoot(prefix: string): string {
 }
 
 afterEach(() => {
+  attemptMode = null;
+  attemptShellCommand = 'printf blocked > shell.txt';
   unregisterProvider(providerId);
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -391,4 +401,87 @@ describe('production gateway runtime factory', () => {
     attemptMode = null;
     await factory.shutdown();
   });
+
+  it('enforces real sandbox permissions with a writable production control', async () => {
+    registerProvider(provider);
+    const settings = new SettingsService({
+      settingsDir: tempRoot('sandbox-settings-'),
+      disableFilePersistence: true,
+      disableLogging: true,
+      env: {},
+      cli: {},
+    });
+    settings.set('agent.modelSelection', { model: 'm1-scripted-model', provider: providerId }, { persist: false });
+    settings.set('sandbox.enabled', true, { persist: false });
+    const workspace = tempRoot('sandbox-workspace-');
+    const outside = tempRoot('sandbox-outside-'); // Separate from the shell's writable sandbox temp root.
+    writeFileSync(path.join(workspace, 'README.md'), 'SCRIPTED_SANDBOX_READ');
+    symlinkSync(outside, path.join(workspace, 'outside-link'), 'dir');
+    const factory = createProductionRuntimeFactory({
+      settingsAuthority: settings,
+      tmpDir: tempRoot('sandbox-runtime-'),
+      sandboxAvailable: true,
+      allowWrite: true,
+    });
+    let index = 0;
+    const run = async (access: 'read' | 'read_write', command: string, nested = false) => {
+      attemptMode = nested ? 'shell-script' : 'shell';
+      attemptShellCommand = command;
+      attemptStep = 0;
+      const events: any[] = [];
+      const id = `sandbox-control-${++index}`;
+      const session = await factory.create(
+        {
+          sessionId: id,
+          ownerUserId: 'sandbox-owner',
+          workspaceId: 'sandbox-workspace',
+          grantVersion: 1,
+          canonicalRoot: workspace,
+          access,
+        },
+        {
+          eventSink: (event) => {
+            events.push(event);
+          },
+        },
+      );
+      try {
+        const admission = await session.prepareMessage('scripted sandbox control', { turnId: id, clientRequestId: id });
+        if (admission.kind !== 'prepared') throw new Error('sandbox control was not admitted');
+        await session.commitMessage(admission.leaseId);
+        await vi.waitFor(() => expect(['idle', 'awaiting_interaction']).toContain(session.status), { timeout: 15_000 });
+        if (session.status === 'awaiting_interaction') {
+          // Supply the local owner's ordinary approval for these disposable fixture commands.
+          await session.service.handleApprovalDecision('y');
+        }
+        await vi.waitFor(() => expect(session.status).toBe('idle'), { timeout: 15_000 });
+        return events
+          .filter((event) => event.type === 'command_message')
+          .map((event) => event.message?.output ?? event.message?.failureReason ?? '')
+          .join('\n');
+      } finally {
+        await session.dispose();
+      }
+    };
+    try {
+      // Positive reads/writes distinguish real sandbox enforcement from an unavailable runner.
+      expect(await run('read', 'cat README.md')).toContain('SCRIPTED_SANDBOX_READ');
+      await run('read_write', 'printf writable > write-control.txt');
+      expect(existsSync(path.join(workspace, 'write-control.txt'))).toBe(true);
+      await run('read_write', 'printf nested > nested-control.txt', true);
+      expect(existsSync(path.join(workspace, 'nested-control.txt'))).toBe(true);
+      expect(await run('read', 'printf blocked > read-marker.txt')).toMatch(/read.only|permission|denied|exit [1-9]/i);
+      expect(await run('read', 'printf blocked > nested-marker.txt', true)).toMatch(
+        /read.only|permission|denied|exit [1-9]/i,
+      );
+      expect(existsSync(path.join(workspace, 'read-marker.txt'))).toBe(false);
+      expect(existsSync(path.join(workspace, 'nested-marker.txt'))).toBe(false);
+      expect(await run('read_write', 'printf blocked > outside-link/outside-marker.txt')).toMatch(
+        /read.only|permission|denied|exit [1-9]/i,
+      );
+      expect(existsSync(path.join(outside, 'outside-marker.txt'))).toBe(false);
+    } finally {
+      await factory.shutdown();
+    }
+  }, 90_000);
 });

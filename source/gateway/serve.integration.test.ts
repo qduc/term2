@@ -202,7 +202,17 @@ describe('term2 serve (child process)', () => {
     const socketPath = path.join(stateDir, 'gateway.sock');
     const child = spawn(
       'node',
-      [cliPath(), 'serve', '--state-dir', stateDir, '--local-owner', 'user-1', '--bff-key', `${KID}=${publicKeyPath}`],
+      [
+        cliPath(),
+        'serve',
+        '--state-dir',
+        stateDir,
+        '--local-owner',
+        'user-1',
+        '--bff-key',
+        `${KID}=${publicKeyPath}`,
+        '--allow-write',
+      ],
       { env: createTestChildEnv({ HOME: tempHome, DISABLE_LOGGING: '1' }), stdio: ['ignore', 'pipe', 'pipe'] },
     );
     disposables.push(() => {

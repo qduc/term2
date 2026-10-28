@@ -15148,6 +15148,47 @@
           "notes": "Not exercised: a live term2 gateway; streaming timing and reconnect behaviour against a real long-lived SSE stream."
         }
       ]
+    },
+    {
+      "id": "2026-10-28-pr53-reload-reconnect-fix",
+      "task_ids": ["2026-10-28-pr53-reload-reconnect-fix"],
+      "recorded_at": "2026-10-28T12:22:07.741903+00:00",
+      "commit": "6183d0e821dae37cce22e469f40b339bf750c8e6",
+      "dirty": true,
+      "environment": "Cloud production Next/BFF/gateway with labelled scripted loopback model; Chromium151 Node24.19",
+      "tiers": [
+        {
+          "name": "capped-reader-Reconnect",
+          "command": "QA_PRODUCTION=1 node /workspace/qa53-fix/verify.mjs guard-only",
+          "exit": 0,
+          "result": {
+            "failed": 0
+          },
+          "notes": "Precommit-built hook blob matches6183d0e8; stored runSHAf98. UI Reload reconnects and completes40ordered chunks before hard reload; question and session controls pass. Final exacthead run follows."
+        },
+        {
+          "name": "static",
+          "command": "pnpm typecheck; pnpm lint; web-client tsc/build",
+          "exit": 0,
+          "result": {
+            "lint_errors": 0,
+            "lint_warnings": 31
+          }
+        }
+      ],
+      "evidence": [
+        "/workspace/qa53-fix/run-guard-only-d4xITi/results.json",
+        "/workspace/qa53-update/run-guard-only-rbZ3Tn/results.json"
+      ],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_reload_fix, separate agent",
+        "verdict": "accept source change and discriminating evidence; exacthead browser/CI pending"
+      },
+      "uncertain": [
+        "Coordinated dirty/clean ID collision remains a documented non-blocking limit by user direction",
+        "Separate57 replay/ref-state change not included"
+      ]
     }
   ]
 }

@@ -17183,6 +17183,213 @@
         "/home/qduc/coord/term2/tasks/discord-input-simplicity/independent-review/report.md"
       ],
       "notes": "Independent term2/codex gpt-6.1-sol high verifier: ACCEPT scoped; no must-fix/source edits. Private user/network/mount namespace; synthetic HOME and private /tmp. Actual AgentClient/session/provider request: fragment exactly once, payload separate, explicit-send/alias/local-final/untrusted guidance present, clearing active reference on detach removes fragment. No real model obedience/live Discord claim."
+    },
+    {
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "revision_kind": "committed_baseline_external_probe",
+      "base_commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "suite": "restart-boundary-probe",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Disposable filesystem only. QueueController and ConversationAdapter imported from unchanged source; adapter dependencies inert, no turn/provider execution. Not a restart, built-CLI or PTY check."
+      },
+      "task_ids": ["2026-10-28-interactive-restart-assessment"],
+      "id": "2026-10-28-interactive-restart-assessment-probe-harness-error",
+      "command": "pnpm --dir /home/qduc/term2/.worktrees/interactive-restart exec tsx /home/qduc/term2/.worktrees/interactive-restart/.term2/restart-boundary-probe.ts",
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": ".term2/restart-boundary-probe.ts (temporary)",
+          "test": "probe setup",
+          "expected": "initialize queue",
+          "actual": "TypeError: first.ready is not a function; QueueController restores synchronously; probe corrected, not a product failure"
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/live-reload/restart-evidence/boundary-probe-attempt-1.stderr"]
+    },
+    {
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "revision_kind": "committed_baseline_external_probe",
+      "base_commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "suite": "restart-boundary-probe",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Disposable filesystem only. QueueController and ConversationAdapter imported from unchanged source; adapter dependencies inert, no turn/provider execution. Not a restart, built-CLI or PTY check."
+      },
+      "task_ids": ["2026-10-28-interactive-restart-assessment"],
+      "id": "2026-10-28-interactive-restart-assessment-probe-three",
+      "command": "pnpm --dir /home/qduc/term2/.worktrees/interactive-restart exec tsx /home/qduc/term2/.worktrees/interactive-restart/.term2/restart-boundary-probe.ts",
+      "result": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/live-reload/restart-evidence/boundary-probe.json"],
+      "notes": "Intermediate probe before closeAdmission case and relocation to reproducible external script. Three assertions establish existing limitations, not three restart acceptance checks."
+    },
+    {
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "revision_kind": "committed_baseline_external_probe",
+      "base_commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "suite": "restart-boundary-probe",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "TMPDIR": "/tmp/qduc/term2-nodejs"
+        },
+        "notes": "Disposable filesystem only. QueueController and ConversationAdapter imported from unchanged source; adapter dependencies inert, no turn/provider execution. Not a restart, built-CLI or PTY check."
+      },
+      "task_ids": ["2026-10-28-interactive-restart-assessment"],
+      "id": "2026-10-28-interactive-restart-assessment-probe-final",
+      "command": "TERM2_SOURCE_ROOT=/home/qduc/term2/.worktrees/interactive-restart pnpm --dir /home/qduc/term2/.worktrees/interactive-restart exec tsx /home/qduc/coord/term2/tasks/live-reload/restart-evidence/boundary-probe.mts",
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/live-reload/restart-evidence/boundary-probe.mts",
+        "/home/qduc/coord/term2/tasks/live-reload/restart-evidence/boundary-probe-final.json",
+        "/home/qduc/coord/term2/tasks/live-reload/restart-evidence/boundary-probe-final.stderr"
+      ],
+      "notes": "Four expected baseline-limit observations: accepted despite ENOTDIR then zero pending on new controller; paused restored text retained but holdDispatch false; adapter sidecar omits image/skill; ordinary send admitted after closeAdmission. Script SHA256 ca62621a16247274b7289e902646ffe577735cb1a3384278925cfb92870e492a. Not evidence that restart cannot be built: evidence that existing seams alone do not meet its contract. No product changes, build, PTY restart, typecheck, lint, provider or integration tiers run. Independent mentor could not read source and is not independent verification."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-assessment-doc-checks",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "revision_kind": "dirty_documentation_only",
+      "base_commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "suite": "documentation-and-no-unit-guard",
+      "command": "pnpm --dir /home/qduc/term2/.worktrees/interactive-restart exec prettier --write docs/test-results.json; pnpm --dir /home/qduc/term2/.worktrees/interactive-restart check:no-unit-tests; git -C /home/qduc/term2/.worktrees/interactive-restart diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Evidence-ledger changes only; no product source changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "All commands exited0. No-unit guard printed no diagnostic; git diff --check empty. JSON/JSONL parsing also checked."
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-assessment"],
+      "notes": "Documentation formatting/parse and repository guard only, not full lint/typecheck or feature verification."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-assessment-doc-formatter-attempt",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "revision_kind": "dirty_documentation_only",
+      "base_commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "suite": "documentation-formatting",
+      "command": "pnpm --dir /home/qduc/term2/.worktrees/interactive-restart exec prettier --check docs/test-results.json",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Author Python serialization expanded existing arrays; corrected by Prettier before commit. No product changes."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "test": "prettier check",
+          "expected": "formatting matches project",
+          "actual": "[warn] Code style issues found in the above file. Forgot to run Prettier?"
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-assessment"],
+      "notes": "Following focused formatting rerun resolves this documentation-only failure."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-assessment-doc-final",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "revision_kind": "dirty_documentation_only",
+      "base_commit": "3fbab2709d58ab158e9928c442cf773a1590cdff",
+      "suite": "documentation-and-no-unit-guard",
+      "command": "pnpm --dir /home/qduc/term2/.worktrees/interactive-restart exec prettier --check docs/test-results.json; pnpm --dir /home/qduc/term2/.worktrees/interactive-restart check:no-unit-tests; git -C /home/qduc/term2/.worktrees/interactive-restart diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Author Python serialization expanded existing arrays; corrected by Prettier before commit. No product changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-assessment"],
+      "notes": "Resolving focused rerun: Prettier check passed, guard exited0, diff --check empty. Historical ledger entries restored byte-for-byte before append; JSON and JSONL parsed. No feature verification.",
+      "comparison": {
+        "classification": "resolved",
+        "resolves_run_ids": ["2026-10-28-interactive-restart-assessment-doc-formatter-attempt"]
+      }
     }
   ]
 }

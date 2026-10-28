@@ -1,0 +1,3176 @@
+{
+  "term2-startup-results-location-failure": [
+    {
+      "repeat": 0,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.2072175150000248,
+      "user_s": 1.277615,
+      "system_s": 0.22658199999999998,
+      "maxrss_kb": 195212,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.794011194999996,
+      "user_s": 0.9001460000000001,
+      "system_s": 0.16967400000000002,
+      "maxrss_kb": 200092,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.0553010909999898,
+      "user_s": 1.140307,
+      "system_s": 0.180923,
+      "maxrss_kb": 200684,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44562:29)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44620:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:48053:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:60990:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:69653:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 0,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.750230624999972,
+      "user_s": 1.0001439999999997,
+      "system_s": 0.134629,
+      "maxrss_kb": 227812,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44562:29)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44620:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:48053:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:60990:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:69653:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 0,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.8857513869999707,
+      "user_s": 0.962618,
+      "system_s": 0.11444199999999993,
+      "maxrss_kb": 227812,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132869:31)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132927:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:136360:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:149297:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:317658:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 0,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.5637503020000167,
+      "user_s": 0.6254140000000001,
+      "system_s": 0.11215399999999998,
+      "maxrss_kb": 227812,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132869:31)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132927:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:136360:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:149297:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:317658:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 1,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.9272023249999961,
+      "user_s": 1.022614,
+      "system_s": 0.11688799999999999,
+      "maxrss_kb": 227812,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132869:31)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132927:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:136360:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:149297:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:317658:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 1,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.5159579539999868,
+      "user_s": 0.5317690000000006,
+      "system_s": 0.09286100000000008,
+      "maxrss_kb": 227812,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132869:31)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132927:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:136360:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:149297:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:317658:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 1,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.0458320150000304,
+      "user_s": 1.243837,
+      "system_s": 0.17425000000000002,
+      "maxrss_kb": 227812,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44562:29)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44620:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:48053:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:60990:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:69653:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 1,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.7915654829999994,
+      "user_s": 0.929155999999999,
+      "system_s": 0.11752300000000004,
+      "maxrss_kb": 228060,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44562:29)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44620:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:48053:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:60990:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:69653:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 1,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.0202968380000357,
+      "user_s": 1.140466,
+      "system_s": 0.14818599999999993,
+      "maxrss_kb": 228060,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.7410840809999968,
+      "user_s": 0.8684570000000011,
+      "system_s": 0.1577900000000001,
+      "maxrss_kb": 228060,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.2976963030000093,
+      "user_s": 1.4460529999999991,
+      "system_s": 0.21550499999999984,
+      "maxrss_kb": 228060,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.9329764270000283,
+      "user_s": 1.0462120000000006,
+      "system_s": 0.20517800000000008,
+      "maxrss_kb": 228060,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.1150168279999662,
+      "user_s": 1.323181,
+      "system_s": 0.203268,
+      "maxrss_kb": 228060,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44562:29)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44620:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:48053:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:60990:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:69653:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 2,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.7358020720000127,
+      "user_s": 0.8260759999999987,
+      "system_s": 0.14468900000000007,
+      "maxrss_kb": 228520,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44562:29)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:44620:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:48053:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:60990:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:69653:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-source.js:6:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 2,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.8468545140000288,
+      "user_s": 0.8152330000000028,
+      "system_s": 0.16143699999999983,
+      "maxrss_kb": 228520,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132869:31)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132927:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:136360:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:149297:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:317658:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 2,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.6127824220000093,
+      "user_s": 0.6289989999999968,
+      "system_s": 0.10516700000000023,
+      "maxrss_kb": 228520,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:fs:484\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/workspace/term2/.worktrees/prompts/lite.md'\n    at Object.readFileSync (node:fs:484:20)\n    at prompt (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132869:31)\n    at dist/services/profiles/registry.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:132927:30)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/services/profiles/index.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:136360:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/tools/system/shell.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:149297:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56)\n    at dist/agent.js (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:317658:5)\n    at __init (file:///workspace/term2/.worktrees/ci-fresh/dist/cli-all.js:16:56) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/workspace/term2/.worktrees/prompts/lite.md'\n}\n\nNode.js v24.19.0\n"
+    }
+  ],
+  "term2-startup-results-ink-external": [
+    {
+      "repeat": 0,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.220478689999993,
+      "user_s": 1.31039,
+      "system_s": 0.19936799999999996,
+      "maxrss_kb": 195776,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.8593054410000036,
+      "user_s": 1.0278229999999997,
+      "system_s": 0.152891,
+      "maxrss_kb": 200076,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.323024733000011,
+      "user_s": 1.5768529999999998,
+      "system_s": 0.21167800000000003,
+      "maxrss_kb": 225348,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.9257803689999946,
+      "user_s": 1.0122090000000004,
+      "system_s": 0.18678299999999992,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 1.0841242839999836,
+      "user_s": 1.2271540000000005,
+      "system_s": 0.12007600000000007,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.7294865789999676,
+      "user_s": 0.8482219999999998,
+      "system_s": 0.12870000000000004,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 1.0936184020000042,
+      "user_s": 1.209085,
+      "system_s": 0.15094799999999986,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.7550885899999571,
+      "user_s": 0.8830569999999991,
+      "system_s": 0.12555800000000006,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.2655864650000126,
+      "user_s": 1.4971800000000002,
+      "system_s": 0.19343100000000013,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.9968653299999914,
+      "user_s": 1.3154520000000005,
+      "system_s": 0.18584199999999984,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.3119992609999827,
+      "user_s": 1.4773639999999997,
+      "system_s": 0.1686430000000001,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.9030557979999685,
+      "user_s": 0.9820580000000003,
+      "system_s": 0.20748500000000014,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.1902879370000505,
+      "user_s": 1.3089449999999996,
+      "system_s": 0.17781099999999972,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.8153845100000012,
+      "user_s": 0.8996519999999997,
+      "system_s": 0.160628,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.0526339739999457,
+      "user_s": 1.2589210000000008,
+      "system_s": 0.17458000000000018,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.8399687709999739,
+      "user_s": 1.102017,
+      "system_s": 0.13483299999999998,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 1.1461484399999904,
+      "user_s": 1.230474000000001,
+      "system_s": 0.15318999999999994,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.5918103839999844,
+      "user_s": 0.6561309999999985,
+      "system_s": 0.15982699999999994,
+      "maxrss_kb": 245028,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    }
+  ],
+  "term2-startup-results-eager-devtools-failure": [
+    {
+      "repeat": 0,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.3888679890000049,
+      "user_s": 1.5140319999999998,
+      "system_s": 0.201597,
+      "maxrss_kb": 195424,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.9776477060000275,
+      "user_s": 1.0782570000000002,
+      "system_s": 0.22183099999999997,
+      "maxrss_kb": 199404,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.2940268390000256,
+      "user_s": 1.554462,
+      "system_s": 0.160773,
+      "maxrss_kb": 218056,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.8109587750000173,
+      "user_s": 0.8858300000000003,
+      "system_s": 0.16698100000000005,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.3555977729999995,
+      "user_s": 0.3068249999999999,
+      "system_s": 0.065685,
+      "maxrss_kb": 245720,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:internal/modules/package_json_reader:301\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'react-devtools-core' imported from /workspace/term2/.worktrees/ci-fresh/dist/cli-all.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)\n    at packageResolve (node:internal/modules/esm/resolve:768:81)\n    at moduleResolve (node:internal/modules/esm/resolve:859:18)\n    at defaultResolve (node:internal/modules/esm/resolve:992:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)\n    at #resolve (node:internal/modules/esm/loader:683:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {\n  code: 'ERR_MODULE_NOT_FOUND'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 0,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.15032891399999926,
+      "user_s": 0.12737599999999993,
+      "system_s": 0.043127999999999944,
+      "maxrss_kb": 245720,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:internal/modules/package_json_reader:301\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'react-devtools-core' imported from /workspace/term2/.worktrees/ci-fresh/dist/cli-all.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)\n    at packageResolve (node:internal/modules/esm/resolve:768:81)\n    at moduleResolve (node:internal/modules/esm/resolve:859:18)\n    at defaultResolve (node:internal/modules/esm/resolve:992:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)\n    at #resolve (node:internal/modules/esm/loader:683:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {\n  code: 'ERR_MODULE_NOT_FOUND'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 1,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.3509464099999491,
+      "user_s": 0.32378899999999966,
+      "system_s": 0.04786699999999999,
+      "maxrss_kb": 245720,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:internal/modules/package_json_reader:301\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'react-devtools-core' imported from /workspace/term2/.worktrees/ci-fresh/dist/cli-all.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)\n    at packageResolve (node:internal/modules/esm/resolve:768:81)\n    at moduleResolve (node:internal/modules/esm/resolve:859:18)\n    at defaultResolve (node:internal/modules/esm/resolve:992:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)\n    at #resolve (node:internal/modules/esm/loader:683:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {\n  code: 'ERR_MODULE_NOT_FOUND'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 1,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.14823189600002706,
+      "user_s": 0.11212399999999967,
+      "system_s": 0.05474699999999999,
+      "maxrss_kb": 245720,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:internal/modules/package_json_reader:301\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'react-devtools-core' imported from /workspace/term2/.worktrees/ci-fresh/dist/cli-all.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)\n    at packageResolve (node:internal/modules/esm/resolve:768:81)\n    at moduleResolve (node:internal/modules/esm/resolve:859:18)\n    at defaultResolve (node:internal/modules/esm/resolve:992:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)\n    at #resolve (node:internal/modules/esm/loader:683:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {\n  code: 'ERR_MODULE_NOT_FOUND'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 1,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.0449105000000145,
+      "user_s": 1.2618940000000007,
+      "system_s": 0.18903400000000004,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.7609617549999825,
+      "user_s": 0.9925880000000005,
+      "system_s": 0.13944899999999993,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 0.9733225539999921,
+      "user_s": 1.0939949999999996,
+      "system_s": 0.13318300000000005,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.6735916000000088,
+      "user_s": 0.7820489999999989,
+      "system_s": 0.1502809999999999,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 0.992775029000029,
+      "user_s": 1.0679500000000015,
+      "system_s": 0.2032980000000002,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.8132256750000124,
+      "user_s": 0.915341999999999,
+      "system_s": 0.16410199999999975,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.0714849310000432,
+      "user_s": 1.1672670000000007,
+      "system_s": 0.14147700000000007,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.8670683629999871,
+      "user_s": 0.9726479999999995,
+      "system_s": 0.15873399999999993,
+      "maxrss_kb": 245720,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.35307705700000724,
+      "user_s": 0.30184999999999995,
+      "system_s": 0.06896700000000022,
+      "maxrss_kb": 245720,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:internal/modules/package_json_reader:301\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'react-devtools-core' imported from /workspace/term2/.worktrees/ci-fresh/dist/cli-all.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)\n    at packageResolve (node:internal/modules/esm/resolve:768:81)\n    at moduleResolve (node:internal/modules/esm/resolve:859:18)\n    at defaultResolve (node:internal/modules/esm/resolve:992:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)\n    at #resolve (node:internal/modules/esm/loader:683:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {\n  code: 'ERR_MODULE_NOT_FOUND'\n}\n\nNode.js v24.19.0\n"
+    },
+    {
+      "repeat": 2,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.1442422680000277,
+      "user_s": 0.12191499999999955,
+      "system_s": 0.04326799999999986,
+      "maxrss_kb": 245720,
+      "status": 1,
+      "stdout_bytes": 0,
+      "stderr": "node:internal/modules/package_json_reader:301\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'react-devtools-core' imported from /workspace/term2/.worktrees/ci-fresh/dist/cli-all.js\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)\n    at packageResolve (node:internal/modules/esm/resolve:768:81)\n    at moduleResolve (node:internal/modules/esm/resolve:859:18)\n    at defaultResolve (node:internal/modules/esm/resolve:992:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)\n    at #resolve (node:internal/modules/esm/loader:683:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {\n  code: 'ERR_MODULE_NOT_FOUND'\n}\n\nNode.js v24.19.0\n"
+    }
+  ],
+  "term2-startup-results": [
+    {
+      "repeat": 0,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.075543046000007,
+      "user_s": 1.1698,
+      "system_s": 0.180161,
+      "maxrss_kb": 195020,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.7811795940000366,
+      "user_s": 0.9110529999999999,
+      "system_s": 0.12820299999999998,
+      "maxrss_kb": 198832,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.0781564229999958,
+      "user_s": 1.1691070000000003,
+      "system_s": 0.195592,
+      "maxrss_kb": 217916,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.7522371080000312,
+      "user_s": 1.008359,
+      "system_s": 0.153563,
+      "maxrss_kb": 230512,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.5882960789999743,
+      "user_s": 0.5898599999999998,
+      "system_s": 0.09371099999999999,
+      "maxrss_kb": 230512,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 0,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.4272869039999705,
+      "user_s": 0.4052480000000003,
+      "system_s": 0.100248,
+      "maxrss_kb": 230512,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.5829895939999687,
+      "user_s": 0.5859509999999997,
+      "system_s": 0.08196899999999996,
+      "maxrss_kb": 230512,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.42021749299999556,
+      "user_s": 0.3960930000000005,
+      "system_s": 0.107993,
+      "maxrss_kb": 230512,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.113171196000053,
+      "user_s": 1.1693089999999993,
+      "system_s": 0.20715000000000017,
+      "maxrss_kb": 239940,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.7360383470000897,
+      "user_s": 0.9999290000000007,
+      "system_s": 0.15473399999999993,
+      "maxrss_kb": 239940,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.0489322359999278,
+      "user_s": 1.2171310000000002,
+      "system_s": 0.12754500000000002,
+      "maxrss_kb": 239940,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 1,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.8094854839999925,
+      "user_s": 0.9295019999999994,
+      "system_s": 0.15962999999999994,
+      "maxrss_kb": 239940,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "plain",
+      "cache": "cold",
+      "wall_s": 1.102920614000027,
+      "user_s": 1.2239319999999996,
+      "system_s": 0.18252599999999997,
+      "maxrss_kb": 239940,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "plain",
+      "cache": "warm",
+      "wall_s": 0.9979739850000442,
+      "user_s": 1.1396189999999997,
+      "system_s": 0.19465100000000013,
+      "maxrss_kb": 239940,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "source",
+      "cache": "cold",
+      "wall_s": 1.1660474770000064,
+      "user_s": 1.2314540000000012,
+      "system_s": 0.19145699999999977,
+      "maxrss_kb": 245476,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "source",
+      "cache": "warm",
+      "wall_s": 0.7801370700000234,
+      "user_s": 0.814152,
+      "system_s": 0.18612099999999998,
+      "maxrss_kb": 245476,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "all",
+      "cache": "cold",
+      "wall_s": 0.5190463149999687,
+      "user_s": 0.5662969999999987,
+      "system_s": 0.03987000000000007,
+      "maxrss_kb": 245476,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    },
+    {
+      "repeat": 2,
+      "mode": "all",
+      "cache": "warm",
+      "wall_s": 0.36566989499999636,
+      "user_s": 0.3593080000000004,
+      "system_s": 0.09205700000000006,
+      "maxrss_kb": 245476,
+      "status": 0,
+      "stdout_bytes": 5523,
+      "stderr": ""
+    }
+  ],
+  "provider-baseline.resources": {
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--config",
+      "vitest.provider-black-box.config.ts",
+      "--reporter=verbose",
+      "--reporter=json",
+      "--outputFile=/tmp/provider-baseline.json"
+    ],
+    "wall_s": 182.601576422,
+    "user_s": 101.442967,
+    "system_s": 16.666781,
+    "maxrss_kb": 434660,
+    "status": 0
+  },
+  "provider-bundle.resources": {
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--config",
+      "vitest.provider-black-box.config.ts",
+      "--reporter=verbose",
+      "--reporter=json",
+      "--outputFile=/tmp/provider-bundle.json",
+      "--bail=1"
+    ],
+    "wall_s": 154.40145416000007,
+    "user_s": 68.984222,
+    "system_s": 10.980214,
+    "maxrss_kb": 441072,
+    "status": 0
+  },
+  "candidate-test-lane.resources": {
+    "command": ["node", "scripts/run-ci-lane.mjs", "test"],
+    "wall_s": 41.813704003999874,
+    "user_s": 66.528256,
+    "system_s": 12.421265,
+    "maxrss_kb": 1106228,
+    "status": 0
+  },
+  "provider-baseline": {
+    "counts": {
+      "numPassedTests": 222,
+      "numFailedTests": 0,
+      "numPendingTests": 1,
+      "numTotalTests": 223
+    },
+    "tests": [
+      {
+        "name": "edits and retracts pending steering while one turn crosses two manual approvals, then handles release and cancellation without duplicate fallback",
+        "status": "passed",
+        "duration": 2215.863265
+      },
+      {
+        "name": "fixture HTTP replay replays a recorded response and validates the outbound request",
+        "status": "passed",
+        "duration": 42.76443499999999
+      },
+      {
+        "name": "fixture HTTP replay exposes a canonical diff for a request mutation",
+        "status": "passed",
+        "duration": 7.3183190000000025
+      },
+      {
+        "name": "fixture WebSocket replay validates ordered sends and replays receives",
+        "status": "passed",
+        "duration": 21.984954999999985
+      },
+      {
+        "name": "fixture WebSocket replay rejects a reordered send",
+        "status": "passed",
+        "duration": 4.582441000000017
+      },
+      {
+        "name": "fixture WebSocket replay does not pass vacuously when no session ever connects",
+        "status": "passed",
+        "duration": 51.523494
+      },
+      {
+        "name": "fixture WebSocket replay rejects a non-WebSocket fixture before starting a vacuous replay server",
+        "status": "passed",
+        "duration": 1.2100480000000005
+      },
+      {
+        "name": "fixture WebSocket replay rejects a empty turn without a meaningful exchange",
+        "status": "passed",
+        "duration": 0.641208000000006
+      },
+      {
+        "name": "fixture WebSocket replay rejects a receive-only turn without a meaningful exchange",
+        "status": "passed",
+        "duration": 0.24161699999999087
+      },
+      {
+        "name": "fixture WebSocket replay rejects a send-only turn without a meaningful exchange",
+        "status": "passed",
+        "duration": 0.1695799999999963
+      },
+      {
+        "name": "fixture WebSocket replay rejects a turn containing non-WebSocket frames instead of filtering them",
+        "status": "passed",
+        "duration": 0.385390000000001
+      },
+      {
+        "name": "fixture WebSocket replay fails validation when a client closes before the replay cursor completes",
+        "status": "passed",
+        "duration": 53.56425900000002
+      },
+      {
+        "name": "fixture WebSocket replay drives the deterministic success scenario with ordered, non-empty frames",
+        "status": "passed",
+        "duration": 4.8933999999999855
+      },
+      {
+        "name": "fixture WebSocket replay drives the deterministic native-error scenario with ordered, non-empty frames",
+        "status": "passed",
+        "duration": 2.5398830000000316
+      },
+      {
+        "name": "fixture WebSocket replay drives the deterministic incomplete scenario with ordered, non-empty frames",
+        "status": "passed",
+        "duration": 1.9151800000000208
+      },
+      {
+        "name": "fixture WebSocket replay drives the deterministic abnormal-close scenario with ordered, non-empty frames",
+        "status": "passed",
+        "duration": 1.838817000000006
+      },
+      {
+        "name": "fixture WebSocket replay rejects an outbound ordering mismatch in a generated scenario",
+        "status": "passed",
+        "duration": 1.7841359999999895
+      },
+      {
+        "name": "compares requests semantically and ignores transport/SDK churn fields",
+        "status": "passed",
+        "duration": 1.8707339999999988
+      },
+      {
+        "name": "compares JSON tool arguments independent of whitespace",
+        "status": "passed",
+        "duration": 0.3210950000000139
+      },
+      {
+        "name": "reports a canonicalized request mutation",
+        "status": "passed",
+        "duration": 0.2779209999999921
+      },
+      {
+        "name": "treats a redacted expected header value as matching any actual value",
+        "status": "passed",
+        "duration": 0.3548240000000078
+      },
+      {
+        "name": "ignores SDK platform headers that vary across recording environments",
+        "status": "passed",
+        "duration": 0.17791300000001797
+      },
+      {
+        "name": "still compares nonvolatile recorded headers",
+        "status": "passed",
+        "duration": 0.2630889999999795
+      },
+      {
+        "name": "fixture transport SDK drift fails loudly when a fixture major/minor differs from the installed SDK",
+        "status": "passed",
+        "duration": 8.610523
+      },
+      {
+        "name": "fixture envelope validates all frame kinds and cross-frame placeholders",
+        "status": "passed",
+        "duration": 1.9046050000000037
+      },
+      {
+        "name": "fixture envelope parses JSON envelopes",
+        "status": "passed",
+        "duration": 0.30613299999998844
+      },
+      {
+        "name": "fixture envelope rejects placeholder collisions",
+        "status": "passed",
+        "duration": 0.744339999999994
+      },
+      {
+        "name": "fixture envelope rejects unmapped placeholder references",
+        "status": "passed",
+        "duration": 0.3340029999999956
+      },
+      {
+        "name": "fixture envelope accepts ordinary angle-bracketed text in frames",
+        "status": "passed",
+        "duration": 0.24400099999999725
+      },
+      {
+        "name": "fixture envelope rejects non-monotonic frame order",
+        "status": "passed",
+        "duration": 0.3500669999999957
+      },
+      {
+        "name": "fixture recorder parses logical SSE events, including multiline data and DONE",
+        "status": "passed",
+        "duration": 1.9327349999999797
+      },
+      {
+        "name": "fixture recorder captures request, response head, and response events without consuming response",
+        "status": "passed",
+        "duration": 19.668112000000008
+      },
+      {
+        "name": "fixture sanitizer redacts request secrets and canonicalizes IDs inside response payloads",
+        "status": "passed",
+        "duration": 4.558314999999993
+      },
+      {
+        "name": "fixture sanitizer redacts plaintext model reasoning while preserving response protocol structure",
+        "status": "passed",
+        "duration": 0.7086979999999983
+      },
+      {
+        "name": "fixture sanitizer does not flag relative provider URL paths and redacts opaque thought signatures",
+        "status": "passed",
+        "duration": 0.6678159999999878
+      },
+      {
+        "name": "fixture sanitizer redacts Google thought text while preserving the thought part shape",
+        "status": "passed",
+        "duration": 0.308985999999976
+      },
+      {
+        "name": "fixture sanitizer redacts Anthropic thinking deltas while preserving event structure",
+        "status": "passed",
+        "duration": 0.3037789999999916
+      },
+      {
+        "name": "fixture sanitizer redacts chat reasoning deltas and provider fingerprints",
+        "status": "passed",
+        "duration": 0.3069629999999961
+      },
+      {
+        "name": "fixture sanitizer redacts provider identifiers in response headers and canonicalizes request IDs",
+        "status": "passed",
+        "duration": 0.6155100000000004
+      },
+      {
+        "name": "fixture sanitizer canonicalizes Responses reasoning and function item IDs and removes encrypted content",
+        "status": "passed",
+        "duration": 0.4114280000000008
+      },
+      {
+        "name": "committed fixture security rejects common secret forms",
+        "status": "passed",
+        "duration": 2.139871999999997
+      },
+      {
+        "name": "committed fixture security does not flag benign prose or URLs as high-entropy secrets",
+        "status": "passed",
+        "duration": 0.3824950000000058
+      },
+      {
+        "name": "committed fixture security contains no likely secrets in committed fixture JSON",
+        "status": "passed",
+        "duration": 31.10954799999999
+      },
+      {
+        "name": "record-from-fake self-validation (plan D4) records from the fake provider, replays to identity, and writes an honestly-labeled envelope",
+        "status": "passed",
+        "duration": 45.105760000000004
+      },
+      {
+        "name": "P1 nested hide result chain approves a hidden nested editor through the scripted adapter and preserves result-chain identity",
+        "status": "passed",
+        "duration": 245.176872
+      },
+      {
+        "name": "OpenAI endpoint redirection proves the installed OpenAI client honors OPENAI_BASE_URL without fetch rewriting",
+        "status": "passed",
+        "duration": 192.72344899999996
+      },
+      {
+        "name": "OpenAI endpoint redirection routes the application-owned OpenAI provider to OPENAI_BASE_URL",
+        "status": "passed",
+        "duration": 27.36472500000002
+      },
+      {
+        "name": "provider capability matrix declares every target route with transport, lifecycle, and required scenarios",
+        "status": "passed",
+        "duration": 5.321462999999994
+      },
+      {
+        "name": "provider capability matrix unit-tests the accounting primitive with representative execution entries",
+        "status": "passed",
+        "duration": 1.6460519999999974
+      },
+      {
+        "name": "provider capability matrix accounts the real lifecycle ledgers without importing their test modules",
+        "status": "passed",
+        "duration": 0.43444199999999
+      },
+      {
+        "name": "provider capability matrix fails when a row has neither an executed scenario nor a documented exclusion",
+        "status": "passed",
+        "duration": 0.2466450000000009
+      },
+      {
+        "name": "provider capability matrix accepts an exclusion only when it carries a reason and evidence",
+        "status": "passed",
+        "duration": 0.5115359999999782
+      },
+      {
+        "name": "provider capability matrix rejects an execution that does not belong to the row required-scenario set",
+        "status": "passed",
+        "duration": 0.38684200000000146
+      },
+      {
+        "name": "assembled provider CLI black-box runs a bounded handoff through the real supervisor, private pipe, and built CLI",
+        "status": "passed",
+        "duration": 1082.8969080000002
+      },
+      {
+        "name": "assembled provider CLI black-box rejects excessive input before the shipped CLI makes any provider request",
+        "status": "passed",
+        "duration": 1100.628782
+      },
+      {
+        "name": "assembled provider CLI black-box applies the supervised output profile on the actual wire while allowing useful work",
+        "status": "passed",
+        "duration": 1103.222925
+      },
+      {
+        "name": "assembled provider CLI black-box runs the shipped CLI through a runtime provider and captures a complete request",
+        "status": "passed",
+        "duration": 1055.7978829999997
+      },
+      {
+        "name": "assembled provider CLI black-box prints terminal-only response text exactly once",
+        "status": "passed",
+        "duration": 1167.3754289999997
+      },
+      {
+        "name": "assembled provider CLI black-box reports provider errors without fabricating successful output",
+        "status": "passed",
+        "duration": 12375.404181999998
+      },
+      {
+        "name": "provider boundary contracts through the registry llama.cpp keeps reasoning translation scoped to its adapter",
+        "status": "passed",
+        "duration": 56.42401899999982
+      },
+      {
+        "name": "provider boundary contracts through the registry openai-compatible keeps reasoning translation scoped to its adapter",
+        "status": "passed",
+        "duration": 11.195823000000019
+      },
+      {
+        "name": "provider boundary contracts through the registry OpenCode 'chat-completions' preserves session affinity across recreated models",
+        "status": "passed",
+        "duration": 15.82355100000018
+      },
+      {
+        "name": "provider boundary contracts through the registry OpenCode 'responses' preserves session affinity across recreated models",
+        "status": "passed",
+        "duration": 15.923027999999931
+      },
+      {
+        "name": "provider boundary contracts through the registry OpenCode 'anthropic' preserves session affinity across recreated models",
+        "status": "passed",
+        "duration": 50.58342399999992
+      },
+      {
+        "name": "provider boundary contracts through the registry SDK adapter 2 preserves explicit reasoning settings over selected effort",
+        "status": "passed",
+        "duration": 8.844849000000067
+      },
+      {
+        "name": "provider boundary contracts through the registry SDK adapter 3 preserves explicit reasoning settings over selected effort",
+        "status": "passed",
+        "duration": 19.24085100000002
+      },
+      {
+        "name": "provider boundary contracts through the registry SDK adapter 4 preserves explicit reasoning settings over selected effort",
+        "status": "passed",
+        "duration": 8.49360999999999
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"39.676606339s\",\"expected\":39677}",
+        "status": "passed",
+        "duration": 16.915133999999853
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"59.999s\",\"expected\":59999}",
+        "status": "passed",
+        "duration": 9.16556300000002
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60s\",\"expected\":60000}",
+        "status": "passed",
+        "duration": 8.118155000000115
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60.001s\"}",
+        "status": "passed",
+        "duration": 5.626163000000133
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"120s\"}",
+        "status": "passed",
+        "duration": 10.957540999999992
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"-1s\",\"expected\":500}",
+        "status": "passed",
+        "duration": 6.911061999999902
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"not-a-duration\",\"expected\":500}",
+        "status": "passed",
+        "duration": 6.754812000000129
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"message\":\"Quota exceeded. https://ai.google.dev/gemini-api/docs/rate-limits. Please retry in 9.592042673s.\",\"expected\":9593}",
+        "status": "passed",
+        "duration": 6.252819999999929
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryAfter\":\"2.5\",\"expected\":2500}",
+        "status": "passed",
+        "duration": 6.229715999999826
+      },
+      {
+        "name": "provider boundary contracts through the registry keeps the built-in registry surface available",
+        "status": "passed",
+        "duration": 0.35570499999994354
+      },
+      {
+        "name": "provider boundary contracts through the registry pilot Chat Completions provider replays a synthetic chat-completions fixture through the registry",
+        "status": "passed",
+        "duration": 7.493962999999894
+      },
+      {
+        "name": "provider boundary contracts through the registry real OpenAI Responses capture replays tool continuation through the built-in registry",
+        "status": "passed",
+        "duration": 15.742591000000175
+      },
+      {
+        "name": "provider boundary contracts through the registry real OpenRouter capture replays tool continuation through the built-in registry",
+        "status": "passed",
+        "duration": 81.0713740000001
+      },
+      {
+        "name": "provider boundary contracts through the registry real OpenCode Chat Completions capture replays tool continuation through the registry",
+        "status": "passed",
+        "duration": 12.376438000000007
+      },
+      {
+        "name": "provider boundary contracts through the registry real OpenCode Anthropic capture replays tool continuation through the registry",
+        "status": "passed",
+        "duration": 14.290135000000191
+      },
+      {
+        "name": "provider boundary contracts through the registry real Google capture replays tool continuation through the registry",
+        "status": "passed",
+        "duration": 9.513903000000028
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 4.911909000000378
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Chat Completions' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 3.393214000000171
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Anthropic' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 4.41690699999981
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Google' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 3.1546010000001843
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenRouter' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 2.895136999999977
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 3.797236000000339
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Chat Completions' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 5.353601000000253
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Anthropic' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 4.394514000000072
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Google' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 3.449616999999762
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenRouter' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 3.527632999999696
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 3.667269000000033
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Chat Completions' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 5.197450000000117
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Anthropic' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 4.854603999999654
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Google' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 3.467885000000024
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenRouter' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 4.35324300000002
+      },
+      {
+        "name": "provider boundary contracts through the registry replays OpenAI-compatible native reasoning_content through the registry tool continuation boundary",
+        "status": "passed",
+        "duration": 6.293088999999782
+      },
+      {
+        "name": "provider boundary contracts through the registry captures OpenRouter-style delta.reasoning and replays it through the registry tool continuation boundary",
+        "status": "passed",
+        "duration": 5.614566000000195
+      },
+      {
+        "name": "provider boundary contracts through the registry reassembles Chat Completions tool fragments with the authoritative tool ID",
+        "status": "passed",
+        "duration": 3.019210999999814
+      },
+      {
+        "name": "provider boundary contracts through the registry retries an in-band 502 that follows trivial whitespace and succeeds",
+        "status": "passed",
+        "duration": 6.398143999999775
+      },
+      {
+        "name": "crash after tool effect but before the tool result keeps the executed call in the resumed provider history without repeating the effect",
+        "status": "passed",
+        "duration": 3094.874489
+      },
+      {
+        "name": "completes ordinary useful work with fresh safety defaults and keeps a resumable session",
+        "status": "passed",
+        "duration": 1177.616227
+      },
+      {
+        "name": "admits input beyond the old universal ceiling when known capacity permits",
+        "status": "passed",
+        "duration": 1205.530049
+      },
+      {
+        "name": "pauses before dispatch on a known small model with fresh defaults",
+        "status": "passed",
+        "duration": 980.7404000000001
+      },
+      {
+        "name": "enforces an explicit smaller input ceiling with escalation=undefined and retains a locator",
+        "status": "passed",
+        "duration": 933.392722
+      },
+      {
+        "name": "enforces an explicit smaller input ceiling with escalation=warn and retains a locator",
+        "status": "passed",
+        "duration": 889.1544640000002
+      },
+      {
+        "name": "parks an unattended critical budget under explicit contain without auto-granting and retains completed tool evidence",
+        "status": "passed",
+        "duration": 2239.4513150000002
+      },
+      {
+        "name": "retains unknown-model work after structured provider overflow without retrying",
+        "status": "passed",
+        "duration": 922.3031630000005
+      },
+      {
+        "name": "completes a tiny small-model request with real fresh and reloaded settings",
+        "status": "passed",
+        "duration": 1637.1444920000013
+      },
+      {
+        "name": "provider recorder credential isolation refuses an Anthropic credential for the OpenCode provider",
+        "status": "passed",
+        "duration": 995.4534819999999
+      },
+      {
+        "name": "application-owned provider restart continuity resumes a completed conversation from full history, then establishes fresh chaining",
+        "status": "passed",
+        "duration": 2673.072659
+      },
+      {
+        "name": "application-owned provider restart continuity settles an interrupted approval-pending 'OpenAI Responses' tool into resumed history without an orphan or stale response id",
+        "status": "passed",
+        "duration": 2446.1546399999997
+      },
+      {
+        "name": "application-owned provider restart continuity settles an interrupted approval-pending 'Codex Responses' tool into resumed history without an orphan or stale response id",
+        "status": "passed",
+        "duration": 2454.104252
+      },
+      {
+        "name": "application-owned context compaction black-box lifecycle persists a compaction item and sends it after save/resume",
+        "status": "passed",
+        "duration": 2613.7498190000006
+      },
+      {
+        "name": "application-owned context compaction black-box lifecycle sends the next Codex turn after native compaction",
+        "status": "passed",
+        "duration": 3457.1691140000003
+      },
+      {
+        "name": "application-owned context compaction black-box lifecycle refuses a switched-provider request when native compaction coverage is unknown",
+        "status": "passed",
+        "duration": 2784.0004279999994
+      },
+      {
+        "name": "application-owned context compaction black-box lifecycle does not re-execute a tool after its turn is replaced by compaction",
+        "status": "passed",
+        "duration": 2592.805479999999
+      },
+      {
+        "name": "Codex WebSocket corrupt-history recovery codex-websocket.orphan-chain-recovery (standard model) sends paired full history after a stale resume chain",
+        "status": "passed",
+        "duration": 1312.9109390000012
+      },
+      {
+        "name": "Codex WebSocket corrupt-history recovery codex-websocket.orphan-chain-recovery (Responses Lite (gpt-5.6-luna)) sends paired full history after a stale resume chain",
+        "status": "passed",
+        "duration": 1348.4599799999996
+      },
+      {
+        "name": "application-owned provider HTTP resilience openai-http.native-error does not become empty success",
+        "status": "passed",
+        "duration": 993.8186310000001
+      },
+      {
+        "name": "application-owned provider HTTP resilience openai-http.early-close does not become empty success",
+        "status": "passed",
+        "duration": 961.356959
+      },
+      {
+        "name": "application-owned provider HTTP resilience openai-http.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 962.6593640000001
+      },
+      {
+        "name": "application-owned provider HTTP resilience codex-http.native-error does not become empty success",
+        "status": "passed",
+        "duration": 911.3426299999996
+      },
+      {
+        "name": "application-owned provider HTTP resilience codex-http.early-close does not become empty success",
+        "status": "passed",
+        "duration": 825.691104
+      },
+      {
+        "name": "application-owned provider HTTP resilience codex-http.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 856.5794850000002
+      },
+      {
+        "name": "application-owned provider HTTP resilience openrouter-http.native-error does not become empty success",
+        "status": "passed",
+        "duration": 851.0805059999993
+      },
+      {
+        "name": "application-owned provider HTTP resilience openrouter-http.early-close does not become empty success",
+        "status": "passed",
+        "duration": 885.145391
+      },
+      {
+        "name": "application-owned provider HTTP resilience openrouter-http.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 849.0951790000008
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.native-error does not become empty success",
+        "status": "passed",
+        "duration": 824.4177980000004
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.early-close does not become empty success",
+        "status": "passed",
+        "duration": 849.7092080000002
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 885.7125380000016
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-anthropic-messages.native-error does not become empty success",
+        "status": "passed",
+        "duration": 965.2293090000003
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-anthropic-messages.early-close does not become empty success",
+        "status": "passed",
+        "duration": 1015.6378590000004
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-anthropic-messages.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 1118.6906820000004
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.native-error does not become empty success",
+        "status": "passed",
+        "duration": 1108.2657639999998
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.early-close does not become empty success",
+        "status": "passed",
+        "duration": 997.2294200000015
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 1012.2137809999986
+      },
+      {
+        "name": "application-owned provider response-side reasoning openai-http.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 830.5559160000012
+      },
+      {
+        "name": "application-owned provider response-side reasoning codex-http.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 843.6600480000016
+      },
+      {
+        "name": "application-owned provider response-side reasoning openrouter-http.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 784.3798940000015
+      },
+      {
+        "name": "application-owned provider response-side reasoning runtime-openai-compatible-chat.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 957.7889660000001
+      },
+      {
+        "name": "application-owned provider response-side reasoning runtime-anthropic-messages.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 872.9215330000006
+      },
+      {
+        "name": "application-owned provider response-side reasoning runtime-google-generate-content.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 842.3867629999986
+      },
+      {
+        "name": "application-owned provider WebSocket resilience openai-websocket.native-error fails without fabricated completion",
+        "status": "passed",
+        "duration": 898.053272000001
+      },
+      {
+        "name": "application-owned provider WebSocket resilience openai-websocket.incomplete fails without fabricated completion",
+        "status": "passed",
+        "duration": 875.1587189999991
+      },
+      {
+        "name": "application-owned provider WebSocket resilience openai-websocket.abnormal-close fails without fabricated completion",
+        "status": "passed",
+        "duration": 1013.0623650000016
+      },
+      {
+        "name": "application-owned provider WebSocket resilience codex-websocket.native-error fails without fabricated completion",
+        "status": "passed",
+        "duration": 1113.219567
+      },
+      {
+        "name": "application-owned provider WebSocket resilience codex-websocket.incomplete fails without fabricated completion",
+        "status": "passed",
+        "duration": 1052.8301260000007
+      },
+      {
+        "name": "application-owned provider WebSocket resilience codex-websocket.abnormal-close fails without fabricated completion",
+        "status": "passed",
+        "duration": 972.1306170000025
+      },
+      {
+        "name": "application-owned WebSocket response-side reasoning openai-websocket.reasoning preserves response-side reasoning and final output",
+        "status": "skipped",
+        "duration": 1000.2987939999985
+      },
+      {
+        "name": "application-owned WebSocket response-side reasoning codex-websocket.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 968.0636830000003
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' surfaces native terminal failure",
+        "status": "passed",
+        "duration": 1147.9421820000002
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' surfaces native terminal failure",
+        "status": "passed",
+        "duration": 1093.0612189999997
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' surfaces native terminal failure",
+        "status": "passed",
+        "duration": 11690.128448
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' surfaces native terminal failure",
+        "status": "passed",
+        "duration": 12492.170208
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' rejects an incomplete stream",
+        "status": "passed",
+        "duration": 1265.762777
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' rejects an incomplete stream",
+        "status": "passed",
+        "duration": 1421.9262559999988
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' rejects an incomplete stream",
+        "status": "passed",
+        "duration": 12361.483030999996
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' rejects an incomplete stream",
+        "status": "passed",
+        "duration": 12219.535455999998
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' stops runaway streamed output",
+        "status": "passed",
+        "duration": 1136.8143290000007
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' stops runaway streamed output",
+        "status": "passed",
+        "duration": 1118.2290129999965
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' stops runaway streamed output",
+        "status": "passed",
+        "duration": 12175.024599000004
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' stops runaway streamed output",
+        "status": "passed",
+        "duration": 12333.137367000003
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' websocket rejects an abnormal close without a fabricated completion",
+        "status": "passed",
+        "duration": 1521.7277199999953
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' websocket rejects an abnormal close without a fabricated completion",
+        "status": "passed",
+        "duration": 7623.672003
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes an approved tool from its producing response",
+        "status": "passed",
+        "duration": 1231.401545
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes an approved tool from its producing response",
+        "status": "passed",
+        "duration": 1227.0021189999998
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes an approved tool from its producing response",
+        "status": "passed",
+        "duration": 12053.397099
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes an approved tool from its producing response",
+        "status": "passed",
+        "duration": 12149.435222
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes a rejected tool exactly once",
+        "status": "passed",
+        "duration": 1365.5752209999991
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes a rejected tool exactly once",
+        "status": "passed",
+        "duration": 1197.5875680000026
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes a rejected tool exactly once",
+        "status": "passed",
+        "duration": 12423.433431999998
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes a rejected tool exactly once",
+        "status": "passed",
+        "duration": 12796.011602999999
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval y and returns one outer tool result",
+        "status": "passed",
+        "duration": 1301.0794749999986
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval n and returns one outer tool result",
+        "status": "passed",
+        "duration": 1419.3942380000008
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification",
+        "status": "passed",
+        "duration": 2330.565982
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' preserves two-turn response chaining",
+        "status": "passed",
+        "duration": 1431.227835
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' preserves two-turn response chaining",
+        "status": "passed",
+        "duration": 1307.2622780000002
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' preserves two-turn response chaining",
+        "status": "passed",
+        "duration": 12087.745614
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' preserves two-turn response chaining",
+        "status": "passed",
+        "duration": 12097.163249000001
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI codex websocket replays full history when the completed response socket is replaced",
+        "status": "passed",
+        "duration": 17568.310540999995
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI codex websocket preserves completed tool pairs when the producing socket is replaced",
+        "status": "passed",
+        "duration": 12630.023444999999
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI session_search through run_code completes canonical fallback in the shipped CLI",
+        "status": "passed",
+        "duration": 13421.030994
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI openai-websocket.retained-connection keeps two chained turns on one retained connection",
+        "status": "passed",
+        "duration": 1275.6216949999944
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI codex-websocket.retained-connection keeps two chained turns on one retained connection",
+        "status": "passed",
+        "duration": 12057.003284000006
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Built-in OpenRouter' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 2271.886021
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime openai' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1841.2957339999998
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime openai-compatible' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1983.3649700000005
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime llama.cpp' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 2009.680217
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime Anthropic' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1902.8921029999983
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime Google' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1930.4869879999987
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'OpenCode Chat route' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1794.203286
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'OpenCode Anthropic route' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1994.874675000001
+      },
+      {
+        "name": "provider black-box harness observes HTTP arrivals without further PTY output and still rejects an unmet state",
+        "status": "passed",
+        "duration": 182.82535400000003
+      },
+      {
+        "name": "provider black-box harness passes bounded retry settings to isolated root removal",
+        "status": "passed",
+        "duration": 0.8107079999999769
+      },
+      {
+        "name": "provider black-box harness reuses one isolated lease across PTY child launches and relaunches",
+        "status": "passed",
+        "duration": 143.50644400000004
+      },
+      {
+        "name": "provider black-box harness waits for composer idle through the harness file, not a prompt glyph",
+        "status": "passed",
+        "duration": 82.15006200000005
+      },
+      {
+        "name": "provider black-box harness gives waitForIdleInput the shared PTY ceiling when no timeout is passed",
+        "status": "passed",
+        "duration": 91.71619199999998
+      },
+      {
+        "name": "provider black-box harness fails waitForIdleInput fast when the child exits without publishing idle",
+        "status": "passed",
+        "duration": 55.443404999999984
+      },
+      {
+        "name": "provider black-box harness writes through the PTY and waits for visible state before exit",
+        "status": "passed",
+        "duration": 71.77483600000005
+      },
+      {
+        "name": "provider black-box harness waits for application-owned composer acknowledgement before writing Enter",
+        "status": "passed",
+        "duration": 0.5014910000001009
+      },
+      {
+        "name": "provider black-box harness isolates HOME and Windows USERPROFILE for child processes",
+        "status": "passed",
+        "duration": 66.93228099999999
+      },
+      {
+        "name": "provider black-box harness does not inherit the host CI marker into an interactive PTY child",
+        "status": "passed",
+        "duration": 60.47735899999998
+      },
+      {
+        "name": "provider black-box harness awaits termination after a bounded timeout",
+        "status": "passed",
+        "duration": 104.79784700000005
+      },
+      {
+        "name": "provider black-box harness reaps a timed-out one-shot child tree",
+        "status": "passed",
+        "duration": 1013.015903
+      },
+      {
+        "name": "provider black-box harness reaps a live PTY child when the owning process is signalled without cleanup",
+        "status": "passed",
+        "duration": 415.4981679999996
+      },
+      {
+        "name": "provider black-box harness retries concurrent workspace cleanup after a transient owned failure",
+        "status": "passed",
+        "duration": 5.09075699999994
+      },
+      {
+        "name": "provider black-box harness rejects new work while cleanup is active and after a failed attempt",
+        "status": "passed",
+        "duration": 72.10759299999972
+      },
+      {
+        "name": "provider black-box harness reclaims the root when preparation fails",
+        "status": "passed",
+        "duration": 1.0995139999999992
+      },
+      {
+        "name": "provider black-box harness preserves persistent acquisition cleanup errors",
+        "status": "passed",
+        "duration": 1.4039440000001377
+      },
+      {
+        "name": "provider black-box harness runs callback cleanup even when the callback fails",
+        "status": "passed",
+        "duration": 0.7844489999997677
+      },
+      {
+        "name": "public hooks through the packaged CLI loads a TypeScript user hook and delivers status.change in non-interactive mode",
+        "status": "passed",
+        "duration": 1209.1539899999998
+      },
+      {
+        "name": "public hooks through the packaged CLI loads a TypeScript user hook and delivers status.change in interactive mode",
+        "status": "passed",
+        "duration": 1537.2015540000002
+      },
+      {
+        "name": "public hooks through the packaged CLI runs TypeScript user hooks before trusted project hooks in deterministic order",
+        "status": "passed",
+        "duration": 1099.182503
+      },
+      {
+        "name": "'bare' reference approval preserves user context and enforces 'authorized' advice",
+        "status": "passed",
+        "duration": 896.457758
+      },
+      {
+        "name": "'bare' reference approval preserves user context and enforces 'high-risk' advice",
+        "status": "passed",
+        "duration": 1045.490054
+      },
+      {
+        "name": "'bare' reference approval preserves user context and enforces 'unknown' advice",
+        "status": "passed",
+        "duration": 1022.4773759999998
+      },
+      {
+        "name": "'full' reference approval preserves user context and enforces 'authorized' advice",
+        "status": "passed",
+        "duration": 1132.5257469999997
+      },
+      {
+        "name": "'full' reference approval preserves user context and enforces 'high-risk' advice",
+        "status": "passed",
+        "duration": 978.7517710000002
+      },
+      {
+        "name": "'full' reference approval preserves user context and enforces 'unknown' advice",
+        "status": "passed",
+        "duration": 1006.9351559999996
+      },
+      {
+        "name": "resumes repeated questions once per decision and settles cancellation before the next turn",
+        "status": "passed",
+        "duration": 1580.898148
+      }
+    ]
+  },
+  "provider-bundle": {
+    "counts": {
+      "numPassedTests": 222,
+      "numFailedTests": 0,
+      "numPendingTests": 1,
+      "numTotalTests": 223
+    },
+    "tests": [
+      {
+        "name": "edits and retracts pending steering while one turn crosses two manual approvals, then handles release and cancellation without duplicate fallback",
+        "status": "passed",
+        "duration": 1884.338085
+      },
+      {
+        "name": "fixture HTTP replay replays a recorded response and validates the outbound request",
+        "status": "passed",
+        "duration": 40.05066099999999
+      },
+      {
+        "name": "fixture HTTP replay exposes a canonical diff for a request mutation",
+        "status": "passed",
+        "duration": 6.675095999999996
+      },
+      {
+        "name": "fixture WebSocket replay validates ordered sends and replays receives",
+        "status": "passed",
+        "duration": 22.710262999999998
+      },
+      {
+        "name": "fixture WebSocket replay rejects a reordered send",
+        "status": "passed",
+        "duration": 7.855710000000016
+      },
+      {
+        "name": "fixture WebSocket replay does not pass vacuously when no session ever connects",
+        "status": "passed",
+        "duration": 51.11483200000001
+      },
+      {
+        "name": "fixture WebSocket replay rejects a non-WebSocket fixture before starting a vacuous replay server",
+        "status": "passed",
+        "duration": 0.9525869999999941
+      },
+      {
+        "name": "fixture WebSocket replay rejects a empty turn without a meaningful exchange",
+        "status": "passed",
+        "duration": 0.4597400000000107
+      },
+      {
+        "name": "fixture WebSocket replay rejects a receive-only turn without a meaningful exchange",
+        "status": "passed",
+        "duration": 0.22871799999998643
+      },
+      {
+        "name": "fixture WebSocket replay rejects a send-only turn without a meaningful exchange",
+        "status": "passed",
+        "duration": 0.16225000000000023
+      },
+      {
+        "name": "fixture WebSocket replay rejects a turn containing non-WebSocket frames instead of filtering them",
+        "status": "passed",
+        "duration": 0.3869320000000016
+      },
+      {
+        "name": "fixture WebSocket replay fails validation when a client closes before the replay cursor completes",
+        "status": "passed",
+        "duration": 53.56552899999997
+      },
+      {
+        "name": "fixture WebSocket replay drives the deterministic success scenario with ordered, non-empty frames",
+        "status": "passed",
+        "duration": 5.088169999999991
+      },
+      {
+        "name": "fixture WebSocket replay drives the deterministic native-error scenario with ordered, non-empty frames",
+        "status": "passed",
+        "duration": 2.7269000000000005
+      },
+      {
+        "name": "fixture WebSocket replay drives the deterministic incomplete scenario with ordered, non-empty frames",
+        "status": "passed",
+        "duration": 2.4029820000000086
+      },
+      {
+        "name": "fixture WebSocket replay drives the deterministic abnormal-close scenario with ordered, non-empty frames",
+        "status": "passed",
+        "duration": 2.029368999999974
+      },
+      {
+        "name": "fixture WebSocket replay rejects an outbound ordering mismatch in a generated scenario",
+        "status": "passed",
+        "duration": 2.110129000000029
+      },
+      {
+        "name": "compares requests semantically and ignores transport/SDK churn fields",
+        "status": "passed",
+        "duration": 1.9932839999999885
+      },
+      {
+        "name": "compares JSON tool arguments independent of whitespace",
+        "status": "passed",
+        "duration": 0.32636199999998894
+      },
+      {
+        "name": "reports a canonicalized request mutation",
+        "status": "passed",
+        "duration": 0.27581700000001774
+      },
+      {
+        "name": "treats a redacted expected header value as matching any actual value",
+        "status": "passed",
+        "duration": 0.23704000000000747
+      },
+      {
+        "name": "ignores SDK platform headers that vary across recording environments",
+        "status": "passed",
+        "duration": 0.15962600000000293
+      },
+      {
+        "name": "still compares nonvolatile recorded headers",
+        "status": "passed",
+        "duration": 0.15835400000000277
+      },
+      {
+        "name": "fixture transport SDK drift fails loudly when a fixture major/minor differs from the installed SDK",
+        "status": "passed",
+        "duration": 13.300002999999975
+      },
+      {
+        "name": "fixture envelope validates all frame kinds and cross-frame placeholders",
+        "status": "passed",
+        "duration": 2.2082010000000025
+      },
+      {
+        "name": "fixture envelope parses JSON envelopes",
+        "status": "passed",
+        "duration": 0.44772100000000137
+      },
+      {
+        "name": "fixture envelope rejects placeholder collisions",
+        "status": "passed",
+        "duration": 1.0921640000000252
+      },
+      {
+        "name": "fixture envelope rejects unmapped placeholder references",
+        "status": "passed",
+        "duration": 0.3949929999999995
+      },
+      {
+        "name": "fixture envelope accepts ordinary angle-bracketed text in frames",
+        "status": "passed",
+        "duration": 0.35711800000001404
+      },
+      {
+        "name": "fixture envelope rejects non-monotonic frame order",
+        "status": "passed",
+        "duration": 0.5985239999999976
+      },
+      {
+        "name": "fixture recorder parses logical SSE events, including multiline data and DONE",
+        "status": "passed",
+        "duration": 2.852485999999999
+      },
+      {
+        "name": "fixture recorder captures request, response head, and response events without consuming response",
+        "status": "passed",
+        "duration": 27.93668600000001
+      },
+      {
+        "name": "fixture sanitizer redacts request secrets and canonicalizes IDs inside response payloads",
+        "status": "passed",
+        "duration": 6.201418999999987
+      },
+      {
+        "name": "fixture sanitizer redacts plaintext model reasoning while preserving response protocol structure",
+        "status": "passed",
+        "duration": 0.6799540000000093
+      },
+      {
+        "name": "fixture sanitizer does not flag relative provider URL paths and redacts opaque thought signatures",
+        "status": "passed",
+        "duration": 0.8847069999999917
+      },
+      {
+        "name": "fixture sanitizer redacts Google thought text while preserving the thought part shape",
+        "status": "passed",
+        "duration": 0.36109299999998257
+      },
+      {
+        "name": "fixture sanitizer redacts Anthropic thinking deltas while preserving event structure",
+        "status": "passed",
+        "duration": 0.5642430000000047
+      },
+      {
+        "name": "fixture sanitizer redacts chat reasoning deltas and provider fingerprints",
+        "status": "passed",
+        "duration": 0.32330799999999726
+      },
+      {
+        "name": "fixture sanitizer redacts provider identifiers in response headers and canonicalizes request IDs",
+        "status": "passed",
+        "duration": 0.7348560000000077
+      },
+      {
+        "name": "fixture sanitizer canonicalizes Responses reasoning and function item IDs and removes encrypted content",
+        "status": "passed",
+        "duration": 0.835503999999986
+      },
+      {
+        "name": "committed fixture security rejects common secret forms",
+        "status": "passed",
+        "duration": 2.7117079999999874
+      },
+      {
+        "name": "committed fixture security does not flag benign prose or URLs as high-entropy secrets",
+        "status": "passed",
+        "duration": 0.5667069999999796
+      },
+      {
+        "name": "committed fixture security contains no likely secrets in committed fixture JSON",
+        "status": "passed",
+        "duration": 40.03786600000001
+      },
+      {
+        "name": "record-from-fake self-validation (plan D4) records from the fake provider, replays to identity, and writes an honestly-labeled envelope",
+        "status": "passed",
+        "duration": 48.768519
+      },
+      {
+        "name": "P1 nested hide result chain approves a hidden nested editor through the scripted adapter and preserves result-chain identity",
+        "status": "passed",
+        "duration": 206.24421200000006
+      },
+      {
+        "name": "OpenAI endpoint redirection proves the installed OpenAI client honors OPENAI_BASE_URL without fetch rewriting",
+        "status": "passed",
+        "duration": 181.53608600000007
+      },
+      {
+        "name": "OpenAI endpoint redirection routes the application-owned OpenAI provider to OPENAI_BASE_URL",
+        "status": "passed",
+        "duration": 39.55327599999998
+      },
+      {
+        "name": "provider capability matrix declares every target route with transport, lifecycle, and required scenarios",
+        "status": "passed",
+        "duration": 6.622941999999995
+      },
+      {
+        "name": "provider capability matrix unit-tests the accounting primitive with representative execution entries",
+        "status": "passed",
+        "duration": 2.345074000000011
+      },
+      {
+        "name": "provider capability matrix accounts the real lifecycle ledgers without importing their test modules",
+        "status": "passed",
+        "duration": 0.5387460000000033
+      },
+      {
+        "name": "provider capability matrix fails when a row has neither an executed scenario nor a documented exclusion",
+        "status": "passed",
+        "duration": 0.3311589999999853
+      },
+      {
+        "name": "provider capability matrix accepts an exclusion only when it carries a reason and evidence",
+        "status": "passed",
+        "duration": 0.4852570000000185
+      },
+      {
+        "name": "provider capability matrix rejects an execution that does not belong to the row required-scenario set",
+        "status": "passed",
+        "duration": 0.4736000000000047
+      },
+      {
+        "name": "assembled provider CLI black-box runs a bounded handoff through the real supervisor, private pipe, and built CLI",
+        "status": "passed",
+        "duration": 634.056078
+      },
+      {
+        "name": "assembled provider CLI black-box rejects excessive input before the shipped CLI makes any provider request",
+        "status": "passed",
+        "duration": 534.594359
+      },
+      {
+        "name": "assembled provider CLI black-box applies the supervised output profile on the actual wire while allowing useful work",
+        "status": "passed",
+        "duration": 547.1826619999999
+      },
+      {
+        "name": "assembled provider CLI black-box runs the shipped CLI through a runtime provider and captures a complete request",
+        "status": "passed",
+        "duration": 604.0035239999997
+      },
+      {
+        "name": "assembled provider CLI black-box prints terminal-only response text exactly once",
+        "status": "passed",
+        "duration": 530.6921000000002
+      },
+      {
+        "name": "assembled provider CLI black-box reports provider errors without fabricating successful output",
+        "status": "passed",
+        "duration": 12183.019542
+      },
+      {
+        "name": "provider boundary contracts through the registry llama.cpp keeps reasoning translation scoped to its adapter",
+        "status": "passed",
+        "duration": 42.19900500000006
+      },
+      {
+        "name": "provider boundary contracts through the registry openai-compatible keeps reasoning translation scoped to its adapter",
+        "status": "passed",
+        "duration": 6.241484000000014
+      },
+      {
+        "name": "provider boundary contracts through the registry OpenCode 'chat-completions' preserves session affinity across recreated models",
+        "status": "passed",
+        "duration": 11.16678300000001
+      },
+      {
+        "name": "provider boundary contracts through the registry OpenCode 'responses' preserves session affinity across recreated models",
+        "status": "passed",
+        "duration": 9.502374000000032
+      },
+      {
+        "name": "provider boundary contracts through the registry OpenCode 'anthropic' preserves session affinity across recreated models",
+        "status": "passed",
+        "duration": 35.73456199999998
+      },
+      {
+        "name": "provider boundary contracts through the registry SDK adapter 2 preserves explicit reasoning settings over selected effort",
+        "status": "passed",
+        "duration": 6.17617800000005
+      },
+      {
+        "name": "provider boundary contracts through the registry SDK adapter 3 preserves explicit reasoning settings over selected effort",
+        "status": "passed",
+        "duration": 14.890873000000056
+      },
+      {
+        "name": "provider boundary contracts through the registry SDK adapter 4 preserves explicit reasoning settings over selected effort",
+        "status": "passed",
+        "duration": 9.938938000000007
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"39.676606339s\",\"expected\":39677}",
+        "status": "passed",
+        "duration": 13.964467999999897
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"59.999s\",\"expected\":59999}",
+        "status": "passed",
+        "duration": 8.670914000000039
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60s\",\"expected\":60000}",
+        "status": "passed",
+        "duration": 5.665322999999944
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60.001s\"}",
+        "status": "passed",
+        "duration": 4.138906999999904
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"120s\"}",
+        "status": "passed",
+        "duration": 3.518028999999956
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"-1s\",\"expected\":500}",
+        "status": "passed",
+        "duration": 6.038293999999951
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"not-a-duration\",\"expected\":500}",
+        "status": "passed",
+        "duration": 6.236957000000075
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"message\":\"Quota exceeded. https://ai.google.dev/gemini-api/docs/rate-limits. Please retry in 9.592042673s.\",\"expected\":9593}",
+        "status": "passed",
+        "duration": 4.956634999999892
+      },
+      {
+        "name": "provider boundary contracts through the registry honors bounded Google quota delays through the real SDK: {\"retryAfter\":\"2.5\",\"expected\":2500}",
+        "status": "passed",
+        "duration": 5.038460999999984
+      },
+      {
+        "name": "provider boundary contracts through the registry keeps the built-in registry surface available",
+        "status": "passed",
+        "duration": 0.3017859999999928
+      },
+      {
+        "name": "provider boundary contracts through the registry pilot Chat Completions provider replays a synthetic chat-completions fixture through the registry",
+        "status": "passed",
+        "duration": 6.5871250000000146
+      },
+      {
+        "name": "provider boundary contracts through the registry real OpenAI Responses capture replays tool continuation through the built-in registry",
+        "status": "passed",
+        "duration": 12.256653999999912
+      },
+      {
+        "name": "provider boundary contracts through the registry real OpenRouter capture replays tool continuation through the built-in registry",
+        "status": "passed",
+        "duration": 63.809983999999986
+      },
+      {
+        "name": "provider boundary contracts through the registry real OpenCode Chat Completions capture replays tool continuation through the registry",
+        "status": "passed",
+        "duration": 15.207113999999933
+      },
+      {
+        "name": "provider boundary contracts through the registry real OpenCode Anthropic capture replays tool continuation through the registry",
+        "status": "passed",
+        "duration": 9.382306000000085
+      },
+      {
+        "name": "provider boundary contracts through the registry real Google capture replays tool continuation through the registry",
+        "status": "passed",
+        "duration": 6.759999999999991
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 3.3456249999999272
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Chat Completions' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 2.2078030000000126
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Anthropic' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 2.4997640000000274
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Google' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 2.346948999999995
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenRouter' succeeds with one authoritative completion",
+        "status": "passed",
+        "duration": 2.584479999999985
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 2.6733410000000504
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Chat Completions' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 2.510249999999928
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Anthropic' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 3.1173069999999825
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Google' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 2.280750000000012
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenRouter' preserves request roles, tools, reasoning, and provider options",
+        "status": "passed",
+        "duration": 2.3848349999999527
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenAI Responses HTTP' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 2.5467239999999265
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Chat Completions' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 3.5159669999999323
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Anthropic' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 3.625308000000018
+      },
+      {
+        "name": "provider boundary contracts through the registry 'Google' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 2.7301740000000336
+      },
+      {
+        "name": "provider boundary contracts through the registry 'OpenRouter' propagates a provider error instead of fabricating completion",
+        "status": "passed",
+        "duration": 3.2021929999999657
+      },
+      {
+        "name": "provider boundary contracts through the registry replays OpenAI-compatible native reasoning_content through the registry tool continuation boundary",
+        "status": "passed",
+        "duration": 4.748778000000016
+      },
+      {
+        "name": "provider boundary contracts through the registry captures OpenRouter-style delta.reasoning and replays it through the registry tool continuation boundary",
+        "status": "passed",
+        "duration": 4.140349000000015
+      },
+      {
+        "name": "provider boundary contracts through the registry reassembles Chat Completions tool fragments with the authoritative tool ID",
+        "status": "passed",
+        "duration": 3.04261699999995
+      },
+      {
+        "name": "provider boundary contracts through the registry retries an in-band 502 that follows trivial whitespace and succeeds",
+        "status": "passed",
+        "duration": 5.137923000000001
+      },
+      {
+        "name": "crash after tool effect but before the tool result keeps the executed call in the resumed provider history without repeating the effect",
+        "status": "passed",
+        "duration": 1727.108221
+      },
+      {
+        "name": "completes ordinary useful work with fresh safety defaults and keeps a resumable session",
+        "status": "passed",
+        "duration": 680.13918
+      },
+      {
+        "name": "admits input beyond the old universal ceiling when known capacity permits",
+        "status": "passed",
+        "duration": 683.550926
+      },
+      {
+        "name": "pauses before dispatch on a known small model with fresh defaults",
+        "status": "passed",
+        "duration": 559.5268529999998
+      },
+      {
+        "name": "enforces an explicit smaller input ceiling with escalation=undefined and retains a locator",
+        "status": "passed",
+        "duration": 621.3749000000003
+      },
+      {
+        "name": "enforces an explicit smaller input ceiling with escalation=warn and retains a locator",
+        "status": "passed",
+        "duration": 601.3228919999997
+      },
+      {
+        "name": "parks an unattended critical budget under explicit contain without auto-granting and retains completed tool evidence",
+        "status": "passed",
+        "duration": 1534.5382079999995
+      },
+      {
+        "name": "retains unknown-model work after structured provider overflow without retrying",
+        "status": "passed",
+        "duration": 573.8746640000008
+      },
+      {
+        "name": "completes a tiny small-model request with real fresh and reloaded settings",
+        "status": "passed",
+        "duration": 1170.0061850000002
+      },
+      {
+        "name": "provider recorder credential isolation refuses an Anthropic credential for the OpenCode provider",
+        "status": "passed",
+        "duration": 906.086381
+      },
+      {
+        "name": "application-owned provider restart continuity resumes a completed conversation from full history, then establishes fresh chaining",
+        "status": "passed",
+        "duration": 1881.4926569999998
+      },
+      {
+        "name": "application-owned provider restart continuity settles an interrupted approval-pending 'OpenAI Responses' tool into resumed history without an orphan or stale response id",
+        "status": "passed",
+        "duration": 1702.0314819999999
+      },
+      {
+        "name": "application-owned provider restart continuity settles an interrupted approval-pending 'Codex Responses' tool into resumed history without an orphan or stale response id",
+        "status": "passed",
+        "duration": 1707.774996
+      },
+      {
+        "name": "application-owned context compaction black-box lifecycle persists a compaction item and sends it after save/resume",
+        "status": "passed",
+        "duration": 1743.7367460000005
+      },
+      {
+        "name": "application-owned context compaction black-box lifecycle sends the next Codex turn after native compaction",
+        "status": "passed",
+        "duration": 1087.2932329999994
+      },
+      {
+        "name": "application-owned context compaction black-box lifecycle refuses a switched-provider request when native compaction coverage is unknown",
+        "status": "passed",
+        "duration": 1723.5670720000016
+      },
+      {
+        "name": "application-owned context compaction black-box lifecycle does not re-execute a tool after its turn is replaced by compaction",
+        "status": "passed",
+        "duration": 1879.664114000001
+      },
+      {
+        "name": "Codex WebSocket corrupt-history recovery codex-websocket.orphan-chain-recovery (standard model) sends paired full history after a stale resume chain",
+        "status": "passed",
+        "duration": 981.2461340000009
+      },
+      {
+        "name": "Codex WebSocket corrupt-history recovery codex-websocket.orphan-chain-recovery (Responses Lite (gpt-5.6-luna)) sends paired full history after a stale resume chain",
+        "status": "passed",
+        "duration": 959.4253449999997
+      },
+      {
+        "name": "application-owned provider HTTP resilience openai-http.native-error does not become empty success",
+        "status": "passed",
+        "duration": 662.300156
+      },
+      {
+        "name": "application-owned provider HTTP resilience openai-http.early-close does not become empty success",
+        "status": "passed",
+        "duration": 651.2548390000001
+      },
+      {
+        "name": "application-owned provider HTTP resilience openai-http.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 601.2323570000001
+      },
+      {
+        "name": "application-owned provider HTTP resilience codex-http.native-error does not become empty success",
+        "status": "passed",
+        "duration": 654.1838290000001
+      },
+      {
+        "name": "application-owned provider HTTP resilience codex-http.early-close does not become empty success",
+        "status": "passed",
+        "duration": 571.3234779999998
+      },
+      {
+        "name": "application-owned provider HTTP resilience codex-http.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 634.9251140000001
+      },
+      {
+        "name": "application-owned provider HTTP resilience openrouter-http.native-error does not become empty success",
+        "status": "passed",
+        "duration": 640.6456760000001
+      },
+      {
+        "name": "application-owned provider HTTP resilience openrouter-http.early-close does not become empty success",
+        "status": "passed",
+        "duration": 618.4705979999999
+      },
+      {
+        "name": "application-owned provider HTTP resilience openrouter-http.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 697.7598790000002
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.native-error does not become empty success",
+        "status": "passed",
+        "duration": 514.1400119999998
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.early-close does not become empty success",
+        "status": "passed",
+        "duration": 569.315646
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-openai-compatible-chat.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 551.1235029999998
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-anthropic-messages.native-error does not become empty success",
+        "status": "passed",
+        "duration": 551.8777640000008
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-anthropic-messages.early-close does not become empty success",
+        "status": "passed",
+        "duration": 534.9303839999993
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-anthropic-messages.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 598.9736889999986
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.native-error does not become empty success",
+        "status": "passed",
+        "duration": 564.9028079999989
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.early-close does not become empty success",
+        "status": "passed",
+        "duration": 546.765738
+      },
+      {
+        "name": "application-owned provider HTTP resilience runtime-google-generate-content.incomplete does not become empty success",
+        "status": "passed",
+        "duration": 582.3385400000006
+      },
+      {
+        "name": "application-owned provider response-side reasoning openai-http.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 577.1986310000011
+      },
+      {
+        "name": "application-owned provider response-side reasoning codex-http.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 615.0664580000011
+      },
+      {
+        "name": "application-owned provider response-side reasoning openrouter-http.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 622.5602319999998
+      },
+      {
+        "name": "application-owned provider response-side reasoning runtime-openai-compatible-chat.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 660.0778739999987
+      },
+      {
+        "name": "application-owned provider response-side reasoning runtime-anthropic-messages.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 598.6341340000017
+      },
+      {
+        "name": "application-owned provider response-side reasoning runtime-google-generate-content.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 710.4083609999998
+      },
+      {
+        "name": "application-owned provider WebSocket resilience openai-websocket.native-error fails without fabricated completion",
+        "status": "passed",
+        "duration": 522.9068669999997
+      },
+      {
+        "name": "application-owned provider WebSocket resilience openai-websocket.incomplete fails without fabricated completion",
+        "status": "passed",
+        "duration": 521.039893000001
+      },
+      {
+        "name": "application-owned provider WebSocket resilience openai-websocket.abnormal-close fails without fabricated completion",
+        "status": "passed",
+        "duration": 551.1139520000015
+      },
+      {
+        "name": "application-owned provider WebSocket resilience codex-websocket.native-error fails without fabricated completion",
+        "status": "passed",
+        "duration": 635.5543799999978
+      },
+      {
+        "name": "application-owned provider WebSocket resilience codex-websocket.incomplete fails without fabricated completion",
+        "status": "passed",
+        "duration": 550.1783840000026
+      },
+      {
+        "name": "application-owned provider WebSocket resilience codex-websocket.abnormal-close fails without fabricated completion",
+        "status": "passed",
+        "duration": 583.8676930000001
+      },
+      {
+        "name": "application-owned WebSocket response-side reasoning openai-websocket.reasoning preserves response-side reasoning and final output",
+        "status": "skipped",
+        "duration": 619.8983509999998
+      },
+      {
+        "name": "application-owned WebSocket response-side reasoning codex-websocket.reasoning preserves response-side reasoning and final output",
+        "status": "passed",
+        "duration": 608.9191119999996
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' surfaces native terminal failure",
+        "status": "passed",
+        "duration": 981.6237229999999
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' surfaces native terminal failure",
+        "status": "passed",
+        "duration": 967.0903069999999
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' surfaces native terminal failure",
+        "status": "passed",
+        "duration": 11652.998882
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' surfaces native terminal failure",
+        "status": "passed",
+        "duration": 11700.671927999998
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' rejects an incomplete stream",
+        "status": "passed",
+        "duration": 785.434957999998
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' rejects an incomplete stream",
+        "status": "passed",
+        "duration": 864.8220149999979
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' rejects an incomplete stream",
+        "status": "passed",
+        "duration": 11380.590938999998
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' rejects an incomplete stream",
+        "status": "passed",
+        "duration": 11935.855556000002
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'http' stops runaway streamed output",
+        "status": "passed",
+        "duration": 789.1905390000029
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' 'websocket' stops runaway streamed output",
+        "status": "passed",
+        "duration": 787.1790279999987
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'http' stops runaway streamed output",
+        "status": "passed",
+        "duration": 7122.571739999999
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' 'websocket' stops runaway streamed output",
+        "status": "passed",
+        "duration": 11996.719015000002
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'openai' websocket rejects an abnormal close without a fabricated completion",
+        "status": "passed",
+        "duration": 715.7330680000014
+      },
+      {
+        "name": "application-owned Responses terminal failure lifecycle 'codex' websocket rejects an abnormal close without a fabricated completion",
+        "status": "passed",
+        "duration": 12585.92356299999
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes an approved tool from its producing response",
+        "status": "passed",
+        "duration": 1021.981418
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes an approved tool from its producing response",
+        "status": "passed",
+        "duration": 926.631592
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes an approved tool from its producing response",
+        "status": "passed",
+        "duration": 11852.792474
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes an approved tool from its producing response",
+        "status": "passed",
+        "duration": 11585.326813999998
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' resumes a rejected tool exactly once",
+        "status": "passed",
+        "duration": 934.9599550000021
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' resumes a rejected tool exactly once",
+        "status": "passed",
+        "duration": 977.1513010000017
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' resumes a rejected tool exactly once",
+        "status": "passed",
+        "duration": 11497.066581000003
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' resumes a rejected tool exactly once",
+        "status": "passed",
+        "duration": 11485.421242999997
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval y and returns one outer tool result",
+        "status": "passed",
+        "duration": 962.7872079999943
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI shipped CLI resolves nested shell approval n and returns one outer tool result",
+        "status": "passed",
+        "duration": 1030.5400940000036
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification",
+        "status": "passed",
+        "duration": 1950.205455000003
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'http' preserves two-turn response chaining",
+        "status": "passed",
+        "duration": 1077.631753
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'openai' 'websocket' preserves two-turn response chaining",
+        "status": "passed",
+        "duration": 1055.129298
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'http' preserves two-turn response chaining",
+        "status": "passed",
+        "duration": 13006.384547
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI 'codex' 'websocket' preserves two-turn response chaining",
+        "status": "passed",
+        "duration": 12725.145013
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI codex websocket replays full history when the completed response socket is replaced",
+        "status": "passed",
+        "duration": 13495.878396
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI codex websocket preserves completed tool pairs when the producing socket is replaced",
+        "status": "passed",
+        "duration": 13528.789986000003
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI session_search through run_code completes canonical fallback in the shipped CLI",
+        "status": "passed",
+        "duration": 12342.070594999997
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI openai-websocket.retained-connection keeps two chained turns on one retained connection",
+        "status": "passed",
+        "duration": 848.2206830000068
+      },
+      {
+        "name": "application-owned Responses lifecycle through the shipped CLI codex-websocket.retained-connection keeps two chained turns on one retained connection",
+        "status": "passed",
+        "duration": 7297.982138000007
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Built-in OpenRouter' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1283.669165
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime openai' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1325.885458
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime openai-compatible' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1390.7431240000005
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime llama.cpp' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1412.1948509999993
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime Anthropic' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1479.8224480000008
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'Runtime Google' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1348.7813260000012
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'OpenCode Chat route' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1382.7559789999996
+      },
+      {
+        "name": "assembled stateless provider lifecycle black-box 'OpenCode Anthropic route' executes two user turns and approval continuations through its registry route",
+        "status": "passed",
+        "duration": 1434.61024
+      },
+      {
+        "name": "provider black-box harness observes HTTP arrivals without further PTY output and still rejects an unmet state",
+        "status": "passed",
+        "duration": 157.10351200000002
+      },
+      {
+        "name": "provider black-box harness passes bounded retry settings to isolated root removal",
+        "status": "passed",
+        "duration": 0.6798150000000192
+      },
+      {
+        "name": "provider black-box harness reuses one isolated lease across PTY child launches and relaunches",
+        "status": "passed",
+        "duration": 110.67786999999998
+      },
+      {
+        "name": "provider black-box harness waits for composer idle through the harness file, not a prompt glyph",
+        "status": "passed",
+        "duration": 76.04782999999998
+      },
+      {
+        "name": "provider black-box harness gives waitForIdleInput the shared PTY ceiling when no timeout is passed",
+        "status": "passed",
+        "duration": 86.08468400000004
+      },
+      {
+        "name": "provider black-box harness fails waitForIdleInput fast when the child exits without publishing idle",
+        "status": "passed",
+        "duration": 62.53725200000008
+      },
+      {
+        "name": "provider black-box harness writes through the PTY and waits for visible state before exit",
+        "status": "passed",
+        "duration": 53.28003799999999
+      },
+      {
+        "name": "provider black-box harness waits for application-owned composer acknowledgement before writing Enter",
+        "status": "passed",
+        "duration": 0.4290640000000394
+      },
+      {
+        "name": "provider black-box harness isolates HOME and Windows USERPROFILE for child processes",
+        "status": "passed",
+        "duration": 55.13870399999996
+      },
+      {
+        "name": "provider black-box harness does not inherit the host CI marker into an interactive PTY child",
+        "status": "passed",
+        "duration": 74.66155700000002
+      },
+      {
+        "name": "provider black-box harness awaits termination after a bounded timeout",
+        "status": "passed",
+        "duration": 107.73519999999996
+      },
+      {
+        "name": "provider black-box harness reaps a timed-out one-shot child tree",
+        "status": "passed",
+        "duration": 1022.4391119999999
+      },
+      {
+        "name": "provider black-box harness reaps a live PTY child when the owning process is signalled without cleanup",
+        "status": "passed",
+        "duration": 342.8812109999999
+      },
+      {
+        "name": "provider black-box harness retries concurrent workspace cleanup after a transient owned failure",
+        "status": "passed",
+        "duration": 5.979927999999745
+      },
+      {
+        "name": "provider black-box harness rejects new work while cleanup is active and after a failed attempt",
+        "status": "passed",
+        "duration": 59.699073999999655
+      },
+      {
+        "name": "provider black-box harness reclaims the root when preparation fails",
+        "status": "passed",
+        "duration": 1.5647030000000086
+      },
+      {
+        "name": "provider black-box harness preserves persistent acquisition cleanup errors",
+        "status": "passed",
+        "duration": 1.0816279999999097
+      },
+      {
+        "name": "provider black-box harness runs callback cleanup even when the callback fails",
+        "status": "passed",
+        "duration": 1.2888550000002397
+      },
+      {
+        "name": "public hooks through the packaged CLI loads a TypeScript user hook and delivers status.change in non-interactive mode",
+        "status": "passed",
+        "duration": 739.816126
+      },
+      {
+        "name": "public hooks through the packaged CLI loads a TypeScript user hook and delivers status.change in interactive mode",
+        "status": "passed",
+        "duration": 1013.5395269999999
+      },
+      {
+        "name": "public hooks through the packaged CLI runs TypeScript user hooks before trusted project hooks in deterministic order",
+        "status": "passed",
+        "duration": 638.6496389999998
+      },
+      {
+        "name": "'bare' reference approval preserves user context and enforces 'authorized' advice",
+        "status": "passed",
+        "duration": 684.5989979999999
+      },
+      {
+        "name": "'bare' reference approval preserves user context and enforces 'high-risk' advice",
+        "status": "passed",
+        "duration": 633.458765
+      },
+      {
+        "name": "'bare' reference approval preserves user context and enforces 'unknown' advice",
+        "status": "passed",
+        "duration": 699.3994369999998
+      },
+      {
+        "name": "'full' reference approval preserves user context and enforces 'authorized' advice",
+        "status": "passed",
+        "duration": 667.752817
+      },
+      {
+        "name": "'full' reference approval preserves user context and enforces 'high-risk' advice",
+        "status": "passed",
+        "duration": 2646.383829
+      },
+      {
+        "name": "'full' reference approval preserves user context and enforces 'unknown' advice",
+        "status": "passed",
+        "duration": 684.6397419999994
+      },
+      {
+        "name": "resumes repeated questions once per decision and settles cancellation before the next turn",
+        "status": "passed",
+        "duration": 1234.808972
+      }
+    ]
+  },
+  "prototype_script": "import { createRequire } from 'node:module';\nimport { readFile, writeFile } from 'node:fs/promises';\nimport { relative, resolve } from 'node:path';\nconst require = createRequire(import.meta.url);\nconst { build } = require(require.resolve('esbuild', { paths: [require.resolve('tsx')] }));\nconst mode = process.argv[2] ?? 'source';\nconst root = resolve('dist');\nconst start = performance.now();\nconst result = await build({\n  entryPoints: ['dist/cli.js'], outdir: 'dist', entryNames: `cli-${mode}`, chunkNames: `experiment-${mode}-[hash]`, bundle: true, splitting: true,\n  platform: 'node', format: 'esm', target: 'node20', treeShaking: true, keepNames: true,\n  packages: mode === 'source' ? 'external' : undefined,\n  external: ['better-sqlite3', 'ssh2', 'react-devtools-core', 'react', 'jiti', '@anthropic-ai/sandbox-runtime', '@qduc/agent-wire'],\n  banner: { js: `import { createRequire as bundleCreateRequire } from 'node:module'; const require = bundleCreateRequire(import.meta.url);` },\n  metafile: true,\n  plugins: [{ name: 'preserve-module-locations', setup(b) {\n    b.onLoad({ filter: /\\.js$/ }, async ({ path }) => {\n      if (!path.startsWith(root + '/')) return;\n      const contents = (await readFile(path, 'utf8')).replaceAll('import.meta.url',\n        `new URL(${JSON.stringify('./' + relative(root, path))}, import.meta.url).href`).replaceAll('import.meta.dirname',\n        `bundleFileURLToPath(new URL(${JSON.stringify('./' + relative(root, resolve(path, '..')) + '/')}, import.meta.url))`);\n      return { contents: `import { fileURLToPath as bundleFileURLToPath } from 'node:url';\\n` + contents.replace(/^#!.*\\n/, ''), loader: 'js' };\n    });\n  } }],\n});\nawait writeFile(`/tmp/term2-bundle-${mode}-meta.json`, JSON.stringify(result.metafile));\nconsole.log(JSON.stringify({ mode, seconds: (performance.now() - start) / 1000, inputs: Object.keys(result.metafile.inputs).length }));\n",
+  "measurement_scripts": {
+    "term2-startup.py": "import subprocess, time, os, resource, tempfile, json\nroot='/workspace/term2/.worktrees/ci-fresh'\nresults=[]\nwith tempfile.TemporaryDirectory(prefix='term2-startup-') as home:\n  for repeat in range(3):\n    for mode in (['plain','source','all'] if repeat % 2 == 0 else ['all','source','plain']):\n      for state in ['cold','warm']:\n        cache=tempfile.mkdtemp(prefix=mode+'-',dir=home) if state=='cold' else cache\n        args=['node',root+'/dist/cli'+('' if mode=='plain' else '-'+mode)+'.js','--help']\n        before=resource.getrusage(resource.RUSAGE_CHILDREN); start=time.monotonic()\n        p=subprocess.run(args,cwd=home,env={**os.environ,'HOME':home,'USERPROFILE':home,'NODE_COMPILE_CACHE':cache},capture_output=True,text=True,timeout=30)\n        after=resource.getrusage(resource.RUSAGE_CHILDREN)\n        row={'repeat':repeat,'mode':mode,'cache':state,'wall_s':time.monotonic()-start,'user_s':after.ru_utime-before.ru_utime,'system_s':after.ru_stime-before.ru_stime,'maxrss_kb':after.ru_maxrss,'status':p.returncode,'stdout_bytes':len(p.stdout),'stderr':p.stderr[-2000:]}\n        results.append(row); print(json.dumps(row),flush=True)\nwith open('/tmp/term2-startup-results.json','w') as f: json.dump(results,f,indent=2)\n",
+    "term2-measure.py": "import subprocess, time, os, resource, json, sys\nname=sys.argv[1]\ncommand=sys.argv[2:]\nbefore=resource.getrusage(resource.RUSAGE_CHILDREN);start=time.monotonic()\nwith open('/tmp/'+name+'.log','w') as out:\n p=subprocess.run(command,stdout=out,stderr=subprocess.STDOUT,env={**os.environ,'CI':'1','NODE_ENV':'test','pnpm_config_verify_deps_before_run':''},timeout=600)\nafter=resource.getrusage(resource.RUSAGE_CHILDREN)\nrow={'command':command,'wall_s':time.monotonic()-start,'user_s':after.ru_utime-before.ru_utime,'system_s':after.ru_stime-before.ru_stime,'maxrss_kb':after.ru_maxrss,'status':p.returncode}\nwith open('/tmp/'+name+'.resources.json','w') as f:json.dump(row,f,indent=2)\nprint(json.dumps(row))\nsys.exit(p.returncode)\n"
+  },
+  "syscall_diagnostic": {
+    "term2-plain-strace.txt": "% time     seconds  usecs/call     calls    errors syscall\n------ ----------- ----------- --------- --------- -------------------\n 73.38    1.671637         745      2243       176 futex\n 21.34    0.486198      243099         2           epoll_pwait\n  1.91    0.043490           3     10953      1633 statx\n  0.85    0.019415          22       850           mmap\n  0.59    0.013346          16       803           munmap\n  0.47    0.010678          13       799           madvise\n  0.43    0.009795           4      2332       196 openat\n  0.32    0.007354           2      2469           read\n  0.28    0.006433           2      2145           close\n  0.19    0.004218          13       317           mprotect\n  0.12    0.002795           4       657           pread64\n  0.03    0.000612           3       178           readlink\n  0.02    0.000397           4        94           brk\n  0.01    0.000315           6        50           rt_sigprocmask\n  0.01    0.000214           4        48           getpid\n  0.01    0.000171          24         7           clone3\n  0.01    0.000128          16         8           prctl\n  0.00    0.000087           2        33           fstat\n  0.00    0.000076           9         8           rseq\n  0.00    0.000064          12         5           sched_getparam\n  0.00    0.000062           7         8           set_robust_list\n  0.00    0.000059           4        12           prlimit64\n  0.00    0.000050           5        10         9 ioctl\n  0.00    0.000044           8         5           sched_getaffinity\n  0.00    0.000036           1        36           rt_sigaction\n  0.00    0.000031           1        31           getcwd\n  0.00    0.000030           7         4           pipe2\n  0.00    0.000025           6         4           epoll_ctl\n  0.00    0.000023           7         3           epoll_create1\n  0.00    0.000022           3         6           write\n  0.00    0.000022           1        21           capget\n  0.00    0.000021           1        21           getegid\n  0.00    0.000020           0        21           getuid\n  0.00    0.000020           0        21           geteuid\n  0.00    0.000019           6         3           eventfd2\n  0.00    0.000018           0        21           getgid\n  0.00    0.000018           6         3         3 io_uring_setup\n  0.00    0.000011           3         3           clock_nanosleep\n  0.00    0.000010           3         3           getrandom\n  0.00    0.000008           2         4           lseek\n  0.00    0.000008           2         4           uname\n  0.00    0.000008           1         5           sched_getscheduler\n  0.00    0.000006           6         1           sched_yield\n  0.00    0.000005           1         5           gettid\n  0.00    0.000000           0         1         1 access\n  0.00    0.000000           0         1           execve\n  0.00    0.000000           0        25        14 fcntl\n  0.00    0.000000           0         1           getppid\n  0.00    0.000000           0         1           arch_prctl\n  0.00    0.000000           0         1           set_tid_address\n------ ----------- ----------- --------- --------- -------------------\n100.00    2.277999          93     24286      2032 total\n",
+    "term2-bundle-strace.txt": "% time     seconds  usecs/call     calls    errors syscall\n------ ----------- ----------- --------- --------- -------------------\n 74.68    0.964553         439      2195       163 futex\n 20.81    0.268717      134358         2           epoll_pwait\n  1.32    0.017016           4      3871       471 statx\n  0.75    0.009692           9      1050           read\n  0.56    0.007279          13       528           mmap\n  0.34    0.004340           5       839        51 openat\n  0.32    0.004154           8       480           munmap\n  0.21    0.002657           8       304           mprotect\n  0.20    0.002633        1316         2           clock_nanosleep\n  0.19    0.002510           3       797           close\n  0.19    0.002405           5       472           madvise\n  0.11    0.001442         206         7           clone3\n  0.09    0.001181           5       219           pread64\n  0.04    0.000573          71         8           prctl\n  0.03    0.000328           2       133           brk\n  0.02    0.000265           4        60           readlink\n  0.02    0.000232          77         3           sched_getscheduler\n  0.02    0.000229           4        50           rt_sigprocmask\n  0.02    0.000196          12        16           getcwd\n  0.01    0.000153           3        47           getpid\n  0.01    0.000121          15         8           rseq\n  0.01    0.000090           2        35           fstat\n  0.01    0.000072           3        21           getuid\n  0.01    0.000071          23         3           sched_getparam\n  0.01    0.000068           5        12           prlimit64\n  0.01    0.000067           3        21           geteuid\n  0.01    0.000065           3        21           capget\n  0.00    0.000060           2        21           getgid\n  0.00    0.000057          11         5           sched_getaffinity\n  0.00    0.000056           2        21           getegid\n  0.00    0.000051           6         8           set_robust_list\n  0.00    0.000039           7         5           gettid\n  0.00    0.000030           5         6           write\n  0.00    0.000030           7         4           uname\n  0.00    0.000026           6         4           pipe2\n  0.00    0.000022           5         4           epoll_ctl\n  0.00    0.000018           6         3           epoll_create1\n  0.00    0.000018           6         3         3 io_uring_setup\n  0.00    0.000017           0        36           rt_sigaction\n  0.00    0.000016           5         3           eventfd2\n  0.00    0.000012           4         3           getrandom\n  0.00    0.000005           0        12        11 ioctl\n  0.00    0.000005           5         1           arch_prctl\n  0.00    0.000005           5         1           set_tid_address\n  0.00    0.000002           0        25        14 fcntl\n  0.00    0.000000           0         4           lseek\n  0.00    0.000000           0         1         1 access\n  0.00    0.000000           0         1           execve\n  0.00    0.000000           0         1           getppid\n------ ----------- ----------- --------- --------- -------------------\n100.00    1.291578         113     11376       714 total\n"
+  }
+}

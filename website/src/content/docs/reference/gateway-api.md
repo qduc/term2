@@ -267,8 +267,15 @@ Read returns `{session:<projection>}`. A projection has `id`, `workspaceId`,
 `status` (`idle`, `running`, `awaiting_interaction`, `interrupted`, or `closed`),
 `createdAt`, `updatedAt`, `latestSequence`, `earliestReplayableSequence`,
 `projectionSequence`, `transcript`, and `interaction`. `transcript.messages` are
-bounded `{id,role:"user"|"bot",text,commands?}` entries; a command entry has
-`callId`, `toolName`, and `status` (`completed`, `failed`, `aborted`, or `unknown`).
+bounded `{id,role:"user"|"bot",text,status?,commands?}` entries. A turn the user
+stopped has no reply in the transcript, so its bot entry carries the partial answer
+the journal streamed and `status:"aborted"`; a turn that was interrupted without a
+stop keeps the synthetic "Previous turn was interrupted" note. A command entry has
+`callId`, `toolName`, and `status` (`completed`, `failed`, `aborted`, or `unknown`),
+plus optional `output` (the tool result body, at most 16,384 characters) and `error`
+(at most 10,000 characters) when the turn recorded them. One projection carries at most
+2 MiB of `output` and `error` text in total, newest turns first; a body cut by that limit
+ends with `[truncated: session transcript size limit]`.
 `interaction` is `null`, pending, or a recovered non-resolvable interaction (see
 below).
 
@@ -387,7 +394,10 @@ fresh `details.session` projection. Other journal/generation failures return
 `503 gateway_unavailable` with the same reload hint. Reload the session projection,
 then reconnect from that projection's `projectionSequence`. This cursor is the
 projection-covered boundary and avoids replaying events already represented by the
-reloaded projection. Omitting `after` means start live from the current high-water
+reloaded projection. While a turn is still streaming, the transcript holds only its
+user message (the reply is written when the turn settles), so `projectionSequence`
+stops just before that turn's `assistant_started` and replay delivers the turn's text,
+tools, and usage. Omitting `after` means start live from the current high-water
 mark; it does not mean “replay from the retention floor”.
 
 ### Frozen event types and payloads

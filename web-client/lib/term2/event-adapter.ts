@@ -168,6 +168,8 @@ function transcriptCommands(value: unknown): Term2Command[] {
         callId: text(item.callId, 256),
         toolName: text(item.toolName, 256),
         status: status as Term2Command['status'],
+        ...(typeof item.output === 'string' && item.output.length > 0 ? { output: text(item.output) } : {}),
+        ...(typeof item.error === 'string' && item.error.length > 0 ? { error: text(item.error, 10_000) } : {}),
       },
     ];
   });
@@ -190,6 +192,7 @@ function transcriptTurns(projection: SessionProjection): Term2TurnView[] {
         role: item.role === 'user' ? ('user' as const) : ('assistant' as const),
         text: text(item.text ?? item.content),
         commands: transcriptCommands(item.commands),
+        aborted: item.role === 'bot' && item.status === 'aborted',
       },
     ];
   });
@@ -206,7 +209,7 @@ function transcriptTurns(projection: SessionProjection): Term2TurnView[] {
         userText: current.text,
         text: syntheticInterruption && stillRunning ? '' : next.text,
         reasoning: '',
-        status: stillRunning && index + 1 === parsed.length - 1 ? 'streaming' : 'completed',
+        status: next.aborted ? 'aborted' : stillRunning && index + 1 === parsed.length - 1 ? 'streaming' : 'completed',
         commands: next.commands,
       });
       index += 1;

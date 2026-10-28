@@ -15150,6 +15150,75 @@
       ]
     },
     {
+      "id": "2026-10-28-permission-stack-hosted-acceptance",
+      "task_ids": ["2026-10-28-permission-stack-hosted-acceptance"],
+      "recorded_at": "2026-10-28T12:35:50.998345+00:00",
+      "commit": "e8e281dbbe25ec357aaaf6f2c40a3b77f25dddd5",
+      "dirty": true,
+      "environment": "Restricted cloud host; real sandbox intentionally required, no mock runner. Existing hosted CI will supply compatible Ubuntu runner.",
+      "source_revisions": {
+        "60": "7cf070b49d48d266e940b11366c2814b51d54b13",
+        "61": "05ca8df8571f7b7daa0e1cb93238a00fd5f8c7de",
+        "46": "b0d8c6269925a01c8f9fdb316931723ad8cdd7a2",
+        "main": "f13f4e74e5692dbc7242e3d3fb21109b1474606c"
+      },
+      "tiers": [
+        {
+          "name": "built-cli-admission",
+          "command": "env -u XDG_STATE_HOME NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/gateway/serve.integration.test.ts",
+          "exit": 0,
+          "result": {
+            "passed": 2,
+            "failed": 0
+          },
+          "notes": "Uncommitted source before final documentation commit; read admission now exercised with --allow-write."
+        },
+        {
+          "name": "guards",
+          "command": "pnpm test",
+          "exit": 0,
+          "result": {
+            "files": 7,
+            "passed": 28
+          }
+        },
+        {
+          "name": "static",
+          "command": "pnpm typecheck; pnpm lint",
+          "exit": 0,
+          "result": {
+            "lint_errors": 0,
+            "lint_warnings": 31
+          }
+        },
+        {
+          "name": "real-sandbox-local",
+          "command": "vitest runtime-factory.integration.test.ts, precommit initial positive-control run",
+          "exit": 1,
+          "result": {
+            "existing_tests_passed": 3,
+            "positive_sandbox_read_blocked": 1
+          },
+          "notes": "Positive read returned Sandbox blocked; this is an environment gap, never denial success. Final negative-result/terminal-idle corrections were independently reviewed; exact-head hosted run pending."
+        }
+      ],
+      "evidence": [
+        "/workspace/qa60/finish-serve-main.log",
+        "/workspace/qa60/finish-runtime-local3.log",
+        "/workspace/qa60/finish-guards.log"
+      ],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_reload_fix",
+        "verdict": "accept corrected source/test design, exact-head hosted sandbox proof pending"
+      },
+      "uncertain": [
+        "Local host cannot provide real sandbox success",
+        "Prior61 ancestry was df49-derived; this branch explicitly merges currentmain as well as unchanged46 and published61/60",
+        "No merge authorized"
+      ]
+    },
+    {
       "id": "2026-10-28-pr53-reload-reconnect-fix",
       "task_ids": ["2026-10-28-pr53-reload-reconnect-fix"],
       "recorded_at": "2026-10-28T12:22:07.741903+00:00",

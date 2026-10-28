@@ -218,6 +218,7 @@ export function createProductionRuntimeFactory(input: {
   };
 
   return new RuntimeFactory({
+    allowWrite: input.allowWrite,
     tmpDir: input.tmpDir,
     policy: input.policy,
     providerProbe: input.providerProbe,

@@ -1,10 +1,8 @@
 name: CI
 
 # Run the full CI matrix on pull requests targeting main and on pushes to main.
-# Unit and integration tiers use separate jobs so they can run concurrently;
-# provider black-box builds dist/ and drives the shipped CLI through PTY-driven
-# scenarios against deterministic loopback fixtures. Process-level e2e is also
-# a separate job below.
+# All four tiers remain required; the existing four jobs share their work.
+# Provider cases still drive the built CLI against deterministic loopback fixtures.
 on:
   push:
     branches:
@@ -22,135 +20,60 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The same four runners now share the complete inventory. Each tier keeps its
+# configuration and module isolation; run-ci-lane.mjs assigns
+# every discovered file once. No test selection depends on changed paths.
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      # npm -g rather than corepack: corepack is bundled only with Node < 25,
-      # and npm ships with every Node release the runner may provision.
-      - name: Install pnpm
-        run: npm install -g pnpm@11.7.0
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # The search tools probe rg/fd on PATH (the grep tool prefers ripgrep;
-      # code-context requires it). Install rg so CI runs the same primary lane
-      # developer machines use; the fallback lane is covered by forced-probe
-      # tests that run regardless of host binaries.
-      # Shell integration checks require the real sandbox (bubblewrap + socat).
-      - name: Install shell sandbox prerequisites
-        run: sudo apt-get update && sudo apt-get install -y ripgrep bubblewrap socat
-
-      # Evidence-driven development experiment: no permanent unit tests may be
-      # committed. See docs/experiments/evidence-driven-development/README.md.
-      - name: Reject committed unit tests
-        run: pnpm check:no-unit-tests
-
-      # The default tier now holds only the static repository guards.
-      # The script sets NODE_ENV=test itself via cross-env; do not rely on the
-      # ambient value (see AGENTS.md on why production mode breaks Ink tests).
-      - name: Run repository guard tests
-        run: pnpm test
-
-  integration:
-    # Ubuntu 24.04 hosted runners reject bubblewrap loopback setup with
-    # RTM_NEWADDR EPERM. Keep the real sandbox checks on a compatible image.
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - uses: ./.github/actions/setup-tests
         with:
-          node-version: 24
+          ripgrep: 'true'
+      - name: Reject committed unit tests
+        run: pnpm check:no-unit-tests
+      - name: Build dist
+        run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
+      - name: Run guards, CLI integration and safety provider cases
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
 
-      - name: Install pnpm
-        run: npm install -g pnpm@11.7.0
+  integration:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-tests
+        with:
+          ripgrep: 'true'
+      - name: Build dist
+        run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
+      - name: Run remaining integration and stateless provider cases
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Keep the search-tool environment consistent with the unit job. Some
-      # integration journeys exercise the same application tools end to end.
-      # Shell integration checks require the real sandbox (bubblewrap + socat).
-      - name: Install shell sandbox prerequisites
-        run: sudo apt-get update && sudo apt-get install -y ripgrep bubblewrap socat
-
-      # vitest.config.ts excludes this tier, so run it explicitly. It needs no
-      # dist/ — cli.integration.test.ts compiles the CLI into node_modules/.cache.
-      - name: Run integration test suite
-        run: pnpm test:integration
-
-  # The process-level e2e tier (terminal UI smoke test, build/rollback round
-  # trip, fake-codex network scenarios) is excluded from the default suite
-  # (vitest.config.ts) and runs here instead. cli.e2e cold-starts the app
-  # through tsx, so this job can take minutes under runner contention.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Install pnpm
-        run: npm install -g pnpm@11.7.0
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # The sandboxed-code-host e2e 'built' variants import the compiled
-      # dist/ modules (see sandboxed-code-host.e2e.test.ts), so dist/ must
-      # exist and be fresh before the suite runs. SKIP_BUILD_BACKUP=1 skips
-      # the rollback backup copy; CI dist/ is disposable.
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-tests
       - name: Build dist
-        run: SKIP_BUILD_BACKUP=1 pnpm build
-
-      - name: Run e2e suite
-        run: pnpm test:e2e
+        run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
+      - name: Run E2E and Responses provider cases
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
 
   provider-black-box:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      # npm -g rather than corepack: corepack is bundled only with Node < 25,
-      # and npm ships with every Node release the runner may provision.
-      - name: Install pnpm
-        run: npm install -g pnpm@11.7.0
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Builds dist/ first, then launches it through a python3 pty.spawn
-      # bridge (provider-test-harness.ts). GitHub-hosted Ubuntu runners ship
-      # python3, so the PTY bridge needs no extra setup here.
-      - name: Run provider black-box suite
-        run: pnpm test:provider-black-box
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-tests
+      - name: Build dist
+        run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
+      - name: Run resilience and remaining provider cases
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box

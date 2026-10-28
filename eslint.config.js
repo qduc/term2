@@ -129,7 +129,7 @@ export default tseslint.config(
   // Tests often need mocks, stubs, and partially implemented interfaces, so
   // unused vars stay as a warning here (overriding the production error).
   {
-    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
+    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', 'source/cli.integration.scenarios.ts'],
     rules: {
       '@typescript-eslint/no-unused-vars': ['off', noUnusedVarsOptions],
       'no-empty': 'off',

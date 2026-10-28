@@ -36,6 +36,7 @@ export function Term2CommandMenu({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +44,10 @@ export function Term2CommandMenu({
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      // Closing unmounts the focused item; hand focus back to the trigger.
+      if (rootRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
     };
     document.addEventListener('pointerdown', onPointer);
     document.addEventListener('keydown', onKey);
@@ -56,6 +60,7 @@ export function Term2CommandMenu({
   return (
     <div ref={rootRef} className="relative flex min-w-0 items-center gap-2">
       <button
+        ref={triggerRef}
         type="button"
         aria-label="Session commands"
         aria-haspopup="menu"
@@ -84,6 +89,7 @@ export function Term2CommandMenu({
                 disabled={disabled}
                 onClick={() => {
                   setOpen(false);
+                  triggerRef.current?.focus();
                   onCommand(commandId);
                 }}
                 className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06]"

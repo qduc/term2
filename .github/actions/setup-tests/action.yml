@@ -21,7 +21,10 @@ runs:
       run: |
         echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
         echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
+    # No test or build step uses web-client; installing it downloaded Next.js
+    # and its native compiler on every cold install.
     - name: Restore locked dependency installation
+      id: deps
       uses: actions/cache@v6
       with:
         path: |
@@ -29,13 +32,33 @@ runs:
           !node_modules/.cache
           !node_modules/.vite
           !node_modules/.vite-temp
-          web-client/node_modules
-          !web-client/node_modules/.cache
-          !web-client/node_modules/.vite
-        key: test-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'web-client/package.json', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
+        key: test-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'web-client/package.json', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
+    # The installation key is exact, so any lockfile change misses it. A
+    # prefix-restored package store limits that miss to the changed packages.
+    - name: Locate package store
+      id: store
+      if: steps.deps.outputs.cache-hit != 'true'
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - name: Restore package store
+      if: steps.deps.outputs.cache-hit != 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: test-pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: test-pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Verify and install locked dependencies
       shell: bash
-      run: pnpm install --frozen-lockfile
+      env:
+        # Defaults wait 10s then 60s per failed tarball; retry more, wait less.
+        pnpm_config_fetch_retries: '4'
+        pnpm_config_fetch_retry_mintimeout: '2000'
+        pnpm_config_fetch_retry_maxtimeout: '10000'
+        STORE_RESTORED: ${{ steps.deps.outputs.cache-hit != 'true' }}
+      run: |
+        pnpm install --frozen-lockfile --filter @qduc/term2
+        # Drop packages the lockfile no longer uses before the store is saved.
+        if [[ "$STORE_RESTORED" == 'true' ]]; then pnpm store prune; fi
     - name: Verify native addons and clean build inputs
       shell: bash
       run: |

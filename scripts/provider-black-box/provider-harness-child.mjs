@@ -14,6 +14,12 @@ if (mode === 'write') {
 } else if (mode === 'hang') {
   process.stdout.write('hanging\r\n');
   await new Promise(() => setInterval(() => undefined, 1_000));
+} else if (mode === 'silent-http') {
+  process.stdout.write('ready\r\n');
+  process.stdin.once('data', async () => {
+    await fetch(process.env.TERM2_HARNESS_HTTP_URL);
+  });
+  await new Promise(() => setInterval(() => undefined, 1_000));
 } else if (mode === 'spawn-tree-and-hang') {
   const pidPath = process.env.TERM2_HARNESS_TREE_PID_PATH;
   if (!pidPath) throw new Error('TERM2_HARNESS_TREE_PID_PATH is required for spawn-tree-and-hang');

@@ -1,0 +1,764 @@
+{
+  "queueRejectedResources": {
+    "command": ["node", "scripts/run-ci-lane.mjs", "test"],
+    "wall_s": 159.1591117979999,
+    "user_s": 150.89061099999998,
+    "system_s": 27.188351,
+    "maxrss_kb": 526412,
+    "status": 1
+  },
+  "queueCorrectedResources": {
+    "command": ["node", "scripts/run-ci-lane.mjs", "test"],
+    "wall_s": 31.80736686399996,
+    "user_s": 54.860433,
+    "system_s": 9.770217,
+    "maxrss_kb": 418244,
+    "status": 0
+  },
+  "queueInventory": [
+    {
+      "lane": "test",
+      "expected": [
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/reference-approval.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/cli-headless.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/cli.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/compatibility-retirement.guard.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/contracts/model-contract-retirement.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/core/core-boundary.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/no-manual-stdout-sync.guard.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/application-stream-boundary.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/theme/no-raw-colors.guard.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/tools/system/run-code/run-code-runtime-boundary.test.ts"
+      ],
+      "actual": [
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/reference-approval.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/cli-headless.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/cli.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/compatibility-retirement.guard.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/contracts/model-contract-retirement.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/core/core-boundary.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/no-manual-stdout-sync.guard.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/application-stream-boundary.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/theme/no-raw-colors.guard.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/tools/system/run-code/run-code-runtime-boundary.test.ts"
+      ],
+      "equal": true
+    },
+    {
+      "lane": "integration",
+      "expected": [
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/acp-v2/serve.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/acp-v2/session-backend.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/components/input/menu-system.integration.test.tsx",
+        "/workspace/term2/.worktrees/ci-fresh/source/gateway/runtime-factory.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/gateway/serve.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/lib/subagent-provider-session.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/providers/orcarouter-models.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/providers/provider-presets.integration.test.tsx",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/agent-runtime/agent-runtime.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/completion-verification/completion-verification.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/conversation/session-index/session-index-concurrency.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/conversation/session-index/session-index-recovery.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/hooks/hook-system.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/models/decision-model-listing.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/session/background-subagent-ui-routing.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/workflow-evolution/ledger.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/workflow-evolution/runtime.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/test-helpers/vitest-cache-isolation.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/tools/agent/list-models.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/tools/system/docker-host-control.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/tools/system/run-code/shell.integration.test.ts"
+      ],
+      "actual": [
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-stateless.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/acp-v2/serve.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/acp-v2/session-backend.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/components/input/menu-system.integration.test.tsx",
+        "/workspace/term2/.worktrees/ci-fresh/source/gateway/runtime-factory.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/gateway/serve.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/lib/subagent-provider-session.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/providers/orcarouter-models.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/providers/provider-presets.integration.test.tsx",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/agent-runtime/agent-runtime.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/completion-verification/completion-verification.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/conversation/session-index/session-index-concurrency.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/conversation/session-index/session-index-recovery.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/hooks/hook-system.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/models/decision-model-listing.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/session/background-subagent-ui-routing.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/workflow-evolution/ledger.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/workflow-evolution/runtime.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/test-helpers/vitest-cache-isolation.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/tools/agent/list-models.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/tools/system/docker-host-control.integration.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/tools/system/run-code/shell.integration.test.ts"
+      ],
+      "equal": true
+    },
+    {
+      "lane": "e2e",
+      "expected": [
+        "/workspace/term2/.worktrees/ci-fresh/scripts/build-output.e2e.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/fake-codex-server.e2e.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-responses.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/cli-tool-rows.e2e.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/cli.e2e.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts"
+      ],
+      "actual": [
+        "/workspace/term2/.worktrees/ci-fresh/scripts/build-output.e2e.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/fake-codex-server.e2e.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-responses-failures.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-responses-tools.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-responses.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/cli-tool-rows.e2e.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/cli.e2e.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts"
+      ],
+      "equal": true
+    },
+    {
+      "lane": "provider-black-box",
+      "expected": [
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/conversation-loop.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fake-provider-http-server.fixture.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-comparator.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-drift.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-envelope.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-recorder.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-sanitizer.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-security.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-self-validation.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/nested-hide.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/openai-base-url.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-capability-matrix.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-cli.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-contract.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-crash-window.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-record-security.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-test-harness.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/public-hooks.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/turn-decisions.blackbox.ts"
+      ],
+      "actual": [
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/conversation-loop.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fake-provider-http-server.fixture.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-comparator.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-drift.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-envelope.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-recorder.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-sanitizer.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-security.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/fixture-self-validation.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/nested-hide.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/openai-base-url.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-capability-matrix.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-cli.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-contract.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-crash-window.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-record-security.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-session-resilience.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/provider-test-harness.test.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/public-hooks.blackbox.ts",
+        "/workspace/term2/.worktrees/ci-fresh/scripts/provider-black-box/turn-decisions.blackbox.ts"
+      ],
+      "equal": true
+    }
+  ],
+  "queueIndependentVerification": [
+    {
+      "mode": "pass",
+      "exit": 0,
+      "wallSeconds": 5.949073166000289,
+      "collected": [
+        "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "source/cli-headless.integration.test.ts",
+        "source/cli.integration.test.ts",
+        "source/probe-a.test.ts",
+        "source/probe-b.test.ts"
+      ],
+      "finished": [
+        "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "source/cli-headless.integration.test.ts",
+        "source/cli.integration.test.ts",
+        "source/probe-a.test.ts",
+        "source/probe-b.test.ts"
+      ],
+      "peakActiveWorkers": 2,
+      "uniqueProcesses": 6,
+      "distinctAppCaches": 4,
+      "distinctProjectBytecodeCaches": 2,
+      "cacheTeardownComplete": true
+    },
+    {
+      "mode": "assertion",
+      "exit": 1,
+      "wallSeconds": 5.331037894000019,
+      "collected": [
+        "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "source/cli-headless.integration.test.ts",
+        "source/cli.integration.test.ts",
+        "source/probe-a.test.ts",
+        "source/probe-b.test.ts"
+      ],
+      "finished": [
+        "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "source/cli-headless.integration.test.ts",
+        "source/cli.integration.test.ts",
+        "source/probe-a.test.ts",
+        "source/probe-b.test.ts"
+      ],
+      "peakActiveWorkers": 2,
+      "uniqueProcesses": 6,
+      "distinctAppCaches": 4,
+      "distinctProjectBytecodeCaches": 2,
+      "cacheTeardownComplete": true
+    },
+    {
+      "mode": "collection",
+      "exit": 1,
+      "wallSeconds": 5.432739913000205,
+      "collected": [
+        "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "source/cli-headless.integration.test.ts",
+        "source/cli.integration.test.ts",
+        "source/probe-a.test.ts",
+        "source/probe-b.test.ts"
+      ],
+      "finished": [
+        "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "source/cli-headless.integration.test.ts",
+        "source/cli.integration.test.ts",
+        "source/probe-b.test.ts"
+      ],
+      "peakActiveWorkers": 2,
+      "uniqueProcesses": 6,
+      "distinctAppCaches": 4,
+      "distinctProjectBytecodeCaches": 2,
+      "cacheTeardownComplete": true
+    },
+    {
+      "mode": "unhandled",
+      "exit": 1,
+      "wallSeconds": 5.3684393809999165,
+      "collected": [
+        "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "source/cli-headless.integration.test.ts",
+        "source/cli.integration.test.ts",
+        "source/probe-a.test.ts",
+        "source/probe-b.test.ts"
+      ],
+      "finished": [
+        "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts",
+        "scripts/provider-black-box/reference-approval.blackbox.ts",
+        "source/cli-headless.integration.test.ts",
+        "source/cli.integration.test.ts",
+        "source/probe-a.test.ts",
+        "source/probe-b.test.ts"
+      ],
+      "peakActiveWorkers": 2,
+      "uniqueProcesses": 6,
+      "distinctAppCaches": 4,
+      "distinctProjectBytecodeCaches": 2,
+      "cacheTeardownComplete": true
+    }
+  ],
+  "queueIndependentInventory": {
+    "uniqueFiles": 63,
+    "tierTotals": {
+      "guards": 7,
+      "integration": 23,
+      "e2e": 5,
+      "provider": 28
+    },
+    "laneTotals": {
+      "test": 11,
+      "integration": 22,
+      "e2e": 8,
+      "provider-black-box": 22
+    },
+    "completeDisjointPartition": true,
+    "assignments": {
+      "source/compatibility-retirement.guard.test.ts": {
+        "tier": "guards",
+        "lane": "test"
+      },
+      "source/contracts/model-contract-retirement.test.ts": {
+        "tier": "guards",
+        "lane": "test"
+      },
+      "source/core/core-boundary.test.ts": {
+        "tier": "guards",
+        "lane": "test"
+      },
+      "source/no-manual-stdout-sync.guard.test.ts": {
+        "tier": "guards",
+        "lane": "test"
+      },
+      "source/services/application-stream-boundary.test.ts": {
+        "tier": "guards",
+        "lane": "test"
+      },
+      "source/theme/no-raw-colors.guard.test.ts": {
+        "tier": "guards",
+        "lane": "test"
+      },
+      "source/tools/system/run-code/run-code-runtime-boundary.test.ts": {
+        "tier": "guards",
+        "lane": "test"
+      },
+      "source/cli-headless.integration.test.ts": {
+        "tier": "integration",
+        "lane": "test"
+      },
+      "source/cli.integration.test.ts": {
+        "tier": "integration",
+        "lane": "test"
+      },
+      "scripts/provider-black-box/provider-ordinary-safety.blackbox.ts": {
+        "tier": "provider",
+        "lane": "test"
+      },
+      "scripts/provider-black-box/reference-approval.blackbox.ts": {
+        "tier": "provider",
+        "lane": "test"
+      },
+      "source/acp-v2/serve.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/acp-v2/session-backend.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/components/input/menu-system.integration.test.tsx": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/gateway/runtime-factory.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/gateway/serve.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/lib/subagent-provider-session.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/providers/orcarouter-models.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/providers/provider-presets.integration.test.tsx": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/agent-runtime/agent-runtime.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/completion-verification/completion-verification.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/conversation/session-index/session-index-concurrency.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/conversation/session-index/session-index-recovery.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/hooks/hook-system.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/models/decision-model-listing.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/session/background-subagent-ui-routing.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/workflow-evolution/ledger.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/services/workflow-evolution/runtime.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/test-helpers/vitest-cache-isolation.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/tools/agent/list-models.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/tools/system/docker-host-control.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "source/tools/system/run-code/shell.integration.test.ts": {
+        "tier": "integration",
+        "lane": "integration"
+      },
+      "scripts/provider-black-box/provider-session-stateless.blackbox.ts": {
+        "tier": "provider",
+        "lane": "integration"
+      },
+      "scripts/build-output.e2e.test.ts": {
+        "tier": "e2e",
+        "lane": "e2e"
+      },
+      "scripts/fake-codex-server.e2e.test.ts": {
+        "tier": "e2e",
+        "lane": "e2e"
+      },
+      "source/cli-tool-rows.e2e.test.ts": {
+        "tier": "e2e",
+        "lane": "e2e"
+      },
+      "source/cli.e2e.test.ts": {
+        "tier": "e2e",
+        "lane": "e2e"
+      },
+      "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts": {
+        "tier": "e2e",
+        "lane": "e2e"
+      },
+      "scripts/provider-black-box/provider-session-responses-failures.blackbox.ts": {
+        "tier": "provider",
+        "lane": "e2e"
+      },
+      "scripts/provider-black-box/provider-session-responses-tools.blackbox.ts": {
+        "tier": "provider",
+        "lane": "e2e"
+      },
+      "scripts/provider-black-box/provider-session-responses.blackbox.ts": {
+        "tier": "provider",
+        "lane": "e2e"
+      },
+      "scripts/provider-black-box/conversation-loop.blackbox.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fake-provider-http-server.fixture.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fake-provider-websocket-server.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fixture-comparator.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fixture-drift.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fixture-envelope.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fixture-recorder.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fixture-sanitizer.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fixture-security.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/fixture-self-validation.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/nested-hide.blackbox.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/openai-base-url.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/provider-capability-matrix.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/provider-cli.blackbox.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/provider-contract.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/provider-crash-window.blackbox.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/provider-record-security.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/provider-session-resilience.blackbox.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/provider-test-harness.test.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/public-hooks.blackbox.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      },
+      "scripts/provider-black-box/turn-decisions.blackbox.ts": {
+        "tier": "provider",
+        "lane": "provider-black-box"
+      }
+    }
+  },
+  "queueVerifiedSourceHashes": {
+    "scripts/run-ci-lane.mjs": "8da2990d7f0717d7e848921050a52619d6bc585bf01fc463dd78d6e9090b6203",
+    "vitest.ci.config.ts": "7cb69fc73055ea1de7d8497bbbc7200fb5bf63cd512fb18f211ce8446a32091c",
+    "vitest.config.ts": "05ce72b2bb4f36a355ff042cc5804e85bb010c3f05a2478171a651de90c34d79",
+    "vitest.integration.config.ts": "b156c29d67ee81736bb64eb1e399d746c8054cd4090b2253b1f6c2a89854f5cf",
+    "vitest.e2e.config.ts": "dd36f72d89f29eb8cd0316212a70c3e3842b37769b9fa3a14cf9cd299938f028",
+    "vitest.provider-black-box.config.ts": "27bb2d24a040be5c8a34be2ff6e15754e9a43a49f64f37e8e9f377498f1c2974",
+    "source/test-helpers/vitest-cache-global-setup.ts": "1e08cbbbbaeefc52bb7db38b214f3f746eb169eb570aac34b7f65a02c71e9384",
+    "source/test-helpers/vitest-cache-isolation.ts": "bc4ec6a7cec101af15776a72c7180b7c3bd5dd614141080384749b3d0c088d75",
+    "source/test-helpers/vitest-network-guard.ts": "87b004af350c880c80427e8a9ea211040509326cac29ae3448ed8a84560062c4",
+    "source/test-helpers/integration-cli-global-setup.ts": "5424a2b7d0906dcf367aeca13c7c9d825545acb63937fa352e5ec6fa4364f1e6",
+    "source/test-helpers/cli-compile-cache.ts": "4ff7df0aca1fde0f1190602c74117da01468acafcc64ac7ae0f93065ed5e21e3",
+    "source/test-helpers/cli-compile-cache-setup.ts": "8ab4ff60a5cadc3bcf85162f27750a816c5583ebad00887a13706e288b02f9d0",
+    "source/test-helpers/terminal-e2e.ts": "ba4afb4055569053c039aa65f3e9a491201382fc3c9dccb30de1bcabcfaf6254",
+    "scripts/provider-black-box/global-setup.ts": "7fa456e7273fb746020fe84c17e9de7d65467072c67b5568a3eea5756733117e"
+  },
+  "sourceMapBefore": [
+    {
+      "name": "baseline",
+      "exit": 1,
+      "stdout": "file:///tmp/term2-source-map-verifier/dist/cli.js\n",
+      "stderr": "file:///tmp/term2-source-map-verifier/dist/cli.js:3\nthrow new Error(\"MAP_PROBE_LINE_3\");\n      ^\n\nError: MAP_PROBE_LINE_3\n    at file:///tmp/term2-source-map-verifier/dist/cli.js:3:7\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n\nNode.js v24.19.0\n"
+    },
+    {
+      "name": "build",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "bundle",
+      "exit": 1,
+      "stdout": "file:///tmp/term2-source-map-verifier/dist/cli.js\n",
+      "stderr": "/tmp/term2-source-map-verifier/dist/cli.js:2\nconsole.log(import.meta.url);\n^\n\nError: MAP_PROBE_LINE_3\n    at <anonymous> (/tmp/term2-source-map-verifier/dist/cli.js:2:1)\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async file:///tmp/term2-source-map-verifier/dist/cli-launcher.mjs:3:1\n\nNode.js v24.19.0\n"
+    }
+  ],
+  "sourceMapAfter": [
+    {
+      "name": "baseline",
+      "exit": 1,
+      "stdout": "file:///tmp/term2-source-map-verifier/dist/cli.js\n",
+      "stderr": "file:///tmp/term2-source-map-verifier/dist/cli.js:3\nthrow new Error(\"MAP_PROBE_LINE_3\");\n      ^\n\nError: MAP_PROBE_LINE_3\n    at file:///tmp/term2-source-map-verifier/dist/cli.js:3:7\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n\nNode.js v24.19.0\n"
+    },
+    {
+      "name": "build",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "bundle",
+      "exit": 1,
+      "stdout": "file:///tmp/term2-source-map-verifier/dist/cli.js\n",
+      "stderr": "/tmp/term2-source-map-verifier/dist/cli.js:3\nthrow new Error(\"MAP_PROBE_LINE_3\");\n      ^\n\nError: MAP_PROBE_LINE_3\n    at <anonymous> (/tmp/term2-source-map-verifier/dist/cli.js:3:7)\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:643:26\n    at async file:///tmp/term2-source-map-verifier/dist/cli-launcher.mjs:3:1\n\nNode.js v24.19.0\n"
+    }
+  ],
+  "packageRelocation": {
+    "archive": "/tmp/term2 bundle verifier #1/archives/qduc-term2-0.35.0.tgz",
+    "sha256": "a96f1b202e215acd81605f53369773f644bc0a98cd38ac8c698289316d88ca77",
+    "relocation": "/tmp/term2 bundle verifier #1/relocated installation # smoke/package",
+    "no_source": true,
+    "dependency_policy": "Reuse existing immutable node_modules via symlink; no fresh dependency installation was tested. Application files exclusively come from packed tarball.",
+    "required_files": [
+      "dist/cli.js",
+      "dist/cli-bundle/cli.js",
+      "dist/env-setup.js",
+      "dist/prompts/lite.md",
+      "dist/utils/worker-cwd-preload.cjs",
+      "dist/services/conversation/session-index/session-index-worker.js",
+      "dist/services/hooks/index.d.ts",
+      "dist/node_modules/@qduc/agent-wire/package.json"
+    ],
+    "results": [
+      {
+        "mode": "unset",
+        "flag": "--help",
+        "status": 0,
+        "stdout": "\n  A terminal-based AI assistant that can help you get things done on your computer\n\n  Everyday usage\n    $ term2\n    $ term2 \"explain this function\"\n    $ term",
+        "stderr": "",
+        "runtime": {
+          "NODE_ENV": "production",
+          "reactModules": [
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.production.js"
+          ]
+        }
+      },
+      {
+        "mode": "unset",
+        "flag": "--version",
+        "status": 0,
+        "stdout": "0.35.0-dev+be87dae\n",
+        "stderr": "",
+        "runtime": {
+          "NODE_ENV": "production",
+          "reactModules": [
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.production.js"
+          ]
+        }
+      },
+      {
+        "mode": "test",
+        "flag": "--help",
+        "status": 0,
+        "stdout": "\n  A terminal-based AI assistant that can help you get things done on your computer\n\n  Everyday usage\n    $ term2\n    $ term2 \"explain this function\"\n    $ term",
+        "stderr": "",
+        "runtime": {
+          "NODE_ENV": "test",
+          "reactModules": [
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.development.js"
+          ]
+        }
+      },
+      {
+        "mode": "test",
+        "flag": "--version",
+        "status": 0,
+        "stdout": "0.35.0-dev+be87dae\n",
+        "stderr": "",
+        "runtime": {
+          "NODE_ENV": "test",
+          "reactModules": [
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.development.js"
+          ]
+        }
+      },
+      {
+        "mode": "production",
+        "flag": "--help",
+        "status": 0,
+        "stdout": "\n  A terminal-based AI assistant that can help you get things done on your computer\n\n  Everyday usage\n    $ term2\n    $ term2 \"explain this function\"\n    $ term",
+        "stderr": "",
+        "runtime": {
+          "NODE_ENV": "production",
+          "reactModules": [
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.production.js"
+          ]
+        }
+      },
+      {
+        "mode": "production",
+        "flag": "--version",
+        "status": 0,
+        "stdout": "0.35.0-dev+be87dae\n",
+        "stderr": "",
+        "runtime": {
+          "NODE_ENV": "production",
+          "reactModules": [
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+            "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.production.js"
+          ]
+        }
+      }
+    ]
+  },
+  "rollback": {
+    "scratch": "/tmp/term2 bundle verifier #1/rollback build # fault 2",
+    "fault": "Corrupt newly emitted CLI at start of copied bundle-cli.mjs; invoke actual esbuild to produce syntax failure. Original project and dist untouched.",
+    "build_exit": 1,
+    "stdout": "[build] build failed; restored the previous dist/ from dist.bak/\n",
+    "stderr_tail": "$ cp -r source/prompts dist/ && mkdir -p dist/providers && cp source/providers/provider-presets.json dist/providers/ && chmod +x dist/cli.js\n\u2718 [ERROR] Expected \";\" but found \"invalid\"\n\n    dist/cli.js:1:13:\n      1 \u2502 deliberately invalid JavaScript @@@\n        \u2502              ~~~~~~~\n        \u2575              ;\n\n/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:1467\n  let error = new Error(text);\n              ^\n\nError: Build failed with 1 error:\ndist/cli.js:1:13: ERROR: Expected \";\" but found \"invalid\"\n    at failureErrorWithLog (/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:1467:15)\n    at /workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:926:25\n    at runOnEndCallbacks (/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:1307:45)\n    at buildResponseToResult (/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:924:7)\n    at /workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:951:16\n    at responseCallbacks.<computed> (/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:603:9)\n    at handleIncomingPacket (/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:658:12)\n    at Socket.readFromStdout (/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js:581:7)\n    at Socket.emit (node:events:509:28)\n    at addChunk (node:internal/streams/readable:563:12) {\n  errors: [Getter/Setter],\n  warnings: [Getter/Setter]\n}\n\nNode.js v24.19.0\n",
+    "before": {
+      "cli.js": "42c5cd4080409320c037c26b12d99c73d4e0bf77d6381717ec218df710006d02",
+      "marker.txt": "941454a1510d109ae44c05c574d05e6647b3cac02f94ee44b30bc0cee2009817"
+    },
+    "after": {
+      "cli.js": "42c5cd4080409320c037c26b12d99c73d4e0bf77d6381717ec218df710006d02",
+      "marker.txt": "941454a1510d109ae44c05c574d05e6647b3cac02f94ee44b30bc0cee2009817"
+    },
+    "old_cli_exit": 0,
+    "old_cli_stdout": "known runnable previous build\n",
+    "backup_exists": false
+  },
+  "specialPathBuild": {
+    "source_revision": "29132736319703855f4162e1a11a31e04f387dde",
+    "scratch": "/tmp/term2 bundle verifier #1/rollback build # fault 2",
+    "build_exit": 0,
+    "results": [
+      {
+        "mode": "unset",
+        "DEV": "true",
+        "exit": 0,
+        "stdout_has_usage": true,
+        "stderr": ""
+      },
+      {
+        "mode": "test",
+        "DEV": "true",
+        "exit": 0,
+        "stdout_has_usage": true,
+        "stderr": ""
+      }
+    ],
+    "build_info": {
+      "version": "0.35.0-dev (commit hash unavailable; built outside a Git checkout)",
+      "commit": null,
+      "release": false,
+      "limitation": "commit hash unavailable; built outside a Git checkout"
+    }
+  },
+  "logs": {
+    "/tmp/candidate-unified-test-lane.log": "{\n  \"lane\": \"test\",\n  \"maxWorkers\": 2,\n  \"plan\": [\n    {\n      \"tier\": \"guards\",\n      \"config\": \"vitest.config.ts\",\n      \"total\": 7,\n      \"files\": [\n        \"source/compatibility-retirement.guard.test.ts\",\n        \"source/contracts/model-contract-retirement.test.ts\",\n        \"source/core/core-boundary.test.ts\",\n        \"source/no-manual-stdout-sync.guard.test.ts\",\n        \"source/services/application-stream-boundary.test.ts\",\n        \"source/theme/no-raw-colors.guard.test.ts\",\n        \"source/tools/system/run-code/run-code-runtime-boundary.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"integration\",\n      \"config\": \"vitest.integration.config.ts\",\n      \"total\": 23,\n      \"files\": [\n        \"source/cli-headless.integration.test.ts\",\n        \"source/cli.integration.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"e2e\",\n      \"config\": \"vitest.e2e.config.ts\",\n      \"total\": 5,\n      \"files\": []\n    },\n    {\n      \"tier\": \"provider\",\n      \"config\": \"vitest.provider-black-box.config.ts\",\n      \"total\": 28,\n      \"files\": [\n        \"scripts/provider-black-box/provider-ordinary-safety.blackbox.ts\",\n        \"scripts/provider-black-box/reference-approval.blackbox.ts\"\n      ]\n    }\n  ]\n}\n\n RUN  v4.1.9 /workspace/term2/.worktrees/ci-fresh\n\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > checks named colours only in UI code, where they would be rendered 3ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags hex literals and removed constants everywhere, UI or not 1ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags const x = '#22d3ee'; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags const x = \"#A78BFA\"; 1ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags <Text color=\"green\">ok</Text> 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags <Text backgroundColor='red'>x</Text> 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags const style = { color: 'gray' }; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags <Text color={COLOR_ACCENT}>x</Text> 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags const c = TOOL_STATUS_COLOR.failed; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows <Text color={theme.danger}>x</Text> 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows const tone: ColorRole = 'danger'; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows const issue = 'see #123456 for details'; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows const anchor = '#section'; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows <Text color={theme[tone]}>x</Text> 0ms\n \u2713 |guards| source/core/core-boundary.test.ts > keeps the core production graph away from CLI and presentation modules 3ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > production source > takes every colour from the active theme 233ms\n \u2713 |guards| source/services/application-stream-boundary.test.ts > proves the application run loop constructs a native stream for processStreamEvents 3ms\n \u2713 |guards| source/services/application-stream-boundary.test.ts > keeps runtime streams on the native application event protocol 1ms\n \u2713 |guards| source/services/application-stream-boundary.test.ts > forbids retired SDK stream envelopes throughout production source 165ms\n \u2713 |guards| source/no-manual-stdout-sync.guard.test.ts > keeps manual DEC Mode 2026 stdout wrapping out of production source 165ms\n \u2713 |guards| source/contracts/model-contract-retirement.test.ts > keeps production code off the retired model contract 242ms\n \u2713 |guards| source/compatibility-retirement.guard.test.ts > keeps retired runner infrastructure out of production source 172ms\n \u2713 |guards| source/tools/system/run-code/run-code-runtime-boundary.test.ts > run_code product/runtime dependency boundary > keeps the runtime and lifecycle contract independent of the outer tool module 2ms\n \u2713 |guards| source/tools/system/run-code/run-code-runtime-boundary.test.ts > run_code product/runtime dependency boundary > keeps the outer definition free of the removed inline lifecycle 1ms\n \u2713 |guards| source/core/core-boundary.test.ts > imports the core entry without CLI process or filesystem side effects 2157ms\n \u2713 |guards| source/core/core-boundary.test.ts > keeps the conversation runtime factory on the internal runtime entry 0ms\n \u2713 |guards| source/core/core-boundary.test.ts > exposes only the session handle DTOs from the core barrel 10ms\n \u2713 |guards| source/core/core-boundary.test.ts > does not pull the CLI log writer into the core production graph 1ms\n\u001b[?2004hstderr | source/components/input/menu-system.integration.test.tsx > opens the slash menu and Escape cancels it through the terminal boundary\nYour app (or one of its dependencies) is using an outdated JSX transform. Update to the modern JSX transform for faster performance: https://react.dev/link/new-jsx-transform\n\n\u001b[?2004l\u001b[?2004h\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > opens the slash menu and Escape cancels it through the terminal boundary 199ms\n\u001b[?2004hstderr | source/components/input/menu-system.integration.test.tsx > copy menu owns keyboard input and accepts the selected code block\nAn update to InputProvider inside a test was not wrapped in act(...).\n\nWhen testing, code that causes React state updates should be wrapped into act(...):\n\nact(() => {\n  /* fire events that update state */\n});\n/* assert on the output */\n\nThis ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act\n\n\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > filters provider inventory through terminal input and opens an editable preset 215ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > copy menu owns keyboard input and accepts the selected code block 91ms\n\u001b[?2004h\u001b[?2004l \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > records policy-authorized skip and survives reopening without redispatch 134ms\n\u001b[?2004h \u2713 |integration| source/components/input/menu-system.integration.test.tsx > MCP menu owns keyboard navigation and Escape restores the editor handoff 162ms\n\u001b[?2004l\u001b[?2004h\u001b[?2004l\u001b[?2004h \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > cannot bypass mandatory verification with a skip recommendation 129ms\n\u001b[?2004l\u001b[?2004h \u2713 |integration| source/components/input/menu-system.integration.test.tsx > clears a slash command when Escape arrives during the menu handoff 69ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > filters a path trigger and inserts the selected entry with a trailing space 81ms\n\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > never completes on INCONCLUSIVE and freezes terminal state 128ms\n\u001b[?2004h\u001b[?2004l\u001b[?2004h \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > never completes on ERROR and freezes terminal state 113ms\n\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting /settings opens the settings successor menu 135ms\n\u001b[?2004h \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > never completes on TIMEOUT and freezes terminal state 100ms\n\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting a /settings prefix opens the settings successor menu 124ms\n\u001b[?2004h \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > never completes on BOGUS and freezes terminal state 100ms\n\u001b[?2004l\u001b[?2004h \u2713 |integration| source/components/input/menu-system.integration.test.tsx > typing the /settings autocomplete trigger opens the settings menu 96ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > shows the typed settings query above the filtered menu 93ms\n\u001b[?2004l \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > uses the conservative fallback for malformed or unknown-version gate output 87ms\n\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > settings filter prompt uses the filter query instead of a legacy prompt fallback 79ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > samples skipped tasks for audit and preserves the model recommendation separately 81ms\n\u001b[?2004h\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > Escape from the root settings menu clears the slash command buffer 129ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > runs an applicable deterministic checker and routes whitespace failure to repair: false 121ms\n\u001b[?2004h\u001b[?2004l \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > runs an applicable deterministic checker and routes whitespace failure to repair: true 112ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > Escape returns from a settings value child to its filtered parent through the terminal boundary 132ms\n\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > a settings_value frame labels its line with the setting name instead of \"Filter:\" 101ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > the deterministic checker fails on a staged whitespace error inside the attested revision 126ms\n\u001b[?2004h\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > opens the mentor pool editor without repeatedly updating the controller store 89ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > the deterministic checker fails on a untracked whitespace error inside the attested revision 121ms\n\u001b[?2004h\u001b[?2004l \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > deduplicates concurrent completion events and rejects conflicting or late callbacks after restart 81ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > persists repair consumption across restart and blocks a repair without progress 78ms\n\u001b[?2004h \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting a /model prefix opens the model successor menu 105ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > raw ctrl+f keystroke reaches the model menu and toggles the highlighted model into favorites 91ms\n\u001b[?2004l\u001b[?2004h\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > raw ctrl+n keystroke starts inline naming on the Favorites tab and Enter persists the nickname 103ms\n\u001b[?2004h \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > repairs a real artifact and verifies the new revision without forwarding worker context 125ms\n\u001b[?2004l\u001b[?2004h\u001b[?2004l\u001b[?2004h \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting a /skills prefix opens the skills successor menu 85ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting a skill activates it immediately and clears the command buffer 78ms\n\u001b[?2004l\u001b[?2004h \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > bounds repairs and gate attempts even when revisions and failures keep changing 117ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > rejects a stale revision and mismatched attempt identifiers 79ms\n\u001b[?2004l\u001b[?2004h\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting a /auto-approve prefix opens the auto-approve value successor menu 99ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > times out an unresponsive verifier and ignores its eventual PASS 71ms\n\u001b[?2004h\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting a /profile prefix opens the profile successor menu 86ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > typing the /profile autocomplete trigger opens the profile menu 63ms\n\u001b[?2004h\u001b[?2004l \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > never authorizes skip after revision validation exceeds the deadline 120ms\n\u001b[?2004h\u001b[?2004l\u001b[?2004h \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting a /resume prefix opens the resume successor menu 82ms\n\u001b[?2004l\u001b[?2004h \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > never authorizes independent_verify after revision validation exceeds the deadline 123ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > cancels an in-flight verification without completing 58ms\n\u001b[?2004l\u001b[?2004h \u2713 |integration| source/components/input/menu-system.integration.test.tsx > accepting a conversation from /resume resumes it and clears the buffer 86ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > keeps the resume menu responsive while its list loads 68ms\n\u001b[?2004l \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > requires an audited administrative action to reopen a blocked task 100ms\n\u001b[?2004h\u001b[?2004l\u001b[?2004h\u001b[?2004l \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > rejects a pre-recovery callback even when a new task reaches the same generation 102ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > ignores a result from a previous opening of the resume menu 138ms\n \u2713 |integration| source/components/input/menu-system.integration.test.tsx > shows a list failure instead of an empty-list claim 61ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > read-only Git probes cannot execute repository fsmonitor or clean filters 69ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > blocks only when a tracked path selects a configured filter 99ms\n \u2713 |integration| source/services/conversation/session-index/session-index-recovery.integration.test.ts > SessionIndex Recovery Matrix (direct) > process restart: cleanly initializes pre-existing index with zero re-reconciliation and exact canonical parity 38ms\n \u2713 |integration| source/services/conversation/session-index/session-index-recovery.integration.test.ts > SessionIndex Recovery Matrix (direct) > interrupted rebuild: recovers cleanly, completes rebuild with 0 orphan FTS rows and exact canonical parity 11ms\n \u2713 |integration| source/services/conversation/session-index/session-index-recovery.integration.test.ts > SessionIndex Recovery Matrix (direct) > competing refreshers: concurrent services reconcile simultaneously without corruption, matching canonical parity 24ms\n \u2713 |integration| source/services/conversation/session-index/session-index-recovery.integration.test.ts > SessionIndex Recovery Matrix (direct) > schema upgrade: cleanly rebuilds outdated v2 schema without permanent fallback, achieving full parity 12ms\n\n  #  /opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node[12784]: void node::RemoveEnvironmentCleanupHook(v8::Isolate*, CleanupHook, void*) at ../src/api/hooks.cc:142\n  #  Assertion failed: (env) != nullptr\n\n----- Native stack trace -----\n\n 1: 0x921e57 node::Assert(node::AssertionInfo const&) [/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node]\n 2: 0x80969b node::RemoveEnvironmentCleanupHook(v8::Isolate*, void (*)(void*), void*) [/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node]\n 3: 0x7f0e0add773a Statement::~Statement() [/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/better-sqlite3@12.4.1/node_modules/better-sqlite3/build/Release/better_sqlite3.node]\n 4: 0x7f0e0add7911 Statement::~Statement() [/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/better-sqlite3@12.4.1/node_modules/better-sqlite3/build/Release/better_sqlite3.node]\n 5: 0xe53ccd  [/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node]\n 6: 0xf065f4  [/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node]\n 7: 0xf075e9  [/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node]\n 8: 0xf0ba60  [/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node]\n 9: 0x199e0d1  [/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node]\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > detects tracked, staged, committed, and untracked changes and refuses symlink escapes 207ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > completion verification through repository and persisted task boundaries > treats executable and symlink documentation changes in both directions as code 155ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > the real verifier starts fresh, reads actual artifacts, and returns an inspectable report 77ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > a decision model failure over the real gate falls back rather than skipping 94ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > a failed-only filesystem probe cannot authorize the real verifier PASS 78ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > the built-in administrative entry point inspects and auditably recovers the persisted task 646ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > the run loop cannot mark a durable goal achieved before verification passes 84ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > a repair deadline stops a nonresponsive model and retains the persisted repair budget 218ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > new user steering supersedes an autonomous repair deadline without changing the persisted budget 194ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > an unsupported workspace blocks with a named reason and an operational alert 60ms\n \u2713 |integration| source/acp-v2/session-backend.integration.test.ts > ACP v2 production backend integration > runs, cancels, and fail-closed-denies a real RuntimeFactory session 308ms\n \u2713 |integration| source/acp-v2/session-backend.integration.test.ts > ACP v2 permission bridge integration > asks the client for permission and runs the approved shell call 103ms\n \u2713 |integration| source/acp-v2/session-backend.integration.test.ts > ACP v2 permission bridge integration > a client rejection denies the call and still ends the turn 92ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > the root 'builtin:standard' AgentClient independently verifies 'PASS' before closing the goal 179ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > the root 'builtin:bare' AgentClient independently verifies 'PASS' before closing the goal 199ms\n \u2713 |integration| source/acp-v2/session-backend.integration.test.ts > ACP v2 permission bridge integration > session/cancel while the permission request is pending cancels the turn 146ms\n \u2713 |integration| source/acp-v2/session-backend.integration.test.ts > ACP v2 permission bridge integration > a fallback-denied approval still ends the turn 185ms\n \u2713 |integration| source/acp-v2/session-backend.integration.test.ts > ACP v2 permission bridge integration > an allowed unsandboxed shell call never escapes the workspace 167ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > the root 'builtin:bare' AgentClient independently verifies 'FAIL' before closing the goal 321ms\n \u2713 |integration| source/services/completion-verification/completion-verification.integration.test.ts > the root 'builtin:bare' AgentClient independently verifies 'INCONCLUSIVE' before closing the goal 299ms\n \u2713 |integration| source/services/workflow-evolution/runtime.integration.test.ts > runs actual activation, fresh Reviewer dispatch, host-approved local reload and next activation with deterministic boundaries 233ms\n \u2713 |integration| source/gateway/serve.integration.test.ts > term2 serve (child process) > pairs, admits a dynamic workspace, creates a persisted session, completes a turn, and exits cleanly on SIGTERM 1684ms\n \u2713 |integration| source/gateway/serve.integration.test.ts > term2 serve (child process) > pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid 1068ms\n \u2713 |integration| source/acp-v2/serve.integration.test.ts > term2 acp (child process) > serves initialize, a session turn and an EOF shutdown over real stdio 1364ms\n \u2713 |integration| source/acp-v2/serve.integration.test.ts > term2 acp permission round trips (child process) > asks the client for permission and writes the file when allowed 1096ms\n \u2713 |integration| source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > runs a real ConversationService turn and never exposes the fixture broker seam 160ms\n \u2713 |integration| source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > composes read-only and read-write tool surfaces from the gateway grant 369ms\n \u2713 |integration| source/gateway/runtime-factory.integration.test.ts > production gateway runtime factory > rejects direct, nested, and subagent writes in a read-only gateway session 644ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > keeps direct shell and executes a scripted shell only after approval 82ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > refuses rejected and ownerless approvals without spawning the command 90ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > routes sandbox denied-read decision allow-once without using the root gate 62ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > routes sandbox denied-read decision unsandboxed-once without using the root gate 62ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > routes sandbox denied-read decision n without using the root gate 48ms\n \u2713 |integration| source/acp-v2/serve.integration.test.ts > term2 acp permission round trips (child process) > rejects the call without writing and keeps stdout protocol-only 4342ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > pauses the work clock while awaiting approval and asks again for the next call 414ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > cancels a pending approval without executing it 38ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > terminates a real foreground process on abort 1158ms\n \u2713 |integration| source/tools/agent/list-models.integration.test.ts > avoids unused I/O, overlaps catalog loads, and retrieves compact pages without losing models 41ms\n \u00d7 |integration| source/tools/agent/list-models.integration.test.ts > discovers registry IDs, sorts real saved session associations, and never exposes history content or errors 20ms\n   \u2192 ENOENT: no such file or directory, mkdir '/home/agent/.local/share/term2-nodejs/conversations'\n \u2713 |integration| source/tools/agent/list-models.integration.test.ts > forwards runtime cancellation to an in-flight provider catalog request 51ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > AgentRuntime integration: legacy roles resolve through boundary > explorer role adapts and round-trips through resolveAgent 3ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > AgentRuntime integration: legacy roles resolve through boundary > worker role adapts with full write + shell authority 1ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > AgentRuntime integration: legacy roles resolve through boundary > mentor role adapts with no authority 0ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > AgentRuntime integration: legacy roles resolve through boundary > custom AgentConfig with tools and permissions resolves correctly 2ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > AgentRuntime integration: legacy roles resolve through boundary > tool resolution fails for tools denied by parent permission intersection 1ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > AgentRuntime integration: legacy roles resolve through boundary > unknown tools produce typed validation failure in resolutionErrors 0ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > AgentRuntime integration: legacy roles resolve through boundary > permissions are intersected with parent for nested agents 0ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > adaptLegacyDefinition round-trip fidelity > preserves all fields needed for execution 0ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > adaptLegacyDefinition round-trip fidelity > custom resolved agent adapts to a legacy definition that ExecutionSubagentRunner can consume 0ms\n \u2713 |integration| source/services/agent-runtime/agent-runtime.integration.test.ts > adaptLegacyDefinition round-trip fidelity > adaptLegacyDefinition maps new limits shape to legacy maxTurns 0ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > terminates a real foreground process on deadline 1464ms\n \u2713 |integration| source/tools/system/run-code/shell.integration.test.ts > shell inside run_code through the wrapped tool graph > keeps a launched background job alive after script completion and parent abort 256ms\n \u2713 |integration| source/services/session/background-subagent-ui-routing.integration.test.ts > projects background lifecycle without making the foreground message history dynamic 19ms\n \u2713 |integration| source/services/hooks/hook-system.integration.test.ts > Hook System Integration > handles project trust filtering correctly during discovery and startup 12ms\n \u2713 |integration| source/services/hooks/hook-system.integration.test.ts > Hook System Integration > dispatches session.start, approval events, and session.end in complete lifecycle sequence 6ms\n \u2713 |integration| source/services/hooks/hook-system.integration.test.ts > Hook System Integration > differentiates auto-approval from prompt-driven approval events 2ms\nstderr | source/providers/provider-presets.integration.test.tsx > copies inventory defaults into independent editable connections and reloads them from disk\nYour app (or one of its dependencies) is using an outdated JSX transform. Update to the modern JSX transform for faster performance: https://react.dev/link/new-jsx-transform\n\n \u2713 |integration| source/lib/subagent-provider-session.integration.test.ts > foreground subagent requests carry an OpenCode session distinct from the parent conversation 5ms\n \u2713 |integration| source/lib/subagent-provider-session.integration.test.ts > the same subagent run keeps one OpenCode session across its requests 0ms\n \u2713 |integration| source/lib/subagent-provider-session.integration.test.ts > a background run keeps one OpenCode session from launch through continuation 2ms\n \u2713 |integration| source/providers/provider-presets.integration.test.tsx > copies inventory defaults into independent editable connections and reloads them from disk 1077ms\n \u2193 |integration| source/tools/system/docker-host-control.integration.test.ts > Docker Desktop host-control integration skipped: set RUN_DOCKER_HOST_CONTROL_INTEGRATION=1 to run this opt-in test\n \u2713 |integration| source/providers/provider-presets.integration.test.tsx > keeps native OpenAI/OpenRouter credentials and identity while allowing setup through the inventory 1036ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > selects the OrcaRouter adapter by hostname for a renamed openai-compatible provider 172ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > selects the OrcaRouter adapter by hostname for a renamed openai provider 13ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > selects the OrcaRouter adapter by hostname for a renamed anthropic provider 7ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > selects the OrcaRouter adapter by hostname for a renamed google provider 7ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > does not apply OrcaRouter metadata semantics to https://other.example/v1 7ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > does not apply OrcaRouter metadata semantics to https://api.orcarouter.ai.other.example/v1 6ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > does not apply OrcaRouter metadata semantics to https://other.example/api.orcarouter.ai/v1 7ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > does not apply OrcaRouter metadata semantics to https://api.orcarouter.ai@other.example/v1 10ms\n \u2713 |integration| source/providers/orcarouter-models.integration.test.ts > does not restore a pre-adapter catalog when the OrcaRouter endpoint fails 8ms\n \u2713 |integration| source/providers/provider-presets.integration.test.tsx > preserves manual setup, rejects invalid input, and leaves no connection when cancelled 806ms\n \u2713 |integration| source/services/workflow-evolution/ledger.integration.test.ts > replays a durable end-to-end decision and observes accepted identity on subsequent real artifact work 80ms\n \u2713 |integration| source/services/workflow-evolution/ledger.integration.test.ts > does not alter durable history on validation failure or an existing writer lock 67ms\n \u2713 |integration| source/services/workflow-evolution/ledger.integration.test.ts > fails replay when frozen criteria were changed after comparison 35ms\n \u2713 |integration| source/services/workflow-evolution/ledger.integration.test.ts > rejects duplicate demo invocation without overwriting prior artifacts 27ms\n \u2713 |integration| source/services/workflow-evolution/ledger.integration.test.ts > captures the actual cached project override until SkillsService rediscovers the changed method 7ms\n \u2713 |integration| source/services/conversation/session-index/session-index-concurrency.integration.test.ts > SessionIndex Multi-Process Concurrency Integration > handles two real concurrent processes reconciling against the same database without locks or crashes 1850ms\n \u2713 |integration| source/services/models/decision-model-listing.integration.test.ts > loads the provider catalog through HTTP and caches only a validated success 45ms\n \u2713 |integration| source/services/models/decision-model-listing.integration.test.ts > retries malformed provider catalogs without preserving the failure 12ms\n \u2713 |integration| source/test-helpers/vitest-cache-isolation.integration.test.ts > disposes owned caches after tests and collection errors while preserving an external cache 2330ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI prompts before starting in non-lite mode from home directory 408ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI prompts before starting in non-lite mode from root directory 427ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI accepts a custom provider from settings.json in non-interactive mode 407ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI --model reports error and exits 1 when no models match pattern 519ms\n \u2713 |integration| source/cli.integration.test.ts > CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs 1027ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog 632ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --help documents the available command-line options 449ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI --json auto-selects an ambiguous model without asking for input 705ms\n \u2713 |integration| source/cli.integration.test.ts > CLI validates goal flags before startup 837ms\n \u2713 |integration| source/cli.integration.test.ts > interactive launch persists the goal before requiring a terminal 488ms\n \u2713 |integration| source/cli.integration.test.ts > positional launch durably records its goal before the first provider request 555ms\n \u2713 |integration| source/cli.integration.test.ts > positional launch closes the goal after a recorded achieved goal_check and reports it 622ms\n \u2713 |integration| source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model= 696ms\n \u2713 |integration| source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=mock-verifier 676ms\n \u2713 |integration| source/cli.integration.test.ts > resume preserves the replayed goal without flags and replaces it before startup when flags are explicit 889ms\n \u2713 |integration| source/cli.integration.test.ts > CLI supports the advertised -h and -v aliases 703ms\n \u2713 |integration| source/cli.integration.test.ts > CLI rejects unknown flags with a clear error 381ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing 5710ms\n(node:15019) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n \u2713 |integration| source/cli.integration.test.ts > CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors 529ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI resolves --model <value> as the last argument to the model, not a prompt 583ms\n(node:15043) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n \u2713 |integration| source/cli.integration.test.ts > CLI --resume ls prints list of conversations and exits 571ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt 609ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --resume list also works 612ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --resume prints message and exits when no conversation is found 527ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous 730ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --resume does not suggest --fork for a conversation from another project 469ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI \"term2 <prompt>\" with no --model is unchanged 612ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --list-models combined with --resume errors instead of misreading the resume id as a search term 378ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt 481ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --list-models combined with --resume --fork errors 386ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error 409ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --refresh without --list-models errors clearly instead of being silently ignored 412ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --list-models --refresh runs the listing errand, not the flag-conflict error 395ms\n \u2713 |integration| source/cli-headless.integration.test.ts > an approved shell call does not approve a later call that reuses its id when the provider repeats call_0 706ms\n \u2713 |integration| source/cli-headless.integration.test.ts > an approved shell call does not approve a later call that reuses its id when the provider repeats its own id 742ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > llama.cpp keeps reasoning translation scoped to its adapter 61ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > openai-compatible keeps reasoning translation scoped to its adapter 10ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > OpenCode 'chat-completions' preserves session affinity across recreated models 18ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > OpenCode 'responses' preserves session affinity across recreated models 15ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > OpenCode 'anthropic' preserves session affinity across recreated models 45ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > SDK adapter 2 preserves explicit reasoning settings over selected effort 7ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > SDK adapter 3 preserves explicit reasoning settings over selected effort 14ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > SDK adapter 4 preserves explicit reasoning settings over selected effort 8ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"39.676606339s\",\"expected\":39677} 11ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"59.999s\",\"expected\":59999} 7ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60s\",\"expected\":60000} 12ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"60.001s\"} 5ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"120s\"} 4ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"-1s\",\"expected\":500} 7ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"retryDelay\":\"not-a-duration\",\"expected\":500} 7ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"message\":\"Quota exceeded. https://ai.google.dev/gemini-api/docs/rate-limits. Please retry in 9.592042673s.\",\"expected\":9593} 6ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {\"retryAfter\":\"2.5\",\"expected\":2500} 6ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > keeps the built-in registry surface available 0ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > pilot Chat Completions provider replays a synthetic chat-completions fixture through the registry 11ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real OpenAI Responses capture replays tool continuation through the built-in registry 14ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real OpenRouter capture replays tool continuation through the built-in registry 83ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real OpenCode Chat Completions capture replays tool continuation through the registry 20ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real OpenCode Anthropic capture replays tool continuation through the registry 11ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real Google capture replays tool continuation through the registry 8ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenAI Responses HTTP' succeeds with one authoritative completion 4ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Chat Completions' succeeds with one authoritative completion 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Anthropic' succeeds with one authoritative completion 4ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Google' succeeds with one authoritative completion 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenRouter' succeeds with one authoritative completion 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenAI Responses HTTP' preserves request roles, tools, reasoning, and provider options 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Chat Completions' preserves request roles, tools, reasoning, and provider options 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Anthropic' preserves request roles, tools, reasoning, and provider options 4ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Google' preserves request roles, tools, reasoning, and provider options 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenRouter' preserves request roles, tools, reasoning, and provider options 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenAI Responses HTTP' propagates a provider error instead of fabricating completion 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Chat Completions' propagates a provider error instead of fabricating completion 5ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Anthropic' propagates a provider error instead of fabricating completion 5ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Google' propagates a provider error instead of fabricating completion 4ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenRouter' propagates a provider error instead of fabricating completion 4ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > replays OpenAI-compatible native reasoning_content through the registry tool continuation boundary 6ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > captures OpenRouter-style delta.reasoning and replays it through the registry tool continuation boundary 6ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > reassembles Chat Completions tool fragments with the authoritative tool ID 3ms\n \u2713 |provider| scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > retries an in-band 502 that follows trivial whitespace and succeeds 7ms\n \u2713 |integration| source/cli-headless.integration.test.ts > an approved shell call does not approve a later call when the chat-completions provider omits tool call ids 872ms\n \u2713 |integration| source/cli-headless.integration.test.ts > an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids 813ms\n \u2713 |integration| source/cli-headless.integration.test.ts > every executed shell call is shown on stderr when the provider repeats its id 826ms\n \u2713 |integration| source/cli-headless.integration.test.ts > one approved shell execution prints exactly one [tool] line 828ms\n \u2713 |provider| scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Built-in OpenRouter' executes two user turns and approval continuations through its registry route 1710ms\n \u2713 |integration| source/cli-headless.integration.test.ts > a call that reuses a refused call id runs and is saved as run, not as refused 855ms\n \u2713 |integration| source/cli-headless.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity 757ms\n \u2713 |provider| scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime openai' executes two user turns and approval continuations through its registry route 1545ms\n \u2713 |integration| source/cli-headless.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity 742ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless full completion in an unsupported workspace reports missing verification 848ms\n \u2713 |provider| scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime openai-compatible' executes two user turns and approval continuations through its registry route 1634ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless bare completion in an unsupported workspace reports missing verification 752ms\n \u2713 |provider| scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime llama.cpp' executes two user turns and approval continuations through its registry route 1466ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless full has unattended instructions and no ask_user capability 614ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless bare has unattended instructions and no ask_user capability 554ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless lite has unattended instructions and no ask_user capability 632ms\n \u2713 |provider| scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime Anthropic' executes two user turns and approval continuations through its registry route 1437ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless pair has unattended instructions and no ask_user capability 612ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless plan has unattended instructions and no ask_user capability 570ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless mentor has unattended instructions and no ask_user capability 683ms\n \u2713 |provider| scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime Google' executes two user turns and approval continuations through its registry route 1444ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless orchestrator has unattended instructions and no ask_user capability 626ms\n \u2713 |provider| scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'OpenCode Chat route' executes two user turns and approval continuations through its registry route 1451ms\n \u2713 |integration| source/cli-headless.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly 703ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless auto-approve at home refuses without printing or waiting for a question 432ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > observes HTTP arrivals without further PTY output and still rejects an unmet state 178ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > passes bounded retry settings to isolated root removal 1ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > reuses one isolated lease across PTY child launches and relaunches 125ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > waits for composer idle through the harness file, not a prompt glyph 80ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > gives waitForIdleInput the shared PTY ceiling when no timeout is passed 84ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > fails waitForIdleInput fast when the child exits without publishing idle 63ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > writes through the PTY and waits for visible state before exit 71ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > waits for application-owned composer acknowledgement before writing Enter 1ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > isolates HOME and Windows USERPROFILE for child processes 55ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > does not inherit the host CI marker into an interactive PTY child 60ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > awaits termination after a bounded timeout 107ms\n \u2713 |provider| scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'OpenCode Anthropic route' executes two user turns and approval continuations through its registry route 1465ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > reaps a timed-out one-shot child tree 1027ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > reaps a live PTY child when the owning process is signalled without cleanup 409ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > retries concurrent workspace cleanup after a transient owned failure 2ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > rejects new work while cleanup is active and after a failed attempt 60ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > reclaims the root when preparation fails 1ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > preserves persistent acquisition cleanup errors 1ms\n \u2713 |provider| scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > runs callback cleanup even when the callback fails 1ms\n \u2713 |provider| scripts/provider-black-box/provider-crash-window.blackbox.ts > crash after tool effect but before the tool result > keeps the executed call in the resumed provider history without repeating the effect 1909ms\n \u2713 |provider| scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > runs a bounded handoff through the real supervisor, private pipe, and built CLI 720ms\n \u2713 |provider| scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > rejects excessive input before the shipped CLI makes any provider request 626ms\n \u2713 |provider| scripts/provider-black-box/nested-hide.blackbox.ts > P1 nested hide result chain > approves a hidden nested editor through the scripted adapter and preserves result-chain identity 246ms\n \u2713 |provider| scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > applies the supervised output profile on the actual wire while allowing useful work 709ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > completes ordinary useful work with fresh safety defaults and keeps a resumable session 699ms\n \u2713 |provider| scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > runs the shipped CLI through a runtime provider and captures a complete request 686ms\n \u2713 |provider| scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > prints terminal-only response text exactly once 608ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > admits input beyond the old universal ceiling when known capacity permits 640ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > pauses before dispatch on a known small model with fresh defaults 542ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=undefined and retains a locator 596ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=warn and retains a locator 538ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > parks an unattended critical budget under explicit contain without auto-granting and retains completed tool evidence 1459ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > retains unknown-model work after structured provider overflow without retrying 647ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > completes a tiny small-model request with real fresh and reloaded settings 1198ms\n \u2713 |provider| scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts request secrets and canonicalizes IDs inside response payloads 4ms\n \u2713 |provider| scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts plaintext model reasoning while preserving response protocol structure 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > does not flag relative provider URL paths and redacts opaque thought signatures 1ms\n \u2713 |provider| scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts Google thought text while preserving the thought part shape 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts Anthropic thinking deltas while preserving event structure 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts chat reasoning deltas and provider fingerprints 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts provider identifiers in response headers and canonicalizes request IDs 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > canonicalizes Responses reasoning and function item IDs and removes encrypted content 1ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > validates ordered sends and replays receives 18ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a reordered send 5ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > does not pass vacuously when no session ever connects 51ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a non-WebSocket fixture before starting a vacuous replay server 2ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a empty turn without a meaningful exchange 0ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a receive-only turn without a meaningful exchange 0ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a send-only turn without a meaningful exchange 0ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a turn containing non-WebSocket frames instead of filtering them 1ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > fails validation when a client closes before the replay cursor completes 53ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > drives the deterministic success scenario with ordered, non-empty frames 6ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > drives the deterministic native-error scenario with ordered, non-empty frames 3ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > drives the deterministic incomplete scenario with ordered, non-empty frames 2ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > drives the deterministic abnormal-close scenario with ordered, non-empty frames 2ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects an outbound ordering mismatch in a generated scenario 2ms\n \u2713 |provider| scripts/provider-black-box/conversation-loop.blackbox.ts > edits and retracts pending steering while one turn crosses two manual approvals, then handles release and cancellation without duplicate fallback 1836ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'bare' reference approval preserves user context and enforces 'authorized' advice 663ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'bare' reference approval preserves user context and enforces 'high-risk' advice 634ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'bare' reference approval preserves user context and enforces 'unknown' advice 592ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'full' reference approval preserves user context and enforces 'authorized' advice 693ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'full' reference approval preserves user context and enforces 'high-risk' advice 632ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'full' reference approval preserves user context and enforces 'unknown' advice 600ms\n \u2713 |provider| scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > reports provider errors without fabricating successful output 12407ms\n \u2713 |provider| scripts/provider-black-box/public-hooks.blackbox.ts > public hooks through the packaged CLI > loads a TypeScript user hook and delivers status.change in non-interactive mode 712ms\n \u2713 |provider| scripts/provider-black-box/public-hooks.blackbox.ts > public hooks through the packaged CLI > loads a TypeScript user hook and delivers status.change in interactive mode 1014ms\n \u2713 |provider| scripts/provider-black-box/turn-decisions.blackbox.ts > resumes repeated questions once per decision and settles cancellation before the next turn 1188ms\n \u2713 |provider| scripts/provider-black-box/public-hooks.blackbox.ts > public hooks through the packaged CLI > runs TypeScript user hooks before trusted project hooks in deterministic order 725ms\n \u2713 |provider| scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > declares every target route with transport, lifecycle, and required scenarios 6ms\n \u2713 |provider| scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > unit-tests the accounting primitive with representative execution entries 2ms\n \u2713 |provider| scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > accounts the real lifecycle ledgers without importing their test modules 0ms\n \u2713 |provider| scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > fails when a row has neither an executed scenario nor a documented exclusion 0ms\n \u2713 |provider| scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > accepts an exclusion only when it carries a reason and evidence 0ms\n \u2713 |provider| scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > rejects an execution that does not belong to the row required-scenario set 0ms\n \u2713 |provider| scripts/provider-black-box/openai-base-url.test.ts > OpenAI endpoint redirection > proves the installed OpenAI client honors OPENAI_BASE_URL without fetch rewriting 213ms\n \u2713 |provider| scripts/provider-black-box/openai-base-url.test.ts > OpenAI endpoint redirection > routes the application-owned OpenAI provider to OPENAI_BASE_URL 33ms\n \u2713 |provider| scripts/provider-black-box/fixture-comparator.test.ts > compares requests semantically and ignores transport/SDK churn fields 3ms\n \u2713 |provider| scripts/provider-black-box/fixture-comparator.test.ts > compares JSON tool arguments independent of whitespace 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-comparator.test.ts > reports a canonicalized request mutation 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-comparator.test.ts > treats a redacted expected header value as matching any actual value 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-comparator.test.ts > ignores SDK platform headers that vary across recording environments 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-comparator.test.ts > still compares nonvolatile recorded headers 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > validates all frame kinds and cross-frame placeholders 2ms\n \u2713 |provider| scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > parses JSON envelopes 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > rejects placeholder collisions 1ms\n \u2713 |provider| scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > rejects unmapped placeholder references 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > accepts ordinary angle-bracketed text in frames 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > rejects non-monotonic frame order 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-drift.test.ts > fixture transport SDK drift > fails loudly when a fixture major/minor differs from the installed SDK 11ms\n \u2713 |provider| scripts/provider-black-box/fixture-recorder.test.ts > fixture recorder > parses logical SSE events, including multiline data and DONE 2ms\n \u2713 |provider| scripts/provider-black-box/fixture-recorder.test.ts > fixture recorder > captures request, response head, and response events without consuming response 28ms\n \u2713 |provider| scripts/provider-black-box/fixture-security.test.ts > committed fixture security > rejects common secret forms 2ms\n \u2713 |provider| scripts/provider-black-box/fixture-security.test.ts > committed fixture security > does not flag benign prose or URLs as high-entropy secrets 0ms\n \u2713 |provider| scripts/provider-black-box/fixture-security.test.ts > committed fixture security > contains no likely secrets in committed fixture JSON 45ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-http-server.fixture.test.ts > fixture HTTP replay > replays a recorded response and validates the outbound request 34ms\n \u2713 |provider| scripts/provider-black-box/fake-provider-http-server.fixture.test.ts > fixture HTTP replay > exposes a canonical diff for a request mutation 6ms\n \u2713 |provider| scripts/provider-black-box/fixture-self-validation.test.ts > record-from-fake self-validation (plan D4) > records from the fake provider, replays to identity, and writes an honestly-labeled envelope 68ms\n \u2713 |provider| scripts/provider-black-box/provider-record-security.test.ts > provider recorder credential isolation > refuses an Anthropic credential for the OpenCode provider 1084ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'openai' 'http' preserves two-turn response chaining 1345ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openai-http.native-error does not become empty success 779ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'openai' 'websocket' preserves two-turn response chaining 1085ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openai-http.early-close does not become empty success 735ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openai-http.incomplete does not become empty success 677ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > codex-http.native-error does not become empty success 618ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > codex-http.early-close does not become empty success 661ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > codex-http.incomplete does not become empty success 561ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openrouter-http.native-error does not become empty success 554ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openrouter-http.early-close does not become empty success 562ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openrouter-http.incomplete does not become empty success 594ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-openai-compatible-chat.native-error does not become empty success 594ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-openai-compatible-chat.early-close does not become empty success 576ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-openai-compatible-chat.incomplete does not become empty success 547ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-anthropic-messages.native-error does not become empty success 641ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-anthropic-messages.early-close does not become empty success 576ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-anthropic-messages.incomplete does not become empty success 615ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-google-generate-content.native-error does not become empty success 592ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-google-generate-content.early-close does not become empty success 535ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-google-generate-content.incomplete does not become empty success 531ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > openai-http.reasoning preserves response-side reasoning and final output 531ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > codex-http.reasoning preserves response-side reasoning and final output 598ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > openrouter-http.reasoning preserves response-side reasoning and final output 567ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'codex' 'http' preserves two-turn response chaining 11603ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > runtime-openai-compatible-chat.reasoning preserves response-side reasoning and final output 665ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > runtime-anthropic-messages.reasoning preserves response-side reasoning and final output 643ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > runtime-google-generate-content.reasoning preserves response-side reasoning and final output 577ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > openai-websocket.native-error fails without fabricated completion 530ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > openai-websocket.incomplete fails without fabricated completion 555ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > openai-websocket.abnormal-close fails without fabricated completion 588ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > codex-websocket.native-error fails without fabricated completion 593ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > codex-websocket.incomplete fails without fabricated completion 519ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > codex-websocket.abnormal-close fails without fabricated completion 602ms\n \u2193 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned WebSocket response-side reasoning > openai-websocket.reasoning preserves response-side reasoning and final output 641ms [openai-websocket: no application-owned response traffic was persisted]\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned WebSocket response-side reasoning > codex-websocket.reasoning preserves response-side reasoning and final output 723ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > application-owned provider restart continuity > resumes a completed conversation from full history, then establishes fresh chaining 2094ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > application-owned provider restart continuity > settles an interrupted approval-pending 'OpenAI Responses' tool into resumed history without an orphan or stale response id 1692ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'codex' 'websocket' preserves two-turn response chaining 11560ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > application-owned provider restart continuity > settles an interrupted approval-pending 'Codex Responses' tool into resumed history without an orphan or stale response id 1680ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > application-owned context compaction black-box lifecycle > persists a compaction item and sends it after save/resume 1744ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > application-owned context compaction black-box lifecycle > sends the next Codex turn after native compaction 1022ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > application-owned context compaction black-box lifecycle > refuses a switched-provider request when native compaction coverage is unknown 1897ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > application-owned context compaction black-box lifecycle > does not re-execute a tool after its turn is replaced by compaction 2019ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > Codex WebSocket corrupt-history recovery > codex-websocket.orphan-chain-recovery (standard model) sends paired full history after a stale resume chain 880ms\n \u2713 |provider| scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts > Codex WebSocket corrupt-history recovery > codex-websocket.orphan-chain-recovery (Responses Lite (gpt-5.6-luna)) sends paired full history after a stale resume chain 888ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses-failures.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'http' surfaces native terminal failure 790ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses-failures.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'websocket' surfaces native terminal failure 790ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > codex websocket replays full history when the completed response socket is replaced 17547ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses-failures.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'http' surfaces native terminal failure 11386ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses-failures.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'websocket' surfaces native terminal failure 7080ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses-failures.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'http' rejects an incomplete stream 887ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > codex websocket preserves completed tool pairs when the producing socket is replaced 13016ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses-failures.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'websocket' rejects an incomplete stream 868ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > session_search through run_code completes canonical fallback in the shipped CLI 11715ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > openai-websocket.retained-connection keeps two chained turns on one retained connection 875ms\n \u2713 |provider| scripts/provider-black-box/provider-session-responses-failures.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'http' rejects an incomplete stream 12588ms\n[ci] test failed: 130\n",
+    "/tmp/candidate-unified-test-corrected.log": "{\n  \"lane\": \"test\",\n  \"maxWorkers\": 2,\n  \"plan\": [\n    {\n      \"tier\": \"guards\",\n      \"config\": \"vitest.config.ts\",\n      \"total\": 7,\n      \"files\": [\n        \"source/compatibility-retirement.guard.test.ts\",\n        \"source/contracts/model-contract-retirement.test.ts\",\n        \"source/core/core-boundary.test.ts\",\n        \"source/no-manual-stdout-sync.guard.test.ts\",\n        \"source/services/application-stream-boundary.test.ts\",\n        \"source/theme/no-raw-colors.guard.test.ts\",\n        \"source/tools/system/run-code/run-code-runtime-boundary.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"integration\",\n      \"config\": \"vitest.integration.config.ts\",\n      \"total\": 23,\n      \"files\": [\n        \"source/cli-headless.integration.test.ts\",\n        \"source/cli.integration.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"e2e\",\n      \"config\": \"vitest.e2e.config.ts\",\n      \"total\": 5,\n      \"files\": []\n    },\n    {\n      \"tier\": \"provider\",\n      \"config\": \"vitest.provider-black-box.config.ts\",\n      \"total\": 28,\n      \"files\": [\n        \"scripts/provider-black-box/provider-ordinary-safety.blackbox.ts\",\n        \"scripts/provider-black-box/reference-approval.blackbox.ts\"\n      ]\n    }\n  ]\n}\n\n RUN  v4.1.9 /workspace/term2/.worktrees/ci-fresh\n\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > checks named colours only in UI code, where they would be rendered 4ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags hex literals and removed constants everywhere, UI or not 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags const x = '#22d3ee'; 1ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags const x = \"#A78BFA\"; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags <Text color=\"green\">ok</Text> 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags <Text backgroundColor='red'>x</Text> 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags const style = { color: 'gray' }; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags <Text color={COLOR_ACCENT}>x</Text> 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > flags const c = TOOL_STATUS_COLOR.failed; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows <Text color={theme.danger}>x</Text> 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows const tone: ColorRole = 'danger'; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows const issue = 'see #123456 for details'; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows const anchor = '#section'; 0ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > findThemeViolations > allows <Text color={theme[tone]}>x</Text> 0ms\n \u2713 |guards| source/core/core-boundary.test.ts > keeps the core production graph away from CLI and presentation modules 16ms\n \u2713 |guards| source/theme/no-raw-colors.guard.test.ts > production source > takes every colour from the active theme 271ms\n \u2713 |guards| source/services/application-stream-boundary.test.ts > proves the application run loop constructs a native stream for processStreamEvents 4ms\n \u2713 |guards| source/services/application-stream-boundary.test.ts > keeps runtime streams on the native application event protocol 1ms\n \u2713 |guards| source/services/application-stream-boundary.test.ts > forbids retired SDK stream envelopes throughout production source 268ms\n \u2713 |guards| source/no-manual-stdout-sync.guard.test.ts > keeps manual DEC Mode 2026 stdout wrapping out of production source 179ms\n \u2713 |guards| source/contracts/model-contract-retirement.test.ts > keeps production code off the retired model contract 171ms\n \u2713 |guards| source/compatibility-retirement.guard.test.ts > keeps retired runner infrastructure out of production source 163ms\n \u2713 |guards| source/tools/system/run-code/run-code-runtime-boundary.test.ts > run_code product/runtime dependency boundary > keeps the runtime and lifecycle contract independent of the outer tool module 2ms\n \u2713 |guards| source/tools/system/run-code/run-code-runtime-boundary.test.ts > run_code product/runtime dependency boundary > keeps the outer definition free of the removed inline lifecycle 1ms\n \u2713 |guards| source/core/core-boundary.test.ts > imports the core entry without CLI process or filesystem side effects 2253ms\n \u2713 |guards| source/core/core-boundary.test.ts > keeps the conversation runtime factory on the internal runtime entry 1ms\n \u2713 |guards| source/core/core-boundary.test.ts > exposes only the session handle DTOs from the core barrel 3ms\n \u2713 |guards| source/core/core-boundary.test.ts > does not pull the CLI log writer into the core production graph 0ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI prompts before starting in non-lite mode from home directory 399ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI prompts before starting in non-lite mode from root directory 379ms\n \u2713 |integration| source/cli.integration.test.ts > CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs 1003ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI accepts a custom provider from settings.json in non-interactive mode 486ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI --model reports error and exits 1 when no models match pattern 576ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --help documents the available command-line options 448ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog 664ms\n \u2713 |integration| source/cli.integration.test.ts > CLI validates goal flags before startup 877ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI --json auto-selects an ambiguous model without asking for input 724ms\n \u2713 |integration| source/cli.integration.test.ts > interactive launch persists the goal before requiring a terminal 543ms\n \u2713 |integration| source/cli.integration.test.ts > positional launch durably records its goal before the first provider request 724ms\n \u2713 |integration| source/cli.integration.test.ts > positional launch closes the goal after a recorded achieved goal_check and reports it 660ms\n \u2713 |integration| source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model= 782ms\n \u2713 |integration| source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=mock-verifier 856ms\n \u2713 |integration| source/cli.integration.test.ts > resume preserves the replayed goal without flags and replaces it before startup when flags are explicit 1058ms\n \u2713 |integration| source/cli.integration.test.ts > CLI supports the advertised -h and -v aliases 819ms\n \u2713 |integration| source/cli.integration.test.ts > CLI rejects unknown flags with a clear error 371ms\n(node:18282) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n \u2713 |integration| source/cli.integration.test.ts > CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors 510ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing 5702ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI resolves --model <value> as the last argument to the model, not a prompt 585ms\n(node:18305) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n \u2713 |integration| source/cli.integration.test.ts > CLI --resume ls prints list of conversations and exits 573ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --resume list also works 609ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --resume prints message and exits when no conversation is found 514ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt 595ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous 642ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --resume does not suggest --fork for a conversation from another project 466ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI \"term2 <prompt>\" with no --model is unchanged 666ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --list-models combined with --resume errors instead of misreading the resume id as a search term 424ms\n \u2713 |integration| source/cli-headless.integration.test.ts > CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt 516ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --list-models combined with --resume --fork errors 395ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error 439ms\n \u2713 |integration| source/cli-headless.integration.test.ts > an approved shell call does not approve a later call that reuses its id when the provider repeats call_0 670ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --refresh without --list-models errors clearly instead of being silently ignored 381ms\n \u2713 |integration| source/cli.integration.test.ts > CLI --list-models --refresh runs the listing errand, not the flag-conflict error 471ms\n \u2713 |integration| source/cli-headless.integration.test.ts > an approved shell call does not approve a later call that reuses its id when the provider repeats its own id 774ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > completes ordinary useful work with fresh safety defaults and keeps a resumable session 715ms\n \u2713 |integration| source/cli-headless.integration.test.ts > an approved shell call does not approve a later call when the chat-completions provider omits tool call ids 792ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > admits input beyond the old universal ceiling when known capacity permits 600ms\n \u2713 |integration| source/cli-headless.integration.test.ts > an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids 622ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > pauses before dispatch on a known small model with fresh defaults 556ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=undefined and retains a locator 572ms\n \u2713 |integration| source/cli-headless.integration.test.ts > every executed shell call is shown on stderr when the provider repeats its id 699ms\n \u2713 |integration| source/cli-headless.integration.test.ts > one approved shell execution prints exactly one [tool] line 660ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=warn and retains a locator 630ms\n \u2713 |integration| source/cli-headless.integration.test.ts > a call that reuses a refused call id runs and is saved as run, not as refused 688ms\n \u2713 |integration| source/cli-headless.integration.test.ts > bare profile via flag keeps a small tool surface, project guidance, and versioned session identity 624ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > parks an unattended critical budget under explicit contain without auto-granting and retains completed tool evidence 1576ms\n \u2713 |integration| source/cli-headless.integration.test.ts > bare profile via config keeps a small tool surface, project guidance, and versioned session identity 567ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > retains unknown-model work after structured provider overflow without retrying 574ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless full completion in an unsupported workspace reports missing verification 672ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless bare completion in an unsupported workspace reports missing verification 589ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > completes a tiny small-model request with real fresh and reloaded settings 1234ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless full has unattended instructions and no ask_user capability 636ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless bare has unattended instructions and no ask_user capability 553ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'bare' reference approval preserves user context and enforces 'authorized' advice 660ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless lite has unattended instructions and no ask_user capability 584ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'bare' reference approval preserves user context and enforces 'high-risk' advice 635ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless pair has unattended instructions and no ask_user capability 606ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'bare' reference approval preserves user context and enforces 'unknown' advice 638ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless plan has unattended instructions and no ask_user capability 576ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'full' reference approval preserves user context and enforces 'authorized' advice 689ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless mentor has unattended instructions and no ask_user capability 583ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'full' reference approval preserves user context and enforces 'high-risk' advice 705ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless orchestrator has unattended instructions and no ask_user capability 728ms\n \u2713 |integration| source/cli-headless.integration.test.ts > bare retains the outside-workspace edit approval boundary without asking headlessly 631ms\n \u2713 |integration| source/cli-headless.integration.test.ts > headless auto-approve at home refuses without printing or waiting for a question 381ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > 'full' reference approval preserves user context and enforces 'unknown' advice 2743ms\n\n Test Files  11 passed (11)\n      Tests  95 passed (95)\n   Start at  16:04:09\n   Duration  30.07s (transform 1.93s, setup 218ms, import 515ms, tests 53.39s, environment 1ms)\n\n",
+    "/tmp/term2-ci-queue-verifier-2/assertion.log": "{\n  \"lane\": \"test\",\n  \"maxWorkers\": 2,\n  \"plan\": [\n    {\n      \"tier\": \"guards\",\n      \"config\": \"vitest.config.ts\",\n      \"total\": 2,\n      \"files\": [\n        \"source/probe-a.test.ts\",\n        \"source/probe-b.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"integration\",\n      \"config\": \"vitest.integration.config.ts\",\n      \"total\": 3,\n      \"files\": [\n        \"source/cli-headless.integration.test.ts\",\n        \"source/cli.integration.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"e2e\",\n      \"config\": \"vitest.e2e.config.ts\",\n      \"total\": 1,\n      \"files\": []\n    },\n    {\n      \"tier\": \"provider\",\n      \"config\": \"vitest.provider-black-box.config.ts\",\n      \"total\": 3,\n      \"files\": [\n        \"scripts/provider-black-box/provider-ordinary-safety.blackbox.ts\",\n        \"scripts/provider-black-box/reference-approval.blackbox.ts\"\n      ]\n    }\n  ]\n}\n\n RUN  v4.1.9 /tmp/term2-ci-queue-verifier-2/fixture-project\n\n \u2713 |guards| source/probe-b.test.ts > queue boundary source/probe-b.test.ts 503ms\n \u00d7 |guards| source/probe-a.test.ts > queue boundary source/probe-a.test.ts 508ms\n   \u2192 expected 'INJECTED_ASSERTION' to be 'expected' // Object.is equality\n \u2713 |integration| source/cli.integration.test.ts > queue boundary source/cli.integration.test.ts 503ms\n \u2713 |integration| source/cli-headless.integration.test.ts > queue boundary source/cli-headless.integration.test.ts 502ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > queue boundary scripts/provider-black-box/reference-approval.blackbox.ts 504ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > queue boundary scripts/provider-black-box/provider-ordinary-safety.blackbox.ts 506ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  |guards| source/probe-a.test.ts > queue boundary source/probe-a.test.ts\nAssertionError: expected 'INJECTED_ASSERTION' to be 'expected' // Object.is equality\n\nExpected: \"expected\"\nReceived: \"INJECTED_ASSERTION\"\n\n \u276f source/probe-a.test.ts:25:34\n     23|     if (tier === 'integration' || tier === 'provider') expect(process.\u2026\n     24|     await new Promise(resolve => setTimeout(resolve, 500));\n     25|     expect('INJECTED_ASSERTION').toBe('expected');\n       |                                  ^\n     26|   } finally {\n     27|     emit('end');\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed | 5 passed (6)\n      Tests  1 failed | 5 passed (6)\n   Start at  16:11:32\n   Duration  3.38s (transform 100ms, setup 138ms, import 72ms, tests 3.04s, environment 1ms)\n\n[ci] test failed: 1\n",
+    "/tmp/term2-ci-queue-verifier-2/collection.log": "{\n  \"lane\": \"test\",\n  \"maxWorkers\": 2,\n  \"plan\": [\n    {\n      \"tier\": \"guards\",\n      \"config\": \"vitest.config.ts\",\n      \"total\": 2,\n      \"files\": [\n        \"source/probe-a.test.ts\",\n        \"source/probe-b.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"integration\",\n      \"config\": \"vitest.integration.config.ts\",\n      \"total\": 3,\n      \"files\": [\n        \"source/cli-headless.integration.test.ts\",\n        \"source/cli.integration.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"e2e\",\n      \"config\": \"vitest.e2e.config.ts\",\n      \"total\": 1,\n      \"files\": []\n    },\n    {\n      \"tier\": \"provider\",\n      \"config\": \"vitest.provider-black-box.config.ts\",\n      \"total\": 3,\n      \"files\": [\n        \"scripts/provider-black-box/provider-ordinary-safety.blackbox.ts\",\n        \"scripts/provider-black-box/reference-approval.blackbox.ts\"\n      ]\n    }\n  ]\n}\n\n RUN  v4.1.9 /tmp/term2-ci-queue-verifier-2/fixture-project\n\n \u2713 |guards| source/probe-b.test.ts > queue boundary source/probe-b.test.ts 503ms\n \u2713 |integration| source/cli.integration.test.ts > queue boundary source/cli.integration.test.ts 504ms\n \u2713 |integration| source/cli-headless.integration.test.ts > queue boundary source/cli-headless.integration.test.ts 503ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > queue boundary scripts/provider-black-box/provider-ordinary-safety.blackbox.ts 503ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > queue boundary scripts/provider-black-box/reference-approval.blackbox.ts 503ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af Failed Suites 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  |guards| source/probe-a.test.ts [ source/probe-a.test.ts ]\nError: INJECTED_COLLECTION\n \u276f source/probe-a.test.ts:16:7\n     14| process.env.TERM2_QUEUE_POISON = file;\n     15| emit('collected');\n     16| throw new Error('INJECTED_COLLECTION');\n       |       ^\n     17| test('queue boundary ' + file, async () => {\n     18|   emit('start');\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed | 5 passed (6)\n      Tests  5 passed (5)\n   Start at  16:11:38\n   Duration  3.42s (transform 87ms, setup 114ms, import 63ms, tests 2.52s, environment 1ms)\n\n[ci] test failed: 1\n",
+    "/tmp/term2-ci-queue-verifier-2/unhandled.log": "{\n  \"lane\": \"test\",\n  \"maxWorkers\": 2,\n  \"plan\": [\n    {\n      \"tier\": \"guards\",\n      \"config\": \"vitest.config.ts\",\n      \"total\": 2,\n      \"files\": [\n        \"source/probe-a.test.ts\",\n        \"source/probe-b.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"integration\",\n      \"config\": \"vitest.integration.config.ts\",\n      \"total\": 3,\n      \"files\": [\n        \"source/cli-headless.integration.test.ts\",\n        \"source/cli.integration.test.ts\"\n      ]\n    },\n    {\n      \"tier\": \"e2e\",\n      \"config\": \"vitest.e2e.config.ts\",\n      \"total\": 1,\n      \"files\": []\n    },\n    {\n      \"tier\": \"provider\",\n      \"config\": \"vitest.provider-black-box.config.ts\",\n      \"total\": 3,\n      \"files\": [\n        \"scripts/provider-black-box/provider-ordinary-safety.blackbox.ts\",\n        \"scripts/provider-black-box/reference-approval.blackbox.ts\"\n      ]\n    }\n  ]\n}\n\n RUN  v4.1.9 /tmp/term2-ci-queue-verifier-2/fixture-project\n\n \u2713 |guards| source/probe-b.test.ts > queue boundary source/probe-b.test.ts 503ms\n \u2713 |guards| source/probe-a.test.ts > queue boundary source/probe-a.test.ts 554ms\n \u2713 |integration| source/cli.integration.test.ts > queue boundary source/cli.integration.test.ts 503ms\n \u2713 |integration| source/cli-headless.integration.test.ts > queue boundary source/cli-headless.integration.test.ts 502ms\n \u2713 |provider| scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > queue boundary scripts/provider-black-box/provider-ordinary-safety.blackbox.ts 503ms\n \u2713 |provider| scripts/provider-black-box/reference-approval.blackbox.ts > queue boundary scripts/provider-black-box/reference-approval.blackbox.ts 503ms\n\u23af\u23af\u23af\u23af\u23af\u23af Unhandled Errors \u23af\u23af\u23af\u23af\u23af\u23af\n\nVitest caught 1 unhandled error during the test run.\nThis might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.\n\n\u23af\u23af\u23af\u23af Unhandled Rejection \u23af\u23af\u23af\u23af\u23af\nError: INJECTED_UNHANDLED\n \u276f source/probe-a.test.ts:25:25\n \u276f ../../../workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20\n\nThis error originated in \"source/probe-a.test.ts\" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.\nThe latest test that might've caused the error is \"queue boundary source/probe-a.test.ts\". It might mean one of the following:\n- The error was thrown, while Vitest was running this test.\n- If the error occurred after the test had been completed, this was the last documented test before it was thrown.\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n\n Test Files  6 passed (6)\n      Tests  6 passed (6)\n     Errors  1 error\n   Start at  16:11:43\n   Duration  3.48s (transform 96ms, setup 133ms, import 77ms, tests 3.08s, environment 1ms)\n\n[ci] test failed: 1\n"
+  }
+}

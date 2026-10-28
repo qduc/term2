@@ -33,6 +33,9 @@ export function createTestChildEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.Pr
   }
   env.TERM = 'xterm-256color';
   env.FORCE_COLOR = '1';
+  if (process.env.TERM2_TEST_NODE_COMPILE_CACHE) {
+    env.NODE_COMPILE_CACHE = process.env.TERM2_TEST_NODE_COMPILE_CACHE;
+  }
   return { ...env, ...overrides };
 }
 

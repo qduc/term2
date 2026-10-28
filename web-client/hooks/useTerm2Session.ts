@@ -117,6 +117,7 @@ export interface UseTerm2SessionResult {
 
 export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult {
   const [view, setView] = useState<Term2SessionView>(() => emptyTerm2SessionView(sessionId || ''));
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [workspaces, setWorkspaces] = useState<WorkspacePage['workspaces']>([]);
   const [sessions, setSessions] = useState<SessionPage['sessions']>([]);
   const [workspaceCursor, setWorkspaceCursor] = useState<string | null>(null);
@@ -368,6 +369,9 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
             status: 'error',
             error: error instanceof Error ? error.message : 'Unable to load session',
           }));
+      } finally {
+        // A terminal reader must release its request and be restartable by Reload.
+        controller.abort();
       }
     };
     void run();
@@ -375,7 +379,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       controller.abort();
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-  }, [sessionId, hydrateAndConnect]);
+  }, [sessionId, hydrateAndConnect, connectionAttempt]);
 
   const createSession = useCallback(async (workspaceId: string) => {
     const projection = await term2Client.createSession(workspaceId);
@@ -485,8 +489,11 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   const refresh = useCallback(async () => {
     const id = sessionIdRef.current;
     if (!id) return;
+    const generation = generationRef.current;
     const projection = await term2Client.getSession(id);
-    installProjection(projection, generationRef.current);
+    if (installProjection(projection, generation) && selectionControllerRef.current?.signal.aborted) {
+      setConnectionAttempt((attempt) => attempt + 1);
+    }
   }, [installProjection]);
 
   const resolveInteraction = useCallback(

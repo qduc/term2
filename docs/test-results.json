@@ -15575,6 +15575,556 @@
         "scope": "Dependency cache hit in all jobs: run 2m37s; setup-tests 30s-62s. ubuntu26 jobs spent ~18s on pnpm supply-chain metadata verification (ECONNRESET retries, 10-16s requests) and ~20s on cache restore."
       },
       "notes": "Store-cache restore on a lockfile change (prefix restore-key) not yet exercised; the pruned-store path did not run in this commit."
+    },
+    {
+      "id": "2026-10-28-ci-install-speed-40726154037-attempt-1",
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "commit": "b73bfb85cd194e282d2971243eeec9e571eba5be",
+      "tree": "5fb46480093bac75475ad51507553a186dfd3bc1",
+      "base_commit": "d56d53e7e3785dce006dffc4cfd1526a85f81c77",
+      "recorded_at": "2026-10-28T17:09:32.195819+00:00",
+      "revision_kind": "clean commit; GitHub Actions PR merge ref",
+      "suite": "CI all four lanes",
+      "command": "GitHub Actions CI run 40726154037, attempt 1",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub-hosted Ubuntu 22.04 (test/integration), Ubuntu 26 (e2e/provider), x64",
+        "node": "24.21.0",
+        "pnpm": "11.7.0",
+        "sandbox": "real hosted kernel sandbox"
+      },
+      "checks": [
+        {
+          "name": "test",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs test",
+          "exit": 0,
+          "result": {
+            "passed": 106,
+            "skipped": 0,
+            "max_workers": 3,
+            "vitest_seconds": 46.42,
+            "setup_seconds": 19.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40726154037/job/122949860625"
+        },
+        {
+          "name": "integration",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+          "exit": 0,
+          "result": {
+            "passed": 326,
+            "skipped": 1,
+            "max_workers": 3,
+            "vitest_seconds": 85.39,
+            "setup_seconds": 21.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40726154037/job/122949861039"
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
+          "exit": 0,
+          "result": {
+            "passed": 69,
+            "skipped": 4,
+            "max_workers": 3,
+            "vitest_seconds": 41.35,
+            "setup_seconds": 6.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40726154037/job/122949861065"
+        },
+        {
+          "name": "provider-black-box",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs provider-black-box",
+          "exit": 0,
+          "result": {
+            "passed": 167,
+            "skipped": 1,
+            "max_workers": 3,
+            "vitest_seconds": 48.08,
+            "setup_seconds": 8.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40726154037/job/122949861391"
+        }
+      ],
+      "failures": [],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_pr62",
+        "verdict": "accept source and bounded evidence",
+        "rework_rounds": 1
+      },
+      "notes": "Hosted warm pnpm/dependency/sandbox cache hits skip dependency installation; real-sandbox positive and negative controls pass. Attempt 1 of 40726154037 initially filled pnpm-CLI and sandbox caches. Do not infer those cold paths from other runs."
+    },
+    {
+      "id": "2026-10-28-ci-install-speed-40726154037-attempt-2",
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "commit": "b73bfb85cd194e282d2971243eeec9e571eba5be",
+      "tree": "5fb46480093bac75475ad51507553a186dfd3bc1",
+      "base_commit": "d56d53e7e3785dce006dffc4cfd1526a85f81c77",
+      "recorded_at": "2026-10-28T17:09:32.195819+00:00",
+      "revision_kind": "clean commit; GitHub Actions PR merge ref",
+      "suite": "CI all four lanes",
+      "command": "GitHub Actions CI run 40726154037, attempt 2",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub-hosted Ubuntu 22.04 (test/integration), Ubuntu 26 (e2e/provider), x64",
+        "node": "24.21.0",
+        "pnpm": "11.7.0",
+        "sandbox": "real hosted kernel sandbox"
+      },
+      "checks": [
+        {
+          "name": "provider-black-box",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs provider-black-box",
+          "exit": 0,
+          "result": {
+            "passed": 167,
+            "skipped": 1,
+            "max_workers": 3,
+            "vitest_seconds": 44.77,
+            "setup_seconds": 10.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40726154037/job/122958260871"
+        },
+        {
+          "name": "test",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs test",
+          "exit": 0,
+          "result": {
+            "passed": 106,
+            "skipped": 0,
+            "max_workers": 3,
+            "vitest_seconds": 32.64,
+            "setup_seconds": 9.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40726154037/job/122958261004"
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
+          "exit": 0,
+          "result": {
+            "passed": 69,
+            "skipped": 4,
+            "max_workers": 3,
+            "vitest_seconds": 51.48,
+            "setup_seconds": 8.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40726154037/job/122958261116"
+        },
+        {
+          "name": "integration",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+          "exit": 0,
+          "result": {
+            "passed": 326,
+            "skipped": 1,
+            "max_workers": 3,
+            "vitest_seconds": 87.44,
+            "setup_seconds": 19.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40726154037/job/122958261118"
+        }
+      ],
+      "failures": [],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_pr62",
+        "verdict": "accept source and bounded evidence",
+        "rework_rounds": 1
+      },
+      "notes": "Hosted warm pnpm/dependency/sandbox cache hits skip dependency installation; real-sandbox positive and negative controls pass. Attempt 1 of 40726154037 initially filled pnpm-CLI and sandbox caches. Do not infer those cold paths from other runs."
+    },
+    {
+      "id": "2026-10-28-ci-install-speed-40731119388-attempt-1",
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "commit": "71aa48a4581cdcb65e0718122e62eabcf68c55b1",
+      "tree": "fae8488647351a7aa21a8aef3ba895ddd86ebc19",
+      "base_commit": "d56d53e7e3785dce006dffc4cfd1526a85f81c77",
+      "recorded_at": "2026-10-28T17:09:32.195819+00:00",
+      "revision_kind": "clean commit; GitHub Actions PR merge ref",
+      "suite": "CI all four lanes",
+      "command": "GitHub Actions CI run 40731119388, attempt 1",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub-hosted Ubuntu 22.04 (test/integration), Ubuntu 26 (e2e/provider), x64",
+        "node": "24.21.0",
+        "pnpm": "11.7.0",
+        "sandbox": "real hosted kernel sandbox"
+      },
+      "checks": [
+        {
+          "name": "test",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs test",
+          "exit": 0,
+          "result": {
+            "passed": 106,
+            "skipped": 0,
+            "max_workers": 3,
+            "vitest_seconds": 48.68,
+            "setup_seconds": 10.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40731119388/job/122967393503"
+        },
+        {
+          "name": "integration",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+          "exit": 0,
+          "result": {
+            "passed": 326,
+            "skipped": 1,
+            "max_workers": 2,
+            "vitest_seconds": 95.95,
+            "setup_seconds": 14.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40731119388/job/122967393797"
+        },
+        {
+          "name": "provider-black-box",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs provider-black-box",
+          "exit": 0,
+          "result": {
+            "passed": 167,
+            "skipped": 1,
+            "max_workers": 3,
+            "vitest_seconds": 50.1,
+            "setup_seconds": 6.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40731119388/job/122967393869"
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
+          "exit": 0,
+          "result": {
+            "passed": 69,
+            "skipped": 4,
+            "max_workers": 3,
+            "vitest_seconds": 50.91,
+            "setup_seconds": 5.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40731119388/job/122967394052"
+        }
+      ],
+      "failures": [],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_pr62",
+        "verdict": "accept source and bounded evidence",
+        "rework_rounds": 1
+      },
+      "notes": "Hosted warm pnpm/dependency/sandbox cache hits skip dependency installation; real-sandbox positive and negative controls pass. Attempt 1 of 40726154037 initially filled pnpm-CLI and sandbox caches. Do not infer those cold paths from other runs."
+    },
+    {
+      "id": "2026-10-28-ci-install-speed-40731119388-attempt-2",
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "commit": "71aa48a4581cdcb65e0718122e62eabcf68c55b1",
+      "tree": "fae8488647351a7aa21a8aef3ba895ddd86ebc19",
+      "base_commit": "d56d53e7e3785dce006dffc4cfd1526a85f81c77",
+      "recorded_at": "2026-10-28T17:09:32.195819+00:00",
+      "revision_kind": "clean commit; GitHub Actions PR merge ref",
+      "suite": "CI integration lane rerun",
+      "command": "GitHub Actions CI run 40731119388, attempt 2",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub-hosted Ubuntu 22.04 (test/integration), Ubuntu 26 (e2e/provider), x64",
+        "node": "24.21.0",
+        "pnpm": "11.7.0",
+        "sandbox": "real hosted kernel sandbox"
+      },
+      "checks": [
+        {
+          "name": "integration",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+          "exit": 0,
+          "result": {
+            "passed": 326,
+            "skipped": 1,
+            "max_workers": 2,
+            "vitest_seconds": 103.47,
+            "setup_seconds": 9.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40731119388/job/122970079868"
+        }
+      ],
+      "failures": [],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_pr62",
+        "verdict": "accept source and bounded evidence",
+        "rework_rounds": 1
+      },
+      "notes": "Only integration reran; other jobs returned by GitHub are carried forward and are not counted again. Hosted warm pnpm/dependency/sandbox cache hits skip dependency installation; real-sandbox positive and negative controls pass. Attempt 1 of 40726154037 initially filled pnpm-CLI and sandbox caches. Do not infer those cold paths from other runs."
+    },
+    {
+      "id": "2026-10-28-ci-install-speed-isolated-failure-paths",
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "commit": "b73bfb85cd194e282d2971243eeec9e571eba5be",
+      "tree": "5fb46480093bac75475ad51507553a186dfd3bc1",
+      "base_commit": "d56d53e7e3785dce006dffc4cfd1526a85f81c77",
+      "recorded_at": "2026-10-28T17:09:32.195819+00:00",
+      "revision_kind": "exact setup action from b73bfb85, unchanged in 71aa48a4 and 22606941; local isolated fixtures",
+      "suite": "setup action cold/warm/failure paths, package-store delta and local static checks",
+      "command": "Exact sandbox run block extracted from .github/actions/setup-tests/action.yml; bash in isolated Ubuntu 22.04 Docker; pnpm install --frozen-lockfile --filter @qduc/term2 with copied package store and a new lockfile",
+      "command_complete": true,
+      "environment": {
+        "host_os": "Debian 13 x64 managed container",
+        "node": "24.19.0",
+        "pnpm": "11.7.0",
+        "docker": "28.4.0",
+        "image": "ubuntu:22.04@sha256:e0f80c829509ef4df9e76bd8944eb7b8ec25cbb379b112a7f9448b2c77a77c9b",
+        "sandbox": "unprivileged Docker; apt proxy and CA configured; hosted sandbox runtime evidence recorded separately"
+      },
+      "checks": [
+        {
+          "name": "missing shared library recovery",
+          "exit": 0,
+          "result": "socat fails on libwrap.so.0 in minimal Ubuntu; exact action removes archives and real apt installs libwrap0, ripgrep, bubblewrap and socat; binaries execute"
+        },
+        {
+          "name": "cold archive fill then warm extraction",
+          "exit": 0,
+          "result": "real apt downloads three .deb files; warm exact-action extraction executes all binaries and invokes no apt command"
+        },
+        {
+          "name": "corrupt archive recovery",
+          "exit": 0,
+          "result": "invalid .deb makes real dpkg-deb fail; exact action removes archive directory, runs real apt update/install, and all three binaries execute"
+        },
+        {
+          "name": "restored package store plus dependency delta",
+          "exit": 0,
+          "result": {
+            "added_dependency": "left-pad@1.1.3",
+            "reused": 630,
+            "downloaded": 1,
+            "added": 631,
+            "install_seconds": 1.3,
+            "old_lock_sha256": "b4fb3fef820e93936b85a5a47c53762d958f31bc21be3ca0ccce1fa90ba67495",
+            "delta_lock_sha256": "ddc832cf58df2a7c54a38102c28772473b5b058b5fd40e5dbcc56b636fa8efda",
+            "runtime_probes": "new package, SQLite, ssh2 and cpu-features execute; no Next.js, SWC or Tailwind installed"
+          }
+        },
+        {
+          "name": "build, typecheck, lint and no-unit-test guard",
+          "exit": 0,
+          "result": "local pre-commit snapshot matching 71aa48a4 source; 31 lint warnings, zero errors; formatting passes; 22606941 later changes only the worker selection constant"
+        },
+        {
+          "name": "independent inventory and worker propagation",
+          "exit": 0,
+          "result": "80 tier/file entries assigned exactly once; 2 and 3 propagate to root and every project; unset, zero, negative, fractional and NaN worker counts reject; six action shell blocks pass bash -n; action YAML parses"
+        }
+      ],
+      "failures": [],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_pr62",
+        "verdict": "accept local failure-path evidence and reviewed source; final hosted CI recorded separately",
+        "rework_rounds": 1
+      },
+      "evidence": {
+        "artifact_directory": "/tmp/pr62-evidence (machine-local files may expire)",
+        "artifact_sha256": {
+          "sandbox-step.sh": {
+            "bytes": 908,
+            "sha256": "2f47dbad42ba2022af9ac4e3c8ed2a4da6482234092b299a895ff5416a0fcd40"
+          },
+          "sandbox-container-proxy.log": {
+            "bytes": 16977,
+            "sha256": "4a008bac182d9fe9bb22fe329f16f8656ca621d98ae2a907fc9ec2af996d6a7c"
+          },
+          "sandbox-minimal-cold.log": {
+            "bytes": 4612,
+            "sha256": "ad5d0454857f8ac15a625871616d2ec0a74a09528223a28ca78ee06d9e6e98a5"
+          },
+          "sandbox-archive-fill.log": {
+            "bytes": 2807,
+            "sha256": "6c2e29f71b056b8720c2ac27597f838a258266b4c80b8c20f7bb74758a47476d"
+          },
+          "sandbox-warm.log": {
+            "bytes": 1852,
+            "sha256": "baa14fada6026cef606ac7600c5755ec3f479e3bfb53011ae19ed36910236969"
+          },
+          "sandbox-corrupt.log": {
+            "bytes": 1213,
+            "sha256": "1cb2e391c965fc5fb7dcfd273b4d57879641ff507968e33b803a07423702cafa"
+          },
+          "delta-install.log": {
+            "bytes": 880,
+            "sha256": "18cfb510e60f76f8afa5f76071a1acd5a651f1b986c43bf72dd734f1eef8be57"
+          },
+          "lint.log": {
+            "bytes": 21553,
+            "sha256": "180f74a1a81aa7dc6c4cb350941764098a98e2d0a9a9bd83535fcd23097de755"
+          },
+          "build.log": {
+            "bytes": 180,
+            "sha256": "6a03a26e0d317f12c2c0a87fa7780b8742851dd27ffe6d197a67bb263513871d"
+          },
+          "typecheck.log": {
+            "bytes": 15,
+            "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+          }
+        }
+      },
+      "comparison": {
+        "resolves_run_ids": ["2026-10-28-ci-install-speed-cold", "2026-10-28-ci-install-speed-warm"]
+      },
+      "uncertain": [
+        "GitHub prefix-key package-store transport on a changed lockfile is not hosted-tested; local copied-store delta validates reuse, not the remote lookup",
+        "Two-versus-three-worker elapsed times vary with runners; no universal percentage speedup established"
+      ],
+      "notes": "No temporary tests/dependencies/faults committed. Auto approval rejected the proposed temporary hosted experiment, so equivalent failure-path checks stayed isolated. Initial local install failed on read-only home caches; succeeded with task-local cache directories. Initial Docker apt attempt lacked proxy config; corrected the harness to use inherited proxy and CA. An initial delta fixture reused its resolution store and was discarded; the recorded run resolves separately and starts a clean installation using the copied baseline store. Independent verifier inspected actual bubblewrap package postinst and exact action-script equivalence. Existing task ledger row remains historical; these task-linked runs extend it without duplicating delivery."
+    },
+    {
+      "id": "2026-10-28-ci-install-speed-40732727137-attempt-1",
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "commit": "2260694182dd9fd2b56d35bb0418068a16567807",
+      "tree": "3f6083836db6ea2d75bd27de094b3b92036b2882",
+      "base_commit": "d56d53e7e3785dce006dffc4cfd1526a85f81c77",
+      "recorded_at": "2026-10-28T17:10:27.617611+00:00",
+      "revision_kind": "clean commit; GitHub Actions PR merge ref",
+      "suite": "CI all four lanes",
+      "command": "GitHub Actions CI run 40732727137, attempt 1",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub-hosted Ubuntu 22.04 (test/integration), Ubuntu 26 (e2e/provider), x64",
+        "node": "24.21.0",
+        "pnpm": "11.7.0",
+        "sandbox": "real hosted kernel sandbox"
+      },
+      "checks": [
+        {
+          "name": "integration",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+          "exit": 0,
+          "result": {
+            "passed": 326,
+            "skipped": 1,
+            "max_workers": 3,
+            "vitest_seconds": 86.41,
+            "setup_seconds": 13.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40732727137/job/122973046512"
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
+          "exit": 0,
+          "result": {
+            "passed": 69,
+            "skipped": 4,
+            "max_workers": 3,
+            "vitest_seconds": 46.27,
+            "setup_seconds": 12.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40732727137/job/122973047076"
+        },
+        {
+          "name": "test",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs test",
+          "exit": 0,
+          "result": {
+            "passed": 106,
+            "skipped": 0,
+            "max_workers": 3,
+            "vitest_seconds": 48.76,
+            "setup_seconds": 15.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40732727137/job/122973047174"
+        },
+        {
+          "name": "provider-black-box",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs provider-black-box",
+          "exit": 0,
+          "result": {
+            "passed": 167,
+            "skipped": 1,
+            "max_workers": 3,
+            "vitest_seconds": 38.75,
+            "setup_seconds": 10.0
+          },
+          "evidence": "https://github.com/qduc/term2/actions/runs/40732727137/job/122973047197"
+        }
+      ],
+      "failures": [],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_pr62",
+        "verdict": "accept source and bounded evidence",
+        "rework_rounds": 1
+      },
+      "notes": "Hosted warm pnpm/dependency/sandbox cache hits skip dependency installation; real-sandbox positive and negative controls pass. Attempt 1 of 40726154037 initially filled pnpm-CLI and sandbox caches. Do not infer those cold paths from other runs."
+    },
+    {
+      "id": "2026-10-28-ci-install-speed-completion",
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "commit": "2260694182dd9fd2b56d35bb0418068a16567807",
+      "tree": "3f6083836db6ea2d75bd27de094b3b92036b2882",
+      "recorded_at": "2026-10-28T17:11:35.541415+00:00",
+      "revision_kind": "clean source commit; completion record in following documentation commit",
+      "suite": "PR62 completion and bounded performance decision",
+      "command": "Repeated hosted CI samples plus independent source/evidence review",
+      "command_complete": true,
+      "checks": [
+        {
+          "name": "latest source all four CI lanes",
+          "exit": 0,
+          "result": {
+            "passed": 668,
+            "skipped": 6,
+            "run": 40732727137,
+            "head": "2260694182dd9fd2b56d35bb0418068a16567807",
+            "integration_workers": 3,
+            "other_lane_workers": 3,
+            "warm_setup_seconds": [10, 12, 13, 15]
+          }
+        },
+        {
+          "name": "worker count comparison",
+          "exit": 0,
+          "result": {
+            "metric": "Vitest duration in seconds, not total job span",
+            "integration_workers_2": {
+              "historical": [70.18, 63.71],
+              "current": [95.95, 103.47]
+            },
+            "integration_workers_3": {
+              "earlier_same_day": [85.39, 87.44],
+              "final_source": [86.41]
+            },
+            "decision": "Retain three workers across lanes; two workers did not reproduce a current elapsed-time improvement. Pass the single planner value through TERM2_CI_MAX_WORKERS and reject invalid values.",
+            "limitations": "Different hosted runners and measurement windows; neither worker count has a universal elapsed advantage. Historical two-worker runs were faster than either current setting; do not claim a controlled percentage improvement."
+          }
+        }
+      ],
+      "failures": [],
+      "verification": {
+        "independent": true,
+        "verifier": "verify_pr62",
+        "verdict": "source and bounded evidence reviewed; latest full CI passes",
+        "rework_rounds": 1,
+        "minutes": null,
+        "tokens": null
+      },
+      "comparison": {
+        "resolves_run_ids": ["2026-10-28-ci-install-speed-cold", "2026-10-28-ci-install-speed-warm"],
+        "evidence_run_ids": [
+          "2026-10-28-ci-install-speed-40726154037-attempt-1",
+          "2026-10-28-ci-install-speed-40726154037-attempt-2",
+          "2026-10-28-ci-install-speed-40731119388-attempt-1",
+          "2026-10-28-ci-install-speed-40731119388-attempt-2",
+          "2026-10-28-ci-install-speed-isolated-failure-paths",
+          "2026-10-28-ci-install-speed-40732727137-attempt-1"
+        ]
+      },
+      "uncertain": [
+        "Hosted prefix-key package-store restoration after a changed lockfile remains unexercised; separate copied-store fixture proves630 reused and1 downloaded.",
+        "Performance samples are subject to runner/registry variance; cold6-minute baseline included registry retries."
+      ],
+      "notes": "Extends the original task ledger row rather than treating resumed delivery as a new task. Final source retains all four test lanes and existing exclusions. Local typecheck/build/lint/guard pass, actual sandbox fallback faults recover, independent review found no actionable source issue. PR remains open for merge; final documentation-head CI is checked separately."
     }
   ]
 }

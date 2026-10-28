@@ -359,7 +359,19 @@ del {
   }
 }
 
+/* Terminal block cursor in the wordmark */
+.t2-caret {
+  animation: t2-caret 1.1s steps(1, end) infinite;
+}
+
+@keyframes t2-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .t2-caret,
   .t2-enter,
   .t2-shimmer {
     animation: none;

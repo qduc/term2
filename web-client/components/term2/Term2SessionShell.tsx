@@ -14,7 +14,6 @@ import {
   PanelLeft,
   Plus,
   Square,
-  TerminalSquare,
 } from 'lucide-react';
 import { useTerm2Session } from '../../hooks/useTerm2Session';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
@@ -32,6 +31,17 @@ import { Term2CommandMenu } from './Term2CommandMenu';
 import { isTerm2LocalControlEnabled } from './flags';
 import { Term2ApiError, term2Client } from '../../lib/api/term2';
 import type { SettingsProjection, SessionConfigRecord } from '../../lib/term2/types';
+
+/** The product name set in mono with a blinking block cursor, sized by the parent's font size. */
+function Wordmark() {
+  return (
+    <span className="inline-flex items-baseline font-mono font-semibold tracking-tight">
+      <span className="mr-[0.35em] text-zinc-400 dark:text-zinc-500">~</span>
+      term2
+      <span aria-hidden className="t2-caret ml-[0.12em] inline-block h-[0.95em] w-[0.5em] translate-y-[0.12em] bg-teal-500" />
+    </span>
+  );
+}
 
 export function Term2SessionShell({
   initialSessionId,
@@ -331,15 +341,9 @@ export function Term2SessionShell({
         }`}
       >
         <div className="flex h-12 shrink-0 items-center justify-between pl-4 pr-2">
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-gradient-to-br from-teal-400 to-teal-700 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
-            >
-              <TerminalSquare className="h-3.5 w-3.5" strokeWidth={2.25} />
-            </span>
-            <h2 className="text-[15px] font-semibold tracking-tight">term2</h2>
-          </div>
+          <h2 className="text-[15px]">
+            <Wordmark />
+          </h2>
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-black/[0.05] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.07] dark:hover:text-zinc-100"
@@ -481,13 +485,10 @@ export function Term2SessionShell({
               <div className="mx-auto w-full max-w-[46rem] space-y-8">
                 {!sessionId && (
                   <div className="t2-enter flex flex-col items-center pt-[14vh] text-center">
-                    <span
-                      aria-hidden
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-400 to-teal-700 text-white shadow-[0_8px_24px_-8px_rgba(13,148,136,0.6),inset_0_1px_0_rgba(255,255,255,0.25)]"
-                    >
-                      <TerminalSquare className="h-6 w-6" strokeWidth={2} />
+                    <span aria-hidden className="text-[2rem] leading-none">
+                      <Wordmark />
                     </span>
-                    <h2 className="mt-5 text-2xl font-semibold tracking-tight">Start an agent chat</h2>
+                    <h2 className="mt-6 text-xl font-semibold tracking-tight">Start an agent chat</h2>
                     <p className="mt-2 max-w-sm text-[15px] text-zinc-500 dark:text-zinc-400">
                       Choose a workspace and create an agent session to begin.
                     </p>

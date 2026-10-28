@@ -54,11 +54,10 @@ runs:
         pnpm_config_fetch_retries: '4'
         pnpm_config_fetch_retry_mintimeout: '2000'
         pnpm_config_fetch_retry_maxtimeout: '10000'
-        STORE_RESTORED: ${{ steps.deps.outputs.cache-hit != 'true' }}
-      run: |
-        pnpm install --frozen-lockfile --filter @qduc/term2
-        # Drop packages the lockfile no longer uses before the store is saved.
-        if [[ "$STORE_RESTORED" == 'true' ]]; then pnpm store prune; fi
+      # No `pnpm store prune`: run directly after this install it still evicted
+      # 5 in-use packages (808 files, 101 MB) in CI, so the saved store missed
+      # them. Bump the store key to reset accumulated packages instead.
+      run: pnpm install --frozen-lockfile --filter @qduc/term2
     - name: Verify native addons and clean build inputs
       shell: bash
       run: |

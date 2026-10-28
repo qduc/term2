@@ -22,6 +22,7 @@ import type {
 import { Term2ProtocolError } from '../lib/term2/types';
 
 const MAX_RECONNECT_DELAY = 10_000;
+const MAX_PROTOCOL_RELOADS = 2;
 const BACKOFF_BASE = 500;
 
 const COMMAND_ERROR_MESSAGES: Record<string, string> = {
@@ -178,6 +179,9 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       if (!installProjection(projection, generation)) return;
       let delay = BACKOFF_BASE;
       let cursor = projection.projectionSequence;
+      // A reload that lands on the same cursor replays the same event; stop after a few instead of looping.
+      let reloadCursor = -1;
+      let reloadsAtCursor = 0;
       while (!signal.aborted && generation === generationRef.current && sessionIdRef.current === id) {
         setView((current) => ({
           ...current,
@@ -291,6 +295,17 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
             return;
           }
           if (error instanceof Term2ProtocolError) {
+            reloadsAtCursor = cursor === reloadCursor ? reloadsAtCursor + 1 : 1;
+            reloadCursor = cursor;
+            if (reloadsAtCursor > MAX_PROTOCOL_RELOADS) {
+              setView((current) => ({
+                ...current,
+                status: 'error',
+                reloadRequired: true,
+                error: 'The session stream has an event this client cannot read.',
+              }));
+              return;
+            }
             setView((current) => ({
               ...current,
               status: 'reconnecting',

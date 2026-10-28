@@ -17390,6 +17390,1151 @@
         "classification": "resolved",
         "resolves_run_ids": ["2026-10-28-interactive-restart-assessment-doc-formatter-attempt"]
       }
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-fixture-type-errors",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/queue/restart.integration.test.ts",
+          "test": "fixture types",
+          "expected": "check passes",
+          "actual": "Four diagnostics: plain string not branded ItemId; SkillAttachment missing description; getQueueStateKind used instead of queueStateKind at two sites."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Early dirty test fixture, not final source. Corrected and later typechecks passed."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-queue-first",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "filesystem-integration",
+      "command": "pnpm test:integration source/services/queue/restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/queue/restart.integration.test.ts",
+          "test": "restart guard diagnostic",
+          "expected": "check passes",
+          "actual": "Expected substring restart; actual Restart is being prepared... (capital R)."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Case-sensitive test expectation corrected; no product change."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-queue-corrected",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "filesystem-integration",
+      "command": "pnpm test:integration source/services/queue/restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Ten initial filesystem/adapter cases passed; later completion-barrier case raised total to eleven."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-socket-fixture-type",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/control-socket/restart.integration.test.ts",
+          "test": "receipt delivery type",
+          "expected": "check passes",
+          "actual": "delivery: 'follow_up' is not a valid ControlMutationReceipt delivery."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Fixture used unsupported receipt enum, corrected to queued."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-socket-serial-reader",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "unix-socket-integration",
+      "command": "pnpm test:integration source/services/control-socket/restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/control-socket/restart.integration.test.ts",
+          "test": "pause/drain",
+          "expected": "check passes",
+          "actual": "Test timed out after 10000ms while reader was queued behind delayed receipt on the same connection."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Fixture status request on same socket waited behind deliberately unresolved admission; existing per-connection serialization. Added independent reader socket."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-socket-unavailable-mapping",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "unix-socket-integration",
+      "command": "pnpm test:integration source/services/control-socket/restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/control-socket/restart.integration.test.ts",
+          "test": "paused mutation protocol code",
+          "expected": "check passes",
+          "actual": "Expected unavailable; received internal."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Actual product defect during implementation: throwing a plain Error with code unavailable did not match protocol outer catch. Used ControlMutationUnavailable mapping; later real-socket test passed."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-socket-mapping-repeat",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "focused-integration",
+      "command": "pnpm test:integration source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 10,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/control-socket/restart.integration.test.ts",
+          "test": "paused mutation protocol code",
+          "expected": "check passes",
+          "actual": "Expected unavailable; received internal."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Duplicate pre-fix command job37f88c15 had same internal-vs-unavailable signature; not a separate later regression."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-socket-corrected",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "unix-socket-integration",
+      "command": "pnpm test:integration source/services/control-socket/restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Real Unix socket delayed receipt, separate status reader, pause/drain/reject/release passed."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-pty-stale-revision",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart.e2e.test.ts",
+          "test": "post-exec composer acknowledgement",
+          "expected": "check passes",
+          "actual": "Timed out waiting for composer value after old revision 5; replacement had revision 1."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Early main-journey attempt. Native exec/resumed history visible, but composer generation read was stale from old process; aggregate test counts not retained."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-pty-filesystem-predicate",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart.e2e.test.ts",
+          "test": "post-exec revision readiness",
+          "expected": "check passes",
+          "actual": "Timed out after 40000ms waiting for revision===1 despite actual resumed CLI."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Next fixture attempt. PTY waitForState only rechecks on output, not filesystem changes; replaced filesystem-only predicate with expect.poll. Aggregate counts not retained."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-pty-initial-six-errors",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 4,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart.e2e.test.ts",
+          "test": "latest leaf and cleanup failure oracles",
+          "expected": "check passes",
+          "actual": "Main/clear used old leaf while turn was active; three cleanup failure cases expected exit 1, PTY bridge reported 0."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Two fixture assumptions: stale idle token raced active second turn; Python pty.spawn wait status 256 truncated to exit 0. Added after-token and fixture-owned actual Node exit-code file."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-pty-initial-six-pass",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Initial six journeys passed in 16.56s. These earlier children retained test markers: proved history/empty leaf and failure paths, not real production queue persistence/hooks."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-provider-initial",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "25 files passed, 99.29s; built then tested early product before paused-keyboard UI fix. Log .term2/restart-provider-black-box.log."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-initial-static",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "static-floors",
+      "command": "pnpm typecheck && pnpm lint && pnpm test && pnpm check:no-unit-tests",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Early product static7files28checks; typecheck, no-unit guard and Prettier passed. ESLint0errors31warnings. Subsequent test/UI additions rechecked below."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-independent-role-limited",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "verification-infrastructure",
+      "command": "functions.run_subagent agent_spec verification attempt",
+      "command_complete": false,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "agent runtime",
+          "test": "behavioral verifier capability",
+          "expected": "check passes",
+          "actual": "explorer can only run read-only (GREEN); shell test execution denied."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "forthright-trefoil-141 resolved explorer despite requested shell access. Read-only role could not execute behavioral verification; not counted as independent acceptance."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-independent-initial",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "independent-verification",
+      "command": "pnpm test:integration source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts source/utils/process-restart.integration.test.ts; pnpm typecheck; pnpm test:e2e scripts/restart.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "kind-toucan-51 ACCEPT earlier narrower matrix: independently13integration+6PTY pass, typecheck pass. Explicitly did not yet prove later hook/policy/livework/realqueue/nativefailure extensions."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-extended-main-first",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart.e2e.test.ts",
+          "test": "hook/current-policy main journey",
+          "expected": "check passes",
+          "actual": "Timed out after 40000ms before first restart; answer rendered, expected auto-approval command status not rendered."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Production/hook extension. Waited for old slash auto-approval diagnostic and stale initial idle readiness; later corrected to current settings-menu durable readback."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-work-first",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart-work.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 3,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart-work.e2e.test.ts",
+          "test": "background ownership",
+          "expected": "check passes",
+          "actual": "process.kill reported ESRCH for shell-reported namespace PID."
+        },
+        {
+          "file": "scripts/restart-work.e2e.test.ts",
+          "test": "paused-text/placeholder readiness",
+          "expected": "check passes",
+          "actual": "Two 40000ms idle-generation>0 timeouts on intentionally paused queues."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Foreground passed; fixture assumptions failed. Seeded paused queue owns input, so idle generation remains zero. Host process.kill cannot validate a PID emitted inside execution namespace."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-work-next",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart-work.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 3,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart-work.e2e.test.ts",
+          "test": "background and queue oracles",
+          "expected": "check passes",
+          "actual": "Background PID ESRCH persisted under namespace; two queue assertions incorrectly assumed pending RPC exposed queue contents."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Foreground passed again. Corrected fixture to read actual queue sidecar: control topic pending represents approval/input, not queued messages. Removed host PID liveness claim."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-fixture-format-timeout",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "formatting",
+      "command": "pnpm exec prettier --write scripts/restart-work.e2e.test.ts",
+      "command_complete": false,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart-work.e2e.test.ts",
+          "test": "format command deadline",
+          "expected": "check passes",
+          "actual": "Shell command timed out at 1000ms."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Explicit 1000ms shell deadline expired after fixture creation. Formatting completed in later commands; no product failure."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-extended-eleven-red",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart.e2e.test.ts scripts/restart-work.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 7,
+        "failed": 4,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart-work.e2e.test.ts",
+          "test": "paused-text and placeholder /restart",
+          "expected": "check passes",
+          "actual": "Both timed out after 5000ms waiting for composer revision >1; got revision1 unchanged because paused prompt owned input."
+        },
+        {
+          "file": "scripts/restart-work.e2e.test.ts",
+          "test": "background settlement oracle",
+          "expected": "check passes",
+          "actual": "Expected background_shell_output; actual persisted event background_shell_completed with status cancelled."
+        },
+        {
+          "file": "scripts/restart.e2e.test.ts",
+          "test": "approval setting oracle",
+          "expected": "check passes",
+          "actual": "40000ms timeout waiting for old slash-command status; direct settings menu applied the value instead."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "55.87s, job8ea41339. Paused cases exposed REAL new-feature accessibility gap: QueuePausedPrompt consumed keyboard and ignored slash input. Fixed command access without resuming/discarding. Other two failures were fixture oracle errors."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-paused-scene-type",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/skins/testing/scenes.tsx:457",
+          "test": "QueuePausedPrompt props",
+          "expected": "check passes",
+          "actual": "TS2741: onCommand missing from scene fixture props."
+        }
+      ],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "job66317440 stopped before build/e2e. New QueuePausedPrompt callback required updating visual scene consumer; corrected."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-extended-eleven-green",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm typecheck && pnpm build && pnpm test:e2e scripts/restart.e2e.test.ts scripts/restart-work.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "job43d3c536: typecheck/build pass,2PTYfiles11cases pass26.63s after keyboard-access and fixture corrections; .term2/restart-extended.log."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-final-precommit-floors",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "static-and-integration",
+      "command": "pnpm lint && pnpm test && pnpm check:no-unit-tests && pnpm test:integration source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts source/utils/process-restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "jobd910628b: ESLint0errors31warnings, Prettier pass; static7files28checks pass, no-unit guard pass, focused3files13integration pass."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-provider-precommit-final",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts --reporter=verbose --bail=1",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Current completed build after paused UI fix;25files passed100.62s. Direct equivalent test command avoids rebuilding underneath concurrent independent PTY verification. Before final one-line App input-owner alignment/type-only correction. Log .term2/restart-provider-final.log."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-independent-extended",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "independent-verification",
+      "command": "pnpm test:e2e scripts/restart.e2e.test.ts scripts/restart-work.e2e.test.ts; pnpm test:integration source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts source/utils/process-restart.integration.test.ts; pnpm typecheck; pnpm lint; pnpm check:no-unit-tests; pnpm test; git diff --check; pnpm exec tsx .term2/restart-independent-check.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "rare-peach-333 ACCEPT narrow contract: independent11PTY,13integration,static28, typecheck, lint0errors31warnings, formatting/no-unit/diff checks all pass. Extra disposable builtCLI close-stage fsync EIO journey1/1 pass: noexec, recovery printed, initialized empty log retained, lock released. Probe removed. Candidate post-proof paused r/x race not established: production persistence/writer fsync synchronous, not a terminal event turn; no speculative guard added. App omitted inputValue while BottomArea passed it: nonblocking consistency issue corrected next."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-final-owner-wiring",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty-and-integration",
+      "command": "pnpm typecheck && pnpm build && pnpm test:e2e scripts/restart.e2e.test.ts scripts/restart-work.e2e.test.ts && pnpm test:integration source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts source/utils/process-restart.integration.test.ts && pnpm exec prettier --check source/app.tsx && git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "job49f255b6 after App inputValue alignment: build/typecheck pass,11PTY pass20.58s,13integration pass, formatting/diff pass. Then type-only inputValue required-field correction typechecked/formatted successfully; emitted JS unchanged."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-independent-owner-wiring",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "revision_kind": "dirty_precommit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "independent-verification",
+      "command": "pnpm typecheck; pnpm test:integration source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts source/utils/process-restart.integration.test.ts; pnpm exec eslint source/app.tsx; pnpm exec prettier --check source/app.tsx source/lib/input-owner.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "cheery-shamrock-406 ACCEPT final App alignment + required InputOwnerState.inputValue: independently typecheck and13integration pass before/after type-only correction; final formatting pass. Exactly two production deriveInputOwner callers both supply current input. No rebuild/PTY/fsync repeat claimed."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-committed-build",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "56cfc42954664838dfd5921d22a55d95bb1c4e3e",
+      "revision_kind": "clean_commit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "typecheck-and-build",
+      "command": "pnpm typecheck && pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Committed-source rerun succeeded; no tracked source/docs edits during run."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-committed-pty",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "56cfc42954664838dfd5921d22a55d95bb1c4e3e",
+      "revision_kind": "clean_commit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "built-cli-pty",
+      "command": "pnpm test:e2e scripts/restart.e2e.test.ts scripts/restart-work.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Committed product2files11PTY cases pass. Same-process native exec, changed compiled core module, history/latest empty leaf, hooks/policies, livework choices, pausedqueue/placeholder and failure journeys."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-committed-integration",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "56cfc42954664838dfd5921d22a55d95bb1c4e3e",
+      "revision_kind": "clean_commit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "focused-integration",
+      "command": "pnpm test:integration source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts source/utils/process-restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Committed product3files13real filesystem/socket/child process cases pass."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-committed-static",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "56cfc42954664838dfd5921d22a55d95bb1c4e3e",
+      "revision_kind": "clean_commit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "static-guards",
+      "command": "pnpm test && pnpm check:no-unit-tests",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Committed product7files28checks and no-unit guard pass."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-committed-provider",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "56cfc42954664838dfd5921d22a55d95bb1c4e3e",
+      "revision_kind": "clean_commit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Committed product rebuilt by standard runner;25files passed. .term2/restart-provider-committed.log. No real provider requests."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-committed-lint",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "56cfc42954664838dfd5921d22a55d95bb1c4e3e",
+      "revision_kind": "clean_commit",
+      "base_commit": "ae843b3b167876ec321a6a6d89f88998b2052d1a",
+      "suite": "lint-and-format",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Owned normal worktree; loopback fixtures/disposable children only. PTY children clear test markers for production persistence/hooks in the extended matrix. No real providers, live services, bridge, coordinator or protected runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "Committed source full ESLint0errors31warnings; full Prettier check passed. Log .term2/restart-lint-committed.log."
+    },
+    {
+      "id": "2026-10-28-interactive-restart-narrow-documentation-checks",
+      "recorded_on": "2026-10-28",
+      "run_at": null,
+      "commit": "56cfc42954664838dfd5921d22a55d95bb1c4e3e",
+      "revision_kind": "dirty_documentation_only",
+      "base_commit": "56cfc42954664838dfd5921d22a55d95bb1c4e3e",
+      "suite": "evidence-documentation",
+      "command": "pnpm exec prettier --check docs/test-results.json; pnpm check:no-unit-tests; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Evidence-only append after clean-source checks; historical JSON rows and JSONL bytes verified preserved."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "task_ids": ["2026-10-28-interactive-restart-narrow"],
+      "notes": "JSON/JSONL parsed; unique new run IDs and source SHA checked. Historical bytes retained, including original Unicode escapes. Formatting/no-unit/diff checks pass; no additional behavioral-test claim."
     }
   ]
 }

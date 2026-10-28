@@ -15435,6 +15435,146 @@
         "rework_rounds": 1
       },
       "notes": "Integration skip requires opt-in Docker host control; e2e skips Linux-only sandbox cases; provider skip is absent persisted openai websocket reasoning traffic. macOS x86_64 ABI checked but runtime not exercised; Linux and Node 20 not exercised. Source commit follows pre-commit tests; lint-staged backup comparison confirmed identical staged source. Compile-cache ENOTEMPTY not repeated in passing full rerun."
+    },
+    {
+      "base_commit": "d56d53e7e3785dce006dffc4cfd1526a85f81c77",
+      "environment": {
+        "os": "GitHub Actions ubuntu-22.04 (test, integration) and ubuntu-latest/ubuntu26 (e2e, provider-black-box), x64",
+        "node": "24.21.0",
+        "pnpm": "11.7.0",
+        "sandbox": "GitHub-hosted runner"
+      },
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "suite": "CI: test, integration, e2e, provider black-box lanes",
+      "command": "see checks",
+      "command_complete": true,
+      "failures": [],
+      "verification": {
+        "independent": false,
+        "verifier": null,
+        "verdict": null,
+        "rework_rounds": 0
+      },
+      "id": "2026-10-28-ci-install-speed-cold",
+      "commit": "fe6e1e2eb734f775a5f9fad931921239bfd3b2eb",
+      "tree": "1f6e2b7e744fd570da73bd5ac5f927d50d070937",
+      "recorded_at": "2026-10-28T15:59:15Z",
+      "revision_kind": "clean commit; CI ran on PR #62 merge ref b9ef594f (run 40721138344)",
+      "checks": [
+        {
+          "name": "ci-test",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs test",
+          "exit": 0,
+          "result": {
+            "files_passed": 11,
+            "files_failed": 0
+          }
+        },
+        {
+          "name": "ci-integration",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+          "exit": 0,
+          "result": {
+            "files_passed": 35,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "ci-e2e",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
+          "exit": 0,
+          "result": {
+            "files_passed": 10,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "ci-provider-black-box",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs provider-black-box",
+          "exit": 0,
+          "result": {
+            "files_passed": 22,
+            "files_failed": 0
+          }
+        }
+      ],
+      "comparison": {
+        "baseline_run": "GitHub Actions run 40719248723 (d56d53e7, cold install, ~6m)",
+        "scope": "Cold filtered install: run 2m00s; setup-tests 19-40s per job vs 37s-4m47s; pnpm install 11-25s vs 19s-4m31s. Registry health differed between runs."
+      },
+      "notes": "All four dependency and store caches missed (new v2 key). pnpm store prune after install removed 5 in-use packages (808 files, 101 MB) from the store saved by provider-black-box; removed in the follow-up commit."
+    },
+    {
+      "base_commit": "d56d53e7e3785dce006dffc4cfd1526a85f81c77",
+      "environment": {
+        "os": "GitHub Actions ubuntu-22.04 (test, integration) and ubuntu-latest/ubuntu26 (e2e, provider-black-box), x64",
+        "node": "24.21.0",
+        "pnpm": "11.7.0",
+        "sandbox": "GitHub-hosted runner"
+      },
+      "task_ids": ["2026-10-28-ci-install-speed"],
+      "suite": "CI: test, integration, e2e, provider black-box lanes",
+      "command": "see checks",
+      "command_complete": true,
+      "failures": [],
+      "verification": {
+        "independent": false,
+        "verifier": null,
+        "verdict": null,
+        "rework_rounds": 0
+      },
+      "id": "2026-10-28-ci-install-speed-warm",
+      "commit": "3e69e2e9ff2d4b6ade7b37f39b846b993916fef1",
+      "tree": "53784095a49b564927b210771452af51b68e08e0",
+      "recorded_at": "2026-10-28T16:02:55Z",
+      "revision_kind": "clean commit; CI ran on PR #62 merge ref (run 40721634822)",
+      "checks": [
+        {
+          "name": "ci-test",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs test",
+          "exit": 0,
+          "result": {
+            "files_passed": 11,
+            "files_failed": 0
+          }
+        },
+        {
+          "name": "ci-integration",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+          "exit": 0,
+          "result": {
+            "files_passed": 35,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "ci-e2e",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
+          "exit": 0,
+          "result": {
+            "files_passed": 10,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "ci-provider-black-box",
+          "command": "pnpm exec node scripts/run-ci-lane.mjs provider-black-box",
+          "exit": 0,
+          "result": {
+            "files_passed": 22,
+            "files_failed": 0
+          }
+        }
+      ],
+      "comparison": {
+        "baseline_run": "GitHub Actions run 40692732946 (63b480d0, cache hit, ~3.5m)",
+        "scope": "Dependency cache hit in all jobs: run 2m37s; setup-tests 30s-62s. ubuntu26 jobs spent ~18s on pnpm supply-chain metadata verification (ECONNRESET retries, 10-16s requests) and ~20s on cache restore."
+      },
+      "notes": "Store-cache restore on a lockfile change (prefix restore-key) not yet exercised; the pruned-store path did not run in this commit."
     }
   ]
 }

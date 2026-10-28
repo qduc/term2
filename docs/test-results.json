@@ -1181,7 +1181,7 @@
           "test": "source/edd-rollover.integration.test.tsx > EDD real queue reaches second turn-start ownership before rollover consumption and delivers once",
           "diagnostic_signatures": [
             "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
-            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E…'",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
             "Error: EDD_CALLBACK_REJECTED"
           ]
         },
@@ -1189,7 +1189,7 @@
           "test": "source/edd-rollover.integration.test.tsx > EDD real hook contains a rejected rollover callback and presents the retained briefing without resend",
           "diagnostic_signatures": [
             "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
-            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E…'",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
             "Error: EDD_CALLBACK_REJECTED"
           ]
         }
@@ -1329,7 +1329,7 @@
           "test": "source/edd-rollover.integration.test.tsx > EDD real queue reaches second turn-start ownership before rollover consumption and delivers once",
           "diagnostic_signatures": [
             "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
-            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E…'",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
             "Error: Session rollover is blocked while a queued submission is pending.",
             "Error: EDD_CALLBACK_REJECTED"
           ]
@@ -1338,7 +1338,7 @@
           "test": "source/edd-rollover.integration.test.tsx > EDD real hook contains a rejected rollover callback and presents the retained briefing without resend",
           "diagnostic_signatures": [
             "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
-            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E…'",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
             "Error: Session rollover is blocked while a queued submission is pending.",
             "Error: EDD_CALLBACK_REJECTED"
           ]
@@ -1347,7 +1347,7 @@
           "test": "source/edd-rollover.integration.test.tsx > EDD combined real hook turn-end consumes rollover while queued successor turn owns zero remaining items",
           "diagnostic_signatures": [
             "AssertionError: expected 'ready' to be 'blocked' // Object.is equality",
-            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E…'",
+            "AssertionError: expected 'EDD_CALLBACK_TURN\\nsettled-0' to contain 'Session rollover was not completed: E\u2026'",
             "Error: Session rollover is blocked while a queued submission is pending.",
             "Error: EDD_CALLBACK_REJECTED"
           ]
@@ -1773,7 +1773,7 @@
         {
           "test": "source/cli.edd-unsupported.integration.test.ts > headless bare completion in an unsupported workspace reports missing verification",
           "diagnostic_signatures": [
-            "AssertionError: expected 'fatal: not a git repository (or any o…' to contain 'not inside a Git repository'"
+            "AssertionError: expected 'fatal: not a git repository (or any o\u2026' to contain 'not inside a Git repository'"
           ]
         }
       ],
@@ -2058,13 +2058,13 @@
         {
           "test": "source/cli.edd-default-off.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=",
           "diagnostic_signatures": [
-            "AssertionError: expected [ { model: 'mock-alpha', …(5) }, …(1) ] to have a length of 4 but got 2"
+            "AssertionError: expected [ { model: 'mock-alpha', \u2026(5) }, \u2026(1) ] to have a length of 4 but got 2"
           ]
         },
         {
           "test": "source/cli.edd-default-off.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=mock-verifier",
           "diagnostic_signatures": [
-            "AssertionError: expected [ { model: 'mock-alpha', …(5) }, …(1) ] to have a length of 4 but got 2"
+            "AssertionError: expected [ { model: 'mock-alpha', \u2026(5) }, \u2026(1) ] to have a length of 4 but got 2"
           ]
         }
       ],
@@ -3219,7 +3219,7 @@
           "file": "source/components/layout/bare-footer-probe.test.tsx",
           "test": "Bare and Pair classic footer at 40/80/120 columns (6 cases)",
           "expected": "Bare or Pair in rendered footer",
-          "actual": "Codex/gpt-5 │ Sandboxed; profile word absent"
+          "actual": "Codex/gpt-5 \u2502 Sandboxed; profile word absent"
         },
         {
           "file": "source/components/layout/bare-footer-probe.test.tsx",
@@ -3707,7 +3707,7 @@
         {
           "command": "pnpm lint",
           "exit_code": 1,
-          "signature": "✖ 9352 problems (9318 errors, 34 warnings)",
+          "signature": "\u2716 9352 problems (9318 errors, 34 warnings)",
           "classification": "observed_local_untracked_artifact_scan_failure",
           "notes": "No tracked-file error blocks; Prettier not reached. Separate tracked eslint/prettier pass. No configuration/artifact cleanup or claim that full lint passed.",
           "evidence": "/tmp/footer-main-integration-20261024/full-lint.log"
@@ -3832,7 +3832,7 @@
         "runner_env": {
           "NODE_ENV": "test"
         },
-        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var→/private/var tmp symlink, no Linux /proc."
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
       },
       "result": {
         "passed": 216,
@@ -3912,7 +3912,7 @@
         "runner_env": {
           "NODE_ENV": "test"
         },
-        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var→/private/var tmp symlink, no Linux /proc."
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
       },
       "result": {
         "passed": 218,
@@ -3992,7 +3992,7 @@
         "runner_env": {
           "NODE_ENV": "test"
         },
-        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var→/private/var tmp symlink, no Linux /proc."
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
       },
       "result": {
         "passed": 27,
@@ -4052,7 +4052,7 @@
         "runner_env": {
           "NODE_ENV": "test"
         },
-        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var→/private/var tmp symlink, no Linux /proc."
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
       },
       "result": {
         "passed": 27,
@@ -4117,7 +4117,7 @@
         "runner_env": {
           "NODE_ENV": "test"
         },
-        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var→/private/var tmp symlink, no Linux /proc."
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
       },
       "result": {
         "passed": 215,
@@ -4181,7 +4181,7 @@
         "runner_env": {
           "NODE_ENV": "test"
         },
-        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var→/private/var tmp symlink, no Linux /proc."
+        "notes": "Local macOS worktree install; loopback provider fixtures, no live model calls. macOS-specific: sandbox-exec, /var\u2192/private/var tmp symlink, no Linux /proc."
       },
       "result": {
         "passed": 215,
@@ -4264,7 +4264,7 @@
       "failures": [
         {
           "test": "source/cli.integration.test.ts > finishes a provider turn when file logging hits ENOSPC",
-          "diagnostic": "AssertionError: expected 'Profile: full\\n' to contain 'File logging disabled after write fai…'"
+          "diagnostic": "AssertionError: expected 'Profile: full\\n' to contain 'File logging disabled after write fai\u2026'"
         },
         {
           "test": "source/cli.integration.test.ts > the shipped CLI verifies a durable goal with verifier.model=",
@@ -4331,19 +4331,19 @@
       "failures": [
         {
           "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real source worker after a cached cwd is deleted",
-          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q…' to be '/var/folders/mf/vt165ks97dg5q2h4bh790…' // Object.is equality"
+          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q\u2026' to be '/var/folders/mf/vt165ks97dg5q2h4bh790\u2026' // Object.is equality"
         },
         {
           "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built worker after a cached cwd is deleted",
-          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q…' to be '/var/folders/mf/vt165ks97dg5q2h4bh790…' // Object.is equality"
+          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q\u2026' to be '/var/folders/mf/vt165ks97dg5q2h4bh790\u2026' // Object.is equality"
         },
         {
           "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real source index worker after a cached cwd is deleted",
-          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q…' to be '/var/folders/mf/vt165ks97dg5q2h4bh790…' // Object.is equality"
+          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q\u2026' to be '/var/folders/mf/vt165ks97dg5q2h4bh790\u2026' // Object.is equality"
         },
         {
           "test": "source/services/sandboxed-code-host/sandboxed-code-host.e2e.test.ts > starts a real built index worker after a cached cwd is deleted",
-          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q…' to be '/var/folders/mf/vt165ks97dg5q2h4bh790…' // Object.is equality"
+          "diagnostic": "AssertionError: expected '/private/var/folders/mf/vt165ks97dg5q\u2026' to be '/var/folders/mf/vt165ks97dg5q2h4bh790\u2026' // Object.is equality"
         }
       ],
       "task_ids": ["2026-10-24-fix-failing-tests"],
@@ -4402,7 +4402,7 @@
         },
         {
           "test": "scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > session_search through run_code completes canonical fallback in the shipped CLI",
-          "diagnostic": "AssertionError: expected '{\"type\":\"function_call_output\",\"outpu…' to contain 'session-search-fixture'"
+          "diagnostic": "AssertionError: expected '{\"type\":\"function_call_output\",\"outpu\u2026' to contain 'session-search-fixture'"
         },
         {
           "test": "scripts/provider-black-box/turn-decisions.blackbox.ts > resumes repeated questions once per decision and settles cancellation before the next turn",

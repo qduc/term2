@@ -3422,7 +3422,12 @@ function projectTranscriptMessages(
     };
     const commands = currentTurnId ? commandsByTurn.get(currentTurnId) : undefined;
     if (commands && commands.length > 0 && !attachedTurns.has(currentTurnId!)) {
-      projectedMessage.commands = commands;
+      // Ledger, journal and transcript commands all end up here, so this is the one place their ids are cleaned.
+      projectedMessage.commands = commands.map((command) => ({
+        ...command,
+        callId: projectionText(command.callId, 256),
+        toolName: projectionText(command.toolName, 256),
+      }));
       attachedTurns.add(currentTurnId!);
     }
     return projectedMessage;

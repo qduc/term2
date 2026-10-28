@@ -1,0 +1,122 @@
+{
+  "revision": "f684903f6d77f58a6210cb9d0a844b096865206c",
+  "build": {
+    "exit": 0,
+    "wallSeconds": 4.728628727999876,
+    "cpuUserSeconds": 9.799438,
+    "cpuSystemSeconds": 1.9477059999999997,
+    "maxRssKiB": 1077744,
+    "buildInfo": {
+      "version": "0.35.0-dev+f684903",
+      "commit": "f684903f6d77f58a6210cb9d0a844b096865206c",
+      "release": false,
+      "limitation": null
+    }
+  },
+  "archive": "/tmp/term2 final artifact verifier # f684903f/archives/qduc-term2-0.35.0.tgz",
+  "sha256": "8a1ae017f5ae31eb74eb6835462d5c0d6c9fbca1abed6a7c7f197e83d8174eb3",
+  "compressedBytes": 8095188,
+  "unpackedFileBytes": 42054719,
+  "bundleBytes": 27972160,
+  "bundleMapBytes": 9822645,
+  "regularFiles": 3601,
+  "relocation": "/tmp/term2 final artifact verifier # f684903f/relocated installation # smoke/package",
+  "noSourceOrScripts": true,
+  "dependencyPolicy": "Reused locked node_modules via symlink; no fresh dependency installation. Application exclusively from newly packed exact-commit tarball.",
+  "requiredFiles": [
+    "dist/cli.js",
+    "dist/cli-bundle/cli.js",
+    "dist/env-setup.js",
+    "dist/prompts/lite.md",
+    "dist/utils/worker-cwd-preload.cjs",
+    "dist/services/conversation/session-index/session-index-worker.js",
+    "dist/services/hooks/index.d.ts",
+    "dist/node_modules/@qduc/agent-wire/package.json"
+  ],
+  "smokes": [
+    {
+      "mode": "unset",
+      "flag": "--help",
+      "exit": 0,
+      "stdout": "\n  A terminal-based AI assistant that can help you get things done on your computer\n\n  Everyday usage\n    $ term2\n    $ term2 \"explain this function\"\n    $ term",
+      "stderr": "",
+      "runtime": {
+        "NODE_ENV": "production",
+        "reactModules": [
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.production.js"
+        ]
+      }
+    },
+    {
+      "mode": "unset",
+      "flag": "--version",
+      "exit": 0,
+      "stdout": "0.35.0-dev+f684903\n",
+      "stderr": "",
+      "runtime": {
+        "NODE_ENV": "production",
+        "reactModules": [
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.production.js"
+        ]
+      }
+    },
+    {
+      "mode": "test",
+      "flag": "--help",
+      "exit": 0,
+      "stdout": "\n  A terminal-based AI assistant that can help you get things done on your computer\n\n  Everyday usage\n    $ term2\n    $ term2 \"explain this function\"\n    $ term",
+      "stderr": "",
+      "runtime": {
+        "NODE_ENV": "test",
+        "reactModules": [
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.development.js"
+        ]
+      }
+    },
+    {
+      "mode": "test",
+      "flag": "--version",
+      "exit": 0,
+      "stdout": "0.35.0-dev+f684903\n",
+      "stderr": "",
+      "runtime": {
+        "NODE_ENV": "test",
+        "reactModules": [
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.development.js"
+        ]
+      }
+    },
+    {
+      "mode": "production",
+      "flag": "--help",
+      "exit": 0,
+      "stdout": "\n  A terminal-based AI assistant that can help you get things done on your computer\n\n  Everyday usage\n    $ term2\n    $ term2 \"explain this function\"\n    $ term",
+      "stderr": "",
+      "runtime": {
+        "NODE_ENV": "production",
+        "reactModules": [
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.production.js"
+        ]
+      }
+    },
+    {
+      "mode": "production",
+      "flag": "--version",
+      "exit": 0,
+      "stdout": "0.35.0-dev+f684903\n",
+      "stderr": "",
+      "runtime": {
+        "NODE_ENV": "production",
+        "reactModules": [
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/index.js",
+          "/workspace/term2/.worktrees/ci-fresh/node_modules/.pnpm/react@19.2.0/node_modules/react/cjs/react.production.js"
+        ]
+      }
+    }
+  ]
+}

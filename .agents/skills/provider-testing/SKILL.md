@@ -15,6 +15,14 @@ pnpm test:provider-black-box
 
 This command builds `dist/` first, then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
 
+Global setup primes a disposable Node compile cache with `dist/cli.js --help`
+before starting the workers. Only compiled bytecode is shared: every scenario
+still starts fresh processes and isolated application state. The cache is
+removed on teardown and is disabled for V8 coverage or
+`NODE_DISABLE_COMPILE_CACHE=1`. Direct Vitest invocations still require a prior
+build. Integration launchers similarly share one emitted CLI build prepared by
+their global setup; they do not reuse a running application.
+
 Compare timing with a recent run on a similarly loaded host; a fixed healthy
 duration becomes stale as PTY scenarios grow. The command uses `--bail=1`
 because the tests drive the built CLI through a PTY and wait on its output:
@@ -60,9 +68,29 @@ scenario is the one whose CLI never reached the state it waits for.
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.
 - `scripts/provider-black-box/provider-session-responses.blackbox.ts`,
-  `scripts/provider-black-box/provider-session-stateless.blackbox.ts`, and
-  `scripts/provider-black-box/provider-session-resilience.blackbox.ts` own the
-  stateful provider lifecycle scenarios and their exported ledger declarations.
+  `provider-session-responses-tools.blackbox.ts`, and
+  `provider-session-responses-failures.blackbox.ts` register the Responses
+  continuity, tool, and failure groups from `provider-session-responses-scenarios.ts`.
+  Vitest's file isolation gives each group separate fixture state and cleanup;
+  scenarios within a file remain sequential. Keep file isolation enabled.
+  The continuity entry retains the aggregate Responses ledger declaration.
+- `scripts/provider-black-box/provider-session-stateless.blackbox.ts` owns the
+  stateless lifecycle scenarios and its exported ledger declaration.
+- `provider-session-resilience.blackbox.ts` and
+  `provider-session-resilience-continuity.blackbox.ts` register transport and
+  continuity groups from `provider-session-resilience-scenarios.ts`. They retain
+  separate fixture state through file isolation; cases within a file stay
+  sequential. The transport entry retains the aggregate resilience ledger.
+
+CI uses `scripts/run-ci-lane.mjs` to distribute the complete tier inventories
+across the same four jobs. Each lane schedules its files through isolated Vitest
+projects using the original tier configurations and one two-worker queue.
+Integration CLI launchers and provider suites use the job's freshly built,
+built CLI; standalone integration runs still prepare a private build. E2E
+retains its source and built-entry coverage. Discovery assigns new files automatically.
+CI runs all assigned files after assertion failures and propagates collection,
+test, and unhandled failures. The published local provider command above retains
+`--bail=1`; it and the other full-suite commands remain available locally.
 
 ## Adding or changing a scenario
 

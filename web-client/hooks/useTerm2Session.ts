@@ -22,6 +22,7 @@ import type {
 import { Term2ProtocolError } from '../lib/term2/types';
 
 const MAX_RECONNECT_DELAY = 10_000;
+const MAX_PROTOCOL_RELOADS = 2;
 const BACKOFF_BASE = 500;
 
 const COMMAND_ERROR_MESSAGES: Record<string, string> = {
@@ -116,6 +117,7 @@ export interface UseTerm2SessionResult {
 
 export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult {
   const [view, setView] = useState<Term2SessionView>(() => emptyTerm2SessionView(sessionId || ''));
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [workspaces, setWorkspaces] = useState<WorkspacePage['workspaces']>([]);
   const [sessions, setSessions] = useState<SessionPage['sessions']>([]);
   const [workspaceCursor, setWorkspaceCursor] = useState<string | null>(null);
@@ -178,6 +180,9 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       if (!installProjection(projection, generation)) return;
       let delay = BACKOFF_BASE;
       let cursor = projection.projectionSequence;
+      // A reload that lands on the same cursor replays the same event; stop after a few instead of looping.
+      let reloadCursor = -1;
+      let reloadsAtCursor = 0;
       while (!signal.aborted && generation === generationRef.current && sessionIdRef.current === id) {
         setView((current) => ({
           ...current,
@@ -291,6 +296,17 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
             return;
           }
           if (error instanceof Term2ProtocolError) {
+            reloadsAtCursor = cursor === reloadCursor ? reloadsAtCursor + 1 : 1;
+            reloadCursor = cursor;
+            if (reloadsAtCursor > MAX_PROTOCOL_RELOADS) {
+              setView((current) => ({
+                ...current,
+                status: 'error',
+                reloadRequired: true,
+                error: 'The session stream has an event this client cannot read.',
+              }));
+              return;
+            }
             setView((current) => ({
               ...current,
               status: 'reconnecting',
@@ -353,6 +369,9 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
             status: 'error',
             error: error instanceof Error ? error.message : 'Unable to load session',
           }));
+      } finally {
+        // A terminal reader must release its request and be restartable by Reload.
+        controller.abort();
       }
     };
     void run();
@@ -360,7 +379,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       controller.abort();
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-  }, [sessionId, hydrateAndConnect]);
+  }, [sessionId, hydrateAndConnect, connectionAttempt]);
 
   const createSession = useCallback(async (workspaceId: string) => {
     const projection = await term2Client.createSession(workspaceId);
@@ -470,8 +489,11 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   const refresh = useCallback(async () => {
     const id = sessionIdRef.current;
     if (!id) return;
+    const generation = generationRef.current;
     const projection = await term2Client.getSession(id);
-    installProjection(projection, generationRef.current);
+    if (installProjection(projection, generation) && selectionControllerRef.current?.signal.aborted) {
+      setConnectionAttempt((attempt) => attempt + 1);
+    }
   }, [installProjection]);
 
   const resolveInteraction = useCallback(

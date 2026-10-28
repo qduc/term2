@@ -38,6 +38,7 @@ import {
 } from './persistence/contracts.js';
 import {
   createSessionProjectionSource,
+  wireCallId,
   hydrateConversationService,
   type PendingInteractionDto,
   type ProjectionCommand,
@@ -1799,12 +1800,20 @@ export class Term2Gateway {
       });
       this.#interactionBindings.delete(claims.sessionId!);
       this.#countInteraction('interaction_resolved');
+      // A multi-question ask_user collects one answer per request; the resolved
+      // result carries all of them (in question order), while this request only
+      // carries the last. A single question keeps the answer as sent so its
+      // tool result format does not change.
+      const toolApprovalAnswer =
+        (binding.dto.askUser?.questions.length ?? 0) > 1 && result.approvalAnswer !== undefined
+          ? result.approvalAnswer
+          : decision.approvalAnswer;
       try {
         if (session.abortGeneration !== continuationAbortGeneration || session.activeTurnId !== binding.turnId) {
           throw new ServerSessionError('interrupted');
         }
         await session.service.handleApprovalDecision(decision.answer, decision.rejectionReason, {
-          approvalAnswer: decision.approvalAnswer,
+          approvalAnswer: toolApprovalAnswer,
           // Cancelling an ask_user question ends the turn, exactly as Escape
           // does in the TUI: the question and its unanswered result stay in
           // history, and the user speaks next. Without this the web client's
@@ -3206,8 +3215,8 @@ function commandMessagePayload(input: unknown): Record<string, unknown> | null {
     return null;
   }
   return {
-    callId: boundedText(callId, 256),
-    toolName: boundedText(toolName, 256),
+    callId: wireCallId(callId),
+    toolName: projectionText(toolName, 256),
     status,
     ...(typeof message.output === 'string' ? { output: boundedText(message.output, 16_384) } : {}),
     ...(typeof message.failureReason === 'string' ? { error: boundedText(message.failureReason, 10_000) } : {}),
@@ -3382,7 +3391,7 @@ function projectTranscriptMessages(
   for (const command of transcript.toolLedger) {
     if (!PROJECTION_COMMAND_STATUSES.has(command.status)) continue;
     addCommand(command.turnId, {
-      callId: boundedText(command.callId, 256),
+      callId: wireCallId(command.callId),
       toolName: boundedText(command.toolName, 256),
       status: boundedText(command.status, 32) as ProjectionCommand['status'],
       ...projectionCommandDetails(command.output, command.failureReason),
@@ -3422,7 +3431,11 @@ function projectTranscriptMessages(
     };
     const commands = currentTurnId ? commandsByTurn.get(currentTurnId) : undefined;
     if (commands && commands.length > 0 && !attachedTurns.has(currentTurnId!)) {
-      projectedMessage.commands = commands;
+      // Ledger, journal and transcript commands all end up here, so this is the one place their names are cleaned.
+      projectedMessage.commands = commands.map((command) => ({
+        ...command,
+        toolName: projectionText(command.toolName, 256),
+      }));
       attachedTurns.add(currentTurnId!);
     }
     return projectedMessage;
@@ -3460,10 +3473,10 @@ function projectTranscriptMessages(
         typeof record.callId === 'string' &&
         typeof record.toolName === 'string' &&
         typeof record.status === 'string' &&
-        !commandsByTurn.get(currentTurnId)?.some((command) => command.callId === record.callId)
+        !commandsByTurn.get(currentTurnId)?.some((command) => command.callId === wireCallId(String(record.callId)))
       ) {
         addCommand(currentTurnId, {
-          callId: boundedText(record.callId, 256),
+          callId: wireCallId(record.callId),
           toolName: boundedText(record.toolName, 256),
           status: boundedText(record.status, 32) as ProjectionCommand['status'],
           ...projectionCommandDetails(record.output, record.failureReason),
@@ -3580,7 +3593,7 @@ export function mapConversationEvent(
       return {
         ...base,
         type: 'tool_started',
-        payload: { turnId, callId: event.toolCallId, toolName: boundedText(event.toolName, 256) },
+        payload: { turnId, callId: wireCallId(event.toolCallId), toolName: projectionText(event.toolName, 256) },
       };
     case 'command_message':
       return commandMessageCandidate(base, event.message, 'command_message');
@@ -3680,7 +3693,7 @@ export function mapConversationEvent(
           turnId,
           agentId: boundedText(event.agentId, 256),
           role: boundedText(event.role, 256),
-          toolCallId: boundedText(event.toolCallId, 256),
+          toolCallId: wireCallId(event.toolCallId),
           toolName: boundedText(event.toolName, 256),
           ...(event.commandMessages
             ? {

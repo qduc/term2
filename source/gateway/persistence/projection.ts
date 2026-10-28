@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { decodeLogEnvelope, type PersistedLogEnvelope } from '../../services/conversation/conversation-decoder.js';
@@ -141,6 +142,22 @@ function readTerm2Envelopes(directory: string, expectedSessionId?: string): Pers
   return all;
 }
 
+const WIRE_ID_PATTERN = /^[A-Za-z0-9_-]{1,256}$/u;
+
+/**
+ * The one raw tool call id -> wire id function. The web client accepts only
+ * `WIRE_ID_PATTERN` ids, so every source (ledger, journal event, transcript,
+ * projection) maps through here and agrees on the same card key. A conforming id
+ * is unchanged; anything else (control characters, other punctuation, over 256
+ * characters) becomes a sanitized stem plus a hash of the raw id, so two
+ * different raw ids cannot meet. Idempotent: its output is a conforming id.
+ */
+export function wireCallId(raw: string): string {
+  if (WIRE_ID_PATTERN.test(raw)) return raw;
+  const hash = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 12);
+  return `${raw.replace(/[^A-Za-z0-9_-]/gu, '_').slice(0, 243)}-${hash}`;
+}
+
 function commandsFromJournal(events: readonly AgentEventEnvelope[]): ReadonlyMap<string, readonly ProjectionCommand[]> {
   const commandsByTurn = new Map<string, ProjectionCommand[]>();
   const statusByTerminalEvent = new Map<string, ProjectionCommandStatus>([
@@ -151,7 +168,7 @@ function commandsFromJournal(events: readonly AgentEventEnvelope[]): ReadonlyMap
   for (const event of events) {
     if (event.type === 'tool_started') {
       const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null;
-      const callId = typeof event.payload.callId === 'string' ? event.payload.callId : null;
+      const callId = typeof event.payload.callId === 'string' ? wireCallId(event.payload.callId) : null;
       const toolName = typeof event.payload.toolName === 'string' ? event.payload.toolName : null;
       if (!turnId || !callId || !toolName) continue;
       const commands = commandsByTurn.get(turnId) ?? [];
@@ -163,7 +180,7 @@ function commandsFromJournal(events: readonly AgentEventEnvelope[]): ReadonlyMap
     }
     if (event.type === 'command_message') {
       const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null;
-      const callId = typeof event.payload.callId === 'string' ? event.payload.callId : null;
+      const callId = typeof event.payload.callId === 'string' ? wireCallId(event.payload.callId) : null;
       const commands = turnId ? commandsByTurn.get(turnId) : undefined;
       if (!turnId || !callId || !commands) continue;
       const output = typeof event.payload.output === 'string' ? event.payload.output : undefined;

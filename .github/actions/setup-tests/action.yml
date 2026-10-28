@@ -10,9 +10,8 @@ runs:
     - uses: actions/setup-node@v7
       id: node
       with:
-        # Match the measured baseline and avoid mixed native-cache keys while
-        # GitHub rolls newer Node patches across ubuntu-latest images.
-        node-version: 24
+        # Match the measured baseline patch; include it in the native-cache key.
+        node-version: 24.21.0
     - name: Install pnpm
       shell: bash
       run: npm install -g pnpm@11.7.0
@@ -57,30 +56,3 @@ runs:
       if: inputs.ripgrep == 'true'
       shell: bash
       run: sudo apt-get update && sudo apt-get install -y ripgrep bubblewrap socat
-    - name: Restore ripgrep
-      if: inputs.ripgrep == 'true'
-      uses: actions/cache@v6
-      with:
-        path: ${{ runner.temp }}/term2-ci-ripgrep
-        # The executable is portable across patch revisions of the same Ubuntu
-        # image family. Re-key on OS/architecture/family, not image publication.
-        key: test-ripgrep-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}
-    - name: Prepare ripgrep
-      if: inputs.ripgrep == 'true'
-      shell: bash
-      run: |
-        tool_dir="$RUNNER_TEMP/term2-ci-ripgrep"
-        if [ ! -x "$tool_dir/rg" ]; then
-          if ! command -v rg >/dev/null 2>&1; then
-            # Hosted images normally have a usable apt index already. Refresh
-            # only if installation fails; keep both failures visible in logs.
-            if ! sudo apt-get install -y ripgrep; then
-              sudo apt-get update
-              sudo apt-get install -y ripgrep
-            fi
-          fi
-          mkdir -p "$tool_dir"
-          cp "$(command -v rg)" "$tool_dir/rg"
-        fi
-        "$tool_dir/rg" --version
-        echo "$tool_dir" >> "$GITHUB_PATH"

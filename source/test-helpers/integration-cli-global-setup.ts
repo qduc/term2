@@ -37,8 +37,12 @@ export default function setup(project: TestProject): (() => void) | undefined {
     { cwd: projectRoot, stdio: 'pipe' },
   );
   fs.cpSync(path.join(projectRoot, 'source', 'prompts'), path.join(buildDir, 'prompts'), { recursive: true });
-  execFileSync(process.execPath, ['scripts/bundle-cli.mjs', buildDir], { cwd: projectRoot, stdio: 'pipe' });
-  const cliPath = path.join(buildDir, 'cli-launcher.mjs');
+  fs.mkdirSync(path.join(buildDir, 'providers'), { recursive: true });
+  fs.copyFileSync(
+    path.join(projectRoot, 'source', 'providers', 'provider-presets.json'),
+    path.join(buildDir, 'providers', 'provider-presets.json'),
+  );
+  const cliPath = path.join(buildDir, 'cli.js');
   project.provide('integrationCliPath', cliPath);
   return prepareCliCompileCache(project, cliPath);
 }

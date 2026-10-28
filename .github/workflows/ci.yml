@@ -39,7 +39,7 @@ jobs:
       - name: Build dist
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
       - name: Run guards, CLI integration and safety provider cases
-        run: /usr/bin/time -v node scripts/run-ci-lane.mjs test
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
 
   integration:
     runs-on: ubuntu-22.04
@@ -54,7 +54,7 @@ jobs:
       - name: Build dist
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
       - name: Run remaining integration and stateless provider cases
-        run: /usr/bin/time -v node scripts/run-ci-lane.mjs integration
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
 
   e2e:
     runs-on: ubuntu-latest
@@ -65,7 +65,7 @@ jobs:
       - name: Build dist
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
       - name: Run E2E and Responses provider cases
-        run: /usr/bin/time -v node scripts/run-ci-lane.mjs e2e
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
 
   provider-black-box:
     runs-on: ubuntu-latest
@@ -76,4 +76,4 @@ jobs:
       - name: Build dist
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
       - name: Run resilience and remaining provider cases
-        run: /usr/bin/time -v node scripts/run-ci-lane.mjs provider-black-box
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box

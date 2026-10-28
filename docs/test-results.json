@@ -15088,6 +15088,66 @@
           "notes": "No console errors in light or dark. Full session shell, live streaming and approvals were not exercised: no gateway was available."
         }
       ]
+    },
+    {
+      "recorded_on": "2026-10-28",
+      "task_ids": ["2026-10-28-web-client-visual-refresh"],
+      "environment": {
+        "os": "Linux 6.18 (cloud container)",
+        "node": "v22.22.0",
+        "pnpm": "11.7.0"
+      },
+      "id": "2026-10-28-web-client-visual-refresh-tsc-build-and-browser",
+      "commit": "7cbb9c1f81b7fa0087e476b0052ed11cc217b8b7",
+      "tree": "1914eb30e4face62df4003897166da2f8e9edcff",
+      "revision_kind": "pre-commit working tree, content identical to the listed commit (lint-staged made no changes)",
+      "suite": "web-client typecheck, production build, and temporary Playwright drive of the full session shell against a mocked agent API",
+      "command": "cd web-client && npx tsc --noEmit && npx next build; next dev on :3100 with Playwright route mocks for /api/agent/* (workspaces, sessions, projection, scripted SSE events); scripts kept outside the repo",
+      "command_complete": true,
+      "checks": [
+        {
+          "name": "web-client-tsc",
+          "command": "npx tsc --noEmit",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0,
+            "skipped": null
+          }
+        },
+        {
+          "name": "web-client-next-build",
+          "command": "npx next build",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0,
+            "skipped": null
+          }
+        },
+        {
+          "name": "temporary-shell-functional-smoke",
+          "command": "playwright chromium: approve interaction, Enter/Shift+Enter composer, session command menu, tool group/row expand, sidebar toggle, theme toggle, session switch, sidebar search, stop button while running",
+          "exit": 0,
+          "result": {
+            "passed": 14,
+            "failed": 0,
+            "skipped": null
+          },
+          "notes": "The compact-command check failed once in the scripted run because the mock's finite SSE response makes the client reconnect every ~2s, briefly disabling commands; a direct re-run posted the command and rendered the 'Context compacted' notice. No console or page errors."
+        },
+        {
+          "name": "temporary-screenshots",
+          "command": "playwright chromium screenshots light/dark, 1440x900 and 390x844",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0,
+            "skipped": null
+          },
+          "notes": "Not exercised: a live term2 gateway; streaming timing and reconnect behaviour against a real long-lived SSE stream."
+        }
+      ]
     }
   ]
 }

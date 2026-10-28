@@ -82,7 +82,7 @@
 /* Define CSS custom properties for theme colors */
 :root {
   --background: #ffffff;
-  --foreground: #18181b; /* zinc-950 */
+  --foreground: #0a0a0a;
   --card: #ffffff;
   --card-foreground: #18181b;
   --popover: #ffffff;
@@ -106,8 +106,8 @@
 
 /* Dark mode colors - applied when .dark class is present */
 :root:where(.dark) {
-  --background: #18181b; /* zinc-900 - Softer dark background */
-  --foreground: #e4e4e7; /* zinc-200 - Softer text */
+  --background: #09090b; /* zinc-950: app chrome behind the raised panel */
+  --foreground: #ededed;
   --card: #18181b;
   --card-foreground: #e4e4e7;
   --popover: #18181b;
@@ -162,7 +162,9 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-feature-settings: 'ss01', 'cv11';
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -274,6 +276,11 @@ main {
   background: transparent !important;
 }
 
+/* The highlight.js theme pads block code; the code block frame owns spacing. */
+pre code.hljs {
+  padding: 0;
+}
+
 /* Task list styling */
 input[type="checkbox"][disabled] {
   margin-right: 0.5rem;
@@ -301,6 +308,69 @@ del {
   .md-h1 { font-size: 1.5rem; }
   .md-h2 { font-size: 1.25rem; }
   .md-h3 { font-size: 1.125rem; }
+}
+
+/* Entrance for newly rendered messages and panels */
+.t2-enter {
+  animation: t2-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes t2-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Light sweep across live status text ("Thinking…", "Reading …") */
+.t2-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--t2-shimmer-base) 0%,
+    var(--t2-shimmer-base) 40%,
+    var(--t2-shimmer-peak) 50%,
+    var(--t2-shimmer-base) 60%,
+    var(--t2-shimmer-base) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: t2-shimmer 2.2s linear infinite;
+  --t2-shimmer-base: #a1a1aa;
+  --t2-shimmer-peak: #18181b;
+}
+
+.dark .t2-shimmer {
+  --t2-shimmer-base: #71717a;
+  --t2-shimmer-peak: #fafafa;
+}
+
+@keyframes t2-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t2-enter,
+  .t2-shimmer {
+    animation: none;
+  }
+  .t2-shimmer {
+    color: var(--t2-shimmer-base);
+  }
+}
+
+::selection {
+  background: rgb(20 184 166 / 0.22);
 }
 
 /* Pulse animation for active conversation indicator */

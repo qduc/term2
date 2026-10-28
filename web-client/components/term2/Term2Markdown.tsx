@@ -12,7 +12,7 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
     <button
       type="button"
       aria-label={copied ? 'Copied' : label}
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-zinc-500 transition-colors hover:bg-black/[0.06] hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100"
       onClick={() => {
         void navigator.clipboard
           ?.writeText(text)
@@ -43,12 +43,12 @@ function highlight(code: string, language: string | undefined): string | null {
 export function Term2CodeBlock({ code, language }: { code: string; language?: string }) {
   const html = useMemo(() => highlight(code, language), [code, language]);
   return (
-    <div className="my-3 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-1 dark:border-zinc-800">
-        <span className="font-mono text-xs text-zinc-500">{language || 'text'}</span>
+    <div className="my-4 overflow-hidden rounded-xl border border-black/[0.06] bg-zinc-50 dark:border-white/[0.07] dark:bg-zinc-950/70">
+      <div className="flex items-center justify-between py-1 pl-4 pr-1.5">
+        <span className="font-mono text-[11.5px] text-zinc-500">{language || 'text'}</span>
         <CopyButton text={code} label="Copy code" />
       </div>
-      <pre className="overflow-x-auto p-3 text-[13px] leading-5">
+      <pre className="overflow-x-auto px-4 pb-3.5 pt-0.5 text-[13px] leading-[1.6]">
         {html ? (
           <code className="hljs md-code" dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
@@ -71,7 +71,9 @@ const components: Components = {
   },
   code({ className, children }) {
     return (
-      <code className={`rounded bg-zinc-100 px-1 py-0.5 font-mono text-[0.85em] dark:bg-zinc-800 ${className ?? ''}`}>
+      <code
+        className={`rounded-md border border-black/[0.06] bg-zinc-100/80 px-[0.35em] py-[0.1em] font-mono text-[0.86em] dark:border-white/[0.08] dark:bg-white/[0.06] ${className ?? ''}`}
+      >
         {children}
       </code>
     );
@@ -82,7 +84,7 @@ const components: Components = {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="md-link text-teal-700 underline underline-offset-2 dark:text-teal-400"
+        className="md-link font-medium text-teal-700 underline decoration-teal-700/30 underline-offset-[3px] hover:decoration-teal-700 dark:text-teal-400 dark:decoration-teal-400/30 dark:hover:decoration-teal-400"
       >
         {children}
       </a>
@@ -90,31 +92,33 @@ const components: Components = {
   },
   table({ children }) {
     return (
-      <div className="my-3 overflow-x-auto">
+      <div className="my-4 overflow-x-auto rounded-xl border border-black/[0.07] dark:border-white/[0.08]">
         <table className="w-full border-collapse text-sm">{children}</table>
       </div>
     );
   },
   th({ children }) {
     return (
-      <th className="border-b border-zinc-300 px-3 py-1.5 text-left font-semibold dark:border-zinc-700">{children}</th>
+      <th className="border-b border-black/[0.07] bg-zinc-50 px-3 py-2 text-left font-medium text-zinc-600 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-300">
+        {children}
+      </th>
     );
   },
   td({ children }) {
-    return <td className="border-b border-zinc-200 px-3 py-1.5 dark:border-zinc-800">{children}</td>;
+    return <td className="border-t border-black/[0.05] px-3 py-2 dark:border-white/[0.06]">{children}</td>;
   },
-  h1: ({ children }) => <h1 className="md-h1 mb-2 mt-5 text-xl font-semibold">{children}</h1>,
-  h2: ({ children }) => <h2 className="md-h2 mb-2 mt-4 text-lg font-semibold">{children}</h2>,
-  h3: ({ children }) => <h3 className="md-h3 mb-1 mt-3 text-base font-semibold">{children}</h3>,
-  p: ({ children }) => <p className="md-p my-2 first:mt-0 last:mb-0">{children}</p>,
-  ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-6">{children}</ul>,
-  ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-6">{children}</ol>,
+  h1: ({ children }) => <h1 className="md-h1 mb-3 mt-6 text-[1.4rem] font-semibold tracking-tight first:mt-0">{children}</h1>,
+  h2: ({ children }) => <h2 className="md-h2 mb-2 mt-6 text-[1.18rem] font-semibold tracking-tight first:mt-0">{children}</h2>,
+  h3: ({ children }) => <h3 className="md-h3 mb-1.5 mt-5 text-base font-semibold tracking-tight first:mt-0">{children}</h3>,
+  p: ({ children }) => <p className="md-p my-3 first:mt-0 last:mb-0">{children}</p>,
+  ul: ({ children }) => <ul className="my-3 list-disc space-y-1.5 pl-6 marker:text-zinc-400">{children}</ul>,
+  ol: ({ children }) => <ol className="my-3 list-decimal space-y-1.5 pl-6 marker:text-zinc-400">{children}</ol>,
   blockquote: ({ children }) => (
-    <blockquote className="my-3 border-l-2 border-zinc-300 pl-3 text-zinc-600 dark:border-zinc-600 dark:text-zinc-400">
+    <blockquote className="my-4 border-l-2 border-teal-500/40 pl-4 text-zinc-600 dark:text-zinc-400">
       {children}
     </blockquote>
   ),
-  hr: () => <hr className="my-4 border-zinc-200 dark:border-zinc-800" />,
+  hr: () => <hr className="my-6 border-black/[0.07] dark:border-white/[0.08]" />,
 };
 
 const remarkPlugins = [remarkGfm];
@@ -126,7 +130,7 @@ const remarkPlugins = [remarkGfm];
  */
 export const Term2Markdown = memo(function Term2Markdown({ text, className }: { text: string; className?: string }) {
   return (
-    <div className={`md-content text-[15px] leading-7 ${className ?? ''}`}>
+    <div className={`md-content text-[15px] leading-[1.7] text-zinc-800 dark:text-zinc-200 ${className ?? ''}`}>
       <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
         {text}
       </ReactMarkdown>

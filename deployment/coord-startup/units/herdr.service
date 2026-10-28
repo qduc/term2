@@ -1,0 +1,18 @@
+[Unit]
+Description=Herdr persistent PTY server
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Environment=HOME=/home/qduc
+Environment=PATH=/home/qduc/.nvm/versions/node/v24.19.0/bin:/home/qduc/.local/bin:/usr/local/bin:/usr/bin:/bin
+UnsetEnvironment=HERDR_SOCKET_PATH HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_PANE_ID
+ExecStart=/home/qduc/.local/bin/herdr server
+Restart=always
+RestartSec=10
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,22 @@
+[Unit]
+Description=Pinned term2 coordinator admission then Discord bridge
+Wants=herdr.service
+After=herdr.service
+StartLimitIntervalSec=180
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Environment=HOME=/home/qduc
+Environment=PATH=/home/qduc/.nvm/versions/node/v24.19.0/bin:/home/qduc/.local/bin:/usr/local/bin:/usr/bin:/bin
+UnsetEnvironment=HERDR_SOCKET_PATH HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_PANE_ID TERM2_DISCORD_BOT_TOKEN TERM2_DISCORD_GATEWAY
+ExecStart=/usr/bin/python3 /home/qduc/.local/lib/term2-coord-startup/startup.py run /home/qduc/.config/term2/coord-startup.json
+WorkingDirectory=/home/qduc/coord/term2
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+TimeoutStopSec=15
+UMask=0077
+
+[Install]
+WantedBy=default.target

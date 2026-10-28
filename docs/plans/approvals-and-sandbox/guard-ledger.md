@@ -1,5 +1,86 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Coordinator launcher bridge-stop grace (2026-10-28)
+
+Owner: `stop_bridge` in `deployment/coord-startup/startup.py`; recovery owner:
+existing Discord journal reconciliation plus manual inspection for ambiguity.
+Scope: this inactive deployment candidate's bridge child only. Class: containment
+budget. Harm prevented: an unresponsive child holding launcher shutdown forever;
+8s also prematurely killed a legitimate single 10s REST operation. Signal: elapsed
+wait after SIGTERM (proxy, not proof an effect failed). Effective fixed grace is
+12s, no configuration/override/clamp/migration; unchanged unit outer stop is15s.
+Action remains SIGTERM, finite wait, then SIGKILL/wait; no new retry or fallback.
+A `sending` output after forced death is uncertain on restart, not retried; journal
+and already-admitted bindings stay intact. No provider-continuity behavior changes.
+Inspect child exit, owner/outbound artifacts and journal state; no new payload or
+secret logging. Multi-operation ticks can exceed either deadline, so universal
+graceful drainage is expressly not promised. Rollback is the copied launcher's
+single grace change; preserved original candidate remains 8s and crash-aware.
+
+Red proof: isolated `assembled.py Assembled.test_launcher_grace_allows_post_deadline`
+under `tasks/discord-durability/integration-evidence/` reaches real passive TUI
+admission and real built CLI POST, withholds acknowledgement, then stops launcher.
+Original 8s copy kills before REST deadline: no143 exit, owner retained, output
+`sending` (`grace-red.log`). Final direct checks and independent disposition are
+recorded in the task integration report/test-results ledger, not inferred here.
+The fixed source is copied from the independently accepted startup candidate;
+original artifacts are unmodified. Deployment/installation is not authorized by
+this ledger entry. Threshold tests target the real10s request boundary plus a
+noncooperative child; exact12s scheduling edges are not a hard real-time promise.
+
+Verification disposition: runtime source `2c5291f8a23ba13174c1fc8140a9c40b63b60dd4`
+passes author assembled4/startup27 and independent fresh4/27. Independent scoped
+acceptance: `integration-evidence/independent-review/report.md` in the coordinator
+task. GET/POST deadline settlement exits143 with ownership/socket cleanup; the
+noncooperative control still dies at12s. Full lint/typecheck/format and unit syntax
+checks pass. Broader provider suite is221pass/1fail/1skip (offline pnpm recorder
+subprocess timeout); its direct installed recorder intent probe passes. Candidate
+remains inactive/unmerged; actual manager/cgroup stop and boot are not established.
+
+
+## Discord default ingress availability (2026-10-27)
+
+Harm: a known-absent configured coordinator previously caused successfully read
+human input to be refused and permanently passed by the cursor. Enforcement and
+recovery owner: `DiscordBridge.#ingress` / existing `tick` scheduling. Class:
+admission availability gate. Signal: current uncached live, opted-in control
+advertisements (`#attached`), not a timeout or proof of TUI/provider readiness.
+The configured `coordinator` name is the sole policy input; no new setting,
+threshold, clamping, schema migration, retry or fallback is added.
+
+When absent, skip ingress GET. Recheck before fresh initialization, each new
+message, and the target-binding snapshot; leave the affected cursor and
+unadmitted input on Discord. Commands and explicit targets wait in REST order.
+An explicit missing non-default alias is still refused/consumed once the default
+is present. Already admitted jobs/outbox continue their existing pinned identity,
+reconciliation and uncertain-send policy. Fresh journals still skip history;
+the gate is not a replacement for launcher admission readiness. Advertisement
+loss just after durable admission remains old pinned work, not automatic replay.
+No additional payload logging or per-tick warning/state is introduced; inspect
+existing advertisements, journal cursor and local attachment status during recovery.
+
+Red proof: `pnpm test:integration source/services/discord/discord-bridge.integration.test.ts
+-t 'waits before first|retains initialized|retains a fetched|stops mid-page'`
+failed all five new boundary cases on base `f7294ca656fc55b75f10e5115010f72efe5e962e`
+with test-only changes (unexpected GETs/cursor advance/command consumption).
+The integration matrix covers opted-out default, before-read and during-read
+loss, partial-page disappearance, first-read skip, explicit alias refusal,
+SIGKILL/fresh-process stale-owner recovery, retained queued output, reverse REST
+pages, duplicate IDs and unauthorized/bot/webhook inputs. Existing tests retain
+inbox capacity, error/backoff, pinned-job and ambiguous POST controls. Verification
+results are recorded in `docs/test-results.json`; independent review is separate.
+Author boundary verification on source `70c9ba2a0a9b63210efd9e10b90ddd4295169a2f`
+(production repair `db72e3267f9215d35db5673d19389f381c4483fb`): the same
+five-case red selection passes; `pnpm test:integration` passes 384 tests with
+one skip, including all 93 bridge and four runner cases. The runner fixtures now
+advertise a real opted-in default so their existing REST/Gateway assertions
+remain exercised rather than bypassing this gate. The rebuilt serialized
+provider black-box suite passes 222 tests with one skip. An earlier concurrent
+provider run timed out in the unrelated repeated-question PTY journey; its exact
+signature and resolving run are retained without inferring baseline persistence
+or load causation. Independent acceptance remains separate. Rollback boundary: the availability checks and their integration
+contract; no journal format or launcher change to undo.
+
 ## Discord Gateway doorbell adoption (2026-10-27)
 
 Owner: `DiscordGatewayNudge` in `discord-gateway.ts`; recovery owner: the

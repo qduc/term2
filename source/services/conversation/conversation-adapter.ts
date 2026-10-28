@@ -217,6 +217,7 @@ export class ConversationAdapter {
   readonly #preparedMessages = new Map<string, PreparedMessage>();
   readonly #cancelledLeases = new Set<string>();
   #admissionClosed = false;
+  #restartHeld = false;
 
   #currentSessionId(): string {
     return typeof this.#sessionId === 'string' ? this.#sessionId : this.#sessionId.current;
@@ -353,6 +354,57 @@ export class ConversationAdapter {
     return held;
   }
 
+  /** Reserve only a restart handoff. On refusal nothing is discarded; release restores normal admission. */
+  async prepareRestart(): Promise<() => void> {
+    if (this.#restartHeld) throw new Error('Restart is already being prepared.');
+    if (!this.#queue || !this.#queue.holdDispatch({ allowPaused: true })) {
+      throw new Error('Finish or stop the current foreground operation, then run /restart.');
+    }
+    this.#restartHeld = true;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      this.#restartHeld = false;
+      this.#queue!.releaseDispatch();
+    };
+    try {
+      if (
+        [...this.#preparedMessages.values()].some((item) => item.expiresAt > Date.now()) ||
+        [...this.#submissions.values()].some((item) => item.stage === 'pending_steer')
+      ) {
+        throw new Error('Unsettled input is still being admitted; finish or cancel it before restarting.');
+      }
+      await this.#queue.assertRestartDurable();
+      const volatile = this.#queue.state().queue.filter((item) => {
+        const submission = this.#submissions.get(item.id);
+        if (!submission)
+          return item.text === QUEUED_NON_TEXT_PLACEHOLDER || item.text === LEGACY_QUEUED_MESSAGE_PLACEHOLDER;
+        const turn = normalizeUserTurn(submission.input);
+        return Boolean(
+          turn.images?.length ||
+            turn.skill ||
+            submission.options.replayFromHistory ||
+            submission.options.suppressUserMessageDisplay ||
+            turn.text !== item.text,
+        );
+      });
+      if (volatile.length) {
+        throw new Error(
+          `Pending input ${volatile
+            .map((item) => item.id)
+            .join(
+              ', ',
+            )} contains images, a skill, or other non-durable input. Run, edit, or explicitly discard it before /restart.`,
+        );
+      }
+      return release;
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
   releaseForegroundQueue(options: { pauseIfQueued?: boolean } = {}): void {
     this.#queue?.releaseDispatch(options);
     this.#notifyQueueState();
@@ -459,6 +511,7 @@ export class ConversationAdapter {
 
   /** Mutate only the owner's still-pending record and its queue/mailbox projection. */
   async retractSubmission(id: string): Promise<SubmissionMutation> {
+    if (this.#restartHeld) throw new Error('Restart is being prepared; pending input was not changed.');
     if (this.#submissions.get(id)?.stage === 'pending_steer') {
       if (!this.#turnFlow.retractSteer) {
         throw new Error(
@@ -486,6 +539,7 @@ export class ConversationAdapter {
 
   /** Keep the executable payload and display projection in the same mutation. */
   async editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
+    if (this.#restartHeld) throw new Error('Restart is being prepared; pending input was not changed.');
     if (this.#submissions.get(id)?.stage === 'pending_steer') {
       if (!this.#turnFlow.editSteer) {
         throw new Error(
@@ -543,6 +597,7 @@ export class ConversationAdapter {
     | { kind: 'steered'; completion: Promise<ConversationTerminal | null> }
     | { kind: 'turn'; terminal: ConversationTerminal }
   > {
+    if (this.#restartHeld) throw new Error('Restart is being prepared; this message was not admitted.');
     const id = options.preferredMessageId ?? String(this.#nextQueuedMessageId++);
     if (this.#submissions.has(id)) throw new Error(`A submission already uses request id ${id}`);
     const submission: Submission = {
@@ -638,6 +693,7 @@ export class ConversationAdapter {
     }: SendMessageOptions = {},
     existing?: Submission,
   ): Promise<ConversationTerminal> {
+    if (this.#restartHeld) throw new Error('Restart is being prepared; this message was not admitted.');
     const queue = this.#queue;
     if (!queue) {
       return this.#executeMessage(existing?.prepareInput?.(input) ?? input, {
@@ -713,7 +769,7 @@ export class ConversationAdapter {
     for (const [leaseId, prepared] of this.#preparedMessages) {
       if (prepared.expiresAt <= now) this.#preparedMessages.delete(leaseId);
     }
-    if (this.#admissionClosed) return { kind: 'rejected', reason: 'closed' };
+    if (this.#admissionClosed || this.#restartHeld) return { kind: 'rejected', reason: 'closed' };
     if (
       !ids.turnId ||
       !ids.clientRequestId ||
@@ -739,7 +795,7 @@ export class ConversationAdapter {
   }
 
   async commitMessage(leaseId: string): Promise<void> {
-    if (this.#admissionClosed) throw new AdmissionLeaseError('closed');
+    if (this.#admissionClosed || this.#restartHeld) throw new AdmissionLeaseError('closed');
     const prepared = this.#preparedMessages.get(leaseId);
     if (!prepared) throw new AdmissionLeaseError('stale');
     if (prepared.expiresAt <= Date.now()) {
@@ -762,7 +818,7 @@ export class ConversationAdapter {
   }
 
   async cancelPreparedMessage(leaseId: string): Promise<void> {
-    if (this.#admissionClosed) throw new AdmissionLeaseError('closed');
+    if (this.#admissionClosed || this.#restartHeld) throw new AdmissionLeaseError('closed');
     if (this.#cancelledLeases.has(leaseId)) return;
     const prepared = this.#preparedMessages.get(leaseId);
     if (!prepared) throw new AdmissionLeaseError('stale');

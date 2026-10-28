@@ -10,12 +10,24 @@ export interface QueuePausedPromptProps {
   pauseReason?: QueuePauseReason;
   onResume: () => void;
   onDiscard: () => void;
+  onCommand: (input: string) => void;
 }
 
-const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReason, onResume, onDiscard }) => {
+const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({
+  queueLength,
+  pauseReason,
+  onResume,
+  onDiscard,
+  onCommand,
+}) => {
   const theme = useTheme();
   const { MenuFrame } = useSkin();
   useInput((input, key) => {
+    if (input.startsWith('/')) {
+      onCommand(input);
+      return;
+    }
+
     if (input === 'r' || input === 'R') {
       onResume();
       return;
@@ -40,6 +52,7 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
         hints={[
           ['r', 'resume'],
           ['x', 'discard'],
+          ['/', 'commands (keep paused)'],
         ]}
       />
     </MenuFrame>

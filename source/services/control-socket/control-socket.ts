@@ -225,6 +225,8 @@ export interface ControlSocketOptions {
 }
 
 /** Owns socket framing, discovery files, connection admission, and the read-only v1 wire. */
+class ControlMutationUnavailable extends Error {}
+
 export class ControlSocketServer {
   readonly name: string;
   readonly directory: string;
@@ -245,6 +247,7 @@ export class ControlSocketServer {
     | null = null;
   #startedAt = '';
   #closed = false;
+  #mutationsPaused = false;
   #ownedSocket: { dev: bigint; ino: bigint; ctimeNs: bigint } | null = null;
   #ownsAdvertisement = false;
 
@@ -385,6 +388,30 @@ export class ControlSocketServer {
       await this.close();
       throw cause;
     }
+  }
+
+  /** Refuse new mutations, drain already entered admission (not model completion), and allow reversible preflight. */
+  pauseMutations(): { drained: Promise<void>; release: () => void } {
+    if (this.#closed || this.#mutationsPaused) throw new Error('Control admission is already closed or paused.');
+    this.#mutationsPaused = true;
+    let released = false;
+    return {
+      drained: this.#admissionLock.run(() => undefined),
+      release: () => {
+        if (released) return;
+        released = true;
+        this.#mutationsPaused = false;
+      },
+    };
+  }
+
+  #runMutation<T>(operation: () => T | Promise<T>): Promise<T> {
+    return this.#admissionLock.run(() => {
+      if (this.#closed || this.#mutationsPaused) {
+        throw new ControlMutationUnavailable('Restart is being prepared; mutation was not admitted.');
+      }
+      return operation();
+    });
   }
 
   async close(): Promise<void> {
@@ -578,7 +605,7 @@ export class ControlSocketServer {
           return helloSeen;
         }
         const body = hashBody({ text: params.text, origin: params.origin, sessionId: params.sessionId });
-        const result = await this.#admissionLock.run(async () => {
+        const result = await this.#runMutation(async () => {
           const prior = this.#bridgeResults.get(key);
           if (prior) return prior.body === body ? { ...prior.receipt, replayed: true } : null;
           if (this.#bridgeResults.size >= 256) {
@@ -651,32 +678,30 @@ export class ControlSocketServer {
           reply(false, undefined, 'unavailable', 'Mutation is not available');
           return helloSeen;
         }
-        const result = await this.#admissionLock
-          .run(async () => {
-            const prior = this.#idempotency.get(params.clientRequestId, body);
-            if (prior.kind === 'conflict')
-              throw Object.assign(new Error('clientRequestId was already used with a different body'), {
-                code: 'conflict',
-              });
-            if (prior.kind === 'replay') return { ...prior.receipt, replayed: true };
-            if (!this.#idempotency.canStore()) {
-              return { delivery: 'rejected', reason: 'idempotency_capacity' } as ControlMutationReceipt;
-            }
-            const receipt = await mutate.call(port, {
-              ...params,
-              onSteerSettled: () => this.#idempotency.settle(params.clientRequestId),
+        const result = await this.#runMutation(async () => {
+          const prior = this.#idempotency.get(params.clientRequestId, body);
+          if (prior.kind === 'conflict')
+            throw Object.assign(new Error('clientRequestId was already used with a different body'), {
+              code: 'conflict',
             });
-            this.#idempotency.set(params.clientRequestId, body, receipt, receipt.delivery === 'steering');
-            if (receipt.delivery !== 'steering') this.#idempotency.settle(params.clientRequestId);
-            return receipt;
-          })
-          .catch((cause: any) => {
-            if (cause?.code === 'conflict') {
-              reply(false, undefined, 'conflict', cause.message);
-              return null;
-            }
-            throw cause;
+          if (prior.kind === 'replay') return { ...prior.receipt, replayed: true };
+          if (!this.#idempotency.canStore()) {
+            return { delivery: 'rejected', reason: 'idempotency_capacity' } as ControlMutationReceipt;
+          }
+          const receipt = await mutate.call(port, {
+            ...params,
+            onSteerSettled: () => this.#idempotency.settle(params.clientRequestId),
           });
+          this.#idempotency.set(params.clientRequestId, body, receipt, receipt.delivery === 'steering');
+          if (receipt.delivery !== 'steering') this.#idempotency.settle(params.clientRequestId);
+          return receipt;
+        }).catch((cause: any) => {
+          if (cause?.code === 'conflict') {
+            reply(false, undefined, 'conflict', cause.message);
+            return null;
+          }
+          throw cause;
+        });
         if (!result) return helloSeen;
         reply(true, result);
         return helloSeen;
@@ -688,7 +713,7 @@ export class ControlSocketServer {
         }
         reply(
           true,
-          await this.#admissionLock.run(() => (this.#interruptHandler ? this.#interruptHandler() : port.interrupt!())),
+          await this.#runMutation(() => (this.#interruptHandler ? this.#interruptHandler() : port.interrupt!())),
         );
         return helloSeen;
       }
@@ -716,8 +741,9 @@ export class ControlSocketServer {
       }
       reply(true, port.get(params.topic));
       return helloSeen;
-    } catch {
-      reply(false, undefined, 'internal', 'Control request failed');
+    } catch (cause) {
+      if (cause instanceof ControlMutationUnavailable) reply(false, undefined, 'unavailable', cause.message);
+      else reply(false, undefined, 'internal', 'Control request failed');
       return helloSeen;
     } finally {
       inFlight.delete(id);

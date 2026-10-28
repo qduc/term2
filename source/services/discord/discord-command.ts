@@ -48,7 +48,11 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
   let stopping = false;
   let wake: (() => void) | undefined;
   let wakePending = false;
-  const stop = () => {
+  const stop = (signal: NodeJS.Signals) => {
+    if (stopping) return;
+    // Preserve conventional CLI signal status, but let the active tick settle
+    // and finally release journal/socket ownership before the caller exits.
+    process.exitCode = signal === 'SIGINT' ? 130 : 143;
     stopping = true;
     wake?.();
   };
@@ -98,10 +102,12 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
       runtimeDir: process.env.XDG_RUNTIME_DIR ?? '',
       warn: (message) => process.stderr.write(`[discord] ${message}\n`),
     });
-    bridge.open();
-    await bridge.listenOutbound();
+    // Own signals before the first asynchronous startup boundary as well as
+    // during ticks and sleep. Enrollment above has its own terminal cleanup.
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
+    bridge.open();
+    await bridge.listenOutbound();
     // Gateway push is a doorbell for the REST read; set TERM2_DISCORD_GATEWAY=off to poll only.
     if (process.env.TERM2_DISCORD_GATEWAY !== 'off') {
       const active = bridge;

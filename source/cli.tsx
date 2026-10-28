@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import './env-setup.js';
+import { fileURLToPath } from 'node:url';
+import { assertRestartSupported, createRestartPlan } from './utils/process-restart.js';
 import { createFailClosedDiscordSend } from './services/discord/discord-send-capability.js';
 import type { ReactNode } from 'react';
 import meow from 'meow';
@@ -148,36 +150,7 @@ let activeControlSocketServer: ControlSocketServer | null = null;
 let effectiveSessionId: string | undefined;
 let effectiveHasConversationContent = false;
 let sessionSummaryPrinted = false;
-
-// Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
-process.on('SIGINT', () => {
-  if (process.stdout.isTTY) {
-    process.stdout.write('\x1b[?1004l');
-  }
-  void Promise.all([
-    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
-    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
-    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
-    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
-  ]).finally(() => {
-    printUsageOnce();
-    process.exit(130);
-  });
-});
-
-process.on('SIGTERM', () => {
-  if (process.stdout.isTTY) {
-    process.stdout.write('\x1b[?1004l');
-  }
-  void Promise.all([
-    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
-    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
-    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
-    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
-  ]).finally(() => {
-    process.exit(143);
-  });
-});
+let restartPlan: ReturnType<typeof createRestartPlan> | undefined;
 
 // Best-effort release of lock + close on uncatchable exits (caught process.exit).
 process.on('exit', () => {
@@ -204,7 +177,7 @@ process.on('exit', () => {
     }
   }
   try {
-    if (effectiveSessionId && !hasConversationContent(effectiveSessionId)) {
+    if (!restartPlan && effectiveSessionId && !hasConversationContent(effectiveSessionId)) {
       deleteConversation(effectiveSessionId);
     }
   } catch {
@@ -418,6 +391,39 @@ if (cli.input[0] === 'discord') {
   await runDiscordBridge(controlArgv.slice(1));
   process.exit(process.exitCode ?? 0);
 }
+
+// Standalone Discord dispatch above owns and awaits its signal lifecycle.
+// Register force-exit session handlers only for the remaining CLI modes; a
+// competing listener would skip the bridge's in-flight tick and finally cleanup.
+// Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
+process.on('SIGINT', () => {
+  if (process.stdout.isTTY) {
+    process.stdout.write('\x1b[?1004l');
+  }
+  void Promise.all([
+    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
+    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
+    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
+  ]).finally(() => {
+    printUsageOnce();
+    process.exit(130);
+  });
+});
+
+process.on('SIGTERM', () => {
+  if (process.stdout.isTTY) {
+    process.stdout.write('\x1b[?1004l');
+  }
+  void Promise.all([
+    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
+    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
+    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
+  ]).finally(() => {
+    process.exit(143);
+  });
+});
 
 if (cli.input[0] === 'control') {
   const exitCode = await runControlCommand(controlArgv.slice(1), process.stdout, process.stderr);
@@ -1461,6 +1467,65 @@ const { waitUntilExit } = render(
       <SettingsSkinProvider settingsService={settings}>
         <InputProvider>
           <App
+            onRestart={async (stopBackground, exitInk) => {
+              const snapshot = () =>
+                createRestartPlan({
+                  entry: fileURLToPath(import.meta.url),
+                  sessionId: logWriter.sessionId,
+                  model: settings.get('agent.modelSelection'),
+                  reasoning: settings.get('agent.reasoningEffort'),
+                  profile: canonicalProfileId(settings.get('app.activeProfileId')),
+                  approval: settings.get('shell.autoApproveMode'),
+                  sandbox: settings.get('sandbox.enabled'),
+                  ...(sshFlag
+                    ? { ssh: { target: sshFlag, directory: sshInfo?.remoteDir, port: cli.flags.sshPort } }
+                    : {}),
+                  ...(controlSocket
+                    ? { control: { name: controlSocket.name, discordInput: controlSocket.discordInputEnabled } }
+                    : {}),
+                });
+              const manual = snapshot().manualCommand;
+              try {
+                assertRestartSupported(fileURLToPath(import.meta.url));
+                if (runtimeControlSocketConnectPending) throw new Error('Control socket connection is still pending.');
+              } catch (error) {
+                throw new Error(`${error instanceof Error ? error.message : String(error)}\nManual resume: ${manual}`);
+              }
+              const liveTasks = () =>
+                conversationService.backgroundTaskControl
+                  .listDetails()
+                  .filter((task) =>
+                    ['running', 'awaiting_approval', 'waiting_for_answer', 'cancelling'].includes(task.status),
+                  );
+              const checkTasks = () => {
+                const tasks = liveTasks();
+                if (tasks.length && !stopBackground)
+                  throw new Error(
+                    `Live background work: ${tasks
+                      .map((task) => `${task.kind}:${task.id} (${task.status})`)
+                      .join(', ')}. ` +
+                      'Leave it running by cancelling restart, or use /restart stop to stop it and restart.',
+                  );
+              };
+              checkTasks();
+              const controlHold = controlSocket?.pauseMutations();
+              let release: (() => void) | undefined;
+              try {
+                await controlHold?.drained;
+                release = await conversationService.prepareRestart();
+                await logWriter.flush();
+                checkTasks();
+                // No await after this snapshot: the held adapter and current writer own the handoff.
+                restartPlan = snapshot();
+                if (executionContext?.getActiveWorkspace())
+                  console.log('Restart resets the active workspace lease to its home scope.');
+                exitInk();
+              } catch (error) {
+                release?.();
+                controlHold?.release();
+                throw error;
+              }
+            }}
             conversationService={conversationService}
             controlSocket={controlSocket}
             controlSocketIsStartup={controlSocket !== undefined}
@@ -1559,23 +1624,51 @@ const { waitUntilExit } = render(
 );
 
 await waitUntilExit();
-if (controlSocket) {
-  await controlSocket.close();
-  activeControlSocketServer = null;
-}
-if (conversationService.hookEvents) {
-  await hookService.emit(
-    conversationService.hookEvents.create('session.end', {
-      reason: 'normal',
-      sessionDuration: Math.max(0, Date.now() - Date.parse(effectiveCreatedAt)),
-    }),
+const writeRestartRecovery = async () => {
+  if (restartPlan)
+    await new Promise<void>((resolve, reject) =>
+      process.stdout.write(`\nRestart recovery command: ${restartPlan!.manualCommand}\n`, (error) =>
+        error ? reject(error) : resolve(),
+      ),
+    );
+};
+try {
+  await writeRestartRecovery();
+  if (controlSocket) {
+    await controlSocket.close();
+    activeControlSocketServer = null;
+  }
+  if (conversationService.hookEvents) {
+    await hookService.emit(
+      conversationService.hookEvents.create('session.end', {
+        reason: 'normal',
+        sessionDuration: Math.max(0, Date.now() - Date.parse(effectiveCreatedAt)),
+      }),
+    );
+  }
+  await conversationService.shutdown();
+  await mcpManager.close();
+  await sessionBrowser.close();
+  activeSessionBrowser = null;
+  await logWriter.close();
+  activeLogWriter = null;
+  printUsageOnce();
+  if (restartPlan) {
+    if (process.stdout.isTTY) process.stdout.write('\x1b[?1004l');
+    killLiveShellChildren();
+    await sshService?.disconnect();
+    if (fs.existsSync(getConversationLockPath(logWriter.sessionId))) {
+      throw new Error('Conversation lock remains after shutdown; refusing same-PID restart.');
+    }
+    await writeRestartRecovery();
+    process.execve!(process.execPath, [process.execPath, ...restartPlan.args], restartPlan.env);
+  }
+} catch (error) {
+  if (!restartPlan) throw error;
+  console.error(
+    `Restart cleanup failed; no replacement attempted: ${error instanceof Error ? error.message : String(error)}`,
   );
+  await writeRestartRecovery();
+  process.exit(1);
 }
-await conversationService.shutdown();
-await mcpManager.close();
-await sessionBrowser.close();
-activeSessionBrowser = null;
-await logWriter.close();
-activeLogWriter = null;
-printUsageOnce();
 process.exit(0);

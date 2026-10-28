@@ -1,0 +1,14 @@
+{
+  "anchor": "SET_AT_CUTOVER_TO_CURRENT_PERSISTED_SEGMENT",
+  "cwd": "/home/qduc/coord/term2",
+  "conversations": "/home/qduc/.local/share/term2-nodejs/conversations",
+  "runtimeParent": "/run/user/1000",
+  "node": "/home/qduc/.nvm/versions/node/v24.19.0/bin/node",
+  "coordEntry": "/home/qduc/term2/dist/cli.js",
+  "bridgeEntry": "/REPLACE_WITH_REVIEWED_INGRESS_GUARDED_BUILD/dist/cli.js",
+  "bridgeConfig": "/home/qduc/.config/term2/discord.json",
+  "herdr": "/home/qduc/.local/bin/herdr",
+  "path": "/home/qduc/.nvm/versions/node/v24.19.0/bin:/home/qduc/.local/bin:/usr/local/bin:/usr/bin:/bin",
+  "readyTimeout": 60,
+  "monitorInterval": 1
+}

@@ -658,6 +658,9 @@ export class DiscordBridge {
   }
 
   async #ingress(): Promise<void> {
+    // Discord is the backlog while the configured default is unavailable. Do not
+    // consume even commands/other targets out of order; admitted work still reconciles.
+    if (!this.#attached()[this.#config.coordinator]) return;
     const response = await this.#request(
       'GET',
       this.#journal.cursor ? `?after=${this.#journal.cursor}&limit=50` : '?limit=1',
@@ -686,6 +689,7 @@ export class DiscordBridge {
       throw new Error('Invalid Discord channel response');
     }
     if (!this.#journal.cursor) {
+      if (!this.#attached()[this.#config.coordinator]) return;
       this.#journal.cursor = messages[0]?.id ?? '0';
       this.#warn(
         '[bridge] Ready. Only new messages from the configured human are accepted. Use @alias text; !bridge pause/resume/status/stop.',
@@ -696,6 +700,8 @@ export class DiscordBridge {
     messages.sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
     for (const message of messages) {
       if (BigInt(message.id) <= BigInt(this.#journal.cursor)) continue;
+      // Attachment can disappear during the REST read or an awaited command.
+      if (!this.#attached()[this.#config.coordinator]) return;
       // Never trust Discord bot identity, including our own echo or webhook messages.
       if (message.author.id === this.#config.humanUserId && !message.author.bot && !message.webhook_id) {
         if (message.content.startsWith('!bridge ')) {
@@ -712,7 +718,9 @@ export class DiscordBridge {
               `[bridge → ${alias}] Work inbox full (128 pending). Message ${message.id} NOT accepted: not queued or sent to a session. Resend after the backlog drains. !bridge status/resume/stop remain available.`,
             );
           } else {
-            const binding = this.#attached()[alias];
+            const attached = this.#attached();
+            if (!attached[this.#config.coordinator]) return;
+            const binding = attached[alias];
             if (!binding)
               this.#warn(
                 `[bridge] Target ${alias} is not attached; message ${message.id} NOT accepted and not delivered.`,

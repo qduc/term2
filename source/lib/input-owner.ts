@@ -37,6 +37,8 @@ export type InputOwnerState = {
   waitingForAskUserAnswer: boolean;
   pendingApproval: unknown | null;
   queuePaused: boolean;
+  /** Slash commands remain reachable without resuming or discarding paused work. */
+  inputValue: string;
   backgroundTaskManagerOpen?: boolean;
   firstRunSetupActive?: boolean;
   menuOpen?: boolean;
@@ -77,7 +79,7 @@ export const deriveInputOwner = (state: InputOwnerState): InputOwner => {
   // This keeps the composer blocked without deadlocking the setup flow.
   if (state.firstRunSetupActive && !state.menuOpen) return { kind: 'first-run-setup' };
   if (state.menuOpen) return { kind: 'menu' };
-  if (state.queuePaused) return { kind: 'queue-paused' };
+  if (state.queuePaused && !state.inputValue?.startsWith('/')) return { kind: 'queue-paused' };
   if (state.backgroundTaskManagerOpen) return { kind: 'background-tasks' };
   return { kind: 'input' };
 };

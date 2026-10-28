@@ -6,6 +6,7 @@ import http from 'node:http';
 import { once } from 'node:events';
 import { spawnTerminal } from './test-helpers/terminal-e2e.js';
 import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from './lib/harness-input-idle.js';
+import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 // Drive the actual first-run wizard and its menu/editor boundary, not mocked
 // hooks. Every child starts under env -i and can discover only our loopback URL.
@@ -55,7 +56,10 @@ it.each(['unreachable', 'catalog'] as const)(
       session.write(key);
       await new Promise((resolve) => setTimeout(resolve, 150));
     };
-    const settingsPath = path.join(stateDir, 'term2-nodejs', 'settings.json');
+    const settingsPath = path.join(
+      resolveSettingsDirectory({ homeDir: home, env: { XDG_STATE_HOME: stateDir } }),
+      'settings.json',
+    );
     const readSettings = () => JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     try {
       await session.waitForOutput('Your Providers', 60_000);

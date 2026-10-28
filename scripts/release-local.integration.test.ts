@@ -60,6 +60,7 @@ it.each(['create tag', 'existing tag', 'build failure'] as const)(
         npm_config_registry: registry,
         NPM_CONFIG_REGISTRY: registry,
         NPM_CONFIG_USERCONFIG: config,
+        npm_config_userconfig: config,
         NODE_AUTH_TOKEN: '',
         NPM_TOKEN: '',
         FAIL_FIXTURE_BUILD: scenario === 'build failure' ? '1' : '',
@@ -87,8 +88,9 @@ execFileSync(process.execPath, ['scripts/write-build-info.mjs'], { stdio: 'inher
 `,
       );
       const pkg = {
-        name: manifest.name,
+        name: 'term2-release-integration-fixture',
         version: '0.0.0',
+        publishConfig: { registry },
         type: 'module',
         files: manifest.files,
         scripts: { build: 'node scripts/fixture-build.mjs', prepublishOnly: manifest.scripts.prepublishOnly },

@@ -470,14 +470,16 @@ describe('production gateway runtime factory', () => {
       expect(existsSync(path.join(workspace, 'write-control.txt'))).toBe(true);
       await run('read_write', 'printf nested > nested-control.txt', true);
       expect(existsSync(path.join(workspace, 'nested-control.txt'))).toBe(true);
-      expect(await run('read', 'printf blocked > read-marker.txt')).toMatch(/read.only|permission|denied|exit [1-9]/i);
+      expect(await run('read', 'printf blocked > read-marker.txt')).toMatch(
+        /read.only|permission|denied|not permitted|exit [1-9]/i,
+      );
       expect(await run('read', 'printf blocked > nested-marker.txt', true)).toMatch(
-        /read.only|permission|denied|exit [1-9]/i,
+        /read.only|permission|denied|not permitted|exit [1-9]/i,
       );
       expect(existsSync(path.join(workspace, 'read-marker.txt'))).toBe(false);
       expect(existsSync(path.join(workspace, 'nested-marker.txt'))).toBe(false);
       expect(await run('read_write', 'printf blocked > outside-link/outside-marker.txt')).toMatch(
-        /read.only|permission|denied|exit [1-9]/i,
+        /read.only|permission|denied|not permitted|exit [1-9]/i,
       );
       expect(existsSync(path.join(outside, 'outside-marker.txt'))).toBe(false);
     } finally {

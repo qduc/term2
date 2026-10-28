@@ -15,7 +15,9 @@ afterEach(async () => {
 it.each(['push', 'off', 'blackhole-recovery', 'blackhole-stop'])(
   'runs the real Discord runner offline with Gateway %s and releases ownership on SIGTERM',
   async (mode) => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'discord-runner-'));
+    const root = fs.mkdtempSync(
+      path.join(process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(), 'discord-runner-'),
+    );
     cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
     const runtime = path.join(root, 'runtime');
     fs.mkdirSync(runtime, { mode: 0o700 });

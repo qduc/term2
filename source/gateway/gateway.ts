@@ -1799,12 +1799,20 @@ export class Term2Gateway {
       });
       this.#interactionBindings.delete(claims.sessionId!);
       this.#countInteraction('interaction_resolved');
+      // A multi-question ask_user collects one answer per request; the resolved
+      // result carries all of them (in question order), while this request only
+      // carries the last. A single question keeps the answer as sent so its
+      // tool result format does not change.
+      const toolApprovalAnswer =
+        (binding.dto.askUser?.questions.length ?? 0) > 1 && result.approvalAnswer !== undefined
+          ? result.approvalAnswer
+          : decision.approvalAnswer;
       try {
         if (session.abortGeneration !== continuationAbortGeneration || session.activeTurnId !== binding.turnId) {
           throw new ServerSessionError('interrupted');
         }
         await session.service.handleApprovalDecision(decision.answer, decision.rejectionReason, {
-          approvalAnswer: decision.approvalAnswer,
+          approvalAnswer: toolApprovalAnswer,
           // Cancelling an ask_user question ends the turn, exactly as Escape
           // does in the TUI: the question and its unanswered result stay in
           // history, and the user speaks next. Without this the web client's

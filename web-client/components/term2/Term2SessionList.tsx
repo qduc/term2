@@ -1,5 +1,30 @@
 'use client';
+import { useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 import type { SessionListItem } from '../../lib/term2/types';
+
+function dayGroup(iso: string): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return 'Older';
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const days = Math.floor((startOfToday.getTime() - then.getTime()) / 86400000) + 1;
+  if (then >= startOfToday) return 'Today';
+  if (days <= 1) return 'Yesterday';
+  if (days <= 7) return 'Previous 7 days';
+  return 'Older';
+}
+const GROUP_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older'];
+
+function StatusDot({ status }: { status: SessionListItem['status'] }) {
+  if (status === 'awaiting_interaction') {
+    return <span title="Waiting for approval" className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />;
+  }
+  if (status === 'running') {
+    return <span title="Running" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-teal-500" />;
+  }
+  return <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-zinc-300 dark:bg-zinc-700" />;
+}
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -59,6 +84,33 @@ export function Term2SessionList({
   onNextPage?: () => void;
 }) {
   const workspaceMap = new Map((workspaces ?? []).map((w) => [w.workspaceId, w.label]));
+  const [query, setQuery] = useState('');
+
+  const entries = useMemo(
+    () =>
+      sessions.map((session) => ({
+        session,
+        title: getSessionTitle(
+          session,
+          firstMessages?.[session.id],
+          workspaceMap.get(session.workspaceId),
+          workspaceMetadata?.[session.workspaceId]?.displayName,
+        ),
+      })),
+    // workspaceMap is rebuilt from `workspaces` each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessions, firstMessages, workspaces, workspaceMetadata],
+  );
+  const grouped = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const groups = new Map<string, typeof entries>();
+    for (const entry of entries) {
+      if (needle && !entry.title.toLowerCase().includes(needle)) continue;
+      const key = dayGroup(entry.session.updatedAt);
+      groups.set(key, [...(groups.get(key) ?? []), entry]);
+    }
+    return GROUP_ORDER.filter((key) => groups.has(key)).map((key) => ({ key, items: groups.get(key)! }));
+  }, [entries, query]);
 
   return (
     <section aria-labelledby="term2-session-heading" className="flex min-h-0 flex-1 flex-col">
@@ -68,46 +120,61 @@ export function Term2SessionList({
         </h2>
         <button
           type="button"
-          className="rounded bg-zinc-900 px-2 py-1 text-xs text-white disabled:opacity-50"
+          className="rounded bg-teal-600 px-2 py-1 text-xs text-white hover:bg-teal-700 disabled:opacity-50"
           disabled={!workspaceId}
           onClick={onCreate}
         >
           New agent chat
         </button>
       </div>
+      {sessions.length > 4 && (
+        <label className="mb-2 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm focus-within:border-teal-500 dark:border-zinc-700 dark:bg-zinc-900">
+          <Search aria-hidden className="h-3.5 w-3.5 text-zinc-400" />
+          <input
+            type="search"
+            aria-label="Search sessions"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search sessions"
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-400"
+          />
+        </label>
+      )}
       {sessions.length === 0 && <p className="text-sm text-zinc-500">No sessions yet.</p>}
-      <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-        {sessions.map((session) => {
-          const firstMsg = firstMessages?.[session.id];
-          const wsLabel = workspaceMap.get(session.workspaceId);
-          const wsDisplayName = workspaceMetadata?.[session.workspaceId]?.displayName;
-          const title = getSessionTitle(session, firstMsg, wsLabel, wsDisplayName);
-          const eventCount = session.latestSequence;
-          const eventsText = eventCount === 1 ? '1 event' : `${eventCount} events`;
-
-          return (
-            <li key={session.id}>
-              <button
-                type="button"
-                aria-current={selected === session.id ? 'page' : undefined}
-                aria-label={`${title} ${session.id}`}
-                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
-                  selected === session.id
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
-                    : 'border-transparent hover:border-zinc-200 hover:bg-zinc-50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900'
-                }`}
-                onClick={() => onSelect(session.id)}
-              >
-                <span className="block truncate text-sm font-medium">{title}</span>
-                <span className="text-xs text-zinc-500">
-                  {session.status} · {eventsText}
-                </span>
-                <span className="block text-[10px] text-zinc-400">created {relativeTime(session.createdAt)}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {sessions.length > 0 && grouped.length === 0 && <p className="text-sm text-zinc-500">No matching sessions.</p>}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {grouped.map(({ key, items }) => (
+          <div key={key} className="mb-3">
+            <h3 className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-zinc-400">{key}</h3>
+            <ul className="space-y-0.5">
+              {items.map(({ session, title }) => (
+                <li key={session.id}>
+                  <button
+                    type="button"
+                    aria-current={selected === session.id ? 'page' : undefined}
+                    aria-label={`${title} ${session.id}`}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                      selected === session.id
+                        ? 'bg-teal-50 dark:bg-teal-950/30'
+                        : 'hover:bg-zinc-100 dark:hover:bg-zinc-900'
+                    }`}
+                    onClick={() => onSelect(session.id)}
+                  >
+                    <StatusDot status={session.status} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{title}</span>
+                      <span className="text-xs text-zinc-500">
+                        {session.status.replace('_', ' ')} ·{' '}
+                        {relativeTime(session.updatedAt)}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
       {onNextPage && (
         <button
           type="button"

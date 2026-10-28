@@ -1,5 +1,7 @@
 'use client';
 import type { Term2SubagentCard as Term2SubagentCardModel } from '../../lib/term2/types';
+import { Term2Markdown } from './Term2Markdown';
+import { Term2ToolGroup } from './Term2ToolGroup';
 
 export function Term2SubagentCard({ card }: { card: Term2SubagentCardModel }) {
   return (
@@ -21,9 +23,9 @@ export function Term2SubagentCard({ card }: { card: Term2SubagentCardModel }) {
         <p className="mt-1 whitespace-pre-wrap text-xs text-zinc-500">{card.progressText}</p>
       )}
       {card.commands.length > 0 && (
-        <p className="mt-1 text-xs text-zinc-500">
-          {card.commands.map((command) => `${command.toolName} (${command.status})`).join(', ')}
-        </p>
+        <div className="mt-2">
+          <Term2ToolGroup commands={card.commands} />
+        </div>
       )}
       {card.toolsUsed && card.toolsUsed.length > 0 && (
         <p className="mt-1 text-xs text-zinc-500">
@@ -33,7 +35,7 @@ export function Term2SubagentCard({ card }: { card: Term2SubagentCardModel }) {
       {card.finalText && (
         <details className="mt-1 text-xs">
           <summary className="cursor-pointer text-zinc-500">Result</summary>
-          <p className="mt-1 whitespace-pre-wrap">{card.finalText}</p>
+          <Term2Markdown text={card.finalText} className="mt-1 !text-xs !leading-5" />
         </details>
       )}
       {card.error && <p className="mt-1 text-xs text-red-700">{card.error}</p>}

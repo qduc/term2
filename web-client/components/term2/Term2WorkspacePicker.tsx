@@ -37,7 +37,7 @@ export function Term2WorkspacePicker({
               aria-pressed={selected === workspace.workspaceId}
               className={`w-full rounded-lg border p-3 text-left ${
                 selected === workspace.workspaceId
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
+                  ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/30'
                   : 'border-zinc-200 dark:border-zinc-700'
               }`}
               onClick={() => onSelect(workspace.workspaceId)}

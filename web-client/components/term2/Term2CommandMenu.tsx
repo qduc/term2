@@ -36,6 +36,7 @@ export function Term2CommandMenu({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +44,12 @@ export function Term2CommandMenu({
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key !== 'Escape') return;
+      // A focused menu item unmounts with the menu, which would drop focus to <body>.
+      // Move it to the trigger first, but only when focus is inside the menu: with focus
+      // elsewhere (e.g. the composer) Escape must not steal it.
+      if (rootRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
+      setOpen(false);
     };
     document.addEventListener('pointerdown', onPointer);
     document.addEventListener('keydown', onKey);
@@ -56,6 +62,7 @@ export function Term2CommandMenu({
   return (
     <div ref={rootRef} className="relative flex min-w-0 items-center gap-2">
       <button
+        ref={triggerRef}
         type="button"
         aria-label="Session commands"
         aria-haspopup="menu"

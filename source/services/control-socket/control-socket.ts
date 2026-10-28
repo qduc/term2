@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 
 export const CONTROL_PROTOCOL_VERSION = 1;
 export const CONTROL_MAX_FRAME_BYTES = 256 * 1024;
@@ -178,8 +179,31 @@ export function parseProcStartTime(stat: string): string | null {
   return fields.length >= 20 ? fields[19] : null;
 }
 
+// Darwin's proc_bsdinfo ends with a kernel timeval (seconds and microseconds).
+// Load the native interface only on macOS; failure keeps identity unverifiable.
+let darwinProcPidInfo:
+  | ((pid: number, flavor: number, arg: number, buffer: Buffer, size: number) => number)
+  | null
+  | undefined;
 export function readProcStartTime(pid: number): string | null {
   try {
+    if (process.platform === 'darwin') {
+      if (!Number.isInteger(pid) || pid <= 0 || pid > 0x7fffffff) return null;
+      if (darwinProcPidInfo === undefined) {
+        darwinProcPidInfo = null;
+        const koffi = createRequire(import.meta.url)('koffi') as typeof import('koffi');
+        darwinProcPidInfo = koffi
+          .load('/usr/lib/libproc.dylib')
+          .func('int proc_pidinfo(int, int, uint64_t, void *, int)');
+      }
+      if (!darwinProcPidInfo) return null;
+      const info = Buffer.alloc(136);
+      if (darwinProcPidInfo(pid, 3, 0, info, info.length) !== info.length || info.readUInt32LE(12) !== pid) return null;
+      const seconds = info.readBigUInt64LE(120);
+      const micros = info.readBigUInt64LE(128);
+      if (seconds === 0n || micros >= 1000000n) return null;
+      return `darwin:${seconds}:${micros}`;
+    }
     return parseProcStartTime(fs.readFileSync(`/proc/${pid}/stat`, 'utf8'));
   } catch {
     return null;

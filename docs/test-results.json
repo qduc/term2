@@ -15258,6 +15258,183 @@
         "Coordinated dirty/clean ID collision remains a documented non-blocking limit by user direction",
         "Separate57 replay/ref-state change not included"
       ]
+    },
+    {
+      "id": "2026-10-28-macos-integration-investigation",
+      "recorded_at": "2026-10-28T15:23:00.249650+00:00",
+      "commit": "63b480d0469b551bb3259adb9eb4e187b3dae181",
+      "tree": "5df0f33f376c270a21515a4f69697fe6df777333",
+      "revision_kind": "dirty worktree; base tree shown, test diff SHA256 3a200033ef636369470ac5b9c9e1b7e79040be2fe0027a0e1497b0665627db1b",
+      "environment": {
+        "os": "Darwin 25.6.0 arm64",
+        "node": "v24.16.0",
+        "pnpm": "11.7.0",
+        "sandbox": "outside agent sandbox; loopback enabled"
+      },
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "result": {
+        "files_passed": 34,
+        "files_failed": 1,
+        "files_skipped": 1,
+        "passed": 363,
+        "failed": 18,
+        "skipped": 1
+      },
+      "failures": [
+        "source/services/discord/discord-bridge.integration.test.ts: 18 failures: explicit acknowledgement, legacy output restart, late attachment, Unicode chunks, retry_after, missing admission outcomes, terminal-origin bare and standard, duplicate send reconciliation, proactive dedup, pending bounds, root dependency, lost admission acknowledgement, ambiguous discovery, 512 notifications, bridge process death, journal write failure, journal byte budget. Signatures include Invalid Discord advertisement, delivery unavailable, and missing output; retry_after and missing admission outcomes also fail."
+      ],
+      "notes": "Initial base run outside sandbox: 35 failed, 346 passed, 1 skipped; 4 Discord command timeouts, 28 Discord bridge failures including EINVAL long Unix socket path, 2 release fixture registry failures, 1 sandbox denial wording mismatch. Dirty snapshot adds short canonical Darwin fixture paths, accepts Operation not permitted, and isolates release registry/user config and package name. Remaining Discord advertisement failures consistent with readProcStartTime using Linux /proc; not all failures attributed. macOS sandboxed run also denied loopback EPERM. Typecheck and lint passed before final short path correction; lint had 31 warnings. No source commit or completed-task record; investigation remains open."
+    },
+    {
+      "commit": "6c5c7a185fd80aff2e285ae376c514cffb17e769",
+      "tree": "048c571a54f44b4dad75edf1cc59fe8108cdc0fb",
+      "base_commit": "63b480d0469b551bb3259adb9eb4e187b3dae181",
+      "environment": {
+        "os": "Darwin 25.6.0 arm64",
+        "node": "v24.16.0",
+        "pnpm": "11.7.0",
+        "sandbox": "outside agent sandbox, loopback enabled"
+      },
+      "recorded_at": "2026-10-28T15:35:17.189182+00:00",
+      "task_ids": ["2026-10-28-macos-integration-repair"],
+      "id": "2026-10-28-macos-e2e-red",
+      "revision_kind": "dirty pre-commit snapshot before first-run fixture path fix",
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "result": {
+        "passed": 33,
+        "failed": 2,
+        "skipped": 4,
+        "files_passed": 6,
+        "files_failed": 1,
+        "files_skipped": 1
+      },
+      "failures": [
+        "source/first-run-setup.e2e.test.ts: both unreachable and catalog: ENOENT reading Linux XDG state settings path on Darwin"
+      ],
+      "notes": "Settings fixture path corrected before subsequent e2e run."
+    },
+    {
+      "commit": "6c5c7a185fd80aff2e285ae376c514cffb17e769",
+      "tree": "048c571a54f44b4dad75edf1cc59fe8108cdc0fb",
+      "base_commit": "63b480d0469b551bb3259adb9eb4e187b3dae181",
+      "environment": {
+        "os": "Darwin 25.6.0 arm64",
+        "node": "v24.16.0",
+        "pnpm": "11.7.0",
+        "sandbox": "outside agent sandbox, loopback enabled"
+      },
+      "recorded_at": "2026-10-28T15:35:17.189182+00:00",
+      "task_ids": ["2026-10-28-macos-integration-repair"],
+      "id": "2026-10-28-macos-provider-red",
+      "revision_kind": "dirty pre-commit snapshot, same source content as commit",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 1
+      },
+      "failures": [
+        "scripts/provider-black-box/turn-decisions.blackbox.ts: resumes repeated questions once per decision and settles cancellation before the next turn; Timed out waiting for PTY child state after 40000ms; compile cache teardown ENOTEMPTY"
+      ],
+      "notes": "Historical Linux runs had same test and timeout, but causality is unknown. Typecheck/lint ran concurrently. Focused case passed 1/1, although cache teardown logged ENOTEMPTY. Later full standalone run passed without that error."
+    },
+    {
+      "commit": "6c5c7a185fd80aff2e285ae376c514cffb17e769",
+      "tree": "048c571a54f44b4dad75edf1cc59fe8108cdc0fb",
+      "base_commit": "63b480d0469b551bb3259adb9eb4e187b3dae181",
+      "environment": {
+        "os": "Darwin 25.6.0 arm64",
+        "node": "v24.16.0",
+        "pnpm": "11.7.0",
+        "sandbox": "outside agent sandbox, loopback enabled"
+      },
+      "recorded_at": "2026-10-28T15:35:17.189182+00:00",
+      "task_ids": ["2026-10-28-macos-integration-repair"],
+      "id": "2026-10-28-macos-integration-repair-green",
+      "revision_kind": "pre-commit snapshots; lint-staged backup source diff against commit empty; integration run before subsequent e2e-only fixture path fix",
+      "suite": "integration, e2e, provider black-box, static and independent checks",
+      "command": "see checks",
+      "command_complete": true,
+      "checks": [
+        {
+          "name": "integration",
+          "command": "pnpm test:integration",
+          "exit": 0,
+          "result": {
+            "passed": 382,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 36,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm test:e2e",
+          "exit": 0,
+          "result": {
+            "passed": 35,
+            "failed": 0,
+            "skipped": 4,
+            "files_passed": 7,
+            "files_failed": 0,
+            "files_skipped": 1
+          }
+        },
+        {
+          "name": "provider-black-box",
+          "command": "pnpm test:provider-black-box",
+          "exit": 0,
+          "result": {
+            "passed": 223,
+            "failed": 0,
+            "skipped": 1,
+            "files_passed": 28,
+            "files_failed": 0
+          }
+        },
+        {
+          "name": "static",
+          "command": "pnpm typecheck; pnpm test; pnpm lint",
+          "exit": 0,
+          "result": {
+            "guards_passed": 28,
+            "lint_warnings": 31
+          }
+        },
+        {
+          "name": "independent",
+          "command": "verifier ABI static assertions, ctypes identity comparison, reaper fault probes, build and relocated packed dependency smoke",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0
+          }
+        }
+      ],
+      "failures": [],
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-28-macos-integration-investigation",
+          "2026-10-28-macos-e2e-red",
+          "2026-10-28-macos-provider-red"
+        ],
+        "scope": "Integration and e2e fixtures pass after fixes. Provider passing rerun does not establish the prior PTY timeout cause."
+      },
+      "verification": {
+        "independent": true,
+        "verifier": "identity_verifier",
+        "verdict": "accept; full suite subsequently passed",
+        "rework_rounds": 1
+      },
+      "notes": "Integration skip requires opt-in Docker host control; e2e skips Linux-only sandbox cases; provider skip is absent persisted openai websocket reasoning traffic. macOS x86_64 ABI checked but runtime not exercised; Linux and Node 20 not exercised. Source commit follows pre-commit tests; lint-staged backup comparison confirmed identical staged source. Compile-cache ENOTEMPTY not repeated in passing full rerun."
     }
   ]
 }

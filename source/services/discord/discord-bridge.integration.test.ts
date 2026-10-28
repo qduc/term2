@@ -65,7 +65,9 @@ async function fixture(
     attach?: string[];
   } = {},
 ) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-discord-'));
+  const root = fs.mkdtempSync(
+    path.join(process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(), 'term2-discord-'),
+  );
   fs.chmodSync(root, 0o700);
   cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
   const received: Record<string, StreamedModelTurnRequest[]> = { coord: [], worker: [] };
@@ -1357,7 +1359,9 @@ it('fails closed without an opted-in socket and delegates outbound only with opt
 });
 
 it('runtime bridge command validates, advertises, refuses duplicates, disconnects and reconnects', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-runtime-bridge-'));
+  const root = fs.mkdtempSync(
+    path.join(process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(), 'term2-runtime-bridge-'),
+  );
   fs.chmodSync(root, 0o700);
   cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
   let active: ControlSocketServer | undefined;
@@ -1693,7 +1697,9 @@ it.each([
 ])(
   'reports redacted request startup failure %s across HTTP and child-process boundaries',
   async (scenario, expected) => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'discord-request-'));
+    const root = fs.mkdtempSync(
+      path.join(process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(), 'discord-request-'),
+    );
     cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
     const secret = 'DUMMY_REQUEST_SECRET_MUST_NOT_PRINT';
     const payload = 'DUMMY_RESPONSE_MUST_NOT_PRINT';
@@ -1777,7 +1783,9 @@ it.each([
   ['--help', 'Discord bridge (candidate)'],
   ['-h', 'Discord bridge (candidate)'],
 ])('categorizes offline setup %s in a clean child process without leaking values', (scenario, expected) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'discord-setup-'));
+  const root = fs.mkdtempSync(
+    path.join(process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(), 'discord-setup-'),
+  );
   cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
   const home = path.join(root, 'home');
   const configDir = path.join(root, 'config', 'term2');

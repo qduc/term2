@@ -42,7 +42,7 @@ const plan = tiers.map(([tier, config]) => {
   if (files.length === 0 || new Set(files).size !== files.length) throw new Error(`Invalid ${tier} inventory`);
   return { tier, config, total: files.length, files: files.filter((file) => owner(tier, file) === lane).sort() };
 });
-console.log(JSON.stringify({ lane, maxWorkers: 2, plan }, null, 2));
+console.log(JSON.stringify({ lane, maxWorkers: 3, plan }, null, 2));
 if (!listOnly) {
   const result = spawnSync(process.execPath, [vitest, 'run', '--config', 'vitest.ci.config.ts', '--reporter=verbose'], {
     env: { ...env, TERM2_CI_PLAN: JSON.stringify(plan), TERM2_CI_PREBUILT_CLI: '1' },

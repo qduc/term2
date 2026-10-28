@@ -5,6 +5,7 @@
     "dist",
     "source/**/*.test.ts",
     "source/**/*.test.tsx",
+    "source/**/*.integration.scenarios.ts",
     "source/**/*.spec.ts",
     "source/**/*.spec.tsx"
   ]

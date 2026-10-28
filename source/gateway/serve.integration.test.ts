@@ -5,8 +5,6 @@ import http from 'node:http';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createGatewayAssertion } from './assertion.js';
 import { getDefaultShellSandboxRunner } from '../utils/shell/sandbox/shell-sandbox-runner.js';
@@ -21,43 +19,7 @@ import { createTestChildEnv } from '../test-helpers/terminal-e2e.js';
 // loopback double. The in-process registerProvider seam used by
 // runtime-factory.integration.test.ts cannot reach into another process.
 
-const require = createRequire(import.meta.url);
-
-// Same one-compile-per-worktree pattern as cli.integration.test.ts, but in a
-// private cache directory so concurrent integration files never race on one
-// tsbuildinfo.
-const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
-const typescriptDir = path.resolve(path.dirname(require.resolve('typescript-7')), '..');
-const serveBuildDir = path.join(projectRoot, 'node_modules', '.cache', 'term2-cli-serve-test-build');
-
-let compiledCliPath: string | undefined;
-function cliPath(): string {
-  if (compiledCliPath) return compiledCliPath;
-  fs.mkdirSync(serveBuildDir, { recursive: true });
-  try {
-    execFileSync(
-      process.execPath,
-      [
-        path.join(typescriptDir, 'bin', 'tsc'),
-        '--project',
-        'tsconfig.build.json',
-        '--outDir',
-        serveBuildDir,
-        '--incremental',
-        '--tsBuildInfoFile',
-        path.join(serveBuildDir, 'tsconfig.tsbuildinfo'),
-      ],
-      { cwd: projectRoot, stdio: 'pipe' },
-    );
-  } catch (error: any) {
-    throw new Error(
-      `Failed to build CLI for tests: ${error.stdout?.toString?.() ?? ''} ${error.stderr?.toString?.() ?? error}`,
-    );
-  }
-  fs.cpSync(path.join(projectRoot, 'source', 'prompts'), path.join(serveBuildDir, 'prompts'), { recursive: true });
-  compiledCliPath = path.join(serveBuildDir, 'cli.js');
-  return compiledCliPath;
-}
+import { integrationCliPath as cliPath } from '../test-helpers/integration-cli.js';
 
 /**
  * Minimal OpenAI-compatible provider double: the /models path serves a fixed

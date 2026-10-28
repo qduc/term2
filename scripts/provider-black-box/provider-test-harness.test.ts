@@ -1,6 +1,7 @@
 import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createIsolatedWorkspaceLease,
@@ -17,6 +18,35 @@ const OWNER = join(process.cwd(), 'scripts/provider-black-box/provider-reaper-ow
 const TSX = join(process.cwd(), 'node_modules/tsx/dist/cli.mjs');
 
 describe('provider black-box harness', () => {
+  it('observes HTTP arrivals without further PTY output and still rejects an unmet state', async () => {
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests += 1;
+      response.end('ok');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Fixture failed to bind');
+    try {
+      await withIsolatedWorkspace({}, async (workspace) => {
+        const child = await workspace.start({
+          command: process.execPath,
+          args: [CHILD, 'silent-http'],
+          env: { TERM2_HARNESS_HTTP_URL: `http://127.0.0.1:${address.port}` },
+        });
+        await child.waitForVisibleOutput('ready');
+        const arrived = child.waitForState(() => requests === 1, 1_000);
+        await child.write('\n');
+        await arrived;
+        expect(requests).toBe(1);
+        await expect(child.waitForState(() => requests === 2, 50)).rejects.toThrow('Timed out waiting for PTY');
+      });
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('passes bounded retry settings to isolated root removal', async () => {
     let receivedOptions: RootRemovalOptionsForTest | undefined;
 

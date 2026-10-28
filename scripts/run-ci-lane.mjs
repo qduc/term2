@@ -8,8 +8,8 @@ const lanes = ['test', 'integration', 'e2e', 'provider-black-box'];
 const lane = process.argv[2];
 const listOnly = process.argv.includes('--list');
 if (!lanes.includes(lane)) throw new Error(`Expected a CI lane: ${lanes.join(', ')}`);
-// Integration is CPU-bound; the other lanes benefit from overlapping I/O.
-const maxWorkers = lane === 'integration' ? 2 : 3;
+// Keep the reported plan and every Vitest project on the same worker count.
+const maxWorkers = 3;
 const env = { ...process.env, CI: '1', NODE_ENV: 'test' };
 // Dependencies are installed and verified by the setup action. Invoke the
 // locked executable directly; pnpm exec may relink dependencies before a run.

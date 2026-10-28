@@ -124,6 +124,7 @@ interface AppProps {
   subagentUsageAccumulator?: UsageAccumulator;
   costAccumulator?: SessionCostAccumulator;
   onPrintUsage?: () => void;
+  onRestart?: (stopBackground: boolean, exitInk: () => void) => Promise<void>;
   onExitUsage?: () => void;
   sessionId: string;
   initialMessages?: Message[];
@@ -174,6 +175,7 @@ const App: FC<AppProps> = ({
   subagentUsageAccumulator,
   costAccumulator,
   onPrintUsage,
+  onRestart,
   onExitUsage,
   sessionId: initialSessionId,
   initialMessages = [],
@@ -214,6 +216,8 @@ const App: FC<AppProps> = ({
     [appendGoal],
   );
   const { exit, waitUntilRenderFlush } = useApp();
+  const restartPreparing = useRef(false);
+  const [isRestartPreparing, setRestartPreparing] = useState(false);
   const { stdout } = useStdout();
   const { setInput, replaceInput, setImages } = useInputActions();
   const { input, mode, images: _images, controller } = useInputState();
@@ -977,7 +981,28 @@ const App: FC<AppProps> = ({
     [replaceInput, waitUntilRenderFlush, exitWithUsage],
   );
 
+  const restartFromCommand = async (stopBackground: boolean) => {
+    if (restartPreparing.current) throw new Error('Restart is already preparing.');
+    if (activeCommand || pendingSurgeTurn || pendingLargeUncachedTurn) {
+      throw new Error('Finish the foreground shell or pending input confirmation before restarting.');
+    }
+    if (!onRestart) throw new Error('Restart is unavailable in this host.');
+    restartPreparing.current = true;
+    setRestartPreparing(true);
+    try {
+      // Clear and paint before acquiring the final service handoff, never afterward.
+      replaceInput('');
+      await waitUntilRenderFlush();
+      await onRestart(stopBackground, exit);
+    } catch (error) {
+      restartPreparing.current = false;
+      setRestartPreparing(false);
+      throw error;
+    }
+  };
+
   const { slashCommands, cycleAppModes } = useAppCommands({
+    restart: restartFromCommand,
     settingsService,
     transitionService: profileTransitionService,
     addSystemMessage,
@@ -1020,7 +1045,7 @@ const App: FC<AppProps> = ({
     skillsService: skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
     onSkillSelected: handleSkillSelected,
     requestModeSwitchConfirm: setPendingModeSwitch,
-    turnInFlight: isProcessing,
+    turnInFlight: isProcessing || isRestartPreparing,
     listConversations: listSavedConversations,
     resumeConversation: resumeConversationFromUi,
     mcpManager,
@@ -1286,6 +1311,7 @@ const App: FC<AppProps> = ({
     waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
     pendingApproval: effectivePendingApproval,
     queuePaused,
+    inputValue: input,
     backgroundTaskManagerOpen,
     firstRunSetupActive: firstRunSetup.active,
     isProcessing: effectiveIsProcessing,
@@ -1355,6 +1381,10 @@ const App: FC<AppProps> = ({
   });
 
   const handleSubmit = async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }): Promise<void> => {
+    if (restartPreparing.current) {
+      addSystemMessage('Restart is preparing; new input is not admitted.');
+      return;
+    }
     const submittedEditor = controller.getSnapshot().editor;
     if (backgroundApprovalEntry && waitingForRejectionReason) {
       resolveBackgroundSubagentApproval({

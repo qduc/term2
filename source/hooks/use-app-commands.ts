@@ -55,6 +55,7 @@ interface UseAppCommandsProps {
   getSessionUsage: () => string;
   refreshProviderUsage?: () => void;
   exit: () => void;
+  restart?: (stopBackground: boolean) => Promise<void>;
   messages: Message[];
   setModelSelection: (selection: import('../services/settings/model-selection.js').ModelSelection) => void;
   getRewindItems: () => readonly RewindItem[];
@@ -102,6 +103,7 @@ export const useAppCommands = ({
   getSessionUsage,
   refreshProviderUsage,
   exit,
+  restart,
   messages,
   getRewindItems,
   rewindToTarget,
@@ -159,6 +161,20 @@ export const useAppCommands = ({
       guardAgainstBusyTurn(command, { turnInFlight: () => turnInFlight, notify: addSystemMessage });
 
     const commands: SlashCommand[] = [
+      {
+        name: 'restart',
+        description: 'Reload the built CLI in place; /restart stop consents to stopping background work',
+        action: (args) => {
+          if (args?.trim() && args.trim() !== 'stop') {
+            addSystemMessage('Usage: /restart [stop]');
+            return false;
+          }
+          void restart?.(args?.trim() === 'stop').catch((error: unknown) => {
+            addSystemMessage(`Restart refused: ${error instanceof Error ? error.message : String(error)}`);
+          });
+          return true;
+        },
+      },
       createModelSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       guardBusyTurn(createClearSlashCommand(clearConversation, addSystemMessage)),
@@ -317,6 +333,7 @@ export const useAppCommands = ({
     getGoal,
     setGoal,
     exit,
+    restart,
     getSessionUsage,
     refreshProviderUsage,
     mcpManager,

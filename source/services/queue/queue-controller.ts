@@ -333,11 +333,43 @@ export class QueueController<Snapshot, Terminal = unknown> {
    * barrier may reserve the next idle boundary with `afterCompletion`; ordinary
    * callers cannot acquire a hold while a turn or another hold owns the queue.
    */
-  holdDispatch(options: { afterCompletion?: boolean } = {}): boolean {
+  holdDispatch(options: { afterCompletion?: boolean; allowPaused?: boolean } = {}): boolean {
     const completing = options.afterCompletion && this.#phase === 'completing';
-    if (this.#dispatchHeld || (!completing && (this.#phase !== 'idle' || this.#active))) return false;
+    const inactive = this.#phase === 'idle' || (options.allowPaused && this.#phase === 'paused');
+    if (this.#dispatchHeld || (!completing && (!inactive || this.#active))) return false;
     this.#dispatchHeld = true;
     return true;
+  }
+
+  /** Under a dispatch hold, prove that normal resume retains exactly the pending input. Never repairs storage. */
+  async assertRestartDurable(): Promise<void> {
+    const writes = this.#persistenceWrites;
+    await writes;
+    if (!this.#dispatchHeld || this.#active || writes !== this.#persistenceWrites) {
+      throw new Error('Queue ownership changed while preparing restart; try again.');
+    }
+    if (!this.#persistence) {
+      if (this.#queue.length) throw new Error('Pending input has no durable queue storage.');
+      return;
+    }
+    const raw = this.#persistence.load();
+    if (raw == null && this.#queue.length === 0) return;
+    const record = validatePersistedQueue<Snapshot>(raw);
+    if (typeof record === 'string') throw new Error(`Cannot verify pending input on disk: ${record}.`);
+    // Restore remints preflight action IDs and pauses retained work. Neither is
+    // input. A persisted interrupted active item is dropped, never replayed.
+    const pending = (items: readonly PersistedQueueItem[]) =>
+      items.map((item) => ({
+        id: item.id,
+        text: item.text,
+        sequence: item.sequence,
+        submittedAt: item.submittedAt,
+        steer: Boolean(item.steer),
+        preflight: item.preflight?.kind,
+      }));
+    if (JSON.stringify(pending(record.queue)) !== JSON.stringify(pending(this.#queue))) {
+      throw new Error('Pending input differs from its durable queue file; restart was not performed.');
+    }
   }
 
   isDispatchHeld(): boolean {

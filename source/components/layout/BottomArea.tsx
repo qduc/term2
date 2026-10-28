@@ -42,7 +42,7 @@ import type { BackgroundTaskControlPort } from '../../services/session/backgroun
 import type { BackgroundTaskControlDetails } from '../../services/session/background-task-control.js';
 import type { CopySelection } from '../../utils/copy-selections.js';
 import type { PendingQueueMessage } from '../input/PendingQueueList.js';
-import { useInputState } from '../../context/InputContext.js';
+import { useInputActions, useInputState } from '../../context/InputContext.js';
 import FirstRunSetupPrompt, { type FirstRunSetupPhase } from '../input/FirstRunSetupPrompt.js';
 import { useTheme } from '../theme.js';
 import { truncateTerminalText } from './terminal-text-budget.js';
@@ -233,7 +233,8 @@ const BottomArea: FC<BottomAreaProps> = ({
 }) => {
   const theme = useTheme();
   const { WorkingIndicator, LiveDivider, ShellActivity } = useSkin();
-  const { controller } = useInputState();
+  const { controller, input } = useInputState();
+  const { replaceInput } = useInputActions();
   const terminalColumns = useTerminalColumns();
   const [dotCount, setDotCount] = useState(1);
   const [workingElapsedSeconds, setWorkingElapsedSeconds] = useState(0);
@@ -335,6 +336,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     waitingForAskUserAnswer,
     pendingApproval,
     queuePaused,
+    inputValue: input,
     isProcessing,
     backgroundTaskManagerOpen,
     firstRunSetupActive: firstRunSetup?.active,
@@ -506,6 +508,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 pauseReason={queuePauseReason}
                 onResume={onResumeQueue || (() => {})}
                 onDiscard={onDiscardQueue || (() => {})}
+                onCommand={replaceInput}
               />
             )}
           </Box>

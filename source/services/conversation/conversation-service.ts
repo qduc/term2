@@ -635,6 +635,17 @@ export class ConversationService {
     return this.#adapter.abortAndDiscard();
   }
 
+  /** Prepare a lossless text-only restart without replacing or disposing this session. */
+  async prepareRestart(): Promise<() => void> {
+    const adapter = this.#adapter;
+    const release = await adapter.prepareRestart();
+    if (this.#adapter !== adapter) {
+      release();
+      throw new Error('The conversation changed while preparing restart; try again.');
+    }
+    return release;
+  }
+
   closeAdmission(): string[] {
     return this.#adapter.closeAdmission();
   }

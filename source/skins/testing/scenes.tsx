@@ -454,7 +454,7 @@ export const SCENES: readonly Scene[] = [
           onDecline={noop}
           onCancel={noop}
         />
-        <QueuePausedPrompt queueLength={2} pauseReason="failure" onResume={noop} onDiscard={noop} />
+        <QueuePausedPrompt queueLength={2} pauseReason="failure" onResume={noop} onDiscard={noop} onCommand={noop} />
         <FirstRunSetupPrompt phase="provider" provider="openai" />
       </Box>
     ),

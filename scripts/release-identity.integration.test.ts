@@ -39,6 +39,11 @@ async function run(cwd: string, executable: string, args: string[], env: NodeJS.
       cwd,
       env: {
         ...process.env,
+        // Exercise publishing-job capabilities locally too. The publish
+        // child must isolate auth even when pnpm is only doing a dry-run.
+        GITHUB_ACTIONS: 'true',
+        ACTIONS_ID_TOKEN_REQUEST_URL: `${registry}/oidc`,
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fixture-not-a-secret',
         GIT_CONFIG_NOSYSTEM: '1',
         GIT_CONFIG_GLOBAL: '/dev/null',
         GIT_AUTHOR_NAME: 'Release fixture',
@@ -168,6 +173,8 @@ it.each(cases)(
               : 'refs/heads/main',
           npm_config_registry: registry,
           NPM_CONFIG_REGISTRY: registry,
+          ACTIONS_ID_TOKEN_REQUEST_URL: '',
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: '',
           NODE_AUTH_TOKEN: '',
           NPM_TOKEN: '',
           NPM_CONFIG_USERCONFIG: '/dev/null',

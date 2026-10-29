@@ -123,6 +123,10 @@ it.each(['push', 'off', 'blackhole-recovery', 'blackhole-stop'])(
       await exited;
     });
     let output = '';
+    let childError: string | undefined;
+    child.on('error', (error) => {
+      childError = error.message;
+    });
     child.stdout!.on('data', (data) => {
       output += String(data);
     });
@@ -135,45 +139,63 @@ it.each(['push', 'off', 'blackhole-recovery', 'blackhole-stop'])(
       if (message.sleep !== undefined) sleeps.push(message.sleep);
       if (message.returned) returned = true;
     });
+    const waitForChildState = async (condition: () => boolean, description: string) => {
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline) {
+        if (condition()) return;
+        if (childError || child.exitCode !== null || child.signalCode !== null) {
+          throw new Error(
+            `Discord runner exited before ${description}: ${
+              childError ?? `code=${child.exitCode} signal=${child.signalCode}`
+            }\n${output}`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error(`Timed out waiting for ${description}\n${output}`);
+    };
     const reply = (index: number) => responses[index]!.end('[]');
-    await expect.poll(() => responses.length, { timeout: 5000 }).toBe(1);
+    await waitForChildState(() => responses.length === 1, 'first REST request');
     if (mode !== 'off') {
-      await expect.poll(() => identified, { timeout: 5000 }).toBe(true);
+      await waitForChildState(() => identified, 'Gateway identify');
       socket!.send(JSON.stringify({ op: 0, s: 1, t: 'READY', d: { session_id: 'runner-session' } }));
-      await expect.poll(() => output, { timeout: 5000 }).toContain('Gateway push connected');
+      await waitForChildState(() => output.includes('Gateway push connected'), 'Gateway push connection');
       // READY arrived mid-tick: catch up without entering the long sleep.
       reply(0);
-      await expect.poll(() => responses.length, { timeout: 5000 }).toBe(2);
+      await waitForChildState(() => responses.length === 2, 'second REST request');
       if (mode === 'blackhole-stop' || mode === 'blackhole-recovery') {
         socket!.pause();
         reply(1);
         if (mode === 'blackhole-recovery') {
-          await expect.poll(() => output, { timeout: 5000 }).toContain('Gateway push unavailable');
+          await waitForChildState(() => output.includes('Gateway push unavailable'), 'Gateway push recovery');
           // No nudge/30s safety read: missing ACK must restore normal REST polling.
-          await expect.poll(() => responses.length, { timeout: 5000 }).toBe(3);
+          await waitForChildState(() => responses.length === 3, 'REST polling after Gateway recovery');
           reply(2);
-          await expect.poll(() => connections, { timeout: 5000 }).toBe(2);
+          await waitForChildState(() => connections === 2, 'Gateway reconnect');
         }
-        await expect.poll(() => sleeps.at(-1), { timeout: 5000 }).toBe(1000);
+        await waitForChildState(() => sleeps.at(-1) === 1000, 'normal Gateway heartbeat interval');
       } else {
         reply(1);
-        await expect.poll(() => sleeps, { timeout: 5000 }).toContain(60000);
+        await waitForChildState(() => sleeps.includes(60000), 'stretched heartbeat interval');
         socket!.send(
           JSON.stringify({ op: 0, s: 2, t: 'MESSAGE_CREATE', d: { channel_id: '200', author: { id: '100' } } }),
         );
         // MESSAGE_CREATE arrived asleep: the real runner must wake (not wait 60 seconds).
-        await expect.poll(() => responses.length, { timeout: 5000 }).toBe(3);
+        await waitForChildState(() => responses.length === 3, 'REST wake after Gateway message');
         socket!.close(4004);
-        await expect.poll(() => output, { timeout: 5000 }).toContain('Authentication rejected; push disabled');
+        await waitForChildState(
+          () => output.includes('Authentication rejected; push disabled'),
+          'Gateway authentication rejection',
+        );
         reply(2);
-        await expect.poll(() => responses.length, { timeout: 5000 }).toBe(4);
+        await waitForChildState(() => responses.length === 4, 'REST request after push disable');
         reply(3);
-        await expect.poll(() => sleeps.at(-1), { timeout: 5000 }).toBe(1000);
+        await waitForChildState(() => sleeps.at(-1) === 1000, 'normal polling after push disable');
         expect(connections).toBe(1);
       }
     } else {
       reply(0);
-      await expect.poll(() => responses.length, { timeout: 5000 }).toBe(2);
+      await waitForChildState(() => responses.length === 2, 'second REST request with Gateway disabled');
       reply(1);
       expect(connections).toBe(0);
       expect(sleeps).toContain(1000);

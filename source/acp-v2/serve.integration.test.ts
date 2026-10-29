@@ -388,7 +388,15 @@ const runAcpChild = async (
     await stdinWriter.close().catch(() => undefined);
   }
 
-  const exit = await Promise.race([exited, sleep(30_000).then(() => ({ code: 'timeout' as const, signal: null }))]);
+  let timeout: NodeJS.Timeout | undefined;
+  const exit = await Promise.race([
+    exited,
+    new Promise<{ code: 'timeout'; signal: null }>((resolve) => {
+      timeout = setTimeout(() => resolve({ code: 'timeout', signal: null }), 30_000);
+    }),
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
   return { stdoutText, stderr, exit };
 };
 

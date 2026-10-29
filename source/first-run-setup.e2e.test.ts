@@ -5,7 +5,11 @@ import path from 'node:path';
 import http from 'node:http';
 import { once } from 'node:events';
 import { spawnTerminal } from './test-helpers/terminal-e2e.js';
-import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from './lib/harness-input-idle.js';
+import {
+  HARNESS_IDLE_ENV,
+  waitForHarnessComposerValue,
+  waitForHarnessIdleGeneration,
+} from './lib/harness-input-idle.js';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 // Drive the actual first-run wizard and its menu/editor boundary, not mocked
@@ -29,6 +33,10 @@ it.each(['unreachable', 'catalog'] as const)(
     if (discovery === 'unreachable') await new Promise<void>((resolve) => fixture.close(() => resolve()));
     const stateDir = path.join(home, 'state');
     const idlePath = path.join(home, 'input-idle');
+    const settingsPath = path.join(
+      resolveSettingsDirectory({ homeDir: home, env: { XDG_STATE_HOME: stateDir } }),
+      'settings.json',
+    );
     const session = spawnTerminal(
       'env',
       [
@@ -50,40 +58,60 @@ it.each(['unreachable', 'catalog'] as const)(
       ],
       { cols: 120, rows: 40 },
     );
-    // Separate terminal events: batching arrow+Enter can legitimately deliver
-    // both against a pre-render selection. Wait for each observed transition.
-    const press = async (key: string) => {
-      session.write(key);
-      await new Promise((resolve) => setTimeout(resolve, 150));
+    const waitForOutputAfter = async (offset: number, check: (output: string) => boolean, description: string) => {
+      try {
+        await expect
+          .poll(() => check(session.getVisibleOutput().slice(offset)), { interval: 10, timeout: 5_000 })
+          .toBe(true);
+      } catch (error) {
+        throw new Error(`Timed out waiting for ${description}: ${String(error)}`);
+      }
     };
-    const settingsPath = path.join(
-      resolveSettingsDirectory({ homeDir: home, env: { XDG_STATE_HOME: stateDir } }),
-      'settings.json',
-    );
+    const press = async (key: string, expected: string) => {
+      const offset = session.getVisibleOutput().length;
+      session.write(key);
+      await waitForOutputAfter(offset, (output) => output.includes(expected), expected);
+    };
+    const pressUntil = async (key: string, check: (output: string) => boolean, description: string) => {
+      const offset = session.getVisibleOutput().length;
+      session.write(key);
+      await waitForOutputAfter(offset, check, description);
+    };
     const readSettings = () => JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     try {
       await session.waitForOutput('Your Providers', 60_000);
-      await press('\r');
+      await press('\r', 'Alibaba / Qwen');
       await session.waitForOutput('Alibaba / Qwen');
-      await press('ollama');
+      await press('ollama', 'ollama');
       await session.waitForOutput('Ollama (local)');
-      await press('\r');
+      await press('\r', 'Review & Save Provider');
       await session.waitForOutput('Review & Save Provider');
       // Template starts on API Key. Point Base URL at the isolated fixture.
-      await press('\x1b[A');
-      await press('\r');
+      await pressUntil('\x1b[A', (output) => /❯\s*Base URL/.test(output), 'Base URL selection');
+      await press('\r', 'Step 3: Base URL');
       await session.waitForOutput('Step 3: Base URL');
-      for (let i = 0; i < 'http://127.0.0.1:11434/v1'.length; i++) await press('\x7f');
-      await press(baseUrl);
-      await press('\r');
-      await press('\x1b[B');
-      await press('\x1b[B');
-      await press('\r');
+      const baseUrlOffset = session.getVisibleOutput().length;
+      session.write('\x7f'.repeat('http://127.0.0.1:11434/v1'.length) + baseUrl);
+      await waitForOutputAfter(baseUrlOffset, (output) => output.includes(baseUrl), 'fixture Base URL input');
+      const editorOffset = session.getVisibleOutput().length;
+      session.write('\r');
+      await waitForOutputAfter(
+        editorOffset,
+        (output) => output.includes('Save Changes') && output.includes(baseUrl),
+        'provider review after Base URL edit',
+      );
+      await pressUntil('\x1b[B', (output) => /❯\s*API Key/.test(output), 'API Key selection');
+      await pressUntil('\x1b[B', (output) => /❯\s*Save Changes/.test(output), 'Save Changes selection');
+      session.write('\r');
       await expect
-        .poll(() => readSettings().providers?.find((provider: { id: string }) => provider.id === 'ollama')?.baseUrl)
+        .poll(() =>
+          fs.existsSync(settingsPath)
+            ? readSettings().providers?.find((provider: { id: string }) => provider.id === 'ollama')?.baseUrl
+            : undefined,
+        )
         .toBe(baseUrl);
       const modelStepOffset = session.getVisibleOutput().length;
-      await press('\r');
+      await press('\r', 'Choose a model to finish setup');
       // This was a banner with no picker on the broken implementation.
       await session.waitForOutput('Choose a model to finish setup', 10_000);
       await expect
@@ -93,25 +121,27 @@ it.each(['unreachable', 'catalog'] as const)(
         await session.waitForOutput('Some providers failed: ollama');
         // Escape must not leave setup stranded without an input surface.
         const offset = session.getVisibleOutput().length;
-        await press('\x1b');
-        await expect.poll(() => session.getVisibleOutput().slice(offset)).toContain('Filter:');
-        await press('dummy-model');
+        session.write('\x1b');
+        await waitForOutputAfter(offset, (output) => output.includes('Filter:'), 'model filter after Escape');
+        await press('dummy-model', 'dummy-model');
       } else {
         await session.waitForOutput('fixture-model');
         expect(requests).toContain('/v1/models');
-        await press('fixture-model');
+        await press('fixture-model', 'Filter: fixture-model');
       }
-      await press('\r');
+      session.write('\r');
       const model = discovery === 'unreachable' ? 'dummy-model' : 'fixture-model';
       await expect.poll(() => readSettings().agent.modelSelection).toEqual({ provider: 'ollama', model });
       await session.waitForOutput(`ollama/${model}`);
-      await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 15_000 });
+      let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 15_000 });
       // A second menu round trip proves setup ended and ordinary commands work.
-      await press('/model ');
-      await press('\x1b');
-      await press('\x03');
+      session.write('/model ');
+      await waitForHarnessComposerValue(idlePath, '/model ');
+      session.write('\x1b');
+      idle = await waitForHarnessIdleGeneration(idlePath, { after: idle });
+      await press('\x03', 'Press Ctrl+C again to exit');
       await session.waitForOutput('Press Ctrl+C again to exit');
-      await press('\x03');
+      session.write('\x03');
       expect((await session.waitForExit(15_000)).exitCode).toBe(0);
       expect(requests.every((url) => url === '/v1/models')).toBe(true);
     } catch (error) {

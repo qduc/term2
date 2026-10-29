@@ -418,6 +418,7 @@ export const getAgentDefinition = (
     {
       projectPath: executionContext?.getCwd() ?? process.cwd(),
       includeContext: !bareMode && memoryContextEnabled && hasCapability('memory'),
+      personalContextOptIn: bareMode && hasCapability('memory'),
       snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
     },
   );
@@ -785,7 +786,8 @@ export const getAgentDefinition = (
       : undefined;
   return {
     name: 'Terminal Assistant',
-    memoryContextEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
+    memoryContextEnabled:
+      hasCapability('memory') && (memoryContextEnabled || bareMode) && memoryCapability.access !== 'none',
     instructions,
     ...(resolveInstructionsForRequest ? { resolveInstructionsForRequest } : {}),
     ...(deps.getGoal

@@ -170,6 +170,82 @@ describe('project personal context through filesystem and normal prompt assembly
     expect(capability.resolvePersonalContext?.()).toContain('Yay');
   });
 
+  it('Bare honors only an explicit project opt-in without importing other context', async () => {
+    const s = await setup();
+    await s.create();
+    await s.create(s.global, 'global-preference', ['preference']);
+    s.settings.set('app.activeProfileId', 'builtin:bare');
+    const build = () =>
+      getAgentDefinition(
+        {
+          settingsService: s.settings,
+          loggingService: logger,
+          executionContext: ExecutionContext.pin(s.projectPath),
+        },
+        'gpt-5.4',
+      );
+    const bare = build();
+    expect(bare.resolveInstructionsForRequest?.() ?? bare.instructions).toBe(bare.instructions);
+    const { createHash } = await import('node:crypto');
+    const { projectScopeKey } = await import('../../utils/project-scope.js');
+    const optIn = path.join(
+      s.root,
+      'projects',
+      createHash('sha256').update(projectScopeKey(s.projectPath)).digest('hex'),
+      'personal-context.json',
+    );
+    await writeFile(optIn, JSON.stringify({ enabled: true }));
+    const enabled = bare.resolveInstructionsForRequest?.() ?? '';
+    expect(enabled).toContain('The human said “Yay!”');
+    expect(enabled.startsWith(bare.instructions + '\n\n### Personal memories')).toBe(true);
+    expect(enabled).not.toContain('### Global memories');
+    expect(enabled).not.toContain('### Persistent memory');
+    expect(build().instructions).toBe(bare.instructions);
+    await writeFile(optIn, JSON.stringify({ enabled: false }));
+    expect(bare.resolveInstructionsForRequest?.()).toBe(bare.instructions);
+    await writeFile(optIn, JSON.stringify({ enabled: true }));
+    s.settings.set('tools.memory.enabled', false);
+    const disabled = build();
+    expect(disabled.resolveInstructionsForRequest?.() ?? disabled.instructions).not.toContain('### Personal memories');
+    const other = getAgentDefinition(
+      {
+        settingsService: s.settings,
+        loggingService: logger,
+        executionContext: ExecutionContext.pin(path.join(s.root, 'other')),
+      },
+      'gpt-5.4',
+    );
+    expect(other.resolveInstructionsForRequest?.() ?? other.instructions).not.toContain('### Personal memories');
+  });
+
+  it('Bare opt-in is fail-closed and does not grant subagents context', async () => {
+    const s = await setup();
+    await s.create();
+    const { createHash } = await import('node:crypto');
+    const { projectScopeKey } = await import('../../utils/project-scope.js');
+    const optIn = path.join(
+      s.root,
+      'projects',
+      createHash('sha256').update(projectScopeKey(s.projectPath)).digest('hex'),
+      'personal-context.json',
+    );
+    const options = { projectPath: s.projectPath, includeContext: false, personalContextOptIn: true };
+    const capability = s.builder.build({ kind: 'main' }, options);
+    expect(capability.context).toBe('');
+    expect(capability.resolvePersonalContext?.()).toBe('');
+    await writeFile(optIn, '{broken');
+    expect(capability.resolvePersonalContext?.()).toBe('');
+    expect(s.warnings.join('\n')).toContain('Personal memory context could not be loaded');
+    await writeFile(optIn, JSON.stringify({ enabled: 'true' }));
+    expect(capability.resolvePersonalContext?.()).toBe('');
+    await writeFile(optIn, JSON.stringify({ enabled: true }));
+    expect(capability.resolvePersonalContext?.()).toContain('Yay');
+    expect(s.builder.build({ kind: 'subagent', role: 'librarian' }, options).resolvePersonalContext).toBeUndefined();
+    expect(
+      s.builder.build({ kind: 'main' }, { ...options, personalContextOptIn: false }).resolvePersonalContext,
+    ).toBeUndefined();
+  });
+
   it('normal agent request assembly refreshes and bare/tool-disabled profiles exclude it', async () => {
     const s = await setup();
     await s.create();

@@ -88,6 +88,8 @@ export class MemoryCapabilityBuilder {
     options: {
       projectPath?: string;
       includeContext?: boolean;
+      /** Bare may opt into personal summaries only, without the global index. */
+      personalContextOptIn?: boolean;
       snapshotGlobalContext?: (read: () => string) => string;
     } = {},
   ): MemoryCapability {
@@ -109,7 +111,8 @@ export class MemoryCapabilityBuilder {
     const tools = createMemoryToolDefinitions(stores, { settingsService: this.#settings });
     let context = '';
     let resolvePersonalContext: (() => string) | undefined;
-    if (subject.kind === 'main' && access === 'write' && options.includeContext !== false) {
+    const includeContext = options.includeContext !== false;
+    if (subject.kind === 'main' && access === 'write' && (includeContext || options.personalContextOptIn)) {
       const read = () => {
         try {
           // Reserve room for personal context even when a small configured
@@ -122,7 +125,7 @@ export class MemoryCapabilityBuilder {
           return '';
         }
       };
-      context = options.snapshotGlobalContext ? options.snapshotGlobalContext(read) : read();
+      if (includeContext) context = options.snapshotGlobalContext ? options.snapshotGlobalContext(read) : read();
       // Global context keeps its session snapshot; personal memories track nightly
       // writes and manual corrections without a derived digest or model call.
       resolvePersonalContext = () => {
@@ -131,7 +134,7 @@ export class MemoryCapabilityBuilder {
             this.#settings.get('memory.contextBudgetChars') - context.length - 2,
             PERSONAL_CONTEXT_BUDGET_CHARS,
           );
-          return budget > 0 ? stores.project.personalContextSync(budget) : '';
+          return budget > 0 ? stores.project.personalContextSync(budget, { requireOptIn: !includeContext }) : '';
         } catch (error) {
           const detail = error instanceof Error ? error.message : 'unknown storage error';
           this.#onWarning(`Personal memory context could not be loaded: ${detail}`);

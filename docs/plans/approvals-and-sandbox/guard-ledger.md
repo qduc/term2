@@ -7,7 +7,12 @@ scope, effective budget and failure recovery: `MemoryCapabilityBuilder.build`.
 Class: context shaping. Harm: copying unbounded personal records/full evidence
 into every normal project request. Signal: rendered UTF-16 character count,
 directly measured including framing/omission pointer. Only root agents with
-memory capability/context enabled use this path, not bare or subagent prompts.
+memory capability/context enabled use this path. Bare is personal-only and
+requires explicit project-store `personal-context.json` with boolean
+`enabled:true`; its resolver rereads the opt-in each request. Missing/false
+opts out; malformed/unreadable configuration warns and omits context, recovering
+after repair. Subagents never receive the section. The file changes no profile,
+tool authority, storage records or unrelated context.
 
 Effective value: min(2400, current `memory.contextBudgetChars` minus the pinned
 global context length minus two separator characters). The existing setting
@@ -37,6 +42,9 @@ integration checks cover add/edit/delete/tag removal, role/scope/tool gates,
 whole-summary overflow, small budget, corruption/recovery and normal agent
 assembly. Verification results and independent disposition are in the task-linked
 `docs/test-results.json` entries; do not infer acceptance merely from this row.
+Bare follow-up red proof: two new filesystem integration checks fail against
+5d7666f3 (missing Bare resolver). They cover explicit local enable/disable,
+fail-closed parsing, no global/Standard additions and no subagent grant.
 
 
 ## Coordinator launcher bridge-stop grace (2026-10-28)

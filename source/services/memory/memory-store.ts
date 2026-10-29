@@ -409,8 +409,18 @@ export class FileMemoryStore implements MemoryStore {
   contextSync(budgetChars: number, options?: MemoryIndexRenderOptions): string {
     return renderMemoryIndex(this.loadSync().memories, budgetChars, options).text;
   }
-  /** Read current personal-tagged summaries for one scope, within the supplied character budget. */
-  personalContextSync(budgetChars: number): string {
+  /** Read current summaries; Bare callers require this project's explicit local opt-in on every request. */
+  personalContextSync(budgetChars: number, options: { requireOptIn?: boolean } = {}): string {
+    if (options.requireOptIn) {
+      try {
+        const config = JSON.parse(readFileSync(join(this.root, 'personal-context.json'), 'utf8'));
+        if (typeof config?.enabled !== 'boolean') throw new Error();
+        if (!config.enabled) return '';
+      } catch (error: any) {
+        if (error?.code === 'ENOENT') return '';
+        throw new MemoryStorageError('Personal memory context opt-in is invalid or unreadable.');
+      }
+    }
     return renderPersonalContext(this.loadSync().memories, budgetChars);
   }
   private loadSync(): Index {

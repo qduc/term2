@@ -93,6 +93,12 @@ environment line (OS, shell, cwd, home, date; no top-level tree). Delegation use
 the existing subagent runtime when the session supplies it; authority restrictions still apply.
 Missing capabilities must be reported, not silently skipped.
 
+Bare's ordinary context defaults stay unchanged. A host-local, project-scoped
+`personal-context.json` opt-in in the project memory store can add only a bounded
+personal-memory section, refreshed before each provider request, without the
+Standard/global-memory prompt. See [personal memory context](../reference/personal-memory-context.md)
+for scope, opt-out and privacy; no profile switch is required.
+
 Bare carries no tool for what the shell can do: file reads, search, edits, and
 skill loading all go through the shell, so the sandbox is Bare's write boundary.
 The model-facing tools are the shell, `goal_check` (root sessions), `run_code`, and,

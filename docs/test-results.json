@@ -23266,6 +23266,424 @@
         "/home/qduc/coord/term2/tasks/pull-main/report.md",
         "/home/qduc/coord/term2/tasks/pull-main/evidence/verification-notes.md"
       ]
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-initial-check-launcher",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": null,
+      "base_commit": "65fb257bf8f3d64a0d4cc1fa40e4c8f6010c9d86",
+      "revision_kind": "dirty_formatted_registry_overlay",
+      "suite": "verification-environment",
+      "command": "unshare -Urn python3 evidence/run-candidate-checks.py (initial pnpm launcher)",
+      "command_complete": false,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "notes": "Installed worktree tools or freshly built CLI under unshare -Urn; synthetic HOME, no XDG overrides, no credentials, only namespace loopback enabled. CLI probes disable the inner shell sandbox deliberately; this is a delegation/authority check, not OS sandbox proof. No paid APIs."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "notes": "No source checks executed: synthetic HOME lacked pnpm bootstrap/verification cache; isolated network prevented registry signature fetch. Typecheck, lint, scoped-eslint commands exited 1 at launcher. Registry-format launcher was interrupted at runner timeout; integration/no-unit guard unrun. No surviving task processes. Corrected runner uses already-installed check executables. This is not a product failure.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/initial-check-results.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/initial-typecheck.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/initial-lint.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/initial-registry-lint.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/verification-notes.md"
+      ],
+      "failure_classification": "environment"
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-candidate-build",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": null,
+      "base_commit": "65fb257bf8f3d64a0d4cc1fa40e4c8f6010c9d86",
+      "revision_kind": "dirty_formatted_registry_overlay",
+      "suite": "build",
+      "command": "pnpm install --frozen-lockfile && pnpm exec prettier --write source/services/profiles/registry.ts && pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal developer shell/HOME for install/build in task-owned worktree. No application provider execution during install/build."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [],
+      "notes": "Normal .worktrees/dirty-commit-bare checkout with its own node_modules; all commands exited 0. Source overlay is formatted original Bare subagents inclusion, not clean base behavior.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/candidate-install-build.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-candidate-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": null,
+      "base_commit": "65fb257bf8f3d64a0d4cc1fa40e4c8f6010c9d86",
+      "revision_kind": "dirty_formatted_registry_overlay",
+      "suite": "typecheck-lint-and-policy",
+      "command": "tsc --noEmit; eslint . && prettier --check .; eslint source/services/profiles/registry.ts; prettier --check source/services/profiles/registry.ts; node scripts/check-no-unit-tests.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "notes": "Installed worktree tools or freshly built CLI under unshare -Urn; synthetic HOME, no XDG overrides, no credentials, only namespace loopback enabled. CLI probes disable the inner shell sandbox deliberately; this is a delegation/authority check, not OS sandbox proof. No paid APIs."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "test": "whole-repo prettier --check .",
+          "actual": "Code style issues found in the above file. Forgot to run Prettier?",
+          "classification": "pre-existing-formatting",
+          "base_reproduced_commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda"
+        }
+      ],
+      "notes": "Typecheck, scoped ESLint/Prettier, and no-unit guard passed. Full ESLint had 0 errors/31 warnings; whole-repo lint exited 1 solely on pre-existing docs/test-results.json formatting. The original e2cb5b8e ledger independently reproduces prettier exit 1. Do not wholesale reformat history. Actual executable paths/exits/durations in check-results evidence.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/candidate-check-results.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/lint.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/registry-lint.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/registry-format.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/base-ledger-format.log"
+      ],
+      "checks": [
+        {
+          "name": "typecheck",
+          "command": [
+            "/home/qduc/term2/.worktrees/dirty-commit-bare/node_modules/.bin/tsc",
+            "--noEmit"
+          ],
+          "exit": 0,
+          "seconds": 2.307
+        },
+        {
+          "name": "lint",
+          "command": [
+            "sh",
+            "-c",
+            "node_modules/.bin/eslint . && node_modules/.bin/prettier --check ."
+          ],
+          "exit": 1,
+          "seconds": 39.39
+        },
+        {
+          "name": "registry-lint",
+          "command": [
+            "/home/qduc/term2/.worktrees/dirty-commit-bare/node_modules/.bin/eslint",
+            "source/services/profiles/registry.ts"
+          ],
+          "exit": 0,
+          "seconds": 3.991
+        },
+        {
+          "name": "registry-format",
+          "command": [
+            "/home/qduc/term2/.worktrees/dirty-commit-bare/node_modules/.bin/prettier",
+            "--check",
+            "source/services/profiles/registry.ts"
+          ],
+          "exit": 0,
+          "seconds": 0.341
+        },
+        {
+          "name": "integration",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--reporter=verbose",
+            "--config",
+            "vitest.integration.config.ts",
+            "--maxWorkers=1",
+            "source/services/agent-runtime/agent-runtime.integration.test.ts",
+            "source/lib/subagent-provider-session.integration.test.ts",
+            "source/services/session/background-subagent-ui-routing.integration.test.ts",
+            "source/services/session/background-task-control.integration.test.ts"
+          ],
+          "exit": 0,
+          "seconds": 5.646
+        },
+        {
+          "name": "no-unit-tests",
+          "command": [
+            "node",
+            "scripts/check-no-unit-tests.mjs"
+          ],
+          "exit": 0,
+          "seconds": 0.032
+        }
+      ]
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-focused-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": null,
+      "base_commit": "65fb257bf8f3d64a0d4cc1fa40e4c8f6010c9d86",
+      "revision_kind": "dirty_formatted_registry_overlay",
+      "suite": "integration",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=verbose --config vitest.integration.config.ts --maxWorkers=1 source/services/agent-runtime/agent-runtime.integration.test.ts source/lib/subagent-provider-session.integration.test.ts source/services/session/background-subagent-ui-routing.integration.test.ts source/services/session/background-task-control.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "notes": "Installed worktree tools or freshly built CLI under unshare -Urn; synthetic HOME, no XDG overrides, no credentials, only namespace loopback enabled. CLI probes disable the inner shell sandbox deliberately; this is a delegation/authority check, not OS sandbox proof. No paid APIs."
+      },
+      "result": {
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 4
+      },
+      "failures": [],
+      "notes": "Existing focused integration tier only; TERM2_CI_PREBUILT_CLI=1. Not a full suite.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/integration.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/candidate-check-results.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-author-cli",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": null,
+      "base_commit": "65fb257bf8f3d64a0d4cc1fa40e4c8f6010c9d86",
+      "revision_kind": "dirty_formatted_registry_overlay",
+      "suite": "built-cli-e2e",
+      "command": "unshare -Urn sh -c 'ip link set lo up && node /home/qduc/coord/term2/tasks/dirty-commit/evidence/bare-cli-probe.mjs /home/qduc/term2/.worktrees/dirty-commit-bare'",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "notes": "Installed worktree tools or freshly built CLI under unshare -Urn; synthetic HOME, no XDG overrides, no credentials, only namespace loopback enabled. CLI probes disable the inner shell sandbox deliberately; this is a delegation/authority check, not OS sandbox proof. No paid APIs."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "notes": "One end-to-end workflow: direct background child launch with maxTurns 3/maxTokens 128; child only read_file reads actual marker; completion notification; script get_subagent_result retrieves same completed result. Four script authority expansion attempts rejected before additional child requests (nested creation, unapproved worktree, finite filesystem shell, finite-network web). Five parent/two child requests; no workspace mutation.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/bare-cli-summary.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/bare-cli-wire.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/bare-cli-stdout.jsonl"
+      ],
+      "summary": {
+        "passed": true,
+        "checks": [
+          "Bare direct/script delegation and result tool registration",
+          "built Bare CLI -> bounded child -> real read_file -> completion notification -> get_subagent_result",
+          "script bridge rejects nested creation, unauthorized worktree, scoped shell, finite-network web",
+          "denied child requests made zero additional provider calls and zero workspace mutations"
+        ],
+        "parentRequests": 5,
+        "childRequests": 2,
+        "status": {
+          "code": 0,
+          "signal": null
+        },
+        "worktree": "/home/qduc/term2/.worktrees/dirty-commit-bare",
+        "revisionKind": "dirty formatted registry overlay on docs commit",
+        "network": "unshare -Urn: loopback only; clean synthetic HOME; no credentials or paid APIs; sandbox disabled inside network namespace to exercise tool workflow",
+        "limits": {
+          "maxTurns": 3,
+          "maxTokens": 128
+        },
+        "providerFailure": null
+      },
+      "independent": false
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-independent-cli",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": null,
+      "base_commit": "65fb257bf8f3d64a0d4cc1fa40e4c8f6010c9d86",
+      "revision_kind": "dirty_formatted_registry_overlay",
+      "suite": "built-cli-e2e",
+      "command": "unshare -Urn sh -c 'ip link set lo up && node /home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/bare-cli-probe.mjs /home/qduc/term2/.worktrees/dirty-commit-bare'",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "notes": "Installed worktree tools or freshly built CLI under unshare -Urn; synthetic HOME, no XDG overrides, no credentials, only namespace loopback enabled. CLI probes disable the inner shell sandbox deliberately; this is a delegation/authority check, not OS sandbox proof. No paid APIs."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "notes": "One end-to-end workflow: direct background child launch with maxTurns 3/maxTokens 128; child only read_file reads actual marker; completion notification; script get_subagent_result retrieves same completed result. Four script authority expansion attempts rejected before additional child requests (nested creation, unapproved worktree, finite filesystem shell, finite-network web). Five parent/two child requests; no workspace mutation.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/bare-cli-summary.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/bare-cli-wire.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/bare-cli-stdout.jsonl"
+      ],
+      "summary": {
+        "passed": true,
+        "checks": [
+          "Bare direct/script delegation and result tool registration",
+          "built Bare CLI -> bounded child -> real read_file -> completion notification -> get_subagent_result",
+          "script bridge rejects nested creation, unauthorized worktree, scoped shell, finite-network web",
+          "denied child requests made zero additional provider calls and zero workspace mutations"
+        ],
+        "parentRequests": 5,
+        "childRequests": 2,
+        "status": {
+          "code": 0,
+          "signal": null
+        },
+        "worktree": "/home/qduc/term2/.worktrees/dirty-commit-bare",
+        "revisionKind": "dirty formatted registry overlay on docs commit",
+        "network": "unshare -Urn: loopback only; clean synthetic HOME; no credentials or paid APIs; sandbox disabled inside network namespace to exercise tool workflow",
+        "limits": {
+          "maxTurns": 3,
+          "maxTokens": 128
+        },
+        "providerFailure": null
+      },
+      "independent": true
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-independent-initial-fixture",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": null,
+      "base_commit": "65fb257bf8f3d64a0d4cc1fa40e4c8f6010c9d86",
+      "revision_kind": "dirty_formatted_registry_overlay",
+      "suite": "built-cli-fixture-diagnostic",
+      "command": "independent supplemental real CLI script fixture (initial attempt)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "notes": "Installed worktree tools or freshly built CLI under unshare -Urn; synthetic HOME, no XDG overrides, no credentials, only namespace loopback enabled. CLI probes disable the inner shell sandbox deliberately; this is a delegation/authority check, not OS sandbox proof. No paid APIs."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "failures": [
+        {
+          "test": "reviewer supplemental authority fixture",
+          "actual": "correctly admitted read_file child violated fixture phase assertion",
+          "classification": "fixture"
+        }
+      ],
+      "notes": "Reviewer incorrectly inferred read_file absent from Bare parent authority from direct schemas alone. It is intentionally registered in the script catalogue, so the child was correctly admitted and the synthetic provider phase assertion failed. Disproven fixture hypothesis, not product defect; historical output retained. Corrected probe requests genuinely absent create_file.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/script-probe/first-attempt/diagnosis.txt",
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/script-probe/first-attempt/probe-run.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/script-probe/first-attempt/bare-cli-wire.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-independent-script",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": null,
+      "base_commit": "65fb257bf8f3d64a0d4cc1fa40e4c8f6010c9d86",
+      "revision_kind": "dirty_formatted_registry_overlay",
+      "suite": "built-cli-e2e",
+      "command": "unshare -Urn sh -c 'ip link set lo up && node /home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/script-probe/bare-cli-probe.mjs /home/qduc/term2/.worktrees/dirty-commit-bare'",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "notes": "Installed worktree tools or freshly built CLI under unshare -Urn; synthetic HOME, no XDG overrides, no credentials, only namespace loopback enabled. CLI probes disable the inner shell sandbox deliberately; this is a delegation/authority check, not OS sandbox proof. No paid APIs."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "notes": "agent.run requesting create_file rejects for absent canWrite before any child provider call. Then authorized shell-only child runs real printf, completes, and returns its marker through script agent.run. Bounded maxTurns 3/maxTokens 128; two parent/two child requests; unchanged workspace. Independent review accepts with no must-fix findings; stale profile-doc sentence corrected in feature commit.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-review.md",
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/script-probe/bare-cli-summary.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/independent-evidence/script-probe/bare-cli-wire.json"
+      ],
+      "independent": true
+    },
+    {
+      "id": "2026-10-29-bare-subagents-acceptance-primary-build-and-cli",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-29-bare-subagents-acceptance"
+      ],
+      "commit": "a0f4ac3153fd477382f83d4ba1dfcbc51bbae40d",
+      "base_commit": null,
+      "revision_kind": "committed_feature",
+      "suite": "build-and-built-cli-e2e",
+      "command": "pnpm build && unshare -Urn sh -c 'ip link set lo up && node /home/qduc/coord/term2/tasks/dirty-commit/primary-evidence/bare-cli-probe.mjs /home/qduc/term2'",
+      "command_complete": true,
+      "environment": {
+        "build": "Normal developer shell/HOME, pnpm build on committed main.",
+        "cli": {
+          "os": "Linux 7.0.14-17-pve",
+          "node_version": "v24.19.0",
+          "notes": "Installed worktree tools or freshly built CLI under unshare -Urn; synthetic HOME, no XDG overrides, no credentials, only namespace loopback enabled. CLI probes disable the inner shell sandbox deliberately; this is a delegation/authority check, not OS sandbox proof. No paid APIs."
+        }
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "notes": "Clean committed source feature on main; normal pnpm build exited 0, then same strengthened actual CLI child/result/authority workflow passed with five parent/two child requests. Source registry bytes match independently reviewed candidate. Targeted source ESLint, registry/profile-doc Prettier and no-unit guard also passed before feature commit. This later documentation record references the actual source commit; no self-referential commit claim.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/dirty-commit/primary-evidence/build.log",
+        "/home/qduc/coord/term2/tasks/dirty-commit/primary-evidence/bare-cli-summary.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/primary-evidence/bare-cli-wire.json",
+        "/home/qduc/coord/term2/tasks/dirty-commit/evidence/feature-commit.log"
+      ],
+      "registry_sha256": "58ea404afd304ec80c675cb19d02b37551b41d6b79309604ec52f57c886d5ccf"
     }
   ]
 }

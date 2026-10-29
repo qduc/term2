@@ -21520,6 +21520,1752 @@
         "Full Discord bridge assertions remain unverified on a compatible Linux host; macOS socket-path and /proc limitations are recorded above.",
         "Independent verification of the provider black-box fixture change remains pending."
       ]
+    },
+    {
+      "id": "2026-10-24-bare-subagents-author",
+      "task_ids": [
+        "2026-10-24-bare-subagents"
+      ],
+      "commit": "4731459c44584c6e49854dac4a1d50cb849687dd",
+      "snapshot": "dirty working tree; registry.ts matches checked worktree bare-subagents",
+      "timestamp": "2026-10-24T13:39:09.456957+00:00",
+      "environment": "Linux, Node v24.19.0; isolated worktree with offline pnpm install --ignore-scripts",
+      "commands": [
+        "pnpm typecheck",
+        "pnpm lint",
+        "temporary ESM resolved-profile/prompt assertions"
+      ],
+      "results": {
+        "typecheck": {
+          "exit_code": 0
+        },
+        "lint": {
+          "exit_code": 0,
+          "warnings": 31,
+          "errors": 0
+        },
+        "temporary_script": {
+          "exit_code": 0,
+          "assertions": "Bare resolves subagents, exact other capabilities retained, no prompt fragments or inline sections added"
+        }
+      },
+      "failures": [
+        "Initial tsx -e probe failed because CJS import.meta.dirname was undefined; ESM file probe passed."
+      ],
+      "uncertain": [
+        "Independent verification unavailable in this session; tool registration/execution not exercised end-to-end."
+      ],
+      "evidence": "Author check logs: /tmp/bare-typecheck.log and /tmp/bare-lint.log; temporary assertion script executed then removed."
+    },
+    {
+      "id": "2026-10-25-goal-original-merge-public-goal-cli",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "base_commit": "c527587762fda9ea730dd55025521b24d656ca22",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "public-goal-cli",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=verbose --config vitest.integration.config.ts source/cli.integration.test.ts -t 'unresolved goal returns attention|no-goal Bare workflow|explicit goal preserves honest|positional launch.*goal|shipped CLI verifies a durable goal|resume preserves the replayed goal|headless .* has unattended instructions'",
+      "argv": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--reporter=verbose",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/cli.integration.test.ts",
+        "-t",
+        "unresolved goal returns attention|no-goal Bare workflow|explicit goal preserves honest|positional launch.*goal|shipped CLI verifies a durable goal|resume preserves the replayed goal|headless .* has unattended instructions"
+      ],
+      "cwd": "/home/qduc/term2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "NODE_ENV": "test",
+        "HUSKY": "0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 43
+      },
+      "failures": [],
+      "duration_seconds": 34.18,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/original-apply/public-goal-cli.log",
+      "notes": "Direct original-checkout verification after the goal-only merge onto queue-integrated main. Existing dirty files: tasks.jsonl, docs/test-results.json, source/services/profiles/registry.ts. Not a clean-commit run. Broad build/integration/e2e/provider verification remains owned by pP; parent owns acceptance. Earlier independent source/behavior review is retained, not restarted.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Broad-suite acceptance on combined integration",
+          "Active effort, tokens and monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-original-merge-completion-verification",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "base_commit": "c527587762fda9ea730dd55025521b24d656ca22",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "completion-verification",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=verbose --config vitest.integration.config.ts source/services/completion-verification/completion-verification.integration.test.ts",
+      "argv": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--reporter=verbose",
+        "--config",
+        "vitest.integration.config.ts",
+        "source/services/completion-verification/completion-verification.integration.test.ts"
+      ],
+      "cwd": "/home/qduc/term2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "NODE_ENV": "test",
+        "HUSKY": "0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 15.7,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/original-apply/completion-verification.log",
+      "notes": "Direct original-checkout verification after the goal-only merge onto queue-integrated main. Existing dirty files: tasks.jsonl, docs/test-results.json, source/services/profiles/registry.ts. Not a clean-commit run. Broad build/integration/e2e/provider verification remains owned by pP; parent owns acceptance. Earlier independent source/behavior review is retained, not restarted.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Broad-suite acceptance on combined integration",
+          "Active effort, tokens and monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-original-merge-typecheck",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "base_commit": "c527587762fda9ea730dd55025521b24d656ca22",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "typecheck",
+      "command": "node node_modules/typescript-7/bin/tsc --noEmit",
+      "argv": [
+        "node",
+        "node_modules/typescript-7/bin/tsc",
+        "--noEmit"
+      ],
+      "cwd": "/home/qduc/term2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "NODE_ENV": "test",
+        "HUSKY": "0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": null,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/original-apply/typecheck.log",
+      "notes": "Direct original-checkout verification after the goal-only merge onto queue-integrated main. Existing dirty files: tasks.jsonl, docs/test-results.json, source/services/profiles/registry.ts. Not a clean-commit run. Broad build/integration/e2e/provider verification remains owned by pP; parent owns acceptance. Earlier independent source/behavior review is retained, not restarted.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Broad-suite acceptance on combined integration",
+          "Active effort, tokens and monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-original-merge-static-guards",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "base_commit": "c527587762fda9ea730dd55025521b24d656ca22",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "static-guards",
+      "command": "node scripts/run-test.mjs",
+      "argv": [
+        "node",
+        "scripts/run-test.mjs"
+      ],
+      "cwd": "/home/qduc/term2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "NODE_ENV": "test",
+        "HUSKY": "0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "duration_seconds": 2.74,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/original-apply/static-guards.log",
+      "notes": "Direct original-checkout verification after the goal-only merge onto queue-integrated main. Existing dirty files: tasks.jsonl, docs/test-results.json, source/services/profiles/registry.ts. Not a clean-commit run. Broad build/integration/e2e/provider verification remains owned by pP; parent owns acceptance. Earlier independent source/behavior review is retained, not restarted.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Broad-suite acceptance on combined integration",
+          "Active effort, tokens and monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-original-merge-no-unit-policy",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "base_commit": "c527587762fda9ea730dd55025521b24d656ca22",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "no-unit-policy",
+      "command": "node scripts/check-no-unit-tests.mjs",
+      "argv": [
+        "node",
+        "scripts/check-no-unit-tests.mjs"
+      ],
+      "cwd": "/home/qduc/term2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "NODE_ENV": "test",
+        "HUSKY": "0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": null,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/original-apply/no-unit-policy.log",
+      "notes": "Direct original-checkout verification after the goal-only merge onto queue-integrated main. Existing dirty files: tasks.jsonl, docs/test-results.json, source/services/profiles/registry.ts. Not a clean-commit run. Broad build/integration/e2e/provider verification remains owned by pP; parent owns acceptance. Earlier independent source/behavior review is retained, not restarted.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Broad-suite acceptance on combined integration",
+          "Active effort, tokens and monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-original-merge-goal-eslint",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "base_commit": "c527587762fda9ea730dd55025521b24d656ca22",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "goal-eslint",
+      "command": "node node_modules/eslint/bin/eslint.js source/cli.integration.test.ts source/non-interactive.ts source/prompts/durable-goal-context.ts source/services/conversation/durable-goal-stop-check.ts source/tools/agent/goal-check.ts",
+      "argv": [
+        "node",
+        "node_modules/eslint/bin/eslint.js",
+        "source/cli.integration.test.ts",
+        "source/non-interactive.ts",
+        "source/prompts/durable-goal-context.ts",
+        "source/services/conversation/durable-goal-stop-check.ts",
+        "source/tools/agent/goal-check.ts"
+      ],
+      "cwd": "/home/qduc/term2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "NODE_ENV": "test",
+        "HUSKY": "0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": null,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/original-apply/goal-eslint.log",
+      "notes": "Direct original-checkout verification after the goal-only merge onto queue-integrated main. Existing dirty files: tasks.jsonl, docs/test-results.json, source/services/profiles/registry.ts. Not a clean-commit run. Broad build/integration/e2e/provider verification remains owned by pP; parent owns acceptance. Earlier independent source/behavior review is retained, not restarted.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Broad-suite acceptance on combined integration",
+          "Active effort, tokens and monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-goal-original-merge-goal-format",
+      "recorded_on": "2026-10-25",
+      "task_ids": [
+        "2026-10-25-goal-check-boundaries"
+      ],
+      "commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "base_commit": "c527587762fda9ea730dd55025521b24d656ca22",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "goal-format",
+      "command": "node node_modules/prettier/bin-prettier.js --check source/cli.integration.test.ts source/non-interactive.ts source/prompts/durable-goal-context.ts source/services/conversation/durable-goal-stop-check.ts source/tools/agent/goal-check.ts",
+      "argv": [
+        "node",
+        "node_modules/prettier/bin-prettier.js",
+        "--check",
+        "source/cli.integration.test.ts",
+        "source/non-interactive.ts",
+        "source/prompts/durable-goal-context.ts",
+        "source/services/conversation/durable-goal-stop-check.ts",
+        "source/tools/agent/goal-check.ts"
+      ],
+      "cwd": "/home/qduc/term2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "NODE_ENV": "test",
+        "HUSKY": "0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": null,
+      "evidence": "/home/qduc/coord/term2/tasks/goal-check/original-apply/goal-format.log",
+      "notes": "Direct original-checkout verification after the goal-only merge onto queue-integrated main. Existing dirty files: tasks.jsonl, docs/test-results.json, source/services/profiles/registry.ts. Not a clean-commit run. Broad build/integration/e2e/provider verification remains owned by pP; parent owns acceptance. Earlier independent source/behavior review is retained, not restarted.",
+      "measurement": {
+        "activity": "verification",
+        "completion": {
+          "status": "verification-pending",
+          "accepted_at": null,
+          "accepted_commit": null
+        },
+        "unknowns": [
+          "Broad-suite acceptance on combined integration",
+          "Active effort, tokens and monetary cost"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-25-normal-main-typecheck",
+      "recorded_on": "2026-10-25",
+      "run_at": null,
+      "recorded_at": "2026-10-25T10:00:32.293027+00:00",
+      "task_ids": [
+        "2026-10-25-normal-ready-original-integration"
+      ],
+      "commit": "1d12261394c1a34024fcf3c561dab550844a5026",
+      "base_commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "cwd": "/home/qduc/term2",
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": null,
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/provider-recovery/normal-ready-integration/typecheck.log"
+      ],
+      "notes": "Actual main with the pre-existing unstaged source/services/profiles/registry.ts Bare-subagents overlay and working-only ledger records preserved. Not a clean-commit run. No broad integration/e2e/provider tier repeated: pP owns final normal broad verification. Prior independent source/composition acceptance is retained."
+    },
+    {
+      "id": "2026-10-25-normal-main-focused-integration",
+      "recorded_on": "2026-10-25",
+      "run_at": null,
+      "recorded_at": "2026-10-25T10:00:32.293027+00:00",
+      "task_ids": [
+        "2026-10-25-normal-ready-original-integration"
+      ],
+      "commit": "1d12261394c1a34024fcf3c561dab550844a5026",
+      "base_commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "discord-registry-zero-frame-focused",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts source/lib/provider-registry.integration.test.ts source/lib/zero-frame-timeout.integration.test.ts --reporter=verbose",
+      "command_complete": true,
+      "cwd": "/home/qduc/term2",
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3
+      },
+      "failures": [],
+      "duration_seconds": 13.79,
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/provider-recovery/normal-ready-integration/focused.log"
+      ],
+      "notes": "Actual main with the pre-existing unstaged source/services/profiles/registry.ts Bare-subagents overlay and working-only ledger records preserved. Not a clean-commit run. No broad integration/e2e/provider tier repeated: pP owns final normal broad verification. Prior independent source/composition acceptance is retained."
+    },
+    {
+      "id": "2026-10-25-normal-main-lint",
+      "recorded_on": "2026-10-25",
+      "run_at": null,
+      "recorded_at": "2026-10-25T10:00:32.293027+00:00",
+      "task_ids": [
+        "2026-10-25-normal-ready-original-integration"
+      ],
+      "commit": "1d12261394c1a34024fcf3c561dab550844a5026",
+      "base_commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "cwd": "/home/qduc/term2",
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "exit_code": 1,
+      "result": {
+        "passed": null,
+        "failed": 9431,
+        "warnings": 34,
+        "skipped": null
+      },
+      "failures": [
+        "ESLint reports9431 errors/34 warnings while traversing the whole original checkout, including .cache (10 reported files), .coord (7028), .term2 (205), packages (538), source (26). Prettier did not run because ESLint exited1. Not repaired and not classified wholesale as pre-existing; the19 integrated-source files pass separate ESLint and Prettier checks."
+      ],
+      "duration_seconds": null,
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/provider-recovery/normal-ready-integration/lint.log"
+      ],
+      "notes": "Actual main with the pre-existing unstaged source/services/profiles/registry.ts Bare-subagents overlay and working-only ledger records preserved. Not a clean-commit run. No broad integration/e2e/provider tier repeated: pP owns final normal broad verification. Prior independent source/composition acceptance is retained."
+    },
+    {
+      "id": "2026-10-25-normal-main-focused-style",
+      "recorded_on": "2026-10-25",
+      "run_at": null,
+      "recorded_at": "2026-10-25T10:00:32.293027+00:00",
+      "task_ids": [
+        "2026-10-25-normal-ready-original-integration"
+      ],
+      "commit": "1d12261394c1a34024fcf3c561dab550844a5026",
+      "base_commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "integrated-source-eslint-prettier",
+      "command": "pnpm exec eslint <19 integrated source paths>; pnpm exec prettier --check <same paths>",
+      "command_complete": true,
+      "cwd": "/home/qduc/term2",
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": null,
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/provider-recovery/normal-ready-integration/focused-eslint.log",
+        "/home/qduc/coord/term2/tasks/provider-recovery/normal-ready-integration/focused-format.log"
+      ],
+      "notes": "Actual main with the pre-existing unstaged source/services/profiles/registry.ts Bare-subagents overlay and working-only ledger records preserved. Not a clean-commit run. No broad integration/e2e/provider tier repeated: pP owns final normal broad verification. Prior independent source/composition acceptance is retained."
+    },
+    {
+      "id": "2026-10-25-normal-main-no-unit-policy",
+      "recorded_on": "2026-10-25",
+      "run_at": null,
+      "recorded_at": "2026-10-25T10:00:32.293027+00:00",
+      "task_ids": [
+        "2026-10-25-normal-ready-original-integration"
+      ],
+      "commit": "1d12261394c1a34024fcf3c561dab550844a5026",
+      "base_commit": "118d697eabec613e6847c99fb194fcb463cf664a",
+      "revision_kind": "merge_commit_with_existing_dirty_worktree",
+      "suite": "no-unit-policy",
+      "command": "node scripts/check-no-unit-tests.mjs",
+      "command_complete": true,
+      "cwd": "/home/qduc/term2",
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "exit_code": 0,
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null
+      },
+      "failures": [],
+      "duration_seconds": null,
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/provider-recovery/normal-ready-integration/check-exits.txt"
+      ],
+      "notes": "Actual main with the pre-existing unstaged source/services/profiles/registry.ts Bare-subagents overlay and working-only ledger records preserved. Not a clean-commit run. No broad integration/e2e/provider tier repeated: pP owns final normal broad verification. Prior independent source/composition acceptance is retained."
+    },
+    {
+      "id": "2026-10-25-discord-usability-integration",
+      "recorded_on": "2026-10-25",
+      "commit": "13b11298",
+      "base_commit": "983b7c29",
+      "revision_kind": "committed_source",
+      "task_ids": [
+        "2026-10-25-discord-usability-integration"
+      ],
+      "suite": "integrated-checkpoint",
+      "command": "pnpm typecheck; pnpm build; pnpm test:integration source/services/discord/discord-bridge.integration.test.ts; pnpm test; focused eslint/prettier; git diff HEAD^ HEAD --check",
+      "command_complete": true,
+      "cwd": "/home/qduc/term2",
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "NODE_ENV": "test"
+      },
+      "exit_code": 0,
+      "result": {
+        "typecheck": "passed",
+        "build": "passed",
+        "discord_integration": {
+          "passed": 16,
+          "failed": 0
+        },
+        "static_guards": {
+          "passed": 28,
+          "failed": 0
+        },
+        "focused_eslint": "passed",
+        "focused_prettier": "passed",
+        "whole_repo_lint": "failed: out-of-scope .cache/.coord content and missing packages/core/tsconfig.json"
+      },
+      "failures": [],
+      "evidence": "/home/qduc/coord/term2/tasks/discord-usability/checkpoint-integrated.md",
+      "notes": "Integrated main commit 13b11298. Independent runtime review of immutable accepted checkpoint at 33c1d27c; no live Discord exercise."
+    },
+    {
+      "id": "2026-10-25-discord-proactive-final-integration",
+      "recorded_on": "2026-10-25",
+      "run_at": null,
+      "commit": "990249a2e83ced2e9407debafe6a58c4aaa2751b",
+      "tree": "468c3a877ac48a81776e3c0633ab0aa870ea17ab",
+      "snapshot": "Pre-commit dirty primary checkout; committed source matches tested source, plus preserved uncommitted Bare subagents inclusion. Recovered ledgers remained dirty.",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node": "v24.19.0",
+        "pnpm": "11.7.0"
+      },
+      "command": "pnpm typecheck; pnpm build; NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts source/tools/system/run-code/shell.integration.test.ts; pnpm test; pnpm lint; focused eslint/prettier; precommit hooks",
+      "results": {
+        "typecheck": {
+          "exit": 0
+        },
+        "build": {
+          "exit": 0
+        },
+        "combined_integration": {
+          "exit": 0,
+          "files_passed": 2,
+          "passed": 42,
+          "failed": 0
+        },
+        "initial_discord_only": {
+          "exit": 0,
+          "passed": 30,
+          "note": "Initial requested run-code/runtime.integration.test.ts filter did not match an existing file; corrected combined run above."
+        },
+        "static": {
+          "exit": 0,
+          "files_passed": 7,
+          "passed": 28,
+          "failed": 0
+        },
+        "whole_repository_lint": {
+          "exit": 1,
+          "errors": 9431,
+          "warnings": 34,
+          "signature": "eslint . includes out-of-scope .cache/.coord scratch artifacts; examples: Buffer/process no-undef and no-require-imports in .cache probes. Full output retained; not all findings independently classified."
+        },
+        "focused_eslint": {
+          "exit": 0
+        },
+        "focused_prettier_worktree": {
+          "exit": 1,
+          "signature": "source/services/profiles/registry.ts: preserved user subagents inclusion extends line beyond formatter preference"
+        },
+        "staged_registry_prettier": {
+          "exit": 0
+        },
+        "precommit": {
+          "exit": 0,
+          "note": "Configured eslint --fix / prettier --write and check-no-unit-tests ran; temporary --no-stash --fail-on-changes flags only; hook restored."
+        }
+      },
+      "evidence": "/home/qduc/coord/term2/tasks/discord-usability/final-integration-evidence",
+      "notes": "Independent offline acceptance from send-fix-review.md at bb0ba60b and envelope-review.md; no new independent review of integration commit. Live Discord, paid calls, activation, full e2e/provider suite not run. Source/docs-only commit; original owned and new ledger evidence remain uncommitted."
+    },
+    {
+      "id": "2026-10-25-discord-empty-final-activation",
+      "recorded_on": "2026-10-25",
+      "run_at": "2026-10-25T13:06:17.231255+00:00",
+      "commit": "890a9a570ca3e2415584af64b5d24daa10542d79",
+      "tree": "0456a467074444e8aa1ee1cd32963e236e65f684",
+      "snapshot": "Checks executed on pre-commit dirty primary; exact two-file accepted patch committed unchanged (patch SHA256 matches reviewed delta). User registry/subagents and evidence ledgers remain dirty; not a clean-commit run. Live smoke executed after commit.",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node": "v24.19.0",
+        "pnpm": "11.7.0"
+      },
+      "command": "pnpm typecheck; pnpm build; NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts --reporter=verbose; focused eslint/prettier; pnpm lint; normal git commit hooks; Herdr bridge restart; sendDiscord send/status",
+      "results": {
+        "checks": [
+          {
+            "name": "typecheck",
+            "command": [
+              "pnpm",
+              "typecheck"
+            ],
+            "exit": 0,
+            "seconds": 3.03
+          },
+          {
+            "name": "build",
+            "command": [
+              "pnpm",
+              "build"
+            ],
+            "exit": 0,
+            "seconds": 3.62
+          },
+          {
+            "name": "bridge",
+            "command": [
+              "pnpm",
+              "exec",
+              "vitest",
+              "run",
+              "--config",
+              "vitest.integration.config.ts",
+              "source/services/discord/discord-bridge.integration.test.ts",
+              "--reporter=verbose"
+            ],
+            "exit": 0,
+            "seconds": 46.34
+          },
+          {
+            "name": "focused-eslint",
+            "command": [
+              "pnpm",
+              "exec",
+              "eslint",
+              "source/services/discord/discord-bridge.ts",
+              "source/services/discord/discord-bridge.integration.test.ts"
+            ],
+            "exit": 0,
+            "seconds": 4.97
+          },
+          {
+            "name": "focused-prettier",
+            "command": [
+              "pnpm",
+              "exec",
+              "prettier",
+              "--check",
+              "source/services/discord/discord-bridge.ts",
+              "source/services/discord/discord-bridge.integration.test.ts"
+            ],
+            "exit": 0,
+            "seconds": 1.45
+          },
+          {
+            "name": "lint",
+            "command": [
+              "pnpm",
+              "lint"
+            ],
+            "exit": 1,
+            "seconds": 30.7
+          }
+        ],
+        "bridge_integration": {
+          "passed": 31,
+          "failed": 0,
+          "files_passed": 1
+        },
+        "precommit": {
+          "exit": 0,
+          "checks": [
+            "eslint --fix",
+            "prettier --write",
+            "check-no-unit-tests.mjs"
+          ]
+        },
+        "whole_repository_lint": {
+          "exit": 1,
+          "errors": 9431,
+          "warnings": 34,
+          "signature": "Includes .cache/.coord scratch artifacts; identical aggregate counts to earlier final-integrated report; not all failures classified and base not rerun. Prettier not reached."
+        },
+        "live_smoke": {
+          "requestId": "activation-890a9a57-20261025-once",
+          "results": [
+            {
+              "requestId": "activation-890a9a57-20261025-once",
+              "channelId": "1563865632942850219",
+              "senderAlias": "coord",
+              "chunks": {
+                "queued": 1,
+                "sent": 0,
+                "uncertain": 0
+              },
+              "delivery": "queued"
+            },
+            {
+              "requestId": "activation-890a9a57-20261025-once",
+              "channelId": "1563865632942850219",
+              "senderAlias": "coord",
+              "chunks": {
+                "queued": 0,
+                "sent": 1,
+                "uncertain": 0
+              },
+              "delivery": "sent"
+            }
+          ]
+        },
+        "preservation": {
+          "existing_runs": 324,
+          "all_existing_run_values_preserved": true,
+          "registry_bytes_preserved": true,
+          "prior_ledger_bytes_preserved_except_append": true
+        }
+      },
+      "independent_verification": "Accepted immutable 5254e180 review in empty-final-review.md; independent verification of integrated 890a9a57 and live activation not performed.",
+      "evidence_directory": "/home/qduc/coord/term2/tasks/discord-usability/activation-evidence",
+      "uncertain": [
+        "No full integration/e2e/provider-black-box rerun or mobile observation.",
+        "Protected coordinator not restarted; its new tool/read_file activation remains pending."
+      ]
+    },
+    {
+      "recorded_on": "2026-10-25",
+      "run_at": "2026-10-25T14:57:14.414812+00:00",
+      "task_ids": [
+        "2026-10-25-unify-model-picker"
+      ],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree; local fixture providers only. No paid model requests."
+      },
+      "command_complete": true,
+      "id": "2026-10-25-unify-model-picker-baseline",
+      "commit": "75ced6745d6d24fc638fb76d4fda1bf4fefc2a5d",
+      "revision_kind": "dirty_base_with_temporary_probe",
+      "suite": "focused-menu-fault-injection",
+      "command": "pnpm test:integration source/components/input/menu-system.integration.test.tsx -t 'temporary: mentor'",
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 29,
+        "exit_code": 1
+      },
+      "evidence": {
+        "signature": "Timed out waiting for healthy catalog row: original pool waits for all providers while one never settles.",
+        "log": "/tmp/model-picker-baseline-ui.log"
+      }
+    },
+    {
+      "recorded_on": "2026-10-25",
+      "run_at": "2026-10-25T14:57:14.414812+00:00",
+      "task_ids": [
+        "2026-10-25-unify-model-picker"
+      ],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree; local fixture providers only. No paid model requests."
+      },
+      "command_complete": true,
+      "id": "2026-10-25-unify-model-picker-verified",
+      "commit": "8f69a90fb8f467b8af1b0e55ef219a487b54cba5",
+      "revision_kind": "source_commit_with_temporary_ui_probe_then_clean_commit",
+      "suite": "focused-menu-verification",
+      "command": "pnpm typecheck; pnpm test:integration source/components/input/menu-system.integration.test.tsx; focused ESLint and Prettier",
+      "result": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0,
+        "exit_code": 0
+      },
+      "evidence": {
+        "summary": "28 existing menu checks plus 2 temporary root/mentor checks passed with healthy, rejected and indefinitely pending catalog providers. Healthy rows visible, failures warnings, selection succeeds; mentor draft retains provider and discard flow works. Temporary probes removed; unchanged 28 existing checks rerun successfully. Focused ESLint: 0 errors, 10 warnings; focused Prettier passed. Typecheck also passed in integrated dirty checkout 450b08d5c38fcb8f41baec1ee6b7a70e8d1e5498.",
+        "logs": [
+          "/tmp/model-picker-ui-final.log",
+          "/tmp/model-picker-existing-ui.log",
+          "/tmp/model-picker-integrated-typecheck.log"
+        ],
+        "temporary_probe": "/tmp/model-picker-ui-probe.txt"
+      },
+      "comparison": {
+        "base_commit": "75ced6745d6d24fc638fb76d4fda1bf4fefc2a5d",
+        "resolves_run_ids": [
+          "2026-10-25-unify-model-picker-baseline"
+        ]
+      }
+    },
+    {
+      "recorded_on": "2026-10-25",
+      "run_at": "2026-10-25T14:57:14.414812+00:00",
+      "task_ids": [
+        "2026-10-25-unify-model-picker"
+      ],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree; local fixture providers only. No paid model requests."
+      },
+      "command_complete": true,
+      "id": "2026-10-25-unify-model-picker-lint",
+      "commit": "8f69a90fb8f467b8af1b0e55ef219a487b54cba5",
+      "revision_kind": "dirty_precommit_source_snapshot",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "exit_code": 1
+      },
+      "evidence": {
+        "summary": "Final ESLint completed with 0 errors and 31 warnings. Prettier failed only on docs/test-results.json, unchanged from worktree base (git diff HEAD -- docs/test-results.json empty). Earlier lint attempt caught newly unused setError in use-model-selection.ts; removed and rerun. No unrelated formatting repaired.",
+        "log": "/tmp/model-picker-lint.log"
+      }
+    },
+    {
+      "id": "2026-10-26-discord-ack-merged-primary",
+      "recorded_on": "2026-10-26",
+      "run_at": "2026-10-26T07:14:56+07:00",
+      "commit": "e152e0b006b87c944bd92debf9451f230e34b1e4",
+      "base_commit": "0082cf7c20a7bcc3130c98338e48cf3289b2d376",
+      "revision_kind": "merged_feature_with_preexisting_dirty_worktree",
+      "task_ids": [
+        "2026-10-25-discord-long-work-ack"
+      ],
+      "suite": "merged-primary-integration-and-build",
+      "command": "pnpm typecheck; pnpm build; pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts --reporter=minimal; scoped eslint + prettier --check; pnpm check:no-unit-tests",
+      "command_complete": true,
+      "cwd": "/home/qduc/term2",
+      "exit_code": 0,
+      "environment": {
+        "os": "linux",
+        "kernel": "7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0"
+      },
+      "commands": [
+        {
+          "name": "source-equivalence",
+          "command": "git diff --exit-code 2f738eef9b50596a8d260ab1d0613e2e8b576fd8 e152e0b006b87c944bd92debf9451f230e34b1e4 -- source/services/control-socket/control-session-port.ts source/tools/discord-send.ts source/services/discord/discord-bridge.integration.test.ts",
+          "exit": 0
+        },
+        {
+          "name": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0
+        },
+        {
+          "name": "build",
+          "command": "pnpm build",
+          "exit": 0
+        },
+        {
+          "name": "discord-bridge-integration",
+          "command": "pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts --reporter=minimal",
+          "exit": 0,
+          "files_passed": 1,
+          "passed": 49,
+          "failed": 0,
+          "skipped": 0
+        },
+        {
+          "name": "scoped-eslint",
+          "command": "pnpm exec eslint source/services/control-socket/control-session-port.ts source/tools/discord-send.ts source/services/discord/discord-bridge.integration.test.ts",
+          "exit": 0
+        },
+        {
+          "name": "scoped-prettier",
+          "command": "pnpm exec prettier --check source/services/control-socket/control-session-port.ts source/tools/discord-send.ts source/services/discord/discord-bridge.integration.test.ts",
+          "exit": 0
+        },
+        {
+          "name": "no-unit-tests",
+          "command": "pnpm check:no-unit-tests",
+          "exit": 0
+        }
+      ],
+      "result": {
+        "passed": 49,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "source_sha256": {
+        "source/services/control-socket/control-session-port.ts": "6140f346f64a7e0f3757776ae5c75cc818afd40ee175cd966423600e92d76c7e",
+        "source/tools/discord-send.ts": "f1deb42bdc50186045395c9c74da58c23f6e3a496a724475c06c0c5e7d6d9615",
+        "source/services/discord/discord-bridge.integration.test.ts": "74db43e3a00c09bc8de0580b3f7b90e7aec4fd2283e5d2c7c9f46ee45f056c22"
+      },
+      "notes": "Checks ran in primary /home/qduc/term2 at merged commit e152e0b006b87c944bd92debf9451f230e34b1e4, with its pre-existing dirty docs/test-results.json, docs/experiments/evidence-driven-development/tasks.jsonl and source/services/profiles/registry.ts present. Those three files were not staged or committed; source/services/profiles/registry.ts was not touched. The three integrated source blobs are byte-identical to review commit 2f738eef9b50596a8d260ab1d0613e2e8b576fd8. Build succeeded and its existing rollback behavior saved a prior build at dist.bak/. No live process restart, external Discord/provider access, or credentials were used."
+    },
+    {
+      "id": "2026-10-26-desk-relay-integration-primary",
+      "recorded_on": "2026-10-26",
+      "run_at": "2026-10-26T07:53:52+07:00",
+      "commit": "51464dd34780cc12ddd4b9128b291667e8fbb052",
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "e152e0b006b87c944bd92debf9451f230e34b1e4",
+      "task_ids": [
+        "2026-10-26-desk-relay-integration"
+      ],
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Ran serially in primary after source-only fast-forward. Pre-existing unstaged docs/test-results.json, EDD tasks.jsonl, and source/services/profiles/registry.ts remained present and unchanged during checks."
+      },
+      "suite": "desk-relay-primary-integration-verification",
+      "command": "In /home/qduc/term2, serial: pnpm build; pnpm typecheck; NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts source/services/agent-runtime/agent-runtime.integration.test.ts --reporter=verbose; pnpm test; scoped eslint; scoped prettier --check. Every exit 0.",
+      "command_complete": true,
+      "result": {
+        "passed": 89,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 9,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "source_identity": null,
+      "source_identity_artifact": "/home/qduc/term2/.worktrees/desk-relay/desk-relay-review-evidence/snapshot.json",
+      "evidence": [
+        "/tmp/qduc/term2-nodejs/tool-output/desk-relay-main-build.log",
+        "/tmp/qduc/term2-nodejs/tool-output/desk-relay-main-typecheck.log",
+        "/tmp/qduc/term2-nodejs/tool-output/desk-relay-main-bridge-runtime.log",
+        "/tmp/qduc/term2-nodejs/tool-output/desk-relay-main-static.log",
+        "/tmp/qduc/term2-nodejs/tool-output/desk-relay-main-eslint.log",
+        "/tmp/qduc/term2-nodejs/tool-output/desk-relay-main-prettier.log",
+        "/home/qduc/term2/.worktrees/desk-relay/desk-relay-review.md",
+        "/home/qduc/term2/.worktrees/desk-relay/desk-relay-review-evidence/checks.json"
+      ],
+      "checks": [
+        {
+          "suite": "build",
+          "command": "pnpm build",
+          "exit": 0
+        },
+        {
+          "suite": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0
+        },
+        {
+          "suite": "bridge-runtime-integration",
+          "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts source/services/agent-runtime/agent-runtime.integration.test.ts --reporter=verbose",
+          "passed": 61,
+          "files_passed": 2,
+          "exit": 0
+        },
+        {
+          "suite": "static-guards",
+          "command": "pnpm test",
+          "passed": 28,
+          "files_passed": 7,
+          "exit": 0
+        },
+        {
+          "suite": "scoped-eslint",
+          "exit": 0
+        },
+        {
+          "suite": "scoped-prettier",
+          "exit": 0
+        },
+        {
+          "suite": "reviewed-source-equivalence",
+          "command": "git diff --exit-code 5e2df11e0dd79cfd7688b22b0144d492065d3f2c HEAD -- reviewed source/reference paths",
+          "exit": 0
+        },
+        {
+          "suite": "dirty-primary-preservation",
+          "exit": 0,
+          "notes": "All three original dirty path byte hashes matched before/after; staged path set stayed empty."
+        },
+        {
+          "suite": "provider-black-box",
+          "mode": "reused independent accepted report on byte-identical source",
+          "passed": 222,
+          "skipped": 1,
+          "exit": 0
+        },
+        {
+          "suite": "e2e",
+          "mode": "reused serial rerun evidence on byte-identical source",
+          "passed": 36,
+          "exit": 0
+        }
+      ],
+      "prior_attempts": [],
+      "comparison": {
+        "red_run_id": "2026-10-26-desk-relay-old-origin-red",
+        "resolves_run_ids": []
+      },
+      "notes": "Source-only fast-forward commit 51464dd3. Independent Sol/high ACCEPT review applies: source/reference blobs are identical to reviewed feature 5e2df11e. Provider/E2E evidence reused from review/author logs, not rerun here per instruction. Full repo lint known non-clean from author run; not rerun. Existing uncommitted registry.ts was deliberately preserved; no live Discord/model call or runtime restart."
+    },
+    {
+      "id": "2026-10-26-quick-menu-live-integration-primary",
+      "recorded_on": "2026-10-26",
+      "run_at": "2026-10-26T08:05:57+07:00",
+      "commit": "d050ec952423b99c057b7ddff5e494b03ee49e1f",
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "51464dd34780cc12ddd4b9128b291667e8fbb052",
+      "task_ids": [
+        "2026-10-26-quick-menu-live-integration"
+      ],
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Serial primary verification after source-only fast-forward to d050ec95. Three pre-existing unstaged paths were present: docs/test-results.json and EDD tasks.jsonl were appended only after checks; source/services/profiles/registry.ts remained byte-identical to its pre-integration dirty snapshot. No primary paths were staged."
+      },
+      "suite": "quick-menu-live-primary-integration-verification",
+      "command": "In /home/qduc/term2, serial: pnpm build; pnpm typecheck; pnpm test; NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/components/layout/BackgroundTaskManager.integration.test.tsx --reporter=verbose; env NODE_ENV=test pnpm exec vitest run --reporter=verbose --config vitest.e2e.config.ts source/task-menu-row-wrap.e2e.test.ts source/cli-tool-rows.e2e.test.ts source/cli.e2e.test.ts; scoped eslint; scoped prettier --check; pnpm check:no-unit-tests; git diff --check. Every command exited 0.",
+      "command_complete": true,
+      "result": {
+        "passed": 33,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 11,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "source_identity": null,
+      "source_identity_artifact": "/home/qduc/coord/term2/tasks/quick-menu-live/reports/recheck/quick-menu-recheck.md",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/build.log",
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/typecheck.log",
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/static.log",
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/manager-integration.log",
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/shared-helper-e2e.log",
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/eslint.log",
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/prettier.log",
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/no-unit-tests.log",
+        "/home/qduc/coord/term2/tasks/quick-menu-live/reports/raw/primary-integration/diff-check.log",
+        "/home/qduc/term2/.worktrees/quick-menu-live/quick-menu-recheck.md"
+      ],
+      "checks": [
+        {
+          "suite": "build",
+          "command": "pnpm build",
+          "exit": 0
+        },
+        {
+          "suite": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0
+        },
+        {
+          "suite": "static-guards",
+          "command": "pnpm test",
+          "passed": 28,
+          "files_passed": 7,
+          "exit": 0
+        },
+        {
+          "suite": "background-task-manager-integration",
+          "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/components/layout/BackgroundTaskManager.integration.test.tsx --reporter=verbose",
+          "passed": 1,
+          "files_passed": 1,
+          "exit": 0
+        },
+        {
+          "suite": "shared-helper-pty-e2e",
+          "command": "env NODE_ENV=test pnpm exec vitest run --reporter=verbose --config vitest.e2e.config.ts source/task-menu-row-wrap.e2e.test.ts source/cli-tool-rows.e2e.test.ts source/cli.e2e.test.ts",
+          "passed": 4,
+          "files_passed": 3,
+          "exit": 0
+        },
+        {
+          "suite": "scoped-eslint",
+          "exit": 0,
+          "notes": "No errors; one existing react-hooks/set-state-in-effect warning in BackgroundTaskManager.tsx at line 263."
+        },
+        {
+          "suite": "scoped-prettier",
+          "exit": 0
+        },
+        {
+          "suite": "no-unit-tests",
+          "command": "pnpm check:no-unit-tests",
+          "exit": 0
+        },
+        {
+          "suite": "source-diff-check",
+          "command": "git diff --check",
+          "exit": 0
+        },
+        {
+          "suite": "independent-source-acceptance",
+          "mode": "reused accepted source review/recheck on byte-identical source",
+          "verifier": "Sol/codex/high",
+          "verdict": "accepted",
+          "exit": 0
+        }
+      ],
+      "prior_attempts": [],
+      "comparison": {
+        "red_run_id": null,
+        "resolves_run_ids": []
+      },
+      "notes": "Source-only commit d050ec95 fast-forwarded main from 51464dd3. Exactly three accepted source paths and blob parity with the independently accepted source were verified. Primary E2E exercises the built CLI/actual PTY at 80x24; independent accepted strict probe covers transfer and settlement. No live model/provider call or runtime restart. Existing EDD lint warning and React act-environment warnings are recorded in raw logs. Dirty primary ledgers were appended after verification; original parsed rows/objects were asserted unchanged."
+    },
+    {
+      "id": "2026-10-26-discord-prompt-session-identity-primary",
+      "recorded_on": "2026-10-26",
+      "run_at": "2026-10-26T07:17:15.884172+00:00",
+      "commit": "54fc3bc1b7e2deb71b5e8cb42c4fe31668ba1c14",
+      "revision_kind": "dirty-working-tree",
+      "base_commit": "f80095af69d3c2ae66bb959a97afbba70ed1d912",
+      "task_ids": [
+        "2026-10-26-discord-prompt-session-identity-integration"
+      ],
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Primary checkout retained unrelated registry and evidence edits. Their preexisting diff was unchanged by source integration; this record is appended after checks."
+      },
+      "suite": "discord-prompt-session-identity-primary",
+      "command": "pnpm build; pnpm test:integration source/services/discord/discord-bridge.integration.test.ts; pnpm typecheck",
+      "command_complete": true,
+      "result": {
+        "passed": 52,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "checks": [
+        {
+          "suite": "build",
+          "command": "pnpm build",
+          "exit": 0
+        },
+        {
+          "suite": "Discord integration",
+          "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts",
+          "exit": 0
+        },
+        {
+          "suite": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0
+        },
+        {
+          "suite": "parent real CLI correction check",
+          "command": "node --import tsx /home/qduc/coord/term2/tasks/session-id-stability/fix-probe.mts",
+          "exit": 0,
+          "notes": "Ran on corrected author worktree before source-only integration. Public ID and createdAt stable through rollover; log segment advances; explicit clear changes identity/time; restart/resume and previous-history read pass."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/archive/discord-comm-prompt/recheck-report.md",
+        "/home/qduc/coord/term2/tasks/archive/session-id-stability/README.md"
+      ],
+      "notes": "Core identity independently reviewed by Sol; one-expression createdAt correction independently verified by parent through actual built CLI. Prompt live connect/disconnect and active-goal requests independently verified by Sol. No live coordinator/desk/bridge restart or external provider call; existing processes need restart to load changes. Full repository lint was not rerun; author reports existing ledger Prettier drift."
+    },
+    {
+      "id": "2026-10-28-primary-ledger-reconcile-install-build",
+      "recorded_on": "2026-10-28",
+      "run_at": "2026-10-28T06:13:11.073490+00:00",
+      "commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "revision_kind": "primary_after_fast_forward_with_original_uncommitted_registry_and_semantically_reapplied_user_ledgers",
+      "base_commit": "3e8c80b837e210771f978bbe3aa682fa20709ddf",
+      "suite": "install-build",
+      "command": "pnpm install --frozen-lockfile && pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal primary install/build; focused checks use existing installed tools/configs under unshare -Urn with synthetic HOME/XDG and only namespace loopback. No live or paid calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-28-primary-ledger-reconcile"
+      ],
+      "notes": "No new source commit. Source includes the original preserved registry edit. Full provider/integration/e2e tiers not inferred. Original23test+11task records remain unstaged; these task-owned verification rows are additional unstaged evidence required by repo policy.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/build.log",
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/preservation-after.json"
+      ]
+    },
+    {
+      "id": "2026-10-28-primary-ledger-reconcile-typecheck",
+      "recorded_on": "2026-10-28",
+      "run_at": "2026-10-28T06:13:11.073490+00:00",
+      "commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "revision_kind": "primary_after_fast_forward_with_original_uncommitted_registry_and_semantically_reapplied_user_ledgers",
+      "base_commit": "3e8c80b837e210771f978bbe3aa682fa20709ddf",
+      "suite": "typecheck",
+      "command": "/home/qduc/term2/node_modules/.bin/tsc --noEmit",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal primary install/build; focused checks use existing installed tools/configs under unshare -Urn with synthetic HOME/XDG and only namespace loopback. No live or paid calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-28-primary-ledger-reconcile"
+      ],
+      "notes": "No new source commit. Source includes the original preserved registry edit. Full provider/integration/e2e tiers not inferred. Original23test+11task records remain unstaged; these task-owned verification rows are additional unstaged evidence required by repo policy.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/typecheck.log",
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/preservation-after.json"
+      ]
+    },
+    {
+      "id": "2026-10-28-primary-ledger-reconcile-static-guards",
+      "recorded_on": "2026-10-28",
+      "run_at": "2026-10-28T06:13:11.073490+00:00",
+      "commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "revision_kind": "primary_after_fast_forward_with_original_uncommitted_registry_and_semantically_reapplied_user_ledgers",
+      "base_commit": "3e8c80b837e210771f978bbe3aa682fa20709ddf",
+      "suite": "static-guards",
+      "command": "node scripts/run-test.mjs --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal primary install/build; focused checks use existing installed tools/configs under unshare -Urn with synthetic HOME/XDG and only namespace loopback. No live or paid calls."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-28-primary-ledger-reconcile"
+      ],
+      "notes": "No new source commit. Source includes the original preserved registry edit. Full provider/integration/e2e tiers not inferred. Original23test+11task records remain unstaged; these task-owned verification rows are additional unstaged evidence required by repo policy.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/static-guards.log",
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/preservation-after.json"
+      ]
+    },
+    {
+      "id": "2026-10-28-primary-ledger-reconcile-integration",
+      "recorded_on": "2026-10-28",
+      "run_at": "2026-10-28T06:13:11.073490+00:00",
+      "commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "revision_kind": "primary_after_fast_forward_with_original_uncommitted_registry_and_semantically_reapplied_user_ledgers",
+      "base_commit": "3e8c80b837e210771f978bbe3aa682fa20709ddf",
+      "suite": "integration",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts --reporter=verbose --maxWorkers=1 source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-command.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts source/utils/process-restart.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal primary install/build; focused checks use existing installed tools/configs under unshare -Urn with synthetic HOME/XDG and only namespace loopback. No live or paid calls."
+      },
+      "result": {
+        "passed": 116,
+        "failed": 0,
+        "skipped": 0,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-28-primary-ledger-reconcile"
+      ],
+      "notes": "No new source commit. Source includes the original preserved registry edit. Full provider/integration/e2e tiers not inferred. Original23test+11task records remain unstaged; these task-owned verification rows are additional unstaged evidence required by repo policy.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/integration.log",
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/preservation-after.json"
+      ]
+    },
+    {
+      "id": "2026-10-28-primary-ledger-reconcile-pty-e2e",
+      "recorded_on": "2026-10-28",
+      "run_at": "2026-10-28T06:13:11.073490+00:00",
+      "commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "revision_kind": "primary_after_fast_forward_with_original_uncommitted_registry_and_semantically_reapplied_user_ledgers",
+      "base_commit": "3e8c80b837e210771f978bbe3aa682fa20709ddf",
+      "suite": "pty-e2e",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.e2e.config.ts --reporter=verbose --maxWorkers=1 scripts/restart.e2e.test.ts scripts/restart-work.e2e.test.ts source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal primary install/build; focused checks use existing installed tools/configs under unshare -Urn with synthetic HOME/XDG and only namespace loopback. No live or paid calls."
+      },
+      "result": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-28-primary-ledger-reconcile"
+      ],
+      "notes": "No new source commit. Source includes the original preserved registry edit. Full provider/integration/e2e tiers not inferred. Original23test+11task records remain unstaged; these task-owned verification rows are additional unstaged evidence required by repo policy.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/pty-e2e.log",
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/preservation-after.json"
+      ]
+    },
+    {
+      "id": "2026-10-28-primary-ledger-reconcile-no-unit-tests",
+      "recorded_on": "2026-10-28",
+      "run_at": "2026-10-28T06:13:11.073490+00:00",
+      "commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "revision_kind": "primary_after_fast_forward_with_original_uncommitted_registry_and_semantically_reapplied_user_ledgers",
+      "base_commit": "3e8c80b837e210771f978bbe3aa682fa20709ddf",
+      "suite": "no-unit-tests",
+      "command": "node scripts/check-no-unit-tests.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal primary install/build; focused checks use existing installed tools/configs under unshare -Urn with synthetic HOME/XDG and only namespace loopback. No live or paid calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-28-primary-ledger-reconcile"
+      ],
+      "notes": "No new source commit. Source includes the original preserved registry edit. Full provider/integration/e2e tiers not inferred. Original23test+11task records remain unstaged; these task-owned verification rows are additional unstaged evidence required by repo policy.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/no-unit-tests.log",
+        "/home/qduc/coord/term2/tasks/main-reconciliation/ledger-reconcile-evidence/preservation-after.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-preserved-local-history-candidate-initial-environment",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T04:49:01.922707+00:00",
+      "commit": null,
+      "source_merge_commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "tree": "97926c2fc1c200a6f116c1a68406f666ebb34628",
+      "revision_kind": "precommit_merge_candidate_built_before_final_commit_same_product_source_as_final_reviewed_tree",
+      "suite": "focused-gateway-acp-integration",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts --reporter=verbose --maxWorkers=1 source/gateway/runtime-factory.integration.test.ts source/gateway/serve.integration.test.ts source/acp-v2/serve.integration.test.ts source/acp-v2/session-backend.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal pnpm install/build in primary; focused tests use installed repository tools/configs under unshare -Urn with synthetic HOME, XDG_*_HOME unset, namespace loopback only, TERM2_CI_PREBUILT_CLI=1. No live credentials/network or paid calls."
+      },
+      "result": {
+        "passed": 14,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "test": "source/gateway/serve.integration.test.ts > completes a turn",
+          "diagnostic": "event not received within 45000ms; session_created,user_message_accepted,assistant_started,turn_failed",
+          "classification": "test-runner XDG_STATE_HOME override conflicts with HOME-changing child fixture; same unmodified product/test passes after removing XDG_*_HOME"
+        }
+      ],
+      "notes": "Initial candidate run set synthetic XDG_STATE_HOME; corrected run retains only synthetic HOME for config/state. Candidate CLI build HEAD metadata preceded merge commit; not claimed a clean final-commit artifact. See verification-notes.md.",
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/initial-candidate-upstream-integration.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-preserved-local-history-candidate-corrected-environment",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T04:49:01.922707+00:00",
+      "commit": null,
+      "source_merge_commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "tree": "97926c2fc1c200a6f116c1a68406f666ebb34628",
+      "revision_kind": "precommit_merge_candidate_built_before_final_commit_same_product_source_as_final_reviewed_tree",
+      "suite": "focused-gateway-acp-integration",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts --reporter=verbose --maxWorkers=1 source/gateway/runtime-factory.integration.test.ts source/gateway/serve.integration.test.ts source/acp-v2/serve.integration.test.ts source/acp-v2/session-backend.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal pnpm install/build in primary; focused tests use installed repository tools/configs under unshare -Urn with synthetic HOME, XDG_*_HOME unset, namespace loopback only, TERM2_CI_PREBUILT_CLI=1. No live credentials/network or paid calls."
+      },
+      "result": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 4,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Initial candidate run set synthetic XDG_STATE_HOME; corrected run retains only synthetic HOME for config/state. Candidate CLI build HEAD metadata preceded merge commit; not claimed a clean final-commit artifact. See verification-notes.md.",
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/candidate-upstream-integration.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-preserved-local-history-primary-build",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T04:49:01.922707+00:00",
+      "commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "base_commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "upstream_commit": "804f96a4dc359cf8e2413841b5874cfb60af6181",
+      "revision_kind": "primary_after_normal_fast_forward_to_reviewed_merge_with_original_unstaged_registry_and_reapplied_user_ledgers",
+      "suite": "build",
+      "command": "pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal pnpm install/build in primary; focused tests use installed repository tools/configs under unshare -Urn with synthetic HOME, XDG_*_HOME unset, namespace loopback only, TERM2_CI_PREBUILT_CLI=1. No live credentials/network or paid calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "notes": "Source includes original preserved registry edit; only focused tiers claimed. New evidence remains unstaged, separate from all original29 test-run and12 task-record additions.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/primary-build.log",
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/preservation.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-preserved-local-history-primary-typecheck",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T04:49:01.922707+00:00",
+      "commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "base_commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "upstream_commit": "804f96a4dc359cf8e2413841b5874cfb60af6181",
+      "revision_kind": "primary_after_normal_fast_forward_to_reviewed_merge_with_original_unstaged_registry_and_reapplied_user_ledgers",
+      "suite": "typecheck",
+      "command": "/home/qduc/term2/node_modules/.bin/tsc --noEmit",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal pnpm install/build in primary; focused tests use installed repository tools/configs under unshare -Urn with synthetic HOME, XDG_*_HOME unset, namespace loopback only, TERM2_CI_PREBUILT_CLI=1. No live credentials/network or paid calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "notes": "Source includes original preserved registry edit; only focused tiers claimed. New evidence remains unstaged, separate from all original29 test-run and12 task-record additions.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/typecheck.log",
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/preservation.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-preserved-local-history-primary-static-guards",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T04:49:01.922707+00:00",
+      "commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "base_commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "upstream_commit": "804f96a4dc359cf8e2413841b5874cfb60af6181",
+      "revision_kind": "primary_after_normal_fast_forward_to_reviewed_merge_with_original_unstaged_registry_and_reapplied_user_ledgers",
+      "suite": "static-guards",
+      "command": "node scripts/run-test.mjs --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal pnpm install/build in primary; focused tests use installed repository tools/configs under unshare -Urn with synthetic HOME, XDG_*_HOME unset, namespace loopback only, TERM2_CI_PREBUILT_CLI=1. No live credentials/network or paid calls."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "notes": "Source includes original preserved registry edit; only focused tiers claimed. New evidence remains unstaged, separate from all original29 test-run and12 task-record additions.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/static-guards.log",
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/preservation.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-preserved-local-history-primary-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T04:49:01.922707+00:00",
+      "commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "base_commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "upstream_commit": "804f96a4dc359cf8e2413841b5874cfb60af6181",
+      "revision_kind": "primary_after_normal_fast_forward_to_reviewed_merge_with_original_unstaged_registry_and_reapplied_user_ledgers",
+      "suite": "integration",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts --reporter=verbose --maxWorkers=1 source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-command.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/queue/restart.integration.test.ts source/services/control-socket/restart.integration.test.ts source/utils/process-restart.integration.test.ts source/services/control-socket/process-identity.integration.test.ts source/gateway/runtime-factory.integration.test.ts source/gateway/serve.integration.test.ts source/acp-v2/serve.integration.test.ts source/acp-v2/session-backend.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal pnpm install/build in primary; focused tests use installed repository tools/configs under unshare -Urn with synthetic HOME, XDG_*_HOME unset, namespace loopback only, TERM2_CI_PREBUILT_CLI=1. No live credentials/network or paid calls."
+      },
+      "result": {
+        "passed": 132,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 11,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "notes": "Source includes original preserved registry edit; only focused tiers claimed. New evidence remains unstaged, separate from all original29 test-run and12 task-record additions.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/integration.log",
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/preservation.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-preserved-local-history-primary-pty-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T04:49:01.922707+00:00",
+      "commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "base_commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "upstream_commit": "804f96a4dc359cf8e2413841b5874cfb60af6181",
+      "revision_kind": "primary_after_normal_fast_forward_to_reviewed_merge_with_original_unstaged_registry_and_reapplied_user_ledgers",
+      "suite": "pty-e2e",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.e2e.config.ts --reporter=verbose --maxWorkers=1 scripts/restart.e2e.test.ts scripts/restart-work.e2e.test.ts source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal pnpm install/build in primary; focused tests use installed repository tools/configs under unshare -Urn with synthetic HOME, XDG_*_HOME unset, namespace loopback only, TERM2_CI_PREBUILT_CLI=1. No live credentials/network or paid calls."
+      },
+      "result": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "notes": "Source includes original preserved registry edit; only focused tiers claimed. New evidence remains unstaged, separate from all original29 test-run and12 task-record additions.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/pty-e2e.log",
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/preservation.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-preserved-local-history-primary-no-unit-tests",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T04:49:01.922707+00:00",
+      "commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "base_commit": "cc3572e411d36652984d76ebe0e651c842618967",
+      "upstream_commit": "804f96a4dc359cf8e2413841b5874cfb60af6181",
+      "revision_kind": "primary_after_normal_fast_forward_to_reviewed_merge_with_original_unstaged_registry_and_reapplied_user_ledgers",
+      "suite": "no-unit-tests",
+      "command": "node scripts/check-no-unit-tests.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Normal pnpm install/build in primary; focused tests use installed repository tools/configs under unshare -Urn with synthetic HOME, XDG_*_HOME unset, namespace loopback only, TERM2_CI_PREBUILT_CLI=1. No live credentials/network or paid calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "exit_code": 0
+      },
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "notes": "Source includes original preserved registry edit; only focused tiers claimed. New evidence remains unstaged, separate from all original29 test-run and12 task-record additions.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/no-unit-tests.log",
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/preservation.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-pull-main-initial-candidate-environment-clarification",
+      "recorded_on": "2026-10-29",
+      "task_ids": [
+        "2026-10-29-pull-main-preserved-local-history"
+      ],
+      "commit": null,
+      "base_commit": "e2cb5b8e5323a39baf4a289ebe7a6eaaebb22cda",
+      "revision_kind": "append_only_historical_clarification",
+      "suite": "evidence-clarification",
+      "command": null,
+      "command_complete": false,
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "clarifies_run": "2026-10-29-pull-main-preserved-local-history-candidate-initial-environment",
+      "notes": "The initial candidate runner set synthetic XDG_STATE_HOME, unlike the shared primary environment description on that historical row. Parent fixture settings were written there while a HOME-changing sanitized child stripped XDG variables and looked elsewhere. The initial 14-pass/1-fail gateway/ACP observation is retained unchanged. Removing XDG overrides while retaining synthetic HOME/network isolation produced the separately recorded 15/15 candidate rerun; primary later passed 132 focused integration cases. This is environment clarification, not a new execution or a claim of product regression.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/pull-main/report.md",
+        "/home/qduc/coord/term2/tasks/pull-main/evidence/verification-notes.md"
+      ]
     }
   ]
 }

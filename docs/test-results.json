@@ -25928,6 +25928,585 @@
         "/home/qduc/coord/term2/tasks/release-040/evidence/operator-pages.json",
         "https://github.com/qduc/term2/actions/runs/40887628752"
       ]
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-gates",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "pnpm typecheck; pnpm exec eslint source; pnpm exec prettier --check source package.json CHANGELOG.md scripts/release-identity.integration.test.ts; pnpm build; pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "All prescribed release gates pass; broad repository lint not newly claimed. checks.tsv and individual logs. Production workflow/guard/runtime unchanged; only fixture+ledgers differ from old release."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "CI=true pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": 400,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "39 files passed, 1 skipped; integration.log. Existing real identity scenarios exercise synthetic OIDC capability isolation."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-e2e-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": 56,
+        "failed": 2,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "test": "scripts/restart.e2e.test.ts: reloads changed compiled core",
+          "signature": "Composer acknowledgement after revision2, got revision3; timeout5000ms at line172; same recorded prior operator/hosted signature."
+        },
+        {
+          "test": "scripts/approval-decision.e2e.test.ts: allow-once",
+          "signature": "PTY child state timeout40000ms while approval menu remained visible; root cause not established."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "2 files failed/9 passed; e2e.log retained. Neither failure suppressed or source-fixed by this recovery."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-base-affected-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "3da4552438b2a69735e741e3a7e18fd6b0622ee0",
+      "tree": "6c44fea0c3cacff75ef4db38f401a78c55a87b8a",
+      "revision_kind": "clean committed source",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts scripts/restart.e2e.test.ts scripts/approval-decision.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "Old-release source comparison in operator clone, 2 files pass. Does NOT reproduce approval failure or prove its root cause. Affected tests/harness/application files byte-identical to candidate."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-e2e-repeat",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": 58,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "Unchanged full repeat, 11 files pass, 71.66s; e2e-repeat.log. Resolves gate outcome, not root causes.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-29-release-040-recovery-e2e-initial"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-provider",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": 223,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "28 files pass; provider.log. No real/paid provider APIs."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-local-artifact",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "node scripts/check-release-identity.mjs; node dist/cli.js --version; node dist/cli.js --help; pnpm pack; inspect tar manifest/build-info; sha256sum",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "CLI exactly0.40.0; release:true and commit exactly tag SHA. Packed metadata matches dist. Local tarball SHA256 c91d5407515ca8ac9bd11bc7100cd86ed2dcf7740df1153109140e80a4d34fe6. Not substituted for registry artifact."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-independent",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "vibrant-cormorant-266: own frozen-lockfile install; real identity/local-release fixtures; recovery built CLI/guard",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "Independent ACCEPT on exact candidate,15.89s; CLI0.40.0 and guard OK. Earlier pearly-laurel-454 read-only inspection withheld acceptance due denied dynamic commands; not counted as dynamic success. recovery-independent.md retains both."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-hosted-ci-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "gh run watch 40896076056 --exit-status (attempt1)",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub hosted Ubuntu 22.04",
+        "node_version": null,
+        "pnpm_version": "11.7.0",
+        "notes": "Hosted workflow configured Node24; exact patch version not independently projected."
+      },
+      "result": {
+        "passed": 87,
+        "failed": 1,
+        "skipped": 4,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "test": "scripts/restart.e2e.test.ts:172",
+          "signature": "Same composer acknowledgement revision2/got3 timeout5000ms; e2e lane only. Other3 lanes success."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "https://github.com/qduc/term2/actions/runs/40896076056 ; counts refer only to e2e/Responses lane, not full CI. release-ci-failed.log."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-hosted-ci-resolving",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "gh run rerun 40896076056 --failed; gh run watch 40896076056 --exit-status",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub hosted Ubuntu 22.04",
+        "node_version": null,
+        "pnpm_version": "11.7.0",
+        "notes": "Hosted workflow configured Node24; exact patch version not independently projected."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "Unchanged-source E2E failed-job retry; all4 lanes now success. No publisher retry. release-ci-attempt2-full.log. Resolves CI gate, not restart timing root cause.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-29-release-040-recovery-hosted-ci-initial"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-trusted-publication",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "tag push; gh run watch 40896076310 --exit-status; inspect Publish package log and registry receipt",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub hosted Ubuntu 22.04",
+        "node_version": null,
+        "pnpm_version": "11.7.0",
+        "notes": "Hosted workflow configured Node24; exact patch version not independently projected."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "https://github.com/qduc/term2/actions/runs/40896076310 ; normal exact-tag Trusted Publishing, guard/lifecycle intact; positive acceptance retained in publish-full.log. No local token fallback/manual dispatch/repeated accepted effect. Atomic approved tag replacement only after unchanged skipped prior publisher/no active or newer run, neutral npm corroboration and lease checks.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-29-release-040-operator-publish-blocked"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-registry-artifact",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2e2a204a1eafb0ee873e58209a43e9cadd29b4d6",
+      "tree": "62b7ed1b77038faea0cbd209fc979aeabf571f46",
+      "revision_kind": "clean committed source; release tag",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "neutral scratch npm view/pack/install @qduc/term2@0.40.0; integrity/shasum/build-info/provenance binding checks; installed CLI --version/--help; npm audit signatures",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "Registry artifact release:true/version0.40.0/exact release SHA; tar SHA512+SHA1 match registry metadata; provenance subject hash and source SHA/workflow/run checked. Signature/provenance verification retained in registry-signatures.log; isolated native install and CLI version/help pass. Registry metadata: {\"shasum\":\"19c2e41e249797140d47596d90b3d9923b5de0b9\",\"tarball\":\"https://registry.npmjs.org/@qduc/term2/-/term2-0.40.0.tgz\",\"fileCount\":3499,\"integrity\":\"sha512-WyiAUBowgXRmWUEyfFpNIQXo1eO572M/v8Un5zQfiPvcCpdk7FqoNGaZVxZKupNYvjo2xEGfCTsbKnKhG5n9WQ==\",\"signatures\":[{\"sig\":\"MEQCIC8OdRtuZwgBAcTfQ+BGW3Nxb4p8xf+KlyuvjDuIV3a6AiA+JRSD910p+Jw2Vrl4IFIeSIBBOd24rx06y2pTBgHe6g==\",\"keyid\":\"SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U\"},{\"keyid\":\"SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U\",\"sig\":\"MEQCIFrwyddW5Nn340a1Fg7HyA82vAT1JBUHNH1B+geWVBsDAiA/Nz4bdPy7Qb7yFUx42W0avc4RDUBcyIzmtKLN5lkoVg==\"}],\"attestations\":{\"url\":\"https://registry.npmjs.org/-/npm/v1/attestations/@qduc%2fterm2@0.40.0\",\"provenance\":{\"predicateType\":\"https://slsa.dev/provenance/v1\"}},\"unpackedSize\":14490337}"
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-docs-ci-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "f2744a2f2a520491345914b0623cdbb9e9ae0dd6",
+      "tree": "7a9e458af0e186aef08ba18274925ee9398b4f61",
+      "revision_kind": "clean committed source",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "gh run watch 40898190880 --exit-status (attempt1)",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub hosted Ubuntu 22.04",
+        "node_version": null,
+        "pnpm_version": "11.7.0",
+        "notes": "Hosted workflow configured Node24; exact patch version not independently projected."
+      },
+      "result": {
+        "passed": 87,
+        "failed": 1,
+        "skipped": 4,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "test": "scripts/restart.e2e.test.ts:172",
+          "signature": "Composer acknowledgement revision2/got3 timeout5000ms; e2e lane; other3 lanes success."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "https://github.com/qduc/term2/actions/runs/40898190880 ; docs-ci-failed.log. Counts are e2e/Responses lane only. No application/fixture change since release."
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-docs-ci-resolving",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "f2744a2f2a520491345914b0623cdbb9e9ae0dd6",
+      "tree": "7a9e458af0e186aef08ba18274925ee9398b4f61",
+      "revision_kind": "clean committed source",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "gh run rerun 40898190880 --failed; gh run watch 40898190880 --exit-status",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub hosted Ubuntu 22.04",
+        "node_version": null,
+        "pnpm_version": "11.7.0",
+        "notes": "Hosted workflow configured Node24; exact patch version not independently projected."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "Same-source failed-E2E-job retry success; all4 lanes success. No publisher or Pages retry. docs-ci-attempt2-full.log.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-29-release-040-recovery-docs-ci-initial"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-recovery-website-published",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "f2744a2f2a520491345914b0623cdbb9e9ae0dd6",
+      "tree": "7a9e458af0e186aef08ba18274925ee9398b4f61",
+      "revision_kind": "clean committed source",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-recovery-verification",
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "0.40.0 recovery verification",
+      "command": "pnpm --dir website build; pnpm test; Pages/CI watch; fetch deployed whats-new page",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Private isolated clone/worktree; no primary dist rebuild or live restart; deterministic loopback fixtures only."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
+      ],
+      "notes": "Post-acceptance website release entry moved into published releases;27 pages/internal links pass. Pages40898190846 success https://github.com/qduc/term2/actions/runs/40898190846; matching CI40898190880 success attempt2 https://github.com/qduc/term2/actions/runs/40898190880 (initial same restart timeout retained); live published heading verified, pending heading absent, compatibility/live-validation caveats retained.\n ; website-build.log and pages-live.html. No separate frontend deployment."
     }
   ]
 }

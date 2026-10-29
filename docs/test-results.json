@@ -28610,6 +28610,290 @@
         "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/integration-discord-bridge.log"
       ],
       "notes": "Exact bridge file separately executed after initial filter typo. Real child-process/control/bridge integration with local network fixtures; covers attachment-only images, reaction routing and explicit reactions, state/idempotency/recovery. Not live Discord acceptance."
+    },
+    {
+      "id": "2026-10-29-personal-memory-injection-typecheck-build",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "41d8173e01aaf23f6b0705abe93d92d03dd073a7",
+      "revision_kind": "committed_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-injection"
+      ],
+      "suite": "typecheck-build",
+      "command": "pnpm typecheck; pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Isolated feature worktree; local loopback fixtures only. No live coordinator/bridge/runtime/timer/store edits, paid provider calls, pushes or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/final-typecheck.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/final-build.log"
+      ],
+      "notes": "Both exit0 on clean committed final source; assertion counts not applicable."
+    },
+    {
+      "id": "2026-10-29-personal-memory-injection-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "41d8173e01aaf23f6b0705abe93d92d03dd073a7",
+      "revision_kind": "committed_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-injection"
+      ],
+      "suite": "static",
+      "command": "pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Isolated feature worktree; local loopback fixtures only. No live coordinator/bridge/runtime/timer/store edits, paid provider calls, pushes or deployment."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/final-static.log"
+      ],
+      "notes": "Exit0; existing static guards only."
+    },
+    {
+      "id": "2026-10-29-personal-memory-injection-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "41d8173e01aaf23f6b0705abe93d92d03dd073a7",
+      "revision_kind": "committed_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-injection"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Isolated feature worktree; local loopback fixtures only. No live coordinator/bridge/runtime/timer/store edits, paid provider calls, pushes or deployment."
+      },
+      "result": {
+        "passed": 434,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 41,
+        "files_failed": 0,
+        "files_skipped": 1
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/final-integration.log"
+      ],
+      "notes": "Exit0; includes9 personal-memory integration tests crossing real temporary filesystem and normal agent assembly. One skipped test/file not inferred passing."
+    },
+    {
+      "id": "2026-10-29-personal-memory-injection-provider",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "41d8173e01aaf23f6b0705abe93d92d03dd073a7",
+      "revision_kind": "committed_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-injection"
+      ],
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Isolated feature worktree; local loopback fixtures only. No live coordinator/bridge/runtime/timer/store edits, paid provider calls, pushes or deployment."
+      },
+      "result": {
+        "passed": 224,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 29,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/final-provider.log"
+      ],
+      "notes": "Exit0; local fixture suite, no live provider calls. One skipped test not inferred passing."
+    },
+    {
+      "id": "2026-10-29-personal-memory-injection-lint",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "41d8173e01aaf23f6b0705abe93d92d03dd073a7",
+      "revision_kind": "committed_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-injection"
+      ],
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Isolated feature worktree; local loopback fixtures only. No live coordinator/bridge/runtime/timer/store edits, paid provider calls, pushes or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "test": "prettier --check .",
+          "expected": "formatted JSON",
+          "actual": "Code style issues found in docs/test-results.json",
+          "classification": "confirmed-pre-existing-formatting"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/final-lint.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/base-ledger-format.log"
+      ],
+      "notes": "Exit1. ESLint0errors31warnings. Only Prettier docs/test-results.json failure. Ledger unchanged by source diff. Independently reproduced exact-base ledger rejection with git show BASE:docs/test-results.json | pnpm exec prettier --check --stdin-filepath docs/test-results.json (exit1). Historical bytes preserved rather than wholesale reformatted."
+    },
+    {
+      "id": "2026-10-29-personal-memory-injection-focused-lint",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "41d8173e01aaf23f6b0705abe93d92d03dd073a7",
+      "revision_kind": "committed_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-injection"
+      ],
+      "suite": "changed-file-lint-format",
+      "command": "git diff --name-only BASE HEAD | xargs pnpm exec prettier --check; git diff --name-only BASE HEAD -- \"*.ts\" | xargs pnpm exec eslint",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Isolated feature worktree; local loopback fixtures only. No live coordinator/bridge/runtime/timer/store edits, paid provider calls, pushes or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/final-focused-lint.txt"
+      ],
+      "notes": "Both exit0; all8 changed files formatted and changed TypeScript ESLint clean. BASE=96d7a1da7a6865ab386446b3ff3a13f3bb60a573. Full lint failure is recorded separately, not masked by wrapper exit0."
+    },
+    {
+      "id": "2026-10-29-personal-memory-injection-bare-workflow",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "41d8173e01aaf23f6b0705abe93d92d03dd073a7",
+      "revision_kind": "committed_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-injection"
+      ],
+      "suite": "built-cli-pty-workflow",
+      "command": "PERSONAL_BARE_WORKFLOW=1 node --import tsx /home/qduc/coord/term2/tasks/personal-memory-injection/workflow.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Isolated feature worktree; local loopback fixtures only. No live coordinator/bridge/runtime/timer/store edits, paid provider calls, pushes or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/final-bare-workflow.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/bare-workflow-results.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/workflow.mjs"
+      ],
+      "notes": "Exit0 after clean-commit pnpm build. Normal actual-project assembly read-only, then copied7 real personal records in isolated CLI project/store with actual3000char setting. Saved Bare default first receives none; enable copied project opt-in then --resume same savedBare with no profile override includes7/2009UTF16chars; summary edit refresh1910chars; delete refresh6/1622; restart/resume stillBare6/1622; optout none.6localfixture modelrequests, no tools. Original live store deep-equal unchanged. This resolves precommit timing ambiguity of earlier Bare replay; no live saved coordinator session mutated. Counts left null because stages are assertions, not test-case totals."
+    },
+    {
+      "id": "2026-10-29-personal-memory-injection-independent",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "41d8173e01aaf23f6b0705abe93d92d03dd073a7",
+      "revision_kind": "committed_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-injection"
+      ],
+      "suite": "independent-integration-and-review",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/memory/personal-memory.integration.test.ts; bounded temporary tsx filesystem probe",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Isolated feature worktree; local loopback fixtures only. No live coordinator/bridge/runtime/timer/store edits, paid provider calls, pushes or deployment."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/independent-verification.md"
+      ],
+      "notes": "ruddy-citron-217 ACCEPT exact41d8173e, clean isolated verifier tree.9integration tests plus7extra probe checks (overlapping checks not added to suite totals). Reviewed Bare delta plus surrounding request path; earlier verifier accepted original5d7666f3. Parent accepts no mustfix. Extra probes checked memory-enabled project isolation, globaloptin rejection, config removal/unreadability/repair, memoryenabled gate and unchangedindex. Extra probe exact command/output not retained beyond agent completion summary; directory at config path used for unreadability, not OSpermission denial. No fullsuite or liveworkflow claimed as independent."
     }
   ]
 }

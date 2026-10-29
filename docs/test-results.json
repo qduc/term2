@@ -28470,6 +28470,146 @@
       ],
       "notes": "Uncommitted feature-draft failures, not escaped defects. Code-only independent review found both; parent reproduced red then fixed. Green policy checks20/20; queue12/12. Snapshot hash was not captured.",
       "base_commit": "d1c27c1a5e18a1134ac6196e5289ced5152a4803"
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d7aaf500b89fc590be08723e2b5bf399ac9d4eed",
+      "revision_kind": "committed_integrated_feature",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local integration executor; real CLI uses loopback fixture and disposable clock. No live runtime changes or external providers."
+      },
+      "failures": [],
+      "id": "2026-10-29-conversation-time-gap-integration-main",
+      "suite": "build-typecheck-static",
+      "command": "pnpm install --frozen-lockfile && pnpm build && pnpm typecheck && pnpm test",
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/integration-main.log"
+      ],
+      "notes": "Clean local main fast-forwarded from d1c27c1a to d7aaf500; install, build, typecheck and all static guards passed."
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d7aaf500b89fc590be08723e2b5bf399ac9d4eed",
+      "revision_kind": "committed_integrated_feature",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local integration executor; real CLI uses loopback fixture and disposable clock. No live runtime changes or external providers."
+      },
+      "failures": [],
+      "id": "2026-10-29-conversation-time-gap-integration-cli",
+      "suite": "provider-black-box-focused",
+      "command": "pnpm install --frozen-lockfile && pnpm build && NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/conversation-time-gap.blackbox.ts --reporter=verbose",
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/integration-worktree.log"
+      ],
+      "notes": "Normal retained .worktrees/conversation-time-gap checkout; real interactive CLI and filesystem resume; notice counts [0,1,1,2] and exact user text asserted. Two-hour gaps simulated only inside disposable CLI child, not live acceptance."
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d7aaf500b89fc590be08723e2b5bf399ac9d4eed",
+      "revision_kind": "committed_integrated_feature",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local integration executor; real CLI uses loopback fixture and disposable clock. No live runtime changes or external providers."
+      },
+      "failures": [],
+      "id": "2026-10-29-conversation-time-gap-integration-queue-image",
+      "suite": "integration-focused",
+      "command": "NODE_ENV=test TERM2_CI_PREBUILT_CLI=1 pnpm exec vitest run --config vitest.integration.config.ts source/services/queue/restart.integration.test.ts source/services/discord/discord-images.integration.test.ts source/services/discord/bridge.integration.test.ts --reporter=verbose",
+      "result": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/integration-worktree.log"
+      ],
+      "notes": "Actual selected files were queue restart (12 passed) and Discord images (6 passed). Initial bridge filter did not match the repository filename; exact discord-bridge.integration.test.ts is run separately, not counted here."
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d7aaf500b89fc590be08723e2b5bf399ac9d4eed",
+      "revision_kind": "committed_integrated_feature",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local integration executor; real CLI uses loopback fixture and disposable clock. No live runtime changes or external providers."
+      },
+      "failures": [],
+      "id": "2026-10-29-conversation-time-gap-integration-discord-bridge",
+      "suite": "integration-discord-bridge",
+      "command": "NODE_ENV=test TERM2_CI_PREBUILT_CLI=1 pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts --reporter=verbose",
+      "result": {
+        "passed": 112,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/integration-discord-bridge.log"
+      ],
+      "notes": "Exact bridge file separately executed after initial filter typo. Real child-process/control/bridge integration with local network fixtures; covers attachment-only images, reaction routing and explicit reactions, state/idempotency/recovery. Not live Discord acceptance."
     }
   ]
 }

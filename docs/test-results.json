@@ -28894,6 +28894,222 @@
         "/home/qduc/coord/term2/tasks/personal-memory-injection/independent-verification.md"
       ],
       "notes": "ruddy-citron-217 ACCEPT exact41d8173e, clean isolated verifier tree.9integration tests plus7extra probe checks (overlapping checks not added to suite totals). Reviewed Bare delta plus surrounding request path; earlier verifier accepted original5d7666f3. Parent accepts no mustfix. Extra probes checked memory-enabled project isolation, globaloptin rejection, config removal/unreadability/repair, memoryenabled gate and unchangedindex. Extra probe exact command/output not retained beyond agent completion summary; directory at config path used for unreadability, not OSpermission denial. No fullsuite or liveworkflow claimed as independent."
+    },
+    {
+      "id": "2026-10-29-personal-memory-local-integration-build-typecheck",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "0197b71ed5d9011fb96ce0c5f54d48e36a5120ea",
+      "revision_kind": "committed_integrated_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-local-integration"
+      ],
+      "suite": "build-typecheck",
+      "command": "pnpm --dir /home/qduc/term2 install --frozen-lockfile && pnpm --dir /home/qduc/term2 build && pnpm --dir /home/qduc/term2 typecheck; pnpm install --frozen-lockfile && pnpm build (retained checkout)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Main and retained normal .worktrees checkout with separate installed dependencies. Local fixtures/read-only live metadata only; no service/runtime/selector restart or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-main-install.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-main-build.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-main-typecheck.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-retained-install.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-retained-build.log"
+      ],
+      "notes": "All exit0. Fast-forward integrated unchanged candidate to main. Both build stamps0.40.0-dev+0197b71, actual complete dist byte-identical3508files; retained runtime is not active."
+    },
+    {
+      "id": "2026-10-29-personal-memory-local-integration-focused",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "0197b71ed5d9011fb96ce0c5f54d48e36a5120ea",
+      "revision_kind": "committed_integrated_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-local-integration"
+      ],
+      "suite": "integration-focused",
+      "command": "NODE_ENV=test pnpm --dir /home/qduc/term2 exec vitest run --config vitest.integration.config.ts source/services/memory/personal-memory.integration.test.ts --reporter=minimal",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Main and retained normal .worktrees checkout with separate installed dependencies. Local fixtures/read-only live metadata only; no service/runtime/selector restart or deployment."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-main-focused.log"
+      ],
+      "notes": "Exit0 on clean integrated main, real filesystem and normal prompt-assembly boundary."
+    },
+    {
+      "id": "2026-10-29-personal-memory-local-integration-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "0197b71ed5d9011fb96ce0c5f54d48e36a5120ea",
+      "revision_kind": "committed_integrated_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-local-integration"
+      ],
+      "suite": "static",
+      "command": "pnpm --dir /home/qduc/term2 test",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Main and retained normal .worktrees checkout with separate installed dependencies. Local fixtures/read-only live metadata only; no service/runtime/selector restart or deployment."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-main-static.log"
+      ],
+      "notes": "Exit0 on clean integrated main; existing static guards."
+    },
+    {
+      "id": "2026-10-29-personal-memory-local-integration-time-gap",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "0197b71ed5d9011fb96ce0c5f54d48e36a5120ea",
+      "revision_kind": "committed_integrated_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-local-integration"
+      ],
+      "suite": "provider-black-box-focused",
+      "command": "NODE_ENV=test pnpm --dir /home/qduc/term2 exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/conversation-time-gap.blackbox.ts --reporter=minimal",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Main and retained normal .worktrees checkout with separate installed dependencies. Local fixtures/read-only live metadata only; no service/runtime/selector restart or deployment."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-time-gap-compatibility.log"
+      ],
+      "notes": "Exit0. Actual isolated interactive CLI time-gap scenario with saved resume/loopback fixture, not natural live-hour acceptance."
+    },
+    {
+      "id": "2026-10-29-personal-memory-local-integration-bare-workflow",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "0197b71ed5d9011fb96ce0c5f54d48e36a5120ea",
+      "revision_kind": "committed_integrated_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-local-integration"
+      ],
+      "suite": "built-cli-pty-workflow",
+      "command": "PERSONAL_BARE_WORKFLOW=1 node --import tsx /home/qduc/coord/term2/tasks/personal-memory-injection/workflow.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Main and retained normal .worktrees checkout with separate installed dependencies. Local fixtures/read-only live metadata only; no service/runtime/selector restart or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-bare-workflow.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-bare-workflow-results.json"
+      ],
+      "notes": "Exit0 on retained0197b71 built entry. Actual7projectsummary copies in isolated store; initialsavedBaredefaultnone; copiedoptin + sameBare resume7/2009UTF16chars; copyedit1910; copydelete6/1622; restart6/1622; optoutnone;6fixture modelrequests/no tools. Live records deep-equal unchanged. Run preceded authorized live optin creation; old workflow recursively copies optin now and requires isolated-copy-only reset before future defaultoff assertion. No live coordinator/provider invoked."
+    },
+    {
+      "id": "2026-10-29-personal-memory-local-integration-actual-optin",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "0197b71ed5d9011fb96ce0c5f54d48e36a5120ea",
+      "revision_kind": "committed_integrated_feature",
+      "base_commit": "96d7a1da7a6865ab386446b3ff3a13f3bb60a573",
+      "task_ids": [
+        "2026-10-29-personal-memory-local-integration"
+      ],
+      "suite": "project-optin-assembly-and-preservation",
+      "command": "Safe O_EXCL|O_NOFOLLOW descriptor-relative optin creation; node integration-actual-bare.mjs; python3 integration-capture.py before/after; source/build hash comparison",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Main and retained normal .worktrees checkout with separate installed dependencies. Local fixtures/read-only live metadata only; no service/runtime/selector restart or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-optin.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-actual-bare.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-actual-bare-results.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-build-preservation.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-bindings-before.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-bindings-after.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-capture.py",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-actual-bare.mjs"
+      ],
+      "notes": "PASS. Recalculated actualprojectScopeKey/hash matches configured/nightlymemoryroot. Previouslyabsent project personal-context.json exclusively created exact{\"enabled\":true}, uid1000/mode0600; no globaloptin. Fresh actualBare+codex/gpt-6.1-terra assembly7/2009 with no global/body/no modelrequest. Existingrecordfile signatures, selector/config/unitfile hashes, timer properties, currentcontrol/bridgekernelpeer generations and4protectedruntime dist manifests unchanged. No edits to protectedactiveconversation-time-gap or sharedservices/selector/profile/coordinatornotes. Snapshotnot a cutoverbackup or quietownership. Codexcache investigation external/pending; no cache-driven source/config changes."
     }
   ]
 }

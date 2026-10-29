@@ -2862,7 +2862,14 @@ it('delivers an attachment-only Discord image through private storage, control, 
   expect(f.received.coord.length).toBe(2);
   const wire = JSON.stringify(f.received.coord[1]!.input);
   expect(wire).toContain('image');
-  expect(wire).toContain(f.png.toString('base64'));
+  expect(
+    f.received.coord[1]!.input.flatMap((item) =>
+      item.type === 'tool_result' && Array.isArray(item.output) ? item.output : [],
+    ),
+  ).toContainEqual({
+    type: 'image',
+    image: { data: f.png.toString('base64'), mediaType: 'image/png' },
+  });
   const journal = JSON.stringify(f.journal());
   expect(JSON.stringify(f.received.coord[0]!.input)).toContain('read_file');
   for (const data of [wire, journal, f.warnings.join('\n')]) {
@@ -2976,6 +2983,13 @@ it('keeps outside-workspace image reads terminal-approved rather than granting r
   await f.sessions.coord!.service.decideNestedApproval(pending!.requestId, { answer: 'y' });
   await f.cycle(12);
   expect(f.received.coord).toHaveLength(2);
-  expect(JSON.stringify(f.received.coord[1]!.input)).toContain(f.png.toString('base64'));
+  expect(
+    f.received.coord[1]!.input.flatMap((item) =>
+      item.type === 'tool_result' && Array.isArray(item.output) ? item.output : [],
+    ),
+  ).toContainEqual({
+    type: 'image',
+    image: { data: f.png.toString('base64'), mediaType: 'image/png' },
+  });
   expect(f.posted).toEqual([]);
 });

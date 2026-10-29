@@ -108,7 +108,7 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
     process.on('SIGTERM', stop);
     bridge.open();
     await bridge.listenOutbound();
-    // Gateway push is a doorbell for the REST read; set TERM2_DISCORD_GATEWAY=off to poll only.
+    // Gateway wakes REST reads and carries live reaction metadata; off means new-message polling only.
     if (process.env.TERM2_DISCORD_GATEWAY !== 'off') {
       const active = bridge;
       gateway = new DiscordGatewayNudge({
@@ -120,14 +120,32 @@ export async function runDiscordBridge(argv: string[]): Promise<void> {
           if (wake) wake();
           else wakePending = true; // arrived mid-tick: skip the next sleep
         },
+        onReaction: (event) => {
+          try {
+            active.receiveReaction(event);
+          } catch {
+            process.stderr.write('[discord] Reaction persistence failed; bridge stopping, coverage incomplete.\n');
+            process.exitCode = 1;
+            stopping = true;
+            wake?.();
+          }
+          if (wake) wake();
+          else wakePending = true;
+        },
         onLiveChange: (live) => {
           active.setPushLive(live);
-          process.stderr.write(`[discord] Gateway push ${live ? 'connected' : 'unavailable; polling every second'}.\n`);
+          process.stderr.write(
+            `[discord] Gateway push ${
+              live
+                ? 'connected'
+                : 'unavailable; polling new messages every second, reaction coverage unavailable until resume'
+            }.\n`,
+          );
         },
         warn: (message) => process.stderr.write(`[discord] ${message}\n`),
       });
       gateway.start();
-    }
+    } else process.stderr.write('[discord] Gateway off: reaction feedback unavailable; polling new messages only.\n');
     while (!stopping) {
       await bridge.tick();
       if (stopping) break;

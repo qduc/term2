@@ -4223,3 +4223,35 @@ bytes after `read_file`, private permissions, terminal approval and restart.
 Logs: coordinator task `discord-image/support-*.log`. Rollback is confined to the
 staging module, bridge hook and their documentation/tests; no shared frame bound,
 provider policy, session permission or journal schema changes.
+
+## Discord reaction admission and recovery (2026-10-29)
+
+Owner: `DiscordBridge.receiveReaction` / `#ingress` / `#send`; recovery owner:
+operator and existing `#jobs`/`open` result reconciliation. Existing admission
+bounds reused, not recalibrated: 128 combined pending feedback-events/jobs for
+inbound work, 128 queued explicit requests (including react), and projected 16 MiB
+serialized journal for new feedback/explicit admission. No settings/environment,
+clamping or new numeric limit. Direct count/byte signals prevent backlog growth;
+legitimate large feedback histories may be refused with local incomplete-coverage
+warnings. Already admitted work, IDs, uncertain effects and status are preserved.
+Incoming reaction replay uses Gateway session/sequence, not emoji-state guesses.
+Exact acknowledged message ID and originating opted-in socket/session/start binding
+are authority boundaries; unknown/pre-feature/ambiguous mappings are warned and
+never rerouted. Non-steering reaction provenance and noRoute keep feedback from
+answering approvals, interrupting work or creating peer chains. Busy work queues;
+pause holds dispatch; pending interaction refuses with retained local evidence.
+
+PUT adds only a normal bot reaction to the caller's retained inputs/sent chunks.
+Shared Discord 429/header pacing applies; 204 is acknowledgement, conclusive 4xx
+is rejected, ambiguous transport/server/crash-sending is uncertain without retry.
+Repeated PUT could re-add a subsequently removed reaction, so no automatic recovery
+retry is justified. Process restart/new IDENTIFY/offline gaps have no reaction
+history recovery; local diagnostics distinguish this from new-message REST catch-up.
+Tests in `discord-bridge.integration.test.ts` cross loopback Gateway/REST, durable
+journal, Unix sockets and real conversation/provider paths: association, replay,
+fast POST race, pause/replacement, busy/approval, explicit run_code, emoji encoding,
+rate-limit/permission/missing target/transport/server/restart. Existing cap-boundary
+checks remain; focused commands/results are recorded in `docs/test-results.json`.
+No live activation. Rollback must retain extended state; older binaries can refuse
+new optional fields. Independent verification disposition belongs to the task
+ledger/report, not an assumed live-safety claim.

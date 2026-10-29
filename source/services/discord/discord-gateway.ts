@@ -1,20 +1,14 @@
 import WebSocket from 'ws';
+import { discordReactionEvent, type DiscordReactionEvent } from './discord-reactions.js';
 
-/**
- * Discord Gateway "doorbell" for the REST bridge.
- *
- * The Gateway is used only as a low-latency wake-up signal: when the configured human
- * posts in the configured channel, `onNudge` fires and the bridge runs its normal
- * cursor-based REST read. Message content is never taken from the Gateway, so the
- * REST cursor and journal remain the single source of truth and a dropped or duplicated
- * Gateway event can at worst cause one extra or one delayed (fallback-poll) read.
- *
- * Only the non-privileged GUILD_MESSAGES intent is requested; channel and author IDs
- * are enough for a nudge. Credentials and payloads are never included in warnings.
+/** Gateway doorbell for REST messages, plus typed live reaction feedback.
+ * REST cursor recovery covers new messages only; reaction history may have gaps.
+ * Credentials and payloads are never included in warnings.
  */
 
 const DEFAULT_GATEWAY = 'wss://gateway.discord.gg/?v=10&encoding=json';
 const GUILD_MESSAGES = 1 << 9;
+const GUILD_MESSAGE_REACTIONS = 1 << 10;
 /** Close codes after which reconnecting cannot help; the bridge stays on REST polling. */
 const FATAL_CLOSE = new Set([4004, 4010, 4011, 4012, 4013, 4014]);
 /** Close codes that invalidate the session, so the next connection must IDENTIFY. */
@@ -28,6 +22,7 @@ export type DiscordGatewayOptions = {
   humanUserId: string;
   /** Called on a relevant message and after every (re)connect so the bridge can catch up. */
   onNudge: () => void;
+  onReaction?: (event: DiscordReactionEvent) => void;
   /** Called when push becomes available or unavailable. */
   onLiveChange?: (live: boolean) => void;
   warn?: (message: string) => void;
@@ -171,7 +166,7 @@ export class DiscordGatewayNudge {
             op: 2,
             d: {
               token: this.#options.token,
-              intents: GUILD_MESSAGES,
+              intents: GUILD_MESSAGES | GUILD_MESSAGE_REACTIONS,
               properties: { os: process.platform, browser: 'term2', device: 'term2' },
             },
           });
@@ -209,13 +204,35 @@ export class DiscordGatewayNudge {
     const d = payload.d;
     if (payload.t === 'READY' || payload.t === 'RESUMED') {
       if (payload.t === 'READY') {
+        this.#warn(
+          '[gateway] New session: reaction coverage starts now; offline/non-resumable reaction history is unavailable',
+        );
         this.#sessionId = typeof d?.session_id === 'string' ? d.session_id : undefined;
         this.#resumeUrl = typeof d?.resume_gateway_url === 'string' ? d.resume_gateway_url : undefined;
       }
       this.#attempts = 0;
       this.#setLive(true);
-      // Anything posted while disconnected is picked up by the REST cursor.
+      // New messages posted while disconnected are picked up by the REST cursor, not reactions.
       this.#options.onNudge();
+      return;
+    }
+    if (
+      (payload.t === 'MESSAGE_REACTION_ADD' || payload.t === 'MESSAGE_REACTION_REMOVE') &&
+      d?.channel_id === this.#options.channelId &&
+      d?.user_id === this.#options.humanUserId &&
+      this.#sessionId
+    ) {
+      const event = discordReactionEvent.safeParse({
+        sessionId: this.#sessionId,
+        sequence: payload.s,
+        change: payload.t === 'MESSAGE_REACTION_ADD' ? 'added' : 'removed',
+        channelId: d.channel_id,
+        userId: d.user_id,
+        messageId: d.message_id,
+        emoji: d.emoji,
+        type: d.type ?? (d.burst === true ? 1 : 0),
+      });
+      if (event.success) this.#options.onReaction?.(event.data);
       return;
     }
     if (
@@ -247,8 +264,8 @@ export class DiscordGatewayNudge {
       this.#stopped = true;
       this.#warn(
         code === 4004
-          ? '[gateway] Authentication rejected; push disabled, continuing with REST polling'
-          : `[gateway] Closed with non-recoverable code ${code}; push disabled, continuing with REST polling`,
+          ? '[gateway] Authentication rejected; push disabled; REST polls new messages only, reaction coverage unavailable'
+          : `[gateway] Closed with non-recoverable code ${code}; push disabled; REST polls new messages only, reaction coverage unavailable`,
       );
       return;
     }
@@ -263,7 +280,8 @@ export class DiscordGatewayNudge {
   #scheduleReconnect(): void {
     if (this.#stopped) return;
     this.#attempts++;
-    if (this.#attempts === 3) this.#warn('[gateway] Reconnecting; REST polling covers the gap');
+    if (this.#attempts === 3)
+      this.#warn('[gateway] Reconnecting; REST polls new messages only, reactions may have gaps');
     const base = Math.min(60_000, 1000 * 2 ** Math.min(6, this.#attempts - 1));
     const delay = Math.floor(base / 2 + Math.random() * (base / 2));
     clearTimeout(this.#reconnectTimer);

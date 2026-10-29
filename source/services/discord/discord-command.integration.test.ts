@@ -73,7 +73,7 @@ it.each(['push', 'off', 'blackhole-recovery', 'blackhole-stop'])(
         const frame = JSON.parse(String(data));
         if (frame.op === 2) {
           expect(frame.d.token).toBe('OFFLINE_RUNNER_TOKEN');
-          expect(frame.d.intents).toBe(1 << 9);
+          expect(frame.d.intents).toBe((1 << 9) | (1 << 10));
           identified = true;
         }
         if (frame.op === 1) client.send(JSON.stringify({ op: 11 }));

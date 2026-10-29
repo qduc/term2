@@ -44,7 +44,8 @@ export interface BridgeInput {
   sessionId: string;
   origin:
     | { kind: 'human'; sender: string; discordMessageId?: string; relayedBy?: string }
-    | { kind: 'agent'; sender: string };
+    | { kind: 'agent'; sender: string }
+    | { kind: 'reaction'; sender: string };
 }
 
 export interface BridgeOutcome {
@@ -608,7 +609,7 @@ export class ControlSocketServer {
           !params.origin ||
           typeof params.origin !== 'object' ||
           Array.isArray(params.origin) ||
-          !['human', 'agent'].includes(params.origin.kind) ||
+          !['human', 'agent', 'reaction'].includes(params.origin.kind) ||
           typeof params.origin.sender !== 'string' ||
           (params.origin.kind === 'human'
             ? !/^[0-9]{1,24}$/.test(params.origin.sender) ||
@@ -622,8 +623,9 @@ export class ControlSocketServer {
               Object.keys(params.origin).some(
                 (key) => !['kind', 'sender', 'discordMessageId', 'relayedBy'].includes(key),
               )
-            : !/^[A-Za-z0-9_-]{1,64}$/.test(params.origin.sender) ||
-              Object.keys(params.origin).some((key) => !['kind', 'sender'].includes(key)))
+            : !(params.origin.kind === 'reaction' ? /^[0-9]{1,24}$/ : /^[A-Za-z0-9_-]{1,64}$/).test(
+                params.origin.sender,
+              ) || Object.keys(params.origin).some((key) => !['kind', 'sender'].includes(key)))
         ) {
           reply(false, undefined, 'invalid_request', 'Invalid bridge input');
           return helloSeen;

@@ -27,7 +27,7 @@ approve a tool call or answer a local approval prompt.
    See [Discord's privileged-intent documentation](https://docs.discord.com/developers/events/gateway#privileged-intents)
    for enabling the intent and any approval requirements. Without access, REST
    message content may be empty. Message content is always read over REST; the
-   optional Gateway connection is only a wake-up signal (see [Gateway push](#gateway-push)).
+   optional Gateway connection wakes new-message reads and carries live reaction feedback (see [Gateway push](#gateway-push)).
 3. **Obtain your channel ID and your own human user ID**, not names. Discord's
    [official ID guide](https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID)
    explains Developer Mode and copying user/channel IDs. UI labels and locations
@@ -480,7 +480,7 @@ but their answers remain terminal-only. The normal registry projection exposes i
 in `run_code` (including Bare), not a new JavaScript global. No bridge need be
 running when the agent is constructed.
 
-The input is `{action:"send",requestId,text}` or `{action:"status",requestId}`.
+The input is `{action:"send",requestId,text}`, `{action:"react",requestId,messageId,emoji}` or `{action:"status",requestId}`. See [Reactions](#reactions) for target and emoji restrictions.
 Request IDs contain 1–64 ASCII letters, digits, `_` or `-`; text is nonblank and at
 most 16,384 UTF-16 units, never silently truncated. Use a fresh key for a new
 notification. Reuse the same key only to reconcile that notification. The bridge resolves
@@ -505,9 +505,8 @@ POST, retained without automatic resend; chunk counts expose partial outcomes.
 `unknown` means the send RPC may have reached the bridge before disconnection:
 inspect status using the **same request ID**, never automatically invent a new ID.
 `unavailable` means no mutation frame was attempted; `missing` is not delivery
-proof. `rejected` means no new admission (invalid input, changed identity, pause,
-key conflict or capacity). Identical send replay returns the existing status;
-changed text with the same key conflicts. Restart never automatically replays tool
+proof. `rejected` means no new admission for invalid input, changed identity, pause, key conflict or capacity; an admitted reaction can also settle rejected after a conclusive Discord HTTP 4xx response. Identical send replay returns the existing status;
+changed action/text/target/emoji with the same key conflicts. Restart never automatically replays tool
 calls, and any durable `sending` chunk becomes `uncertain`.
 
 New proactive admissions are limited to 128 queued requests (the existing inbox
@@ -534,6 +533,79 @@ is added. Existing version 1 journals are refused with a fresh-`stateDir` messag
 incompatible new shapes fail closed without rewriting the file. Preserve the old
 journal on rollback; do not run an older bridge executable against a version 2
 journal, and do not run this bridge against a version 1 journal.
+
+## Reactions
+
+Human add/remove reactions on **acknowledged explicit assistant sends** are live
+feedback for the exact originating socket/session/process binding, not for the
+current coordinator or an alias replacement. Each text POST now stores Discord's
+returned message ID with the chunk; send/status exposes `messageIds` in chunk order
+(only acknowledged IDs, possibly partial). Feedback includes the configured human,
+add/remove, Unicode or custom emoji ID/name, normal/burst type, exact message ID,
+send request ID, chunk position and the stored chunk text. It is visible as a
+server message and model context, not attached to a guessed/latest turn.
+
+Gateway metadata is journaled before dispatch, including if it arrives before the
+POST acknowledgement. Gateway session/sequence suppresses replay without suppressing
+add → remove → add. Feedback uses the existing work inbox, control result recovery,
+pause and exact identity checks, with a `reaction` provenance discriminator and
+`noRoute`. Busy sessions receive a follow-up, never steering. Terminal/nested
+approval or question state refuses admission and retains the feedback locally;
+a reaction cannot answer a prompt, resume a paused bridge, grant permissions or
+route the resulting final to another session. There is no automatic Discord reply
+or reaction in response to feedback.
+
+For an explicit assistant reaction, use e.g.
+`{action:"react",requestId:"ack_request",messageId:"123",emoji:"👍🏽"}`.
+The same eligible opted-in interactive root/capability/profile and private RPC own
+this action; no new token, alias/channel override or subagent capability is added.
+Targets must be the calling binding's retained admitted human inputs (including
+completed jobs until existing trimming removes them) or acknowledged explicit sent
+chunks. Other/unknown/expired targets are rejected as `unknown_target`. This is not
+arbitrary channel-history access. Unicode input is one emoji grapheme, preserving
+skin tones, variation selectors, flags, keycaps and joined sequences. Custom input
+uses accessible `name:id` (e.g. `shipit:444`), not `<:name:id>` or `:shortcode:`;
+the whole segment is URL-encoded once. Deleted custom names on inbound feedback
+may be null; the ID is still shown. Outbound is normal add-only: no own removal,
+super reactions, moderation or emoji management. Incoming individual removals are
+supported; bulk REMOVE_ALL/REMOVE_EMOJI lack actor identity and are ignored, so
+feedback is an event stream, **not a current reaction-state inventory**.
+
+Discord requires View Channel and Read Message History; Add Reactions is needed
+to introduce an emoji not already on the message. Custom emoji can be unavailable,
+role-restricted or need Use External Emojis. No Administrator/Manage Messages grant
+is needed. Reaction status includes `reaction:{messageId,emoji}`. `sent` means
+Discord acknowledged the PUT with an empty 204, not that the reaction remains
+forever. HTTP 400/401/403/404 settle with redacted `invalid_reaction`,
+`authentication`, `permission`, or `missing_message` reasons. Shared rate-limit
+headers/429 delay keep it queued. Transport, unexpected acknowledgement or server
+failure is `uncertain`; even idempotent PUT is not automatically retried because
+it could re-add something deliberately removed after the original effect.
+A crash with durable `sending` likewise becomes uncertain. Same-key replay/status
+reconciles the operation, not a fresh-ID retry.
+
+**Coverage limits:** Gateway Resume may replay some transient disconnects. Process
+restart, fresh IDENTIFY/non-resumable sessions, disabled/failed Gateway, receipt
+before durable admission, and capacity refusal can lose reaction events. Startup,
+new Gateway sessions, disconnect/fatal/off and admission errors emit local coverage
+diagnostics; REST polling recovers new messages only. No reactor snapshots,
+history backfill or promise of complete offline reaction history is made. Old
+pre-feature sends lack Discord message IDs and ambiguous sends lack acknowledged
+mapping: those reactions remain unassociated with a local warning, never guessed
+from content, alias, author or latest turn. Admitted events survive bridge restart;
+session-process loss still uses the existing uncertain/manual reconciliation path.
+The 128 pending inbox and 16 MiB projected journal budgets also apply to new
+reaction feedback; refusal logs incomplete coverage and leaves accepted work intact.
+Keep extended journals on rollback: old binaries may refuse the new optional fields;
+do not erase mapping/uncertainty to make an older binary accept them.
+
+Official contracts: [Create Reaction](https://docs.discord.com/developers/resources/message#create-reaction),
+[Gateway reaction events](https://docs.discord.com/developers/events/gateway-events#message-reaction-add),
+[Gateway intents and resume](https://docs.discord.com/developers/events/gateway), and
+[Emoji object](https://docs.discord.com/developers/resources/emoji#emoji-object).
+Offline protocol fixtures verify these paths; live Discord permissions, mobile
+rendering, actual custom emoji access and real-provider semantic behavior are not
+established by them.
 
 ## Offline evidence and optional authorized live smoke
 

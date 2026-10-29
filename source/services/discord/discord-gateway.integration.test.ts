@@ -86,7 +86,7 @@ it('identifies with only the non-privileged intent and nudges only for the confi
   await g.until(() => !!g.frame(0, 2)());
   const identify = g.frame(0, 2)()!;
   expect(identify.d.token).toBe('OFFLINE_FIXTURE_TOKEN');
-  expect(identify.d.intents).toBe(1 << 9);
+  expect(identify.d.intents).toBe((1 << 9) | (1 << 10));
 
   g.dispatch(0, 1, 'READY', { session_id: 'session-1', resume_gateway_url: g.url });
   await g.until(() => events.nudges === 1);

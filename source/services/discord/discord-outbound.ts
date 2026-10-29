@@ -11,6 +11,7 @@ export interface DiscordBinding {
 }
 export type DiscordSendInput =
   | { action: 'send'; requestId: string; text: string }
+  | { action: 'react'; requestId: string; messageId: string; emoji: string }
   | { action: 'status'; requestId: string };
 export interface DiscordSendResult {
   requestId: string;
@@ -19,7 +20,9 @@ export interface DiscordSendResult {
   capacity?: { kind: 'pending' | 'journal_bytes'; used: number; limit: number };
   channelId?: string;
   senderAlias?: string;
-  chunks?: { queued: number; sent: number; uncertain: number };
+  chunks?: { queued: number; sent: number; uncertain: number; rejected?: number };
+  messageIds?: string[];
+  reaction?: { messageId: string; emoji: string };
 }
 interface Advertisement {
   v: 1;
@@ -245,7 +248,7 @@ export async function sendDiscord(
       resolve(
         value ?? {
           requestId: input.requestId,
-          delivery: attempted && input.action === 'send' ? 'unknown' : 'unavailable',
+          delivery: attempted && input.action !== 'status' ? 'unknown' : 'unavailable',
         },
       );
     };
@@ -274,11 +277,20 @@ export async function sendDiscord(
               JSON.stringify({
                 v: 1,
                 id: 'call',
-                method: input.action === 'send' ? 'discord_send' : 'discord_send_status',
+                method:
+                  input.action === 'status'
+                    ? 'discord_send_status'
+                    : input.action === 'react'
+                    ? 'discord_react'
+                    : 'discord_send',
                 params: {
                   binding,
                   requestId: input.requestId,
-                  ...(input.action === 'send' ? { text: input.text } : {}),
+                  ...(input.action === 'send'
+                    ? { text: input.text }
+                    : input.action === 'react'
+                    ? { messageId: input.messageId, emoji: input.emoji }
+                    : {}),
                 },
               }) + '\n',
             );

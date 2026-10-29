@@ -23880,6 +23880,639 @@
         "Full integration/e2e/provider lanes not rerun locally for YAML-only integration; reused hosted lanes remain mandatory before merge.",
         "No push; local origin/main may be stale. Publication must reconcile then-current remote main and authorize all local main history."
       ]
+    },
+    {
+      "id": "2026-10-29-ci-failure-hosted-test",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T08:19:19Z",
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "revision_kind": "historical hosted run observation",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "hosted CI lane test",
+      "command": "pnpm exec node scripts/run-ci-lane.mjs test",
+      "environment": {
+        "runner_label": "ubuntu-22.04",
+        "node_version": "v24.21.0",
+        "pnpm_version": "11.7.0",
+        "actual_os_version": null
+      },
+      "result": {
+        "passed": 104,
+        "failed": 2,
+        "skipped": 0,
+        "files_passed": 10,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [{ "summary": "Bare flag/config scenario2110 expected3tools; received extra run_subagent." }],
+      "notes": "Run40841284146 at requested main revision. Provider-black-box job succeeded; its counts were not fetched and are not inferred. All three failing jobs built successfully.",
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/40841284146",
+        "/home/qduc/coord/term2/tasks/ci-failure/ci-failed-clean.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-ci-failure-hosted-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T08:19:19Z",
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "revision_kind": "historical hosted run observation",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "hosted CI lane integration",
+      "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+      "environment": {
+        "runner_label": "ubuntu-22.04",
+        "node_version": "v24.21.0",
+        "pnpm_version": "11.7.0",
+        "actual_os_version": null
+      },
+      "result": {
+        "passed": 343,
+        "failed": 1,
+        "skipped": 1,
+        "files_passed": 37,
+        "files_failed": 1,
+        "files_skipped": 1,
+        "exit_code": 1
+      },
+      "failures": [
+        { "summary": "Repair deadline fixture797 expected repair; received blocked before run loop start." }
+      ],
+      "notes": "Run40841284146 at requested main revision. Provider-black-box job succeeded; its counts were not fetched and are not inferred. All three failing jobs built successfully.",
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/40841284146",
+        "/home/qduc/coord/term2/tasks/ci-failure/ci-failed-clean.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-ci-failure-hosted-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T08:19:19Z",
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "revision_kind": "historical hosted run observation",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "hosted CI lane e2e",
+      "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
+      "environment": {
+        "runner_label": "ubuntu-latest",
+        "node_version": "v24.21.0",
+        "pnpm_version": "11.7.0",
+        "actual_os_version": null
+      },
+      "result": {
+        "passed": 87,
+        "failed": 1,
+        "skipped": 4,
+        "files_passed": 12,
+        "files_failed": 1,
+        "files_skipped": 1,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "summary": "Restart background ownership PTY40000ms timeout; visible Allow this action shell approval. E2E setup does not request sandbox dependency install."
+        }
+      ],
+      "notes": "Run40841284146 at requested main revision. Provider-black-box job succeeded; its counts were not fetched and are not inferred. All three failing jobs built successfully.",
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/40841284146",
+        "/home/qduc/coord/term2/tasks/ci-failure/ci-failed-clean.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-ci-failure-build",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": null,
+      "revision_kind": "clean base source",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "SKIP_BUILD_BACKUP=1 pnpm build",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Build succeeded in isolated checkout; implementation edits change tests only, not shipped CLI.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/build.log"]
+    },
+    {
+      "id": "2026-10-29-ci-failure-baseline-bare",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": null,
+      "revision_kind": "clean base source; built CLI from same source",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "TERM2_CI_PREBUILT_CLI=1 pnpm test:integration source/cli-headless.integration.test.ts -t 'bare profile'",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 2,
+        "skipped": 31,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "summary": "2failed/31skipped; both flag/config cases expect3tools but receive run_subagent as fourth at scenario2110."
+        }
+      ],
+      "notes": "2failed/31skipped; both flag/config cases expect3tools but receive run_subagent as fourth at scenario2110.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/bare-red.log"]
+    },
+    {
+      "id": "2026-10-29-ci-failure-baseline-deadline",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": null,
+      "revision_kind": "clean base source; built CLI from same source",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm test:integration source/services/completion-verification/completion-verification.integration.test.ts -t 'repair deadline stops'",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 38,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "1passed/38skipped on faster local host; not evidence against a150ms setup race.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/deadline-baseline.log"]
+    },
+    {
+      "id": "2026-10-29-ci-failure-baseline-restart",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": null,
+      "revision_kind": "clean base source; built CLI from same source",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm test:e2e scripts/restart-work.e2e.test.ts -t 'real background ownership'",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 3,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "1passed/3skipped while local sandbox dependencies exist; CI dependency conditions differ.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/restart-red.log"]
+    },
+    {
+      "id": "2026-10-29-ci-failure-deadline-delay-red",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": null,
+      "revision_kind": "temporary dirty probe; not a clean-commit run",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "See probes.py and log preamble; temporary controlled fixture intervention",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 38,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "summary": "Temporary200ms currentRevision delay on original150ms wall-clock test reproduces blocked-vs-repair failure before model start."
+        }
+      ],
+      "notes": "Temporary200ms currentRevision delay on original150ms wall-clock test reproduces blocked-vs-repair failure before model start.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/deadline-delayed-red.log"]
+    },
+    {
+      "id": "2026-10-29-ci-failure-restart-missing-deps-red",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": null,
+      "revision_kind": "temporary dirty probe; not a clean-commit run",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "See probes.py and log preamble; temporary controlled fixture intervention",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 3,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "summary": "Original test plus child-only which shim hides bwrap/socat: same40000ms PTY wait and Allow this action UI as hosted. Other dependency lookup delegates to /usr/bin/which."
+        }
+      ],
+      "notes": "Original test plus child-only which shim hides bwrap/socat: same40000ms PTY wait and Allow this action UI as hosted. Other dependency lookup delegates to /usr/bin/which.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/restart-no-deps-red.log"]
+    },
+    {
+      "id": "2026-10-29-ci-failure-restart-missing-deps-green",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": null,
+      "revision_kind": "temporary dirty probe; not a clean-commit run",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "See probes.py and log preamble; temporary controlled fixture intervention",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 3,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Same child-only missing-dependency condition with saved always/disabled fixture settings passes1test/3skipped.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/restart-no-deps-green.log"]
+    },
+    {
+      "id": "2026-10-29-ci-failure-deadline-delay-green",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": null,
+      "revision_kind": "temporary dirty probe; not a clean-commit run",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "See probes.py and log preamble; temporary controlled fixture intervention",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 38,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Final fake task clock plus same200ms real snapshot delay passes1test/38skipped; real Git/SQLite remain exercised.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/deadline-delayed-green.log"]
+    },
+    {
+      "id": "2026-10-29-ci-failure-typecheck",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm typecheck",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Final source tree static check.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/typecheck.log"],
+      "elapsed_seconds": 3.02
+    },
+    {
+      "id": "2026-10-29-ci-failure-lint",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm lint",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "summary": "ESLint0errors/31warnings; Prettier fails only pre-existing docs/test-results.json. Same HEAD ledger fails Prettier via stdin (base-ledger-format.log); changed source files pass focused checks. No unrelated wholesale ledger formatting."
+        }
+      ],
+      "notes": "ESLint0errors/31warnings; Prettier fails only pre-existing docs/test-results.json. Same HEAD ledger fails Prettier via stdin (base-ledger-format.log); changed source files pass focused checks. No unrelated wholesale ledger formatting.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lint.log"],
+      "elapsed_seconds": 39.91
+    },
+    {
+      "id": "2026-10-29-ci-failure-no-unit-tests",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm check:no-unit-tests",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Final source tree static check.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/no-unit-tests.log"],
+      "elapsed_seconds": 0.87
+    },
+    {
+      "id": "2026-10-29-ci-failure-diff-check",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "git diff --cached --check",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Final source tree static check.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/diff-check.log"],
+      "elapsed_seconds": 0.01
+    },
+    {
+      "id": "2026-10-29-ci-failure-lane-test",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm exec node scripts/run-ci-lane.mjs test",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 106,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 11,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Exact CI lane inventory and maxWorkers=3; all discovered files assigned by repository lane runner.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lane-test.log"],
+      "elapsed_seconds": 41.42
+    },
+    {
+      "id": "2026-10-29-ci-failure-lane-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 344,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 38,
+        "files_failed": 0,
+        "files_skipped": 1,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Exact CI lane inventory and maxWorkers=3; all discovered files assigned by repository lane runner.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lane-integration.log"],
+      "elapsed_seconds": 79.6
+    },
+    {
+      "id": "2026-10-29-ci-failure-lane-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 92,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 14,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Exact CI lane inventory and maxWorkers=3; all discovered files assigned by repository lane runner.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lane-e2e.log"],
+      "elapsed_seconds": 83.96
+    },
+    {
+      "id": "2026-10-29-ci-failure-lane-provider-black-box",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm exec node scripts/run-ci-lane.mjs provider-black-box",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": 167,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 22,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Exact CI lane inventory and maxWorkers=3; all discovered files assigned by repository lane runner.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lane-provider-black-box.log"],
+      "elapsed_seconds": 43.71
+    },
+    {
+      "id": "2026-10-29-ci-failure-focused-style",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "afde70a94e3c8af8ce545497079b189b7f9045c2",
+      "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
+      "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
+      "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
+      "task_ids": ["2026-10-29-ci-failure"],
+      "suite": "CI failure investigation",
+      "command": "pnpm exec eslint <3changedfiles>; pnpm exec prettier --check <3changedfiles>",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated ci-oct29 checkout; own frozen-lockfile install; no paid providers or external workflow mutations. Loopback provider fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Both commands exit0; ESLint ignores scripts/restart-work.e2e.test.ts under existing repository configuration (one warning). Prettier checks all3; typecheck covers project. See focused-eslint.log and base-ledger-format.log too.",
+      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/focused-prettier.log"]
     }
   ]
 }

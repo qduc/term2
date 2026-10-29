@@ -23684,6 +23684,202 @@
         "/home/qduc/coord/term2/tasks/dirty-commit/evidence/feature-commit.log"
       ],
       "registry_sha256": "58ea404afd304ec80c675cb19d02b37551b41d6b79309604ec52f57c886d5ccf"
+    },
+    {
+      "id": "2026-10-29-catalog-auto-merge",
+      "task_ids": [
+        "2026-10-29-catalog-auto-merge"
+      ],
+      "recorded_at": "2026-10-29T06:07:30.546974+00:00",
+      "commit": "5203b5fad8eea318f044025f0d24f882cf8be540",
+      "dirty": false,
+      "environment": "Linux x64 container; Node v24.19.0; pnpm 11.20.0; isolated normal .worktrees/catalog-auto-merge checkout; frozen-lockfile install.",
+      "tiers": [
+        {
+          "name": "isolated-build",
+          "command": "SKIP_BUILD_BACKUP=1 pnpm build",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0
+          },
+          "notes": "Only isolated worktree dist built. Primary/live/armed builds untouched."
+        },
+        {
+          "name": "repository-guards",
+          "command": "pnpm test",
+          "exit": 0,
+          "result": {
+            "passed": 28,
+            "failed": 0,
+            "files_passed": 7,
+            "files_failed": 0
+          }
+        },
+        {
+          "name": "workflow-syntax",
+          "command": "actionlint 1.7.12 -shellcheck= -pyflakes= .github/workflows/ci.yml .github/workflows/model-catalog-update.yml; pnpm exec prettier --check .github/workflows/ci.yml .github/workflows/model-catalog-update.yml; git diff --check",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0
+          },
+          "notes": "Shell scripts separately passed bash -n. Shellcheck/pyflakes unavailable, disabled in actionlint."
+        },
+        {
+          "name": "temporary-workflow-boundary-probes",
+          "command": "python3 /home/qduc/coord/term2/tasks/catalog-auto-merge/verify_workflow.py",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0
+          },
+          "notes": "Actual workflow bash extracted from YAML; real local bare Git remote, fake gh boundary only. No-change, new PR, existing PR, catalog-only staging, SHA outputs and merge failure propagation passed. YAML checks cover main-only updater, success dependency gates, four unchanged CI lane commands, read-only CI and event-SHA checkout fallback. Before/after proves original workflow had no merge command. Not a hosted GitHub run."
+        },
+        {
+          "name": "independent-workflow-review",
+          "command": "Independent term2/codex gpt-6-luna high review of workflow diff against e2cb5b8e; actionlint and git diff --check",
+          "exit": 0,
+          "result": {
+            "passed": null,
+            "failed": 0
+          },
+          "notes": "Accepted with no actionable findings. Review: coordinator tasks/catalog-auto-merge/review.md. Read-only gh confirmed settings; no external writes."
+        }
+      ],
+      "uncertain": [
+        "No hosted workflow dispatch or live token/merge decision exercised; no remote writes authorized.",
+        "Full integration/e2e/provider suites not rerun locally for YAML-only change; all four existing hosted CI lanes are reused as mandatory predecessors to merge.",
+        "Future required PR status contexts may not be satisfied by schedule-context reusable CI; merge will honor those rules rather than bypass them."
+      ],
+      "notes": "Live read-only evidence: PR #36 github-actions[bot], no checks or auto-merge request; auto-merge disabled; squash allowed; main branch protection absent and branch rules empty. Explicit updater write permission means default read workflow permission is not the cause. No new secrets/settings required by this design. Evidence artifacts at /home/qduc/coord/term2/tasks/catalog-auto-merge/.",
+      "measurement": {
+        "activity": "delivery",
+        "completion": {
+          "status": "author-complete",
+          "author_completed_at": "2026-10-29T06:07:30.546974+00:00",
+          "accepted_at": null,
+          "accepted_commit": null,
+          "evidence_run_ids": [
+            "2026-10-29-catalog-auto-merge"
+          ]
+        },
+        "unknowns": [
+          "Hosted activation and coordinator integration pending; actor effort and tokens not attributed."
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-catalog-auto-merge-local-integration",
+      "task_ids": [
+        "2026-10-29-catalog-auto-merge-local-integration"
+      ],
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T06:27:12.789299+00:00",
+      "commit": "700348d4f874ee10f1b490c430ea47be4e236968",
+      "base_commit": "01a73c840e68c7d3419809aee36eed7e887c1c20",
+      "original_source_commit": "5203b5fad8eea318f044025f0d24f882cf8be540",
+      "revision_kind": "committed_cherry_pick_on_current_main",
+      "suite": "workflow-integration",
+      "command": "pnpm build; actionlint -shellcheck= -pyflakes= .github/workflows/ci.yml .github/workflows/model-catalog-update.yml; node scripts/run-test.mjs --maxWorkers=1; python3 integrate-evidence/verify_integrated_workflow.py; prettier --check changed workflows; node scripts/check-no-unit-tests.mjs; git diff HEAD^ HEAD --check",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "actionlint_version": "1.7.12",
+        "build": "Normal primary pnpm build after local cherry-pick; no install or build in live/armed worktrees.",
+        "checks": "Installed repository tools under unshare -Urn, synthetic HOME and explicit credential-free environment, namespace loopback only. Real local Git bare remote and stub gh; actionlint itself is a local static check. Official actionlint binary downloaded and checksum verified; no remote mutation."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "notes": "Counts cover existing static guards only; workflow shell/DAG fixtures and actionlint separately passed, not extra guard test counts."
+      },
+      "checks": [
+        {
+          "name": "guards",
+          "command": [
+            "node",
+            "scripts/run-test.mjs",
+            "--maxWorkers=1"
+          ],
+          "exit": 0,
+          "seconds": 3.075
+        },
+        {
+          "name": "workflow-probes",
+          "command": [
+            "python3",
+            "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/verify_integrated_workflow.py"
+          ],
+          "exit": 0,
+          "seconds": 0.374
+        },
+        {
+          "name": "workflow-format",
+          "command": [
+            "/home/qduc/term2/node_modules/.bin/prettier",
+            "--check",
+            ".github/workflows/ci.yml",
+            ".github/workflows/model-catalog-update.yml"
+          ],
+          "exit": 0,
+          "seconds": 0.206
+        },
+        {
+          "name": "no-unit-tests",
+          "command": [
+            "node",
+            "scripts/check-no-unit-tests.mjs"
+          ],
+          "exit": 0,
+          "seconds": 0.031
+        },
+        {
+          "name": "diff-check",
+          "command": [
+            "git",
+            "diff",
+            "HEAD^",
+            "HEAD",
+            "--check"
+          ],
+          "exit": 0,
+          "seconds": 0.002
+        },
+        {
+          "command": [
+            "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/tools/actionlint",
+            "-shellcheck=",
+            "-pyflakes=",
+            ".github/workflows/ci.yml",
+            ".github/workflows/model-catalog-update.yml"
+          ],
+          "exit": 0,
+          "seconds": 0.003,
+          "version": "1.7.12",
+          "notes": "shellcheck/pyflakes unavailable and disabled, as in accepted review; extracted run scripts separately checked by bash -n in workflow fixture"
+        }
+      ],
+      "failures": [],
+      "notes": "Exact accepted two-workflow source cherry-picked onto current main without modifying later Bare/evidence commits. Prior main remains ancestor; integrated workflow blobs equal 5203b5fa. Local no-op/new/existing PR shell paths, catalog-only staging, SHA outputs, exact-head merge invocation, failure propagation, four-lane success dependencies, least privilege and normal event-SHA fallback passed. Only source commit cherry-picked; original author evidence imported by object as new append, not old full ledgers. Independent source review remains applicable because workflow bytes are identical. Hooks disabled per operation to avoid lint-staged stash/ledger formatting; no-unit/diff and focused workflow formatting checked explicitly.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/cherry-pick.log",
+        "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/build.log",
+        "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/check-results.json",
+        "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/guards.log",
+        "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/workflow-probes.log",
+        "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/actionlint-result.json",
+        "/home/qduc/coord/term2/tasks/catalog-auto-merge/integrate-evidence/actionlint-provenance.json",
+        "/home/qduc/coord/term2/tasks/catalog-auto-merge/review.md"
+      ],
+      "uncertain": [
+        "No hosted workflow dispatch, PR merge, token enforcement or scheduling/check-attribution verification; no remote settings changed.",
+        "Full integration/e2e/provider lanes not rerun locally for YAML-only integration; reused hosted lanes remain mandatory before merge.",
+        "No push; local origin/main may be stale. Publication must reconcile then-current remote main and authorize all local main history."
+      ]
     }
   ]
 }

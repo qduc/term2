@@ -89,8 +89,8 @@ model to read the checkout's AGENTS.md and `~/.agents/AGENTS.md` when it starts
 working in a checkout, and scoped instructions before editing. The same applies to
 remote sessions through the remote shell. Bare includes the skills catalog
 (the model loads a skill by reading its SKILL.md through the shell) and a short
-environment line (OS, shell, cwd, home, date; no top-level tree). Delegation
-remains omitted.
+environment line (OS, shell, cwd, home, date; no top-level tree). Delegation uses
+the existing subagent runtime when the session supplies it; authority restrictions still apply.
 Missing capabilities must be reported, not silently skipped.
 
 Bare carries no tool for what the shell can do: file reads, search, edits, and

@@ -153,7 +153,17 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
       // tools are script-only too.
       tools: {
         kind: 'tools',
-        include: ['shell', 'skills', 'web', 'memory', 'sessions', 'mcp', 'background-tasks', 'discord-send'],
+        include: [
+          'shell',
+          'skills',
+          'web',
+          'memory',
+          'sessions',
+          'mcp',
+          'background-tasks',
+          'discord-send',
+          'subagents',
+        ],
       },
       enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
       presentation: { kind: 'presentation', displayName: 'Bare', label: 'BARE', color: 'cyan' },

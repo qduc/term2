@@ -24592,6 +24592,378 @@
         "/tmp/restart-menu-lint.log",
         "/tmp/restart-menu-lint-clean.log"
       ]
+    },
+    {
+      "id": "2026-10-29-release-040-release-gates",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6db75ebd151e73f277c7cde66eda6b568fac4f02",
+      "tree": "84b2fb0a03514101d839845a00c0ae76fef18a9f",
+      "revision_kind": "dirty pre-review release-preparation snapshot; exact tree retained",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm typecheck; pnpm exec eslint source; pnpm exec prettier --check source package.json CHANGELOG.md; pnpm build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Each command exited 0. Source ESLint has warnings, not errors. Exact normal release-script health checks executed directly because even --no-push would create a prohibited tag. Later review correction changes only README.md, CHANGELOG.md and sessions guide; source/scripts/package/config bytes are unchanged.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/typecheck.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/source-eslint.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/source-format.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/build.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6db75ebd151e73f277c7cde66eda6b568fac4f02",
+      "tree": "84b2fb0a03514101d839845a00c0ae76fef18a9f",
+      "revision_kind": "dirty pre-review release-preparation snapshot; exact tree retained",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Completed full standalone tier; not a shared CI lane count. Product source, package.json and test/build configuration match final preparation source 9548d5ad757cd3072d20b3aadcfd7b69477da3fd byte-for-byte; final source differs from this exact dirty tree only in three documentation files. No claim of tagged-artifact or live-provider validation.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/static.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6db75ebd151e73f277c7cde66eda6b568fac4f02",
+      "tree": "84b2fb0a03514101d839845a00c0ae76fef18a9f",
+      "revision_kind": "dirty pre-review release-preparation snapshot; exact tree retained",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": 400,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 39,
+        "files_failed": 0,
+        "files_skipped": 1,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Completed full standalone tier; not a shared CI lane count. Product source, package.json and test/build configuration match final preparation source 9548d5ad757cd3072d20b3aadcfd7b69477da3fd byte-for-byte; final source differs from this exact dirty tree only in three documentation files. No claim of tagged-artifact or live-provider validation.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/integration.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6db75ebd151e73f277c7cde66eda6b568fac4f02",
+      "tree": "84b2fb0a03514101d839845a00c0ae76fef18a9f",
+      "revision_kind": "dirty pre-review release-preparation snapshot; exact tree retained",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": 58,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 11,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Completed full standalone tier; not a shared CI lane count. Product source, package.json and test/build configuration match final preparation source 9548d5ad757cd3072d20b3aadcfd7b69477da3fd byte-for-byte; final source differs from this exact dirty tree only in three documentation files. No claim of tagged-artifact or live-provider validation.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/e2e.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-provider-black-box",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6db75ebd151e73f277c7cde66eda6b568fac4f02",
+      "tree": "84b2fb0a03514101d839845a00c0ae76fef18a9f",
+      "revision_kind": "dirty pre-review release-preparation snapshot; exact tree retained",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": 223,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 28,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Completed full standalone tier; not a shared CI lane count. Product source, package.json and test/build configuration match final preparation source 9548d5ad757cd3072d20b3aadcfd7b69477da3fd byte-for-byte; final source differs from this exact dirty tree only in three documentation files. No claim of tagged-artifact or live-provider validation.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/provider-black-box.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-full-lint",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6db75ebd151e73f277c7cde66eda6b568fac4f02",
+      "tree": "84b2fb0a03514101d839845a00c0ae76fef18a9f",
+      "revision_kind": "dirty pre-review release-preparation snapshot; exact tree retained",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "test": "prettier --check .",
+          "expected": "All matched files use Prettier code style",
+          "actual": "Code style issues found in docs/test-results.json; exit 1; same unchanged base blob also fails"
+        }
+      ],
+      "notes": "ESLint 0 errors/31 warnings; Prettier fails only docs/test-results.json. Exact base and current ledger blob both a2251d259b83f60c3d9d6993926846e8dc120b11 before evidence append; base ledger reproduced failure through prettier stdin. Matches prior 2026-10-29-ci-failure-lint observation. Historical ledger formatting left untouched, not waived as passing.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/full-lint.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/base-test-results-format.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-website-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6db75ebd151e73f277c7cde66eda6b568fac4f02",
+      "tree": "19bbcda5047d1408918b6c73518b2c08ce3c16ba",
+      "revision_kind": "pre-commit dirty docs snapshot subsequently committed byte-for-byte",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm --dir website build",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "27 pages built, internal links passed; 10 HTML text/anchor assertions across five pages passed. Non-fatal /404 route conflict warning retained; baseline warning not separately reproduced. Initial broad editor-text recovery claim was subsequently narrowed after independent source inspection; final website rebuilt below.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/website-build.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/rendered-docs.txt"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-website-final",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "9548d5ad757cd3072d20b3aadcfd7b69477da3fd",
+      "tree": "cdd3df6099d08e1533df06ed47d00a29d551dec8",
+      "revision_kind": "pre-commit dirty source snapshot subsequently committed; website inputs match final source",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm --dir website build; rendered corrected restart text/anchor checks",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "27 pages built, all internal links verified; corrected queue-only recovery/excluded unsaved drafts and images/skills restriction rendered. Non-fatal /404 route warning. Documentation-site build only, not a web-client frontend build or browser/live gateway validation.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/website-final-build.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/rendered-final-docs.txt"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-final-release-gates",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "9548d5ad757cd3072d20b3aadcfd7b69477da3fd",
+      "tree": "cdd3df6099d08e1533df06ed47d00a29d551dec8",
+      "revision_kind": "clean committed preparation source; deliberately untagged",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm typecheck; pnpm exec eslint source; pnpm exec prettier --check source package.json CHANGELOG.md; pnpm build; pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Every normal non-publishing release-script health gate rerun successfully on exact clean final source after documentation correction. Counts refer only to static guards, not other commands or the full tiers above.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/final-typecheck.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/final-source-eslint.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/final-source-format.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/final-build.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/final-static.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-artifact-and-identity",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "9548d5ad757cd3072d20b3aadcfd7b69477da3fd",
+      "tree": "cdd3df6099d08e1533df06ed47d00a29d551dec8",
+      "revision_kind": "clean committed preparation source; deliberately untagged",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "task_ids": [
+        "2026-10-29-release-040-preparation"
+      ],
+      "suite": "local 0.40.0 release preparation",
+      "command": "pnpm pack --pack-destination <task evidence>; node dist/cli.js --version; node dist/cli.js --help; node scripts/check-release-identity.mjs; inspect packed manifest/build-info and file inventory",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release-040 worktree with own frozen-lockfile root and website installs; real Linux sandbox prerequisites present. Deterministic loopback provider fixtures only; no paid API, tag, push, publication, deployment or live-runtime mutation."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Local pack and CLI observations succeeded. Package manifest is 0.40.0; CLI and packed build-info intentionally identify 0.40.0-dev+9548d5a, release:false, matching source commit. No web-client frontend included. Identity guard exits 1 as expected for missing exact tag; this is a successful negative check, not a publish attempt or proof of a future tagged artifact. Local tarball is inspection-only and must NOT be published.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/pack.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/final-cli-version.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/final-cli-help.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/final-build-info.json",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/clean-untagged-guard.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/pack-inspection.json"
+      ]
     }
   ]
 }

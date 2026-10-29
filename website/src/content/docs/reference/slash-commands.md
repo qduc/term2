@@ -35,6 +35,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 | **`/settings`** | `[key] [value]` | View or modify runtime configuration settings. |
 | **`/goal`** | `[show\|set <outcome> [--criteria <text>]\|achieved\|abandon]` | Inspect or update the durable session goal; `/clear` retains it. |
 | **`/clear`** | — | Clear current conversation history and start a fresh session. |
+| **`/restart`** | `[stop]` | Reload the supported built CLI and resume the session; `stop` consents to stopping background work. See [restart limits](/term2/using-term2/sessions/#restart-the-built-cli). |
 | **`/quit`** | — | Exit term2 session cleanly. |
 
 ---

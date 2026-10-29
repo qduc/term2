@@ -13,6 +13,12 @@ In an existing interactive session, `/bridge connect [name]` creates a local con
 
 Alternatively, start the TUI with `--control-socket=<name> --discord-input`. A local attachment is not proof that the standalone bridge is connected to Discord. Run and configure the standalone bridge separately as described in the guide.
 
+## Push Wake-up and REST Delivery
+
+The bridge uses Discord Gateway push as a wake-up signal for cursor-based REST reads. While push is connected, the REST safety poll runs every 30 seconds instead of every second. Message content and delivery cursors still come from REST; push is not a second content source. Set `TERM2_DISCORD_GATEWAY=off` in the bridge process environment to use polling only.
+
+Ingress remains in Discord while the configured default coordinator is unavailable, rather than being consumed without a destination. These changes have offline fixture coverage, not completed live Discord/mobile acceptance.
+
 ## Replies and local controls
 
 Channel output requires an explicit `discord_send` call; ordinary assistant finals are not automatically mirrored. Capable, opted-in agents receive Discord communication guidance, but wording alone does not prove a message was sent. Approvals, questions, and status output remain local. Plan mode blocks Discord sends.

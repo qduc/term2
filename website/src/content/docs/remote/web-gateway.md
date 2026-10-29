@@ -5,6 +5,14 @@ description: Running the private gateway for external clients and programmatic c
 
 `term2 serve` runs a private gateway service designed to connect external client applications, web interfaces, and local processes directly to an authenticated term2 agent runtime. **One of `--pairing` or `--bff-key` is required.**
 
+## Separate Web Client
+
+The repository's `web-client/` directory is a separate private Next.js application, not part of the `@qduc/term2` npm package or this documentation site. Updating the npm CLI updates the gateway backend; update and rebuild the web client separately for frontend changes such as Markdown/code rendering, grouped tool calls, and the refreshed composer/sidebar.
+
+Gateway session replay restores recorded tool-result bodies and stopped partial replies, and replays an in-flight turn from its start after reload. Replay improves display continuity; it does not undo already-executed tool effects or guarantee uninterrupted network delivery.
+
+See [shell sandbox restrictions](/term2/safety/sandbox/#read-only-gateway-sessions) for read-only workspace grants. A physically writable directory may be granted read-only access without granting runtime write permission.
+
 ## Command Syntax
 
 ```bash

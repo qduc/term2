@@ -46,3 +46,9 @@ To allow the agent to read reference documentation or sibling libraries outside 
   }
 }
 ```
+
+## Read-only Gateway Sessions
+
+A read-only workspace grant does not require the underlying directory to be physically unwritable, and it does not become a write grant just because the directory is writable. `term2 serve --allow-write` permits write grants; a session still needs a `read_write` grant for workspace writes.
+
+Read-only gateway shell execution requires the filesystem sandbox with workspace writes disabled. If the sandbox is unavailable or disabled, an unsandboxed run is requested, or execution uses SSH rather than the local sandbox, the shell call is refused. Approval does not turn an unsandboxed general-purpose shell into a read-only one. This is a gateway-session policy, not a claim that every tool or remote service is covered by the shell sandbox.

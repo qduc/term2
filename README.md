@@ -57,6 +57,7 @@ This README tracks `main`; npm releases may lag behind it. Check `term2 --versio
 | To…                         | Use…                                                          |
 | --------------------------- | ------------------------------------------------------------- |
 | Switch models               | `/model` or `Ctrl+O`                                          |
+| Restart the built CLI       | `/restart` (or `/restart stop` to stop background work)         |
 | Manage provider connections | `/providers`                                                  |
 | Resume a conversation       | `term2 --resume`; `term2 --resume ls` lists saved sessions    |
 | Try another approach        | `term2 --resume <session-id> --fork`                          |
@@ -65,7 +66,7 @@ This README tracks `main`; npm releases may lag behind it. Check `term2 --versio
 
 Continue a saved session headlessly with `term2 --resume <session-id> "Follow-up prompt"` (or use `last` instead of an ID). Add `--fork` to keep the original session unchanged.
 
-`--profile bare` selects the minimal-prompt profile; the former Lite options (`--lite`, `-l`, `/lite`, and `--profile lite`) now select Bare too.
+`--profile bare` selects the minimal-prompt profile with subagent delegation; the former Lite options (`--lite`, `-l`, `/lite`, and `--profile lite`) now select Bare too.
 
 A command-line prompt runs non-interactively, with tool execution disabled by default. `--auto-approve` enables tools without interactive confirmation; use it only when you intend unattended execution. See [scripting](https://qduc.github.io/term2/using-term2/non-interactive/) and [SSH setup](https://qduc.github.io/term2/remote/ssh/).
 
@@ -74,9 +75,13 @@ attaches existing opted-in terminal sessions. Start with `term2 discord --help`.
 Replies require explicit `discord_send`; status, approvals and questions stay local.
 Live Discord/mobile validation is still outstanding.
 
+`/restart` reloads the built CLI in place and resumes the conversation, recovering queued and editor text. It requires POSIX Node with `process.execve` support (Node 24 recommended), a built `dist/cli.js` entry, and no Node flags, loaders, or `NODE_OPTIONS`. Live background work blocks restart unless you explicitly use `/restart stop`; active workspace leases reset to home scope. Finish foreground shell commands and pending input confirmations first. See [session restart](https://qduc.github.io/term2/using-term2/sessions/#restart-the-built-cli) for recovery limits.
+
 ## Approvals and sandbox
 
 Interactive sessions default to shell auto-approval `off` and an enabled shell sandbox. You can change these settings, so the active configuration matters. The sandbox constrains shell commands; it does not cover providers, external MCP servers, or every tool.
+
+Read-only gateway sessions require sandboxed shell execution: disabling the sandbox, requesting an unsandboxed command, or using an SSH execution context does not bypass the read-only restriction.
 
 See [approvals](https://qduc.github.io/term2/safety/approvals/) and [sandbox boundaries](https://qduc.github.io/term2/safety/sandbox/) for the policies and their limits.
 
@@ -102,7 +107,7 @@ pnpm --dir website build
 pnpm --dir website preview
 ```
 
-The separate [`web-client/`](web-client/) app connects to the private `term2 serve` gateway. See [gateway setup](https://qduc.github.io/term2/remote/web-gateway/).
+The separate private Next.js [`web-client/`](web-client/) app connects to the `term2 serve` gateway. It is not included in the npm CLI package; frontend updates require updating and rebuilding that app separately. Gateway backend fixes ship with the CLI. See [gateway setup](https://qduc.github.io/term2/remote/web-gateway/).
 
 ## License
 

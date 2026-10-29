@@ -10,7 +10,7 @@ term2 provides built-in profiles for different stages of development and system 
 | Profile | Activation | Purpose | Observable Capabilities & Restrictions |
 | :--- | :--- | :--- | :--- |
 | **Standard** | Default (`term2`), `/profile standard` | Primary engineering mode for everyday development. | Full codebase context, file reading and editing, shell execution, subagents. |
-| **Bare** | `--profile bare`, `/profile bare` | Minimal system prompt baseline while retaining essential quality safeguards and completion verification. | Shell-led codebase work, `read_file` for images, project instructions, the skills catalog, and environment context; selected web, memory, session, MCP, and background-task capabilities are available through `run_code`. |
+| **Bare** | `--profile bare`, `/profile bare` | Minimal system prompt baseline while retaining essential quality safeguards and completion verification. | Shell-led codebase work, subagent delegation, `read_file` for images, project instructions, the skills catalog, and environment context; selected web, memory, session, MCP, and background-task capabilities are available through `run_code`. |
 | **Plan** | `/plan`, `Shift+Tab`, `/profile plan` | Architecture design, research, and code review. | Read-only operation: file modifications, file creations, and mutating shell commands are prevented. |
 | **Lite** | `term2 --lite`, `/lite`, `/profile lite` | Compatibility alias for Bare. | Uses the same profile and capabilities as Bare. |
 | **Pair** | `/profile pair` | Work step by step with the user leading. | Standard tools with instructions to agree on the next step before acting. |

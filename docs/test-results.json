@@ -25417,6 +25417,517 @@
           "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-independent-verification.md"
         ]
       }
+    },
+    {
+      "id": "2026-10-29-release-040-operator-script-gates",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "pre-commit staged release metadata snapshot on 2c2dc1a9; source matches tagged tree",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "script-gates",
+      "command": "scripts/release.sh 0.40.0 --no-push --non-interactive",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Typecheck, source ESLint, source/package/changelog Prettier, build and static tier passed. Not full pnpm lint. Script created local sentinel/tag; rebuilt afterward.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-release-local.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-tagged-build.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "clean exact-tag release source",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "static",
+      "command": "pnpm test",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Executed on exact tagged source in isolated clone. Four tiers total709 passed/2skipped; repeated guards not added twice.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-static.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-checks.tsv"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "clean exact-tag release source",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": 400,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Executed on exact tagged source in isolated clone. Four tiers total709 passed/2skipped; repeated guards not added twice.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-integration.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-checks.tsv"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "clean exact-tag release source",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": 58,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Executed on exact tagged source in isolated clone. Four tiers total709 passed/2skipped; repeated guards not added twice.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-e2e.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-checks.tsv"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-provider",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "clean exact-tag release source",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "provider",
+      "command": "pnpm test:provider-black-box",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": 223,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Executed on exact tagged source in isolated clone. Four tiers total709 passed/2skipped; repeated guards not added twice.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-provider.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-checks.tsv"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-menu",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "exact-tag runtime source with temporary untracked menu test; removed afterward",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "menu",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts scripts/operator-menu-temp.e2e.test.ts --reporter=verbose",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Rendered PTY starts model/effort, End shows skills/restart/quit/help in order. Earlier fixture startup timeouts30s and10s retained; matching standard work subdirectory resolved. No product change.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-menu.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-menu-render.txt",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-menu-test.ts.txt",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-menu-diagnostic.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-menu-diagnostic2.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-website-package-identity",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "clean exact-tag release source",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "website-package-identity",
+      "command": "pnpm --dir website build; node scripts/check-release-identity.mjs; node dist/cli.js --version; pnpm pack",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "27pages and internal links pass. Clean exact tag; CLI0.40.0; build-info release true/hash exact; packed manifest and build-info match. Tagged artifact SHA2563757dc7c880d0515b3f4d1fb3d2ca5dd95f8dbe584f2d8ec404a7309b3cdb659. Preparation artifact retained separately with original hash.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-website.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-identity.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-pack.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-local-0.40.0.tgz"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-integration-ci-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2c2dc1a950db17ae96bd71a5952fd35e48f703bf",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": null,
+      "revision_kind": "hosted clean integration commit; Ubuntu22.04/ubuntu-latest lanes",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "integration-ci-initial",
+      "command": "GitHub CI40887628562 attempt1",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": null,
+        "failed": 2,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        "turn-decisions.blackbox repeated questions: state timeout40000ms at SELECT_ONE_COLOR; lane166pass/1fail/1skip",
+        "restart.e2e line172: composer ack after revision2 got3 timeout5000ms; lane87pass/1fail/4skip"
+      ],
+      "notes": "Two failing PTY cases; passing lanes not totaled. No evidence of package write.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-integration-ci-failed.log",
+        "https://github.com/qduc/term2/actions/runs/40887628562"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-integration-ci-resolving",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2c2dc1a950db17ae96bd71a5952fd35e48f703bf",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": null,
+      "revision_kind": "unchanged hosted integration source",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "integration-ci-resolving",
+      "command": "GitHub CI40887628562 attempt2 --failed",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Failed jobs pass without source changes. Timing-sensitive observation, not root-cause fix.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-integration-ci-final.json",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-integration-ci-retry.log"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-release-ci-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "hosted clean exact release main",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "release-ci-initial",
+      "command": "GitHub CI40889250595 attempt1",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        "restart.e2e line172: composer ack after revision2 got3 timeout5000ms; lane87pass/1fail/4skip"
+      ],
+      "notes": "Other3 lanes pass. Restart composer acknowledgement signature recurred.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-release-ci-failed.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-release-ci.json"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-release-ci-resolving",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "unchanged hosted exact release main",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "release-ci-resolving",
+      "command": "GitHub CI40889250595 attempt2 --failed",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "All lanes green after unchanged-source failed-job retry; no product fix claimed.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-release-ci-final.json",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-release-ci-retry.log",
+        "https://github.com/qduc/term2/actions/runs/40889250595"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-publish-blocked",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "hosted exact-tag checkout Ubuntu22.04 Node24 pnpm11.7.0",
+      "task_ids": [
+        "2026-10-29-release-040-operator",
+        "2026-10-27-release-identity-check"
+      ],
+      "suite": "publish-blocked",
+      "command": "GitHub publish40889266938 tag push",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": 397,
+        "failed": 3,
+        "skipped": 1,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        "release-identity.integration: tag push valid and manual valid unexpected request count; manual annotated unexpected request count. Hosted integration397pass/3fail/1skip."
+      ],
+      "notes": "Static/build passed; integration failed3 valid identity fixture cases. Publish package step SKIPPED. No trusted-publish acceptance. Registry final read404/latest0.39.0, not used alone as evidence no acceptance.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-publish-full.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-publish-final.json",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-npm-final-version.json",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-npm-final-tags.json",
+        "https://github.com/qduc/term2/actions/runs/40889266938"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-oidc-diagnostics",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": "efb64094f3a91296e6338c396977c2c2e7785cf2",
+      "revision_kind": "temporary untracked diagnostic copy on exact tagged source; removed afterward",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "oidc-diagnostics",
+      "command": "temporary real-process fixture: synthetic loopback ACTIONS_ID_TOKEN_REQUEST_URL/TOKEN with GITHUB_ACTIONS=true; then blank both inside fixture",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Discriminating red valid case:1 assertion failure/17skipped; pnpm guard succeeds but dry-run GETs loopback OIDC endpoint403. Green18/18 with both vars blank, same synthetic outer capability. Initial incomplete probe without GITHUB_ACTIONS passed and tokenURLport9 timed out; retained and not treated as red-proof. No real OIDC credentials/registry writes. Proven two-line patch saved, not activated.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-publish-oidc-actions-loopback.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-publish-oidc-actions-scrubbed.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-publish-oidc-repro.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-publish-oidc-loopback.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-oidc-fixture-fix.patch"
+      ]
+    },
+    {
+      "id": "2026-10-29-release-040-operator-pages",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "2c2dc1a950db17ae96bd71a5952fd35e48f703bf",
+      "base_commit": "16562a2597a8e4c712a01cec8d28cd7e2615aeac",
+      "tree": null,
+      "revision_kind": "hosted documentation integration source",
+      "task_ids": [
+        "2026-10-29-release-040-operator"
+      ],
+      "suite": "pages",
+      "command": "GitHub Pages40887628752; gh api repos/qduc/term2/pages",
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated release clone; hosted runs explicitly labeled Ubuntu GitHub Actions/Node24/pnpm11.7.0 instead."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Pages deployment success, https://qduc.github.io/term2/. Pending-publication wording intentionally retained because npm step skipped. No frontend deployment.",
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-integration-pages.log",
+        "/home/qduc/coord/term2/tasks/release-040/evidence/operator-pages.json",
+        "https://github.com/qduc/term2/actions/runs/40887628752"
+      ]
     }
   ]
 }

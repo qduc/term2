@@ -7,10 +7,10 @@ import provider from './vitest.provider-black-box.config.js';
 const configs: Record<string, UserConfig> = { guards, integration, e2e, provider };
 const plan: { tier: string; files: string[] }[] = JSON.parse(process.env.TERM2_CI_PLAN!);
 
-// Four-vCPU runners used 57–232% CPU with two workers (run 40721634822).
 // Project values override the root one, and Vitest rejects projects in one
 // queue that disagree, so every project gets the CI value explicitly.
-const maxWorkers = 3;
+const maxWorkers = Number(process.env.TERM2_CI_MAX_WORKERS);
+if (!Number.isInteger(maxWorkers) || maxWorkers < 1) throw new Error('Expected a positive CI worker count');
 
 // One queue per runner. Retain each tier's setup, deadlines and file isolation.
 // Override include explicitly: Vite's extends merge concatenates include arrays,

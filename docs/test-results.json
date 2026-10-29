@@ -26994,6 +26994,284 @@
         "verifier": "idle-hellebore-520",
         "verdict": "accept"
       }
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "8bd4743c3d5a2c6b372d028016e7276e01b8909d",
+      "tree": "12524c78ee7aa55c4908097a273d5d6ab1024ee5",
+      "revision_kind": "clean_committed_candidate",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-local-activation"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Dedicated .worktrees/discord-image-active with own pnpm install; test scripts set NODE_ENV=test; provider network is offline fixtures. Candidate built before arming and not rebuilt afterward."
+      },
+      "id": "2026-10-29-discord-image-activation-build-static",
+      "suite": "build-static",
+      "command": "pnpm install --frozen-lockfile && pnpm build && pnpm typecheck; pnpm check:no-unit-tests; git diff --check 143507e3..8bd4743",
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/activation-install.log",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-build.log",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-typecheck.log",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-static-guard.log"
+      ],
+      "notes": "All passed; no test counts inferred from static commands. Full candidate3500-file manifest preserved before/after live activation."
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "8bd4743c3d5a2c6b372d028016e7276e01b8909d",
+      "tree": "12524c78ee7aa55c4908097a273d5d6ab1024ee5",
+      "revision_kind": "clean_committed_candidate",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-local-activation"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Dedicated .worktrees/discord-image-active with own pnpm install; test scripts set NODE_ENV=test; provider network is offline fixtures. Candidate built before arming and not rebuilt afterward."
+      },
+      "id": "2026-10-29-discord-image-activation-discord-initial",
+      "suite": "discord-initial",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-images.integration.test.ts source/services/discord/discord-commands.integration.test.ts source/services/discord/discord-cli.integration.test.ts",
+      "result": {
+        "passed": 105,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/activation-integration.log"
+      ],
+      "notes": "Two supplied paths did not exist and contributed no coverage. Correct four-file suite subsequently run. Post-command shell tail syntax failed only to display completed logs; tests exit0. Do not add this overlapping count to final suite counts."
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "8bd4743c3d5a2c6b372d028016e7276e01b8909d",
+      "tree": "12524c78ee7aa55c4908097a273d5d6ab1024ee5",
+      "revision_kind": "clean_committed_candidate",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-local-activation"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Dedicated .worktrees/discord-image-active with own pnpm install; test scripts set NODE_ENV=test; provider network is offline fixtures. Candidate built before arming and not rebuilt afterward."
+      },
+      "id": "2026-10-29-discord-image-activation-discord-integration",
+      "suite": "discord-integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-images.integration.test.ts source/services/discord/discord-command.integration.test.ts source/services/discord/discord-gateway.integration.test.ts",
+      "result": {
+        "passed": 114,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 4,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/activation-integration-full.log"
+      ],
+      "notes": "Actual local HTTP/filesystem/control/read_file boundary; includes partial failures and30s stalled-body deadline. No live Discord image sent."
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "8bd4743c3d5a2c6b372d028016e7276e01b8909d",
+      "tree": "12524c78ee7aa55c4908097a273d5d6ab1024ee5",
+      "revision_kind": "clean_committed_candidate",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-local-activation"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Dedicated .worktrees/discord-image-active with own pnpm install; test scripts set NODE_ENV=test; provider network is offline fixtures. Candidate built before arming and not rebuilt afterward."
+      },
+      "id": "2026-10-29-discord-image-activation-discord-cli-e2e",
+      "suite": "discord-cli-e2e",
+      "command": "pnpm test:e2e source/services/discord/discord-cli.e2e.test.ts",
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/activation-e2e.log"
+      ],
+      "notes": null
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "8bd4743c3d5a2c6b372d028016e7276e01b8909d",
+      "tree": "12524c78ee7aa55c4908097a273d5d6ab1024ee5",
+      "revision_kind": "clean_committed_candidate",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-local-activation"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Dedicated .worktrees/discord-image-active with own pnpm install; test scripts set NODE_ENV=test; provider network is offline fixtures. Candidate built before arming and not rebuilt afterward."
+      },
+      "id": "2026-10-29-discord-image-activation-provider-black-box",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "result": {
+        "passed": 223,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 28,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/activation-provider.log"
+      ],
+      "notes": "Full offline fixture suite passed first activation run; no paid provider calls."
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "8bd4743c3d5a2c6b372d028016e7276e01b8909d",
+      "tree": "12524c78ee7aa55c4908097a273d5d6ab1024ee5",
+      "revision_kind": "clean_committed_candidate",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-local-activation"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Dedicated .worktrees/discord-image-active with own pnpm install; test scripts set NODE_ENV=test; provider network is offline fixtures. Candidate built before arming and not rebuilt afterward."
+      },
+      "id": "2026-10-29-discord-image-activation-lint",
+      "suite": "lint",
+      "command": "pnpm lint; git show 143507e3:docs/test-results.json and prettier --check --config .prettierrc.json on private exact-base copy",
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "diagnostic": "ESLint0errors/31warnings; lint exit1 solely existing ledger Prettier formatting. Same formatting warning reproduced on exact base143507e3 copy with same config. No historical ledger reformatting."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/activation-lint.log",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-evidence/base-test-results.json"
+      ],
+      "notes": "Lint remains red on known inherited formatting; behavioral suites pass. Separate static guard/typecheck pass."
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "8bd4743c3d5a2c6b372d028016e7276e01b8909d",
+      "tree": "12524c78ee7aa55c4908097a273d5d6ab1024ee5",
+      "revision_kind": "clean_committed_candidate",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-local-activation"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Dedicated .worktrees/discord-image-active with own pnpm install; test scripts set NODE_ENV=test; provider network is offline fixtures. Candidate built before arming and not rebuilt afterward."
+      },
+      "id": "2026-10-29-discord-image-activation-live-bridge-cutover",
+      "suite": "live-bridge-cutover",
+      "command": "Identity-scoped pidfd SIGTERM once; stopped stable backup; one explicit Python exec launch in original w9:pR; direct ordered Gateway snapshot; verify-live.py03/04; atomic expected-byte bridgeEntry-only selector arm; independent pre/post operational verification",
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "activation-evidence/gateway-verification.json",
+          "diagnostic": "Herdr multiline pane wait-output regex timed out after60s despite successful bridge launch. Direct ordered snapshot confirms unique marker then fresh Gateway connected. No signal/launch/send retried."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/activation-evidence/01-immediate-pre-stop.json",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-evidence/02-old-bridge-stopped.json",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-evidence/03-new-bridge-ready-verification.json",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-evidence/04-boot-aligned-verification.json",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-evidence/boot-update-intent.json",
+        "/home/qduc/coord/term2/tasks/discord-image/activation-evidence/post-cutover-review.md"
+      ],
+      "notes": "Live old bridge2980590 replaced by3282449/start339473165, candidate8bd4743. Exact journal/cursor unchanged56done/145sent/142proactive. Coordinator2980031, writer/current log/public session, Herdr129259 and other panes/credentials unchanged. Only bridgeEntry changed; enabled units stay inactive. Real image/CDN/provider semantics and physical boot pending; no Discord sends/prompts/replay/remote push/publish/deploy."
     }
   ]
 }

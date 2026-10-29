@@ -173,6 +173,7 @@ export interface AgentDefinition {
   name: string;
   instructions: string;
   resolveInstructionsForRequest?: () => string;
+  resolvePersonalContext?: () => string;
   resolveRequestSnapshot?: () => RequestSnapshot;
   tools: ToolRegistry;
   model: string;
@@ -770,22 +771,18 @@ export const getAgentDefinition = (
       ? '\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.'
       : ''
   }`;
-  const withPersonalContext = (context: string) => (context ? `\n\n${context}` : '');
   const resolveInstructionsForRequest =
-    deps.getGoal || deps.isDiscordInputEnabled || memoryCapability.resolvePersonalContext
+    deps.getGoal || deps.isDiscordInputEnabled
       ? () =>
           `${instructions}${
             discordSendEnabled && deps.isDiscordInputEnabled?.()
               ? `\n\n${resolvePrompt(path.join(BASE_PROMPT_PATH, 'discord-communication.md'))}`
               : ''
-          }${deps.getGoal ? renderDurableGoalContext(deps.getGoal()) : ''}${
-            memoryCapability.resolvePersonalContext
-              ? withPersonalContext(memoryCapability.resolvePersonalContext())
-              : ''
-          }`
+          }${deps.getGoal ? renderDurableGoalContext(deps.getGoal()) : ''}`
       : undefined;
   return {
     name: 'Terminal Assistant',
+    resolvePersonalContext: () => memoryCapability.resolvePersonalContext?.() ?? '',
     memoryContextEnabled:
       hasCapability('memory') && (memoryContextEnabled || bareMode) && memoryCapability.access !== 'none',
     instructions,

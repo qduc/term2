@@ -395,6 +395,7 @@ export type SessionRolloverEvent =
     };
 
 export type LogEvent =
+  | { type: 'personal_memory_context'; humanInputAt: string; snapshot: string }
   | MemoryInjectedLogEvent
   | SessionInitEvent
   | SettingsChangedEvent

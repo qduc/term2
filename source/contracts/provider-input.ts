@@ -43,6 +43,8 @@ export interface ProviderInputItem {
   /** Application-owned metadata, never serialized into provider tool output. */
   runCodeExecution?: unknown;
   content?: unknown;
+  /** Changed automatic personal snapshot on a human turn, or comparison state on native compaction. */
+  personalMemoryContext?: string;
   providerData?: Record<string, unknown>;
   /**
    * Marks an item as provider-native and opaque. Set only by the adapter that

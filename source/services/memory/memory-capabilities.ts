@@ -1,3 +1,4 @@
+import { PERSONAL_MEMORY_NOTICE_OVERHEAD } from '../conversation/personal-memory-context.js';
 import type { ISettingsService } from '../service-interfaces.js';
 import { FileMemoryStore } from './memory-store.js';
 import { createMemoryToolDefinitions } from '../../tools/memory/memory-tools.js';
@@ -15,7 +16,7 @@ export type MemoryCapability = {
   tools: AnyScriptedToolDefinition[];
   guidance: string;
   context: string;
-  /** Main-agent-only project summaries, read fresh at each provider request. */
+  /** Main-agent-only project summaries, read fresh when admitting human input. */
   resolvePersonalContext?: () => string;
 };
 // Retained for decoding and rendering historical memory_injected events.
@@ -131,8 +132,8 @@ export class MemoryCapabilityBuilder {
       resolvePersonalContext = () => {
         try {
           const budget = Math.min(
-            this.#settings.get('memory.contextBudgetChars') - context.length - 2,
-            PERSONAL_CONTEXT_BUDGET_CHARS,
+            this.#settings.get('memory.contextBudgetChars') - context.length - 2 - PERSONAL_MEMORY_NOTICE_OVERHEAD,
+            PERSONAL_CONTEXT_BUDGET_CHARS - PERSONAL_MEMORY_NOTICE_OVERHEAD,
           );
           return budget > 0 ? stores.project.personalContextSync(budget, { requireOptIn: !includeContext }) : '';
         } catch (error) {

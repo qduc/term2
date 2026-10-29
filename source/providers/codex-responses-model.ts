@@ -1076,9 +1076,9 @@ const filterServerManagedInput = (input: unknown, consumedToolResultCallIds?: Re
     return [...(filteredToolResults as unknown[]), ...trailingUserMessages];
   }
 
-  // Fresh user turn with no trailing tool output: the delta is the latest
-  // user message onward.
-  const deltaStart = findServerManagedDeltaStart(input);
+  // Keep the entire trailing user block: application-supplied context may
+  // immediately precede the human message and is part of this same delta.
+  const deltaStart = endUserIndex < input.length ? endUserIndex : findServerManagedDeltaStart(input);
   return deltaStart > 0 ? input.slice(deltaStart) : input;
 };
 

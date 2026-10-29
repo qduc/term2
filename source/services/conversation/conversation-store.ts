@@ -1,3 +1,4 @@
+import { withPersonalMemoryContext } from './personal-memory-context.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { userTurnToProviderItem } from './user-turn-item.js';
 import { type UserTurn } from '../../types/user-turn.js';
@@ -71,9 +72,12 @@ export class ConversationStore {
   #historyRevision = 0;
   #historyIdentity = crypto.randomUUID();
 
-  addUserTurn(input: string | UserTurn): void {
-    this.#history.push(userTurnToProviderItem(input, { history: this.#history }));
+  addUserTurn(input: string | UserTurn, resolvePersonalContext?: () => string): ProviderInputItem {
+    const item = userTurnToProviderItem(input, { history: this.#history });
+    const admitted = withPersonalMemoryContext(item, this.#history, resolvePersonalContext);
+    this.#history.push(admitted);
     this.#historyRevision++;
+    return admitted;
   }
 
   addUserMessage(text: string): void {

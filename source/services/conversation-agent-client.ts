@@ -113,6 +113,8 @@ export interface ConversationTurnSession {
 
 export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   runTurn(session: ConversationTurnSession): Promise<void>;
+  /** Current automatic personal data; captured only when admitting human input. */
+  resolvePersonalContext?(): string;
   setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   answerBackgroundSubagentQuestion?(runId: string, messageId: string, answer: string): boolean;
   startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;

@@ -197,6 +197,7 @@ interface ReplayState {
   warnings: string[];
   /** Journal entries keyed by turn id when present, otherwise by legacy user-turn index. */
   pendingJournals: Map<string, TurnJournal>;
+  personalMemoryContexts: Map<string, string>;
   /** Command messages added during streaming that may overlap with journal tool results. */
   pendingCommandMessages: SavedMessage[];
   /** Observational lifecycle only: replay never creates a process from these records. */
@@ -532,19 +533,28 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
     case 'goal_changed':
       state.goal = cloneValue(event.goal);
       return;
+    case 'personal_memory_context': {
+      state.personalMemoryContexts.set(event.humanInputAt, event.snapshot);
+      const item = [...state.history]
+        .reverse()
+        .find((item) => item.role === 'user' && String(item.humanInputAt) === event.humanInputAt);
+      if (item) item.personalMemoryContext = event.snapshot;
+      return;
+    }
     case 'user_message': {
       state.messages.push(cloneMessage(event.message));
       state.activeTurnStartIndex = state.messages.length;
       state.trailingUserMessage = true;
-      state.history.push(
-        userTurnToProviderItem(
-          {
-            text: event.message.text ?? '',
-            ...(event.message.humanInputAt !== undefined ? { humanInputAt: event.message.humanInputAt } : {}),
-          },
-          { history: state.history },
-        ),
+      const item = userTurnToProviderItem(
+        {
+          text: event.message.text ?? '',
+          ...(event.message.humanInputAt !== undefined ? { humanInputAt: event.message.humanInputAt } : {}),
+        },
+        { history: state.history },
       );
+      const snapshot = state.personalMemoryContexts.get(String(item.humanInputAt));
+      if (snapshot !== undefined) item.personalMemoryContext = snapshot;
+      state.history.push(item);
       return;
     }
     case 'assistant_journal_delta': {
@@ -1284,6 +1294,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     inFlightToolCalls: new Map(),
     warnings: [],
     pendingJournals: new Map(),
+    personalMemoryContexts: new Map(),
     pendingCommandMessages: [],
     backgroundShellJobs: new Map(),
     activeTurnStartIndex: 0,

@@ -34,6 +34,7 @@ export class ConversationRecord {
   #ledger = new ToolExecutionLedger();
   readonly #journal: AssistantTurnJournal;
   readonly #logger?: ILoggingService;
+  readonly #resolvePersonalContext?: () => string;
   #journalSink: ((event: LogEvent) => void) | null = null;
   #segmentBaseline: ReturnType<ConversationStore['getProviderHistorySnapshot']> | undefined;
   #lastPersistence: RecordAcceptanceReceipt['persistence'] = 'unconfigured';
@@ -46,11 +47,13 @@ export class ConversationRecord {
   constructor(
     options: {
       logger?: ILoggingService;
+      resolvePersonalContext?: () => string;
       providerContext?: ProviderContinuity;
       checkpointObserver?: OpenAIRootCheckpointLifecycleObserver;
     } = {},
   ) {
     this.#logger = options.logger;
+    this.#resolvePersonalContext = options.resolvePersonalContext;
     this.#providerContext = options.providerContext;
     this.#checkpointObserver = options.checkpointObserver;
     this.#attachUserTurnCount();
@@ -160,7 +163,8 @@ export class ConversationRecord {
   }
 
   acceptInput(turn: string | UserTurn): RecordAcceptanceReceipt {
-    this.#store.addUserTurn(turn);
+    const item = this.#store.addUserTurn(turn, this.#resolvePersonalContext);
+    this.#persistPersonalMemoryContext(item);
     return { accepted: 'memory', persistence: 'not_requested' };
   }
   addUserTurn(turn: string | UserTurn): RecordAcceptanceReceipt {
@@ -197,9 +201,20 @@ export class ConversationRecord {
     this.#pendingReasoningText = '';
   }
 
+  #persistPersonalMemoryContext(item: ProviderInputItem): void {
+    if (item.role !== 'user' || typeof item.humanInputAt !== 'string' || typeof item.personalMemoryContext !== 'string')
+      return;
+    this.#deliverJournalEvent({
+      type: 'personal_memory_context',
+      humanInputAt: item.humanInputAt,
+      snapshot: item.personalMemoryContext,
+    });
+  }
+
   /** Accept one observed provider item into both evidence representations before publication. */
   acceptObservedItem(item: unknown): RecordAcceptanceReceipt {
     this.#lastPersistence = this.#journalSink ? 'not_requested' : 'unconfigured';
+    if (item && typeof item === 'object') this.#persistPersonalMemoryContext(item as ProviderInputItem);
     // Journal deduplication is independent of execution occurrence: a real new
     // invocation may reuse a provider call id within this logical turn.
     const acceptedItems = normalizeRunItem(item);

@@ -543,6 +543,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const providerContinuity = suppliedProviderContinuity ?? new ProviderContinuity();
   const record = new ConversationRecord({
     logger,
+    resolvePersonalContext: () => agentClient.resolvePersonalContext?.() ?? '',
     providerContext: providerContinuity,
     checkpointObserver: openAIRootCheckpointLifecycleObserver,
   });

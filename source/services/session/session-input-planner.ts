@@ -272,7 +272,8 @@ export class SessionInputPlanner {
       this.#lastDispatchModel !== null && currentModel !== null && this.#lastDispatchModel !== currentModel;
     const useChaining = supportsChaining && !hasMalformedArgs && !hasModelMismatch && continuityAvailable;
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
-    const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
+    // Preserve application-owned human metadata (timing and personal snapshots) in deltas.
+    const chainedInput = latestInput;
 
     // Stateless (full-history) inputs must be self-contained: the Responses
     // API rejects a previous_response_id-less input containing a function_call

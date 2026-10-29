@@ -1,3 +1,4 @@
+import { carryPersonalMemoryContext } from '../services/conversation/personal-memory-context.js';
 import type { ApplicationRunLoopOptions } from '../services/agent-runtime/application-run-loop.js';
 import type { ConversationTurnSession } from '../services/conversation-agent-client.js';
 import {
@@ -314,7 +315,7 @@ export class AgentClient {
         input: normalizeApplicationInput(input.history),
         signal: input.signal,
       });
-      const history = compacted.history as ProviderInputItem[];
+      const history = carryPersonalMemoryContext(input.history, compacted.history as ProviderInputItem[]);
       if (history.length === 0) {
         throw new Error('Codex compact endpoint returned an empty history');
       }
@@ -1641,6 +1642,10 @@ export class AgentClient {
     const stream = this.#applicationRunLoop.continueRunStream(state, this.#applicationOptions(options));
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());
     return stream;
+  }
+
+  resolvePersonalContext(): string {
+    return this.#agentConfig.getApplicationAgent().resolvePersonalContext?.() ?? '';
   }
 
   async compactCodexSessionHistory(

@@ -1,3 +1,4 @@
+import { personalMemoryNotice, withPersonalMemoryContext } from '../conversation/personal-memory-context.js';
 import { conversationTimeGap, formatConversationTimeGap } from '../conversation/conversation-time-gap.js';
 import { isOpenAICompaction, projectModelRequestHistory } from '../conversation/conversation-state-projector.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
@@ -115,6 +116,8 @@ export interface ApplicationAgent {
   readonly instructions: string;
   /** Resolve session-dynamic instruction context once at each provider request boundary. */
   readonly resolveInstructionsForRequest?: () => string;
+  /** Read personal data only when admitting a human message, never on tool continuations. */
+  readonly resolvePersonalContext?: () => string;
   /**
    * Capture the session state rendered into a request, at that same request
    * boundary. The response's tool calls execute with it (see `RequestSnapshot`).
@@ -1038,6 +1041,7 @@ export class ApplicationRunLoop {
           ? item.content.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('')
           : '';
       if (item.role === 'user' && !text.startsWith('[Mode Notice]')) state.completionRepairDeadline = undefined;
+      item = withPersonalMemoryContext(item, state.history, state.agent.resolvePersonalContext);
       state.history.push(item);
       state.input.push(...normalizeApplicationInput([item]));
       outputPush(stream, queue, { type: 'item', item });
@@ -2234,6 +2238,13 @@ export function normalizeApplicationInput(
   return items.flatMap((item) => {
     const notice = item.role === 'user' ? formatConversationTimeGap(item.conversationTimeGap) : null;
     return [
+      ...(item.role === 'user' && typeof item.personalMemoryContext === 'string'
+        ? normalizeInputItem({
+            type: 'message',
+            role: 'user',
+            content: personalMemoryNotice(item.personalMemoryContext),
+          })
+        : []),
       ...(notice ? normalizeInputItem({ type: 'message', role: 'system', content: notice }) : []),
       ...normalizeInputItem(item),
     ];
@@ -2439,7 +2450,7 @@ function isProviderOpaque(
 
 function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
   if (isProviderOpaque(item)) {
-    const { providerOpaque: _marker, ...providerItem } = item;
+    const { providerOpaque: _marker, personalMemoryContext: _personalContext, ...providerItem } = item;
     return [
       {
         type: 'provider_opaque',

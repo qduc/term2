@@ -6,6 +6,7 @@ import { MemoryCapabilityBuilder } from './memory-capabilities.js';
 import { FileMemoryStore } from './memory-store.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { getAgentDefinition } from '../../agent.js';
+import { PERSONAL_MEMORY_NOTICE_OVERHEAD } from '../conversation/personal-memory-context.js';
 import { ExecutionContext } from '../execution-context.js';
 import type { ILoggingService } from '../service-interfaces.js';
 
@@ -139,13 +140,15 @@ describe('project personal context through filesystem and normal prompt assembly
   });
 
   it('shares the configured budget with the pinned global index', async () => {
-    const s = await setup(700);
+    const s = await setup(1400);
     await s.create();
     await s.global.create({ id: 'preference', title: 'Preference', summary: 'x'.repeat(400), content: 'body' });
     const capability = s.builder.build({ kind: 'main' }, { projectPath: s.projectPath });
     const personal = capability.resolvePersonalContext?.() ?? '';
     expect(capability.context.length).toBeGreaterThan(0);
-    expect(capability.context.length + (personal ? personal.length + 2 : 0)).toBeLessThanOrEqual(700);
+    expect(
+      capability.context.length + (personal ? personal.length + 2 + PERSONAL_MEMORY_NOTICE_OVERHEAD : 0),
+    ).toBeLessThanOrEqual(1400);
     expect(personal).toContain('moment');
   });
 
@@ -195,14 +198,15 @@ describe('project personal context through filesystem and normal prompt assembly
       'personal-context.json',
     );
     await writeFile(optIn, JSON.stringify({ enabled: true }));
-    const enabled = bare.resolveInstructionsForRequest?.() ?? '';
+    const enabled = bare.resolvePersonalContext?.() ?? '';
     expect(enabled).toContain('The human said “Yay!”');
-    expect(enabled.startsWith(bare.instructions + '\n\n### Personal memories')).toBe(true);
+    expect(enabled.startsWith('### Personal memories')).toBe(true);
+    expect(bare.resolveInstructionsForRequest?.() ?? bare.instructions).toBe(bare.instructions);
     expect(enabled).not.toContain('### Global memories');
     expect(enabled).not.toContain('### Persistent memory');
     expect(build().instructions).toBe(bare.instructions);
     await writeFile(optIn, JSON.stringify({ enabled: false }));
-    expect(bare.resolveInstructionsForRequest?.()).toBe(bare.instructions);
+    expect(bare.resolvePersonalContext?.()).toBe('');
     await writeFile(optIn, JSON.stringify({ enabled: true }));
     s.settings.set('tools.memory.enabled', false);
     const disabled = build();
@@ -259,12 +263,12 @@ describe('project personal context through filesystem and normal prompt assembly
         'gpt-5.4',
       );
     const agent = build();
-    expect(agent.resolveInstructionsForRequest?.()).toContain('The human said “Yay!”');
+    expect(agent.resolvePersonalContext?.()).toContain('The human said “Yay!”');
     await s.project.update('moment', { summary: 'New corrected moment' });
-    expect(agent.resolveInstructionsForRequest?.()).toContain('New corrected moment');
-    expect(agent.resolveInstructionsForRequest?.()).not.toContain('Yay');
+    expect(agent.resolvePersonalContext?.()).toContain('New corrected moment');
+    expect(agent.resolvePersonalContext?.()).not.toContain('Yay');
     s.settings.set('tools.memory.enabled', false);
-    expect(build().resolveInstructionsForRequest?.() ?? '').not.toContain('New corrected moment');
+    expect(build().resolvePersonalContext?.() ?? '').not.toContain('New corrected moment');
     s.settings.set('tools.memory.enabled', true);
     s.settings.set('app.activeProfileId', 'builtin:bare');
     const bare = build();

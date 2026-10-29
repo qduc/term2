@@ -36,10 +36,21 @@ it('keeps a process alive after ENOSPC, reports once, and drops further logs wit
       '--input-type=module',
       '-e',
       `import { LoggingService } from './source/services/logging/logging-service.ts';
+       const failureReported = new Promise(resolve => {
+         const write = process.stderr.write.bind(process.stderr);
+         let stderrBuffer = '';
+         process.stderr.write = (chunk, ...args) => {
+           const result = write(chunk, ...args);
+           stderrBuffer += String(chunk);
+           if (stderrBuffer.includes('File logging disabled after write failure')) resolve();
+           return result;
+         };
+       });
        const logging = new LoggingService({ logDir: process.argv[1], suppressConsoleOutput: true });
        const second = new LoggingService({ logDir: process.argv[2], suppressConsoleOutput: true });
        for (let i = 0; i < 10; i++) { logging.info('write ' + i); second.info('write ' + i); }
-       setTimeout(() => { console.log('TURN_FINISHED'); setTimeout(() => process.exit(0), 50); }, 150);`,
+       await failureReported;
+       process.stdout.write('TURN_FINISHED\\n', () => process.exit(0));`,
       directory,
       secondDirectory,
     ],
@@ -143,15 +154,18 @@ it('continues startup and logs one warning when retention cannot delete old traf
   }
 
   expect(() => logDirs.forEach((logDir) => new LoggingService({ logDir }))).not.toThrow();
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  const readWarnings = async () => {
+    const warnings: string[] = [];
+    for (const logDir of logDirs) {
+      const applicationLog = (await readdir(logDir)).find((name) => /^term2-\d{4}-\d{2}-\d{2}\.log$/.test(name));
+      if (applicationLog) warnings.push(await readFile(join(logDir, applicationLog), 'utf8'));
+    }
+    return warnings.join('');
+  };
+  await expect.poll(readWarnings, { timeout: 5_000 }).toContain('logging.retention_cleanup_failed');
   await Promise.all(trafficDirs.map((trafficDir) => chmod(trafficDir, 0o700)));
 
-  const warnings: string[] = [];
-  for (const logDir of logDirs) {
-    const applicationLog = (await readdir(logDir)).find((name) => /^term2-\d{4}-\d{2}-\d{2}\.log$/.test(name));
-    if (applicationLog) warnings.push(await readFile(join(logDir, applicationLog), 'utf8'));
-  }
-  expect(warnings.join('').match(/logging\.retention_cleanup_failed/g)).toHaveLength(1);
+  expect((await readWarnings()).match(/logging\.retention_cleanup_failed/g)).toHaveLength(1);
 });
 
 it('continues measuring sibling traffic entries when one subdirectory is unreadable', async () => {

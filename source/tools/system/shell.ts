@@ -54,6 +54,9 @@ import type {
   RegisterShellOutputWatchOptions,
 } from '../../services/shell/background-shell-watches.js';
 
+const READ_ONLY_REQUIRES_SANDBOX_ERROR =
+  'Error: shell is unavailable in a read-only session unless it runs inside the sandbox. Enable sandbox.enabled, or use a read_write workspace. Command not executed.';
+
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
 const monitorOptionsSchema = z.object({
@@ -1068,6 +1071,19 @@ export function createShellToolDefinition(deps: {
             );
             return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
           }
+        }
+
+        // A read-only session may only run commands the sandbox has wrapped with
+        // a read-only filesystem. Without the sandbox (sandbox.enabled=false, an
+        // approved unsandboxed run, or an SSH session) nothing stops a command
+        // from writing the workspace, and a command-level check cannot make a
+        // general shell read-only, so refuse to run.
+        if (readOnly && !sandboxed) {
+          loggingService.security(
+            'Shell refused: read-only session cannot run outside the sandbox',
+            withExecutionCorrelation({ command: optimizedCommand.substring(0, 100), sandboxEnabled, sandbox }),
+          );
+          return READ_ONLY_REQUIRES_SANDBOX_ERROR;
         }
 
         const executePreparedCommand = async (

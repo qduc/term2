@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,6 +49,7 @@ it.each(['create tag', 'existing tag', 'build failure'] as const)(
       await writeFile(config, `registry=${registry}\n//127.0.0.1:${address.port}/:_authToken=fixture-not-a-secret\n`);
       const env = {
         ...process.env,
+        PATH: `${path.join(fixture, 'bin')}:${process.env.PATH ?? ''}`,
         GIT_CONFIG_NOSYSTEM: '1',
         GIT_CONFIG_GLOBAL: '/dev/null',
         GIT_AUTHOR_NAME: 'Release fixture',
@@ -60,6 +61,7 @@ it.each(['create tag', 'existing tag', 'build failure'] as const)(
         npm_config_registry: registry,
         NPM_CONFIG_REGISTRY: registry,
         NPM_CONFIG_USERCONFIG: config,
+        npm_config_userconfig: config,
         NODE_AUTH_TOKEN: '',
         NPM_TOKEN: '',
         FAIL_FIXTURE_BUILD: scenario === 'build failure' ? '1' : '',
@@ -71,6 +73,11 @@ it.each(['create tag', 'existing tag', 'build failure'] as const)(
       };
       await mkdir(path.join(cwd, 'scripts'), { recursive: true });
       await mkdir(path.join(cwd, 'dist'));
+      const fixtureBin = path.join(fixture, 'bin');
+      await mkdir(fixtureBin);
+      const sleepShim = path.join(fixtureBin, 'sleep');
+      await writeFile(sleepShim, '#!/bin/sh\ncase "$1" in 2|4) exit 0 ;; *) exec /bin/sleep "$@" ;; esac\n');
+      await chmod(sleepShim, 0o755);
       for (const script of ['release.sh', 'write-build-info.mjs', 'check-release-identity.mjs']) {
         await copyFile(path.join(root, 'scripts', script), path.join(cwd, 'scripts', script));
       }
@@ -87,8 +94,9 @@ execFileSync(process.execPath, ['scripts/write-build-info.mjs'], { stdio: 'inher
 `,
       );
       const pkg = {
-        name: manifest.name,
+        name: 'term2-release-integration-fixture',
         version: '0.0.0',
+        publishConfig: { registry },
         type: 'module',
         files: manifest.files,
         scripts: { build: 'node scripts/fixture-build.mjs', prepublishOnly: manifest.scripts.prepublishOnly },

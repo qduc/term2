@@ -240,7 +240,19 @@ type BridgeSession = {
   unwind: () => Promise<void>;
 };
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const raceWithTimeout = async <T>(operation: Promise<T>, timeoutMs: number): Promise<T | undefined> => {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<undefined>((resolve) => {
+        timeout = setTimeout(() => resolve(undefined), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+};
 const never = <T>(): Promise<T> => new Promise<T>(() => {});
 
 const withBridgeSession = async (
@@ -316,19 +328,14 @@ const withBridgeSession = async (
 
   const updates: acp.UpdateSessionNotification[] = [];
   const permissionRequests: acp.RequestPermissionRequest[] = [];
-  const notifying = acp
-    .client({ name: 'acp-m3-integration-client' })
-    .onNotification(acp.methods.client.session.update, ({ params }) => {
-      updates.push(params);
-    });
-  const client = options.permission
-    ? notifying.onRequest(acp.methods.client.session.requestPermission, async ({ params }) => {
-        permissionRequests.push(params);
-        return await options.permission!(params);
-      })
-    : notifying;
-  const agent = createAcpV2Agent({ backend, logger: { error: vi.fn() }, version: 'test' });
-
+  let signalPermissionRequest: (() => void) | undefined;
+  const permissionRequestReceived = new Promise<true>((resolve) => {
+    signalPermissionRequest = () => resolve(true);
+  });
+  let signalTerminal: ((reason: string) => void) | undefined;
+  const terminalReceived = new Promise<string>((resolve) => {
+    signalTerminal = resolve;
+  });
   const terminalStopReason = (): string | undefined => {
     for (let index = updates.length - 1; index >= 0; index -= 1) {
       const update = updates[index]!.update as { sessionUpdate?: string; state?: string; stopReason?: string };
@@ -336,6 +343,21 @@ const withBridgeSession = async (
     }
     return undefined;
   };
+  const notifying = acp
+    .client({ name: 'acp-m3-integration-client' })
+    .onNotification(acp.methods.client.session.update, ({ params }) => {
+      updates.push(params);
+      const stopReason = terminalStopReason();
+      if (stopReason) signalTerminal?.(stopReason);
+    });
+  const client = options.permission
+    ? notifying.onRequest(acp.methods.client.session.requestPermission, async ({ params }) => {
+        permissionRequests.push(params);
+        signalPermissionRequest?.();
+        return await options.permission!(params);
+      })
+    : notifying;
+  const agent = createAcpV2Agent({ backend, logger: { error: vi.fn() }, version: 'test' });
 
   try {
     await connectOverNdJson(agent, client, async (context) => {
@@ -358,21 +380,13 @@ const withBridgeSession = async (
           });
         },
         waitForPermissionRequest: async (timeoutMs) => {
-          const deadline = Date.now() + timeoutMs;
-          while (Date.now() < deadline) {
-            if (permissionRequests.length > 0) return true;
-            await sleep(50);
-          }
-          return false;
+          if (permissionRequests.length > 0) return true;
+          return (await raceWithTimeout(permissionRequestReceived, timeoutMs)) ?? false;
         },
         waitForTerminal: async (timeoutMs) => {
-          const deadline = Date.now() + timeoutMs;
-          while (Date.now() < deadline) {
-            const stopReason = terminalStopReason();
-            if (stopReason) return stopReason;
-            await sleep(50);
-          }
-          return 'timeout';
+          const stopReason = terminalStopReason();
+          if (stopReason) return stopReason;
+          return (await raceWithTimeout(terminalReceived, timeoutMs)) ?? 'timeout';
         },
         cancel: async () => {
           await context.notify(acp.methods.agent.session.cancel, { sessionId: created.sessionId });
@@ -388,10 +402,10 @@ const withBridgeSession = async (
             // The connection may already be gone.
           }
           try {
-            await Promise.race([
+            await raceWithTimeout(
               context.request(acp.methods.agent.session.close, { sessionId: created.sessionId }),
-              sleep(2_000),
-            ]);
+              2_000,
+            );
           } catch {
             // Closing a stuck session is best effort.
           }
@@ -404,7 +418,7 @@ const withBridgeSession = async (
     unregisterProvider(bridgeProviderId);
     delete process.env.TERM2_CONVERSATIONS_DIR;
     delete process.env.TERM2_TEST_DB_DIR;
-    await Promise.race([runtimeFactory.shutdown(), sleep(5_000)]);
+    await raceWithTimeout(runtimeFactory.shutdown(), 5_000);
   }
 };
 

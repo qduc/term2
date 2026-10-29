@@ -12,16 +12,37 @@ runs:
       with:
         # Match the measured baseline patch; include it in the native-cache key.
         node-version: 24.21.0
+    # Installing pnpm from npm took 1–36s per job; a cached copy keeps a
+    # dependency-cache hit off the registry entirely.
+    - name: Restore pnpm
+      id: pnpm
+      uses: actions/cache@v6
+      with:
+        path: ~/.term2-ci/pnpm
+        key: test-pnpm-cli-v1-${{ runner.os }}-${{ runner.arch }}-11.7.0
     - name: Install pnpm
       shell: bash
-      run: npm install -g pnpm@11.7.0
+      env:
+        CACHE_HIT: ${{ steps.pnpm.outputs.cache-hit }}
+      run: |
+        prefix="$HOME/.term2-ci/pnpm"
+        if [[ "$CACHE_HIT" != 'true' ]]; then npm install -g --prefix "$prefix" pnpm@11.7.0; fi
+        "$prefix/bin/pnpm" --version
+        echo "$prefix/bin" >> "$GITHUB_PATH"
+        # This action owns dependency state. Otherwise a later `pnpm run` or
+        # `pnpm exec` reinstalls whenever the checkout is newer than the
+        # restored installation, ignoring the filter below and adding web-client.
+        echo "pnpm_config_verify_deps_before_run=false" >> "$GITHUB_ENV"
     - name: Identify runner image
       id: image
       shell: bash
       run: |
         echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
         echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
+    # No test or build step uses web-client; installing it downloaded Next.js
+    # and its native compiler on every cold install.
     - name: Restore locked dependency installation
+      id: deps
       uses: actions/cache@v6
       with:
         path: |
@@ -29,13 +50,36 @@ runs:
           !node_modules/.cache
           !node_modules/.vite
           !node_modules/.vite-temp
-          web-client/node_modules
-          !web-client/node_modules/.cache
-          !web-client/node_modules/.vite
-        key: test-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'web-client/package.json', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
-    - name: Verify and install locked dependencies
+        key: test-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'web-client/package.json', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
+    # The installation key is exact, so any lockfile change misses it. A
+    # prefix-restored package store limits that miss to the changed packages.
+    - name: Locate package store
+      id: store
+      if: steps.deps.outputs.cache-hit != 'true'
       shell: bash
-      run: pnpm install --frozen-lockfile
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - name: Restore package store
+      if: steps.deps.outputs.cache-hit != 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: test-pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: test-pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-
+    # An exact hit restores an installation of these same manifests, which
+    # passed pnpm's supply-chain check before it was saved; any lockfile change
+    # misses and is checked here. Re-checking a hit cost 3–18s of registry calls.
+    - name: Verify and install locked dependencies
+      if: steps.deps.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        # Defaults wait 10s then 60s per failed tarball; retry more, wait less.
+        pnpm_config_fetch_retries: '4'
+        pnpm_config_fetch_retry_mintimeout: '2000'
+        pnpm_config_fetch_retry_maxtimeout: '10000'
+      # No `pnpm store prune`: run directly after this install it still evicted
+      # 5 in-use packages (808 files, 101 MB) in CI, so the saved store missed
+      # them. Bump the store key to reset accumulated packages instead.
+      run: pnpm install --frozen-lockfile --filter @qduc/term2
     - name: Verify native addons and clean build inputs
       shell: bash
       run: |
@@ -52,7 +96,38 @@ runs:
         new ssh2.Client();
         createRequire(require.resolve('ssh2'))('cpu-features')();
         NODE
+    # apt took 12–21s: an index refresh, then dpkg reading its file database.
+    # The archives for this exact image extract to the same files instead.
+    - name: Restore shell sandbox packages
+      id: sandbox-debs
+      if: inputs.ripgrep == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ~/.term2-ci/sandbox-debs
+        key: test-sandbox-debs-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-${{ steps.image.outputs.version }}
     - name: Install shell sandbox prerequisites
       if: inputs.ripgrep == 'true'
       shell: bash
-      run: sudo apt-get update && sudo apt-get install -y ripgrep bubblewrap socat
+      run: |
+        debs="$HOME/.term2-ci/sandbox-debs"
+        extract() {
+          local deb socat_version
+          compgen -G "$debs/*.deb" >/dev/null || return 1
+          for deb in "$debs"/*.deb; do sudo dpkg-deb -x "$deb" / || return 1; done
+          # bubblewrap's only maintainer script applies the sysctl file it ships.
+          sudo sysctl --quiet --pattern '^kernel\.unprivileged_userns_clone$' --system || :
+          rg --version && bwrap --version && socat_version="$(socat -V)" || return 1
+          grep -m1 'socat version' <<<"$socat_version"
+        }
+        if ! compgen -G "$debs/*.deb" >/dev/null; then
+          sudo apt-get update
+          mkdir -p "$debs"
+          (cd "$debs" && apt-get download ripgrep bubblewrap socat) || :
+        fi
+        # A failed download, or a shared library missing from a new image,
+        # falls back to apt. Removing the archives keeps them out of the cache.
+        if ! extract; then
+          rm -rf "$debs"
+          sudo apt-get update
+          sudo apt-get install -y ripgrep bubblewrap socat
+        fi

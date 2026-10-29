@@ -22,6 +22,7 @@ import type {
 import { Term2ProtocolError } from '../lib/term2/types';
 
 const MAX_RECONNECT_DELAY = 10_000;
+const MAX_PROTOCOL_RELOADS = 2;
 const BACKOFF_BASE = 500;
 
 const COMMAND_ERROR_MESSAGES: Record<string, string> = {
@@ -116,6 +117,7 @@ export interface UseTerm2SessionResult {
 
 export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult {
   const [view, setView] = useState<Term2SessionView>(() => emptyTerm2SessionView(sessionId || ''));
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [workspaces, setWorkspaces] = useState<WorkspacePage['workspaces']>([]);
   const [sessions, setSessions] = useState<SessionPage['sessions']>([]);
   const [workspaceCursor, setWorkspaceCursor] = useState<string | null>(null);
@@ -137,9 +139,15 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   const pendingTextRef = useRef(new Map<string, string>());
   const admittingSessionIdsRef = useRef(new Set<string>());
 
-  useEffect(() => {
-    viewRef.current = view;
-  }, [view]);
+  // viewRef is the source of truth for the latest view; React state only mirrors
+  // it. Every update goes through the ref first, so a render that lags behind a
+  // burst of replayed events can never roll the ref back and fake a sequence gap.
+  const patchView = useCallback((update: (current: Term2SessionView) => Term2SessionView) => {
+    const next = update(viewRef.current);
+    viewRef.current = next;
+    setView(next);
+  }, []);
+
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
@@ -178,8 +186,11 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       if (!installProjection(projection, generation)) return;
       let delay = BACKOFF_BASE;
       let cursor = projection.projectionSequence;
+      // A reload that lands on the same cursor replays the same event; stop after a few instead of looping.
+      let reloadCursor = -1;
+      let reloadsAtCursor = 0;
       while (!signal.aborted && generation === generationRef.current && sessionIdRef.current === id) {
-        setView((current) => ({
+        patchView((current) => ({
           ...current,
           status:
             current.status === 'running' || current.status === 'awaiting_interaction'
@@ -192,7 +203,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         try {
           let streamHadActivity = false;
           const response = await term2Client.openEvents(id, cursor, signal);
-          setView((current) => ({
+          patchView((current) => ({
             ...current,
             status:
               current.pendingInteraction?.state === 'pending'
@@ -260,7 +271,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
               details.latestSequence < 0 ||
               !sessionDetails
             ) {
-              setView((current) => ({
+              patchView((current) => ({
                 ...current,
                 status: 'error',
                 reloadRequired: true,
@@ -272,7 +283,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
             if (!coherentProjection(projection)) {
               projection = await term2Client.getSession(id, signal);
               if (!coherentProjection(projection)) {
-                setView((current) => ({
+                patchView((current) => ({
                   ...current,
                   status: 'error',
                   reloadRequired: true,
@@ -287,11 +298,22 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
             continue;
           }
           if (error instanceof Term2ApiError && [401, 403, 404].includes(error.status)) {
-            setView((current) => ({ ...current, status: 'error', error: error.message }));
+            patchView((current) => ({ ...current, status: 'error', error: error.message }));
             return;
           }
           if (error instanceof Term2ProtocolError) {
-            setView((current) => ({
+            reloadsAtCursor = cursor === reloadCursor ? reloadsAtCursor + 1 : 1;
+            reloadCursor = cursor;
+            if (reloadsAtCursor > MAX_PROTOCOL_RELOADS) {
+              patchView((current) => ({
+                ...current,
+                status: 'error',
+                reloadRequired: true,
+                error: 'The session stream has an event this client cannot read.',
+              }));
+              return;
+            }
+            patchView((current) => ({
               ...current,
               status: 'reconnecting',
               reloadRequired: true,
@@ -305,7 +327,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
               continue;
             } catch (reloadError) {
               if (signal.aborted) return;
-              setView((current) => ({
+              patchView((current) => ({
                 ...current,
                 status: 'error',
                 error: reloadError instanceof Error ? reloadError.message : 'Unable to reload session',
@@ -313,7 +335,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
               return;
             }
           }
-          setView((current) => ({
+          patchView((current) => ({
             ...current,
             status: 'reconnecting',
             error: 'Connection interrupted; retrying.',
@@ -325,7 +347,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         }
       }
     },
-    [installProjection],
+    [installProjection, patchView],
   );
 
   useEffect(() => {
@@ -343,16 +365,19 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     }
     const id = sessionId;
     const run = async () => {
-      setView((current) => ({ ...emptyTerm2SessionView(id), status: 'hydrating' }));
+      patchView((current) => ({ ...emptyTerm2SessionView(id), status: 'hydrating' }));
       try {
         await hydrateAndConnect(id, generation, controller.signal);
       } catch (error) {
         if (!controller.signal.aborted)
-          setView((current) => ({
+          patchView((current) => ({
             ...current,
             status: 'error',
             error: error instanceof Error ? error.message : 'Unable to load session',
           }));
+      } finally {
+        // A terminal reader must release its request and be restartable by Reload.
+        controller.abort();
       }
     };
     void run();
@@ -360,7 +385,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       controller.abort();
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-  }, [sessionId, hydrateAndConnect]);
+  }, [sessionId, hydrateAndConnect, connectionAttempt]);
 
   const createSession = useCallback(async (workspaceId: string) => {
     const projection = await term2Client.createSession(workspaceId);
@@ -408,12 +433,12 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         pendingTextRef.current.delete(clientRequestId);
         return false;
       }
-      setView((current) => ({ ...current, status: 'running', error: null }));
+      patchView((current) => ({ ...current, status: 'running', error: null }));
       return true;
     } catch (error) {
       pendingTextRef.current.delete(clientRequestId);
       if (generation !== generationRef.current || sessionIdRef.current !== id) return false;
-      setView((current) => ({
+      patchView((current) => ({
         ...current,
         status: 'error',
         error: error instanceof Error ? error.message : 'Message was not accepted',
@@ -422,7 +447,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     } finally {
       admittingSessionIdsRef.current.delete(id);
     }
-  }, []);
+  }, [patchView]);
 
   // Command results never render a turn: an accepted retry arrives through the
   // session event stream, so only outcomes and failures need local state.
@@ -454,24 +479,27 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       (item) => item.status === 'streaming' || item.status === 'pending',
     )?.turnId;
     if (!id || !activeTurnId) return;
-    setView((current) => ({ ...current, status: 'aborting', error: null }));
+    patchView((current) => ({ ...current, status: 'aborting', error: null }));
     try {
       await term2Client.abort(id, activeTurnId);
     } catch (error) {
       if (generation !== generationRef.current || sessionIdRef.current !== id) return;
-      setView((current) => ({
+      patchView((current) => ({
         ...current,
         status: 'error',
         error: error instanceof Error ? error.message : 'Abort result unknown',
       }));
     }
-  }, []);
+  }, [patchView]);
 
   const refresh = useCallback(async () => {
     const id = sessionIdRef.current;
     if (!id) return;
+    const generation = generationRef.current;
     const projection = await term2Client.getSession(id);
-    installProjection(projection, generationRef.current);
+    if (installProjection(projection, generation) && selectionControllerRef.current?.signal.aborted) {
+      setConnectionAttempt((attempt) => attempt + 1);
+    }
   }, [installProjection]);
 
   const resolveInteraction = useCallback(
@@ -528,7 +556,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
           }
           return;
         }
-        setView((current) => ({
+        patchView((current) => ({
           ...current,
           error: error instanceof Error ? error.message : 'Interaction was not accepted',
         }));

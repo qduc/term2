@@ -373,7 +373,7 @@ Advertisement `<name>.json`, mode `0600`, replaced atomically (write temp in the
 
 No phase and no title in this file. Phase is a `status` call. Title does not exist.
 
-`startedAt` is the kernel starttime, not `Date.now()` at listen. proc(5) defines `starttime` as field 22 (1-based) of `/proc/<pid>/stat`. Parse it by taking the substring after the **last** `)` (the comm field is parenthesized and may contain spaces and parentheses), then the 20th whitespace-separated token of what remains (fields 3 through 22). A split of the whole line on whitespace is wrong. The unit-test seam feeds fixture lines, including a comm that contains spaces and a `)`, and does not read a live `/proc` unless a test asks it to.
+`startedAt` is the kernel starttime, not `Date.now()` at listen. On Linux, proc(5) defines `starttime` as field 22 (1-based) of `/proc/<pid>/stat`. Parse it by taking the substring after the **last** `)` (the comm field is parenthesized and may contain spaces and parentheses), then the 20th whitespace-separated token of what remains (fields 3 through 22). A split of the whole line on whitespace is wrong. On macOS, `readProcStartTime` reads the seconds and microseconds from `proc_pidinfo`'s `proc_bsdinfo`; a seconds-only `ps` timestamp is too coarse to distinguish rapidly reused PIDs. If the kernel lookup is unavailable, return no token and retain the fail-closed handling below.
 
 Bind order:
 

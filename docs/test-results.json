@@ -26507,6 +26507,493 @@
         "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
       ],
       "notes": "Post-acceptance website release entry moved into published releases;27 pages/internal links pass. Pages40898190846 success https://github.com/qduc/term2/actions/runs/40898190846; matching CI40898190880 success attempt2 https://github.com/qduc/term2/actions/runs/40898190880 (initial same restart timeout retained); live published heading verified, pending heading absent, compatibility/live-validation caveats retained.\n ; website-build.log and pages-live.html. No separate frontend deployment."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-red",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_precommit_regression_on_base",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t 'attachment-only Discord image through'",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-image-support worktree; synthetic loopback only."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 94,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "attachment-only Discord image through private storage, control, conversation and read_file to the model",
+          "diagnostic": "Expected one loopback attachment download; got []. Attachment-only text projection creates no model turn."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-red.log"
+      ],
+      "notes": "New integration fixture against unchanged base bridge; untracked staging helper unused. Earlier launcher attempts used unavailable python and skipped all tests; not red/green evidence."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-oracle-repair",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_feature_precommit",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t 'attachment-only Discord image through'",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-image-support worktree; synthetic loopback only."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 94,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "attachment-only Discord image journey",
+          "diagnostic": "Image bytes reached model; assertion incorrectly expected completed job text to retain read_file, but completed jobs clear text. Assertion moved to actual first model input."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-image-green.log"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "2026-10-29-discord-image-support-integration-prefinal",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_feature_precommit",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-image-support worktree; synthetic loopback only."
+      },
+      "result": {
+        "passed": 107,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "test": "keeps outside-workspace image reads terminal-approved",
+          "diagnostic": "Expected one model request but got2. Fixture used app temp root (already readable), then headless owner (fails closed with approval-required tool result). Corrected to outside-temp home scratch plus existing interactive nested approval owner; final same boundary passes after explicit local approval."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-integration.log"
+      ],
+      "notes": "Additional diagnostic attempts retained in support-approval-probe.log, support-approval-fixed.log, support-approval-home-probe.log. These are fixture/oracle setup failures, not evidence of production approval bypass."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-provider-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_feature_precommit",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-image-support worktree; synthetic loopback only."
+      },
+      "result": {
+        "passed": 191,
+        "failed": 1,
+        "skipped": 21,
+        "files_passed": 26,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/turn-decisions.blackbox.ts",
+          "test": "resumes repeated questions once per decision and settles cancellation before the next turn",
+          "diagnostic": "Timed out waiting for PTY child state after40000ms; SELECT_A_SECOND_COLOR / Amber / Violet visible. Runner bail1;213 observed tests,28 scheduled files, no full-tier pass. Same-signature historical rows are candidates only; no exact-base causal reproduction."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-provider.log"
+      ],
+      "notes": "Build passed; source production files match1509a9a3 and536d2ba0. This run overlapped integration. Bounded unchanged-production rerun resolves failure observationally, not root cause."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-provider-bounded",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_feature_precommit",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts --reporter=minimal --maxWorkers=2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-image-support worktree; synthetic loopback only."
+      },
+      "result": {
+        "passed": 223,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 28,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-provider-bounded.log"
+      ],
+      "notes": "Uses successful preceding build; production source identical to1509a9a3/536d2ba0 (git diff verified). Test-only oracle/commit bookkeeping overlapped later in run; no overlapping test suites. No live model/provider calls. Resolves initial suite timeout observationally; cause remains unisolated."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-integration-final",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "536d2ba06d5801063fdf3ac68f14d89a7abded88",
+      "revision_kind": "committed_feature",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-images.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-image-support worktree; synthetic loopback only."
+      },
+      "result": {
+        "passed": 114,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 4,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-integration-final.log"
+      ],
+      "notes": "Exact committed536d2ba0 tree8d93dee5a8cd8e7bb65fb9ba29ee999c8a36ac0d. Genuine structured image parts after read_file, local approval and remote approval rejection, URL/auth/privacy/permissions/restart, stream cap/count/deadline. Full generic integration tier not run."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "536d2ba06d5801063fdf3ac68f14d89a7abded88",
+      "revision_kind": "committed_feature",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "e2e",
+      "command": "pnpm test:e2e source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-image-support worktree; synthetic loopback only."
+      },
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-e2e.log"
+      ],
+      "notes": "Ran after completed build and final Discord integration. CLI offline fixtures only; not live Discord/mobile acceptance. Full generic e2e tier not run."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_feature_precommit",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "static",
+      "command": "pnpm typecheck; pnpm lint; pnpm check:no-unit-tests; changed-file prettier --check; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Isolated discord-image-support worktree; synthetic loopback only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "diagnostic": "Whole repo lint exits1: ESLint0errors31warnings; Prettier fails only historical docs/test-results.json. Exact base git-show piped to prettier --check --stdin-filepath docs/test-results.json also exits1, support-base-format.log."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-lint.log"
+      ],
+      "notes": "Typecheck passed after fixture human.author.bot type fix (initial failure support-typecheck.log). Changed-file formatting, diff check, no-unit-tests guard passed. Later structured-oracle typecheck passed at source536d2ba0: support-typecheck-structured.log. No historical ledger reformat."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-static-final-interrupted",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "536d2ba06d5801063fdf3ac68f14d89a7abded88",
+      "revision_kind": "committed_feature",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "static",
+      "command": "pnpm typecheck; further checks intended but not reached",
+      "command_complete": false,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Isolated local worktree; no live services."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "diagnostic": "Shell tool timed_out after1014ms before typecheck result; incomplete command, not a TypeScript diagnostic."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-static-final.log"
+      ],
+      "notes": "Tool execution deadline accidentally1000ms; terminated during tsc. No code failure observed; no pass claim. Process inspection confirmed no surviving tsc. Safe read-only repetition recorded separately."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-static-final",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "536d2ba06d5801063fdf3ac68f14d89a7abded88",
+      "revision_kind": "committed_feature",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "static",
+      "command": "pnpm typecheck; pnpm check:no-unit-tests; git diff --name-only 143507e3..HEAD -z | xargs -0 pnpm exec prettier --check; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Isolated local worktree; no live services."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-static-final-complete.log"
+      ],
+      "notes": "Exact source536d2ba0/tree8d93dee5; all four exit statuses0. Whole-repo lint was run separately and retains historical ledger-format limitation. No lint pass inferred from scoped formatting.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-29-discord-image-support-static-final-interrupted"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-discord-image-support-independent-e2e-unbuilt",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "536d2ba06d5801063fdf3ac68f14d89a7abded88",
+      "revision_kind": "committed_feature",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "e2e",
+      "command": "pnpm test:e2e source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent image-verifier worktree, source536d2ba0, no build yet."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 8,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-cli.e2e.test.ts",
+          "diagnostic": "Fresh worktree missing required dist/cli.js;8 tests failed before REST. pnpm build repairs setup; no source change."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-verifier.md"
+      ],
+      "notes": "Independent fresh worktree lacked dist/cli.js; all8 failed before REST requests. Chained typecheck did not execute. Environment/setup failure, not a demonstrated production defect."
+    },
+    {
+      "id": "2026-10-29-discord-image-support-independent",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "536d2ba06d5801063fdf3ac68f14d89a7abded88",
+      "revision_kind": "committed_feature",
+      "base_commit": "143507e3fd89d790e78c15f23fbfef792866b109",
+      "task_ids": [
+        "2026-10-29-discord-image-support"
+      ],
+      "suite": "independent-verification",
+      "command": "pnpm install --frozen-lockfile; focused Discord integration (110+4); temporary cross-boundary probe; pnpm build; Discord CLI e2e; pnpm typecheck; pnpm lint; exact-base prettier check; pnpm check:no-unit-tests; changed-file prettier --check; git diff --check; git status --porcelain",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": null
+        },
+        "notes": "Isolated local worktree; no live services."
+      },
+      "result": {
+        "passed": 123,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 6,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "diagnostic": "Whole-repository lint remains red on exact-base historical formatting; not part of behavioral test counts. Scoped changed-file formatting passes."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-image/support-verifier.md"
+      ],
+      "notes": "Verifier idle-hellebore-520 ACCEPT.115integration (114existing+1own temporary probe),8built-CLI e2e. Temporary probe success/403/success confirms partial success, exact structured image bytes, omissions, privacy and restart without replay. Initial supplied nonexistent discord-rest test path contributed no tests; command suite separately added. Lint0errors31warnings then historical ledger-format failure independently reproduced on exact base. Final source clean. Parent provider suite not independently rerun. No live or semantic visual claim.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-29-discord-image-support-independent-e2e-unbuilt"
+        ]
+      },
+      "verification": {
+        "independent": true,
+        "verifier": "idle-hellebore-520",
+        "verdict": "accept"
+      }
     }
   ]
 }

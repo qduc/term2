@@ -4186,10 +4186,12 @@ and reconcile later effects rather than replaying it blindly.
 ## Discord image ingress containment (2026-10-29)
 
 Owner: `stageDiscordImages` in `source/services/discord/discord-images.ts`;
-caller/authentication owner: `DiscordBridge.#ingress`. Status: candidate, pending
-independent verification. Class: admission byte/count limits plus a containment
-fetch deadline. Harm: unbounded attachment allocation/disk use per message and a
-stalled CDN response blocking the serial bridge (including later human controls).
+caller/authentication owner: `DiscordBridge.#ingress`. Independently verified at
+`536d2ba06d5801063fdf3ac68f14d89a7abded88` with synthetic local HTTP,
+filesystem, control and conversation workflows; not live Discord/provider vision.
+Class: admission byte/count limits plus a containment fetch deadline. Harm:
+unbounded attachment allocation/disk use per message and a stalled CDN response
+blocking the serial bridge (including later human controls).
 
 Effective policy is code-local: first ten attachments, 20 MiB aggregate streamed
 bytes per message, one shared 30,000 ms AbortSignal for the message's downloads.

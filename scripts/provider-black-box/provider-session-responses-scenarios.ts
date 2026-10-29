@@ -28,9 +28,12 @@ const TOOL_ARGUMENTS_PARTS = ['{"command":"pwd",', '"sandbox":"unsandboxed"}'] a
 const TOOL_ARGUMENTS = TOOL_ARGUMENTS_PARTS.join('');
 const BACKGROUND_SHELL_CALL_ID = 'call-fixture-background-shell';
 const BACKGROUND_SHELL_ITEM_ID = 'item-fixture-background-shell';
-// Harmless and deliberately short-lived: completion occurs after the launch
-// acknowledgement, while keeping this shipped-CLI fixture free of inline code.
-const BACKGROUND_SHELL_ARGUMENTS = JSON.stringify({ command: 'sleep 1', background: true });
+// The test releases this shell after observing the launch acknowledgement, so
+// completion remains a distinct notification without a fixed sleep.
+const BACKGROUND_SHELL_ARGUMENTS = JSON.stringify({
+  command: 'while [ ! -e .term2-background-shell-release ]; do sleep 0.05; done',
+  background: true,
+});
 
 type ProviderId = 'openai' | 'codex';
 type Transport = 'http' | 'websocket';
@@ -97,6 +100,7 @@ afterEach(async () => {
   activeServer = undefined;
 
   try {
+    if (workspace) await writeFile(join(workspace.root, '.term2-background-shell-release'), 'released');
     await child?.cleanup({ timeoutMs: 2_000 });
   } finally {
     try {
@@ -367,17 +371,17 @@ export function registerResponsesToolScenarios(): void {
       await writeApprovalShortcut(child, 'y');
       await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 2);
       await child.waitForVisibleOutput('BACKGROUND-LAUNCH-FINAL');
-      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 3, 10_000);
-      await child.waitForVisibleOutput('BACKGROUND-COMPLETION-FINAL');
-
-      const requests = normalRequests(server.requests);
-      const launchContinuation = requests[1];
+      const launchContinuation = normalRequests(server.requests)[1];
       const results = toolResultItems(launchContinuation);
       expect(results).toHaveLength(1);
       expect(results[0]).toMatchObject({ type: 'function_call_output', call_id: BACKGROUND_SHELL_CALL_ID });
       const acknowledgement = parseFunctionResultOutput(results[0]);
       expect(acknowledgement).toMatchObject({ jobId: expect.any(String), status: 'running' });
+      await writeFile(join(workspace.root, '.term2-background-shell-release'), 'released');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 3, 10_000);
+      await child.waitForVisibleOutput('BACKGROUND-COMPLETION-FINAL');
 
+      const requests = normalRequests(server.requests);
       // A background completion is a separate notification turn, never a second
       // function result for the original tool call.
       expect(

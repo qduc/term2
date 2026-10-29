@@ -21,8 +21,11 @@ const ROWS = 24;
 let session: TerminalSession | null = null;
 let server: http.Server | null = null;
 let root = '';
+let shellReleasePath = '';
 
 afterEach(async () => {
+  if (shellReleasePath) fs.writeFileSync(shellReleasePath, '');
+  shellReleasePath = '';
   session?.dispose();
   session = null;
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
@@ -34,7 +37,7 @@ afterEach(async () => {
 async function startProvider(workspace: string): Promise<string> {
   let requests = 0;
   const command = (name: string) =>
-    `sleep 15; printf '${name}' > '${path.join(
+    `while [ ! -e '${shellReleasePath}' ]; do sleep 0.05; done; printf '${name}' > '${path.join(
       workspace,
       `${name}.done`,
     )}'; # MENU_ROW_WRAP_LONG_LABEL_012345678901234567890123456789`;
@@ -145,6 +148,7 @@ it(
     fs.mkdirSync(home);
     fs.mkdirSync(workspace);
     fs.mkdirSync(runtime);
+    shellReleasePath = path.join(workspace, 'release-shells');
     const baseUrl = await startProvider(workspace);
     const idlePath = path.join(home, 'input-idle');
     const env = {
@@ -225,6 +229,7 @@ it(
     expectTwoActiveRows(currentMenu());
     expect(currentMenu()).not.toContain('[Shell · foreground]');
 
+    fs.writeFileSync(shellReleasePath, '');
     const firstDone = path.join(workspace, 'one.done');
     const secondDone = path.join(workspace, 'two.done');
     await waitUntil(
@@ -238,7 +243,7 @@ it(
     expect(session.getVisibleOutput()).not.toContain('Task is no longer transferable');
 
     session.write('\x1b');
-    await sleep(100);
+    await waitForHarnessIdleGeneration(idlePath, { after: idle });
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);
     session.write('\x03');

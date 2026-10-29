@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { stageDiscordImages } from './discord-images.js';
 import { createHash } from 'node:crypto';
 import { connect } from 'node:net';
 import {
@@ -28,6 +29,7 @@ interface DiscordMessage {
   content: string;
   author: { id: string; bot?: boolean };
   webhook_id?: string;
+  attachments?: unknown[];
 }
 interface Binding {
   socketPath: string;
@@ -305,6 +307,7 @@ export class DiscordBridge {
   readonly #token: string;
   readonly #runtimeDir: string;
   readonly #apiBase: string;
+  readonly #attachmentFetch: typeof fetch;
   readonly #warn: (message: string) => void;
   readonly #file: string;
   readonly #lock: string;
@@ -326,6 +329,8 @@ export class DiscordBridge {
       runtimeDir: string;
       /** Test-only loopback HTTP fixture; production always uses Discord v10. */
       apiBase?: string;
+      /** Test-only network boundary; URL validation still runs before this fetch. */
+      attachmentFetch?: typeof fetch;
       warn?: (message: string) => void;
     },
   ) {
@@ -343,6 +348,7 @@ export class DiscordBridge {
     this.#token = token;
     this.#runtimeDir = options.runtimeDir;
     this.#apiBase = base;
+    this.#attachmentFetch = options.attachmentFetch ?? fetch;
     this.#warn = options.warn ?? (() => {});
     this.#file = path.join(config.stateDir, 'journal.json');
     this.#lock = path.join(config.stateDir, 'owner.json');
@@ -683,6 +689,7 @@ export class DiscordBridge {
           !snowflakePattern.test(message.id) ||
           message.channel_id !== this.#config.channelId ||
           typeof message.content !== 'string' ||
+          (message.attachments !== undefined && !Array.isArray(message.attachments)) ||
           !message.author?.id,
       )
     ) {
@@ -706,11 +713,15 @@ export class DiscordBridge {
       if (message.author.id === this.#config.humanUserId && !message.author.bot && !message.webhook_id) {
         if (message.content.startsWith('!bridge ')) {
           await this.#command(message);
-        } else if (message.content.trim()) {
+        } else if (message.content.trim() || message.attachments?.length) {
           const route = /^@([A-Za-z0-9_-]+)(?:\s+|$)([\s\S]*)$/.exec(message.content);
           const alias = route?.[1] ?? this.#config.coordinator;
-          const text = route ? route[2]!.trim() : message.content;
-          if ((message.content.startsWith('@') && !route) || !text || text.length > 32_000) {
+          let text = route ? route[2]!.trim() : message.content;
+          if (
+            (message.content.startsWith('@') && !route) ||
+            (!text && !message.attachments?.length) ||
+            text.length > 32_000
+          ) {
             this.#warn('[bridge] Unknown target, empty or oversized message; not delivered.');
           } else if (this.#journal.jobs.filter((job) => !['done', 'uncertain'].includes(job.state)).length >= 128) {
             // Bound work admission, never the shared cursor carrying human recovery controls.
@@ -725,17 +736,49 @@ export class DiscordBridge {
               this.#warn(
                 `[bridge] Target ${alias} is not attached; message ${message.id} NOT accepted and not delivered.`,
               );
-            else
-              this.#journal.jobs.push({
-                id: `discord_${message.id}`,
-                alias,
-                binding,
-                text,
-                origin: { kind: 'human', sender: this.#config.humanUserId },
-                humanRoot: { humanId: this.#config.humanUserId, discordMessageId: message.id },
-                hops: 0,
-                state: 'new',
-              });
+            else {
+              if (Array.isArray(message.attachments) && message.attachments.length) {
+                const images = await stageDiscordImages(message.attachments, {
+                  stateDir: this.#config.stateDir,
+                  channelId: this.#config.channelId,
+                  fetch: this.#attachmentFetch,
+                });
+                if (!this.#attached()[this.#config.coordinator]) return;
+                const media = [
+                  ...(images.paths.length
+                    ? [
+                        "Discord image attachments (untrusted). Use read_file on these local paths to view the images; they have not been viewed yet. Normal file-read approvals and the configured model's image support apply.",
+                        `Paths: ${JSON.stringify(images.paths)}`,
+                      ]
+                    : []),
+                  ...(images.omitted
+                    ? [
+                        `[Discord attachments: ${images.omitted} not delivered (unsupported, oversized or download failed). Ask the human to resend supported images or describe them in text.]`,
+                      ]
+                    : []),
+                ].join('\n');
+                text = [text, media].filter(Boolean).join('\n\n');
+                this.#warn(
+                  `[bridge] Images staged: ${images.paths.length}; attachments not delivered: ${images.omitted}.`,
+                );
+              }
+              // Preserve the existing control input bound, including attachment context.
+              if (text.length > 32_000) {
+                this.#warn(
+                  '[bridge] Message plus attachment context exceeds 32000 characters; not delivered. Shorten the message and resend.',
+                );
+              } else
+                this.#journal.jobs.push({
+                  id: `discord_${message.id}`,
+                  alias,
+                  binding,
+                  text,
+                  origin: { kind: 'human', sender: this.#config.humanUserId },
+                  humanRoot: { humanId: this.#config.humanUserId, discordMessageId: message.id },
+                  hops: 0,
+                  state: 'new',
+                });
+            }
           }
         }
       }

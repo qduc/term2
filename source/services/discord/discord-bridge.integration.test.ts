@@ -54,6 +54,8 @@ const logger = {
 
 async function fixture(
   options: {
+    imageTools?: boolean;
+    approveImages?: boolean;
     maxHops?: number;
     busyTool?: boolean;
     respond?: (alias: string, request: StreamedModelTurnRequest) => string | Promise<string>;
@@ -66,7 +68,10 @@ async function fixture(
   } = {},
 ) {
   const root = fs.mkdtempSync(
-    path.join(process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(), 'term2-discord-'),
+    path.join(
+      options.approveImages === false ? os.homedir() : process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(),
+      'term2-discord-',
+    ),
   );
   fs.chmodSync(root, 0o700);
   cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -106,6 +111,20 @@ async function fixture(
             yield { type: 'completion' as const, responseId: 'busy-tool-turn', output: [] };
             return;
           }
+          if (options.imageTools && alias === 'coord' && received[alias]!.length === 1) {
+            const imagePath = JSON.stringify(request.input).match(/\/[^"\\\s]+\/images-[^"\\\s]+\/0\.png/)?.[0];
+            yield {
+              type: 'tool_call' as const,
+              id: 'view-image',
+              name: 'run_code',
+              arguments: JSON.stringify({
+                code: `return await tools.read_file({path:${JSON.stringify(imagePath)}})`,
+                description: 'View attached image',
+              }),
+            };
+            yield { type: 'completion' as const, responseId: 'view-image-turn', output: [] };
+            return;
+          }
           const proactiveScript = (options.proactiveScripts ?? [
             'return await tools.discord_send({action:"send",requestId:"terminal_notice",text:"@worker terminal-origin notification"})',
           ])[(received[alias]!.length - 1) / 2];
@@ -135,13 +154,14 @@ async function fixture(
     const settings = createMockSettingsService({
       'agent.modelSelection': { provider: providerId, model: 'fixture-model' },
       'agent.retryAttempts': 0,
+      ...(options.imageTools && options.approveImages !== false ? { 'shell.autoApproveMode': 'always' } : {}),
       ...(options.proactive ? { 'app.activeProfileId': options.profile ?? 'builtin:bare' } : {}),
     });
     const context = new SessionContextService();
     const ownership = new ToolOwnershipRegistry();
     const client = new AgentClient({
       selection: { provider: providerId, model: 'fixture-model' },
-      ...(options.proactive || options.busyTool
+      ...(options.proactive || options.busyTool || options.imageTools
         ? {}
         : {
             agentOverride: {
@@ -168,6 +188,7 @@ async function fixture(
       agentClient: client,
       sessionId,
       toolOwnership: ownership,
+      enableNestedApproval: options.approveImages === false,
       deps: { logger, settingsService: settings, sessionContextService: context },
     });
     cleanup.push(() => service.dispose());
@@ -218,6 +239,12 @@ async function fixture(
   const posted: any[] = [];
   const unauthorizedPosts: string[] = [];
   const headers: string[] = [];
+  const mediaRequests: Array<{ path: string; authorization: string | undefined }> = [];
+  let mediaStatus = 200;
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==',
+    'base64',
+  );
   let nextId = 10n;
   let reads = 0;
   let posts429 = 0;
@@ -229,6 +256,12 @@ async function fixture(
   const http: Server = createServer(async (request, response) => {
     headers.push(String(request.headers.authorization));
     const url = new URL(request.url!, 'http://localhost');
+    if (url.pathname.startsWith('/attachments/')) {
+      mediaRequests.push({ path: url.pathname, authorization: request.headers.authorization });
+      response.writeHead(mediaStatus, { 'Content-Type': 'image/png', Location: 'http://127.0.0.1/private' });
+      response.end(png);
+      return;
+    }
     if (request.method === 'GET') {
       reads++;
       await beforeRead?.();
@@ -299,6 +332,10 @@ async function fixture(
     new DiscordBridge(config, 'OFFLINE_FIXTURE_TOKEN', {
       runtimeDir: root,
       apiBase: `http://127.0.0.1:${address.port}`,
+      attachmentFetch: (url, init) => {
+        const source = new URL(String(url));
+        return fetch(`http://127.0.0.1:${address.port}${source.pathname}${source.search}`, init);
+      },
       warn: (warning) => {
         warnings.push(warning);
         onWarning?.(warning);
@@ -307,7 +344,7 @@ async function fixture(
   let bridge = makeBridge();
   bridge.open();
   cleanup.push(() => bridge.close());
-  const human = (content: string, author = { id: '100' }, extra = {}) => {
+  const human = (content: string, author: { id: string; bot?: boolean } = { id: '100' }, extra = {}) => {
     const message = { id: String(nextId++), channel_id: '200', author, content, ...extra };
     messages.push(message);
     return message;
@@ -327,6 +364,18 @@ async function fixture(
   const journal = () => JSON.parse(fs.readFileSync(path.join(config.stateDir, 'journal.json'), 'utf8'));
   return {
     root,
+    png,
+    mediaRequests,
+    setMediaStatus: (value: number) => {
+      mediaStatus = value;
+    },
+    image: (id = '501', extra = {}) => ({
+      id,
+      size: png.length,
+      content_type: 'image/png',
+      url: `https://cdn.discordapp.com/attachments/200/${id}/PRIVATE_NAME.png?ex=PRIVATE_SIGNATURE`,
+      ...extra,
+    }),
     apiBase: `http://127.0.0.1:${address.port}`,
     holdPost: () => {
       holdPost = true;
@@ -2802,4 +2851,131 @@ it('with Gateway push live, reads only on a nudge and still delivers through the
   f.bridge().setPushLive(false);
   await f.cycle(2);
   expect(f.reads()).toBe(ready + 3);
+});
+
+it('delivers an attachment-only Discord image through private storage, control, conversation and read_file to the model', async () => {
+  const f = await fixture({ imageTools: true });
+  await f.cycle();
+  f.human('', { id: '100' }, { attachments: [f.image()] });
+  await f.cycle(12);
+  expect(f.mediaRequests).toEqual([{ path: '/attachments/200/501/PRIVATE_NAME.png', authorization: undefined }]);
+  expect(f.received.coord.length).toBe(2);
+  const wire = JSON.stringify(f.received.coord[1]!.input);
+  expect(wire).toContain('image');
+  expect(wire).toContain(f.png.toString('base64'));
+  const journal = JSON.stringify(f.journal());
+  expect(JSON.stringify(f.received.coord[0]!.input)).toContain('read_file');
+  for (const data of [wire, journal, f.warnings.join('\n')]) {
+    expect(data).not.toContain('PRIVATE_NAME');
+    expect(data).not.toContain('PRIVATE_SIGNATURE');
+    expect(data).not.toContain('OFFLINE_FIXTURE_TOKEN');
+  }
+  const dir = fs.readdirSync(f.config.stateDir).find((name) => name.startsWith('images-'))!;
+  const image = path.join(f.config.stateDir, dir, '0.png');
+  expect(fs.readFileSync(image)).toEqual(f.png);
+  expect(fs.statSync(image).mode & 0o777).toBe(0o600);
+  expect(fs.statSync(path.dirname(image)).mode & 0o777).toBe(0o700);
+  f.restart();
+  await f.cycle();
+  expect(f.mediaRequests).toHaveLength(1);
+  expect(f.received.coord).toHaveLength(2);
+  expect(f.posted).toEqual([]);
+});
+
+it('routes captioned and bare-alias images and explicitly counts unsupported siblings', async () => {
+  const f = await fixture();
+  await f.cycle();
+  f.human(
+    '@worker inspect this',
+    { id: '100' },
+    { attachments: [f.image(), f.image('502', { content_type: 'application/pdf' })] },
+  );
+  await f.cycle(6);
+  expect(f.received.coord).toHaveLength(0);
+  expect(f.received.worker).toHaveLength(1);
+  const input = JSON.stringify(f.received.worker[0]!.input);
+  expect(input).toContain('inspect this');
+  expect(input).toContain('read_file');
+  expect(input).toContain('1 not delivered');
+  f.human('@worker', { id: '100' }, { attachments: [f.image('503')] });
+  await f.cycle(6);
+  expect(f.received.worker).toHaveLength(2);
+  expect(f.mediaRequests).toHaveLength(2);
+  expect(f.posted).toEqual([]);
+});
+
+it('does not download media for excluded authors, commands or unavailable targets', async () => {
+  const f = await fixture();
+  await f.cycle();
+  for (const [content, author, extra] of [
+    ['caption', { id: '999' }, {}],
+    ['caption', { id: '100', bot: true }, {}],
+    ['caption', { id: '100' }, { webhook_id: '900' }],
+    ['!bridge status', { id: '100' }, {}],
+    ['@missing caption', { id: '100' }, {}],
+    ['@bad.target', { id: '100' }, {}],
+    ['x'.repeat(32001), { id: '100' }, {}],
+  ] as const)
+    f.human(content, author, { ...extra, attachments: [f.image()] });
+  await f.cycle(6);
+  expect(f.mediaRequests).toEqual([]);
+  expect(f.received.coord).toHaveLength(0);
+  await f.detach('coord');
+  f.human('', { id: '100' }, { attachments: [f.image()] });
+  const cursor = f.journal().cursor;
+  await f.cycle();
+  expect(f.mediaRequests).toEqual([]);
+  expect(f.journal().cursor).toBe(cursor);
+});
+
+it('reports rejected CDN locations, redirects and failed downloads without fetching another host or losing later input', async () => {
+  const f = await fixture();
+  await f.cycle();
+  f.human(
+    '',
+    { id: '100' },
+    {
+      attachments: [
+        f.image('501', { url: 'http://127.0.0.1/private' }),
+        f.image('502', { size: 20 * 1024 * 1024 + 1 }),
+      ],
+    },
+  );
+  await f.cycle(6);
+  expect(f.mediaRequests).toEqual([]);
+  expect(JSON.stringify(f.received.coord[0]!.input)).toContain('2 not delivered');
+  for (const status of [302, 403]) {
+    f.setMediaStatus(status);
+    f.human('caption', { id: '100' }, { attachments: [f.image()] });
+    await f.cycle(6);
+    expect(JSON.stringify(f.received.coord.at(-1)!.input)).toContain('1 not delivered');
+  }
+  f.setMediaStatus(200);
+  f.human('recovered', { id: '100' }, { attachments: [f.image()] });
+  await f.cycle(6);
+  expect(f.mediaRequests).toHaveLength(3);
+  expect(JSON.stringify(f.received.coord.at(-1)!.input)).toContain('read_file');
+  expect(f.warnings.join('\n')).not.toContain('PRIVATE_SIGNATURE');
+  expect(f.posted).toEqual([]);
+});
+
+it('keeps outside-workspace image reads terminal-approved rather than granting remote input new permissions', async () => {
+  const f = await fixture({ imageTools: true, approveImages: false });
+  await f.cycle();
+  f.human('view this', { id: '100' }, { attachments: [f.image()] });
+  await f.cycle(12);
+  expect(f.mediaRequests).toHaveLength(1);
+  expect(f.received.coord).toHaveLength(1);
+  const pending = f.sessions.coord!.service.getNestedApprovalSnapshot();
+  expect(pending?.toolName).toBe('read_file');
+  expect(JSON.stringify(f.received.coord[0]!.input)).not.toContain(f.png.toString('base64'));
+  f.human('approve the read');
+  await f.cycle(6);
+  expect(f.received.coord).toHaveLength(1);
+  expect(f.sessions.coord!.service.getNestedApprovalSnapshot()?.requestId).toBe(pending!.requestId);
+  await f.sessions.coord!.service.decideNestedApproval(pending!.requestId, { answer: 'y' });
+  await f.cycle(12);
+  expect(f.received.coord).toHaveLength(2);
+  expect(JSON.stringify(f.received.coord[1]!.input)).toContain(f.png.toString('base64'));
+  expect(f.posted).toEqual([]);
 });

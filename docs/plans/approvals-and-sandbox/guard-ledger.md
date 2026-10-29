@@ -4182,3 +4182,42 @@ refusal and channel/human/path/hop-limit mismatch without journal rewrite.
 Commands and results are recorded in `docs/test-results.json`. Rollback of the
 binary alone cannot open the upgraded fingerprint; preserve a pre-upgrade backup
 and reconcile later effects rather than replaying it blindly.
+
+## Discord image ingress containment (2026-10-29)
+
+Owner: `stageDiscordImages` in `source/services/discord/discord-images.ts`;
+caller/authentication owner: `DiscordBridge.#ingress`. Status: candidate, pending
+independent verification. Class: admission byte/count limits plus a containment
+fetch deadline. Harm: unbounded attachment allocation/disk use per message and a
+stalled CDN response blocking the serial bridge (including later human controls).
+
+Effective policy is code-local: first ten attachments, 20 MiB aggregate streamed
+bytes per message, one shared 30,000 ms AbortSignal for the message's downloads.
+There is no environment/setting/role override, inheritance, clamping or migration.
+Metadata size must be a positive safe integer fitting the remaining budget; actual
+stream size must equal it. Bytes consumed by failed downloads also consume budget.
+A single chunk can cross the budget before rejection; no oversized buffer is
+concatenated or saved. No model/provider limit is inferred from these values.
+
+The least-destructive action is to omit/refuse the affected attachment before
+saving it, retain successful sibling files and deliver an explicit omitted count.
+No admitted tool/turn is cancelled. Recovery: resend smaller supported images or
+supply text; no persisted signed URL retry. Legitimate large or slow uploads can
+be refused. The 20 MiB/30s policy is a conservative single-user containment choice,
+not a measured universal suitability claim. Staged files remain in private bridge
+state without automatic expiry; disk growth across messages is operator-owned.
+
+Observability is count-only local diagnostics and a model-visible omitted count;
+no exception strings, signed URLs, original filenames or token values. The existing
+32,000-character control text bound also includes generated media context; combined
+oversize refuses the whole message with local resend guidance, not truncation.
+
+Evidence: `pnpm test:integration source/services/discord/discord-images.integration.test.ts`
+checks exact 20 MiB and 20 MiB+1 metadata, mismatched actual streams, ten/eleven
+admission, signature validation, URL allowlisting, and a real stalled HTTP body
+aborted at the shared 30s deadline. The Discord bridge integration journey was red
+before the ingress change (no download/model image) and now checks actual image
+bytes after `read_file`, private permissions, terminal approval and restart.
+Logs: coordinator task `discord-image/support-*.log`. Rollback is confined to the
+staging module, bridge hook and their documentation/tests; no shared frame bound,
+provider policy, session permission or journal schema changes.

@@ -24,3 +24,22 @@ Ingress remains in Discord while the configured default coordinator is unavailab
 Channel output requires an explicit `discord_send` call; ordinary assistant finals are not automatically mirrored. Capable, opted-in agents receive Discord communication guidance, but wording alone does not prove a message was sent. Approvals, questions, and status output remain local. Plan mode blocks Discord sends.
 
 Offline socket/API fixtures and local attachment checks do not validate real-account Discord delivery, bot permissions, or mobile behavior. Those live checks remain outstanding; follow the guide's live checklist before relying on them.
+
+## Image attachments
+
+New human PNG/JPEG/WebP/GIF attachments are staged privately in bridge state. The
+target receives local paths and uses its existing `read_file` image tool; this is
+not automatic inline vision. Use a local image-capable model/session with tools
+enabled, and approve outside-workspace reads in the terminal when required.
+`@worker` plus an image works without a caption. No file-read permission is granted
+by Discord. Unsupported/failed media is explicitly counted instead of disappearing.
+
+The bridge considers up to ten attachments and 20 MiB total downloaded bytes within
+30 seconds per message. It fetches only validated Discord CDN attachment URLs,
+without credentials or redirects. Signed URLs and original filenames are not
+forwarded to the model. Image bytes go to the configured provider only through the
+normal tool workflow, and may be retained in normal conversation history. Staged
+files remain in private bridge state until manually removed with archived state;
+protect backups and monitor disk usage. See the reference guide's **Images from
+Discord** section for limitations and recovery. Live Discord and real-provider
+vision behavior have not been validated by offline fixtures.

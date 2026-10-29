@@ -67,6 +67,59 @@ are hints, not proof of a particular network cause; unknown failures stay generi
 Read failures retain the cursor and use the existing bounded backoff; a diagnostic
 does not imply the process exited. Never paste credentials into bug reports.
 
+## Images from Discord
+
+New configured-human messages can carry PNG, JPEG, WebP or GIF attachments, with
+or without a caption. `@worker` with an image targets that attached session;
+without a target the configured coordinator receives it. The bridge downloads
+eligible images into generated private files under its `stateDir` and adds local
+paths plus a `read_file` instruction to the ordinary untrusted Discord input.
+The session uses its existing image-reading tool: **this is not inline vision**,
+and no image has been viewed until the tool read succeeds. The configured model
+must support image inputs. Model-specific format restrictions (for example,
+animated GIFs) still apply; no provider/model is selected automatically.
+
+File reads retain the session's existing permissions. State outside the workspace
+normally requires terminal approval unless already allowed by the session's normal
+read policy. Discord cannot answer that approval. Tools-disabled, remote-filesystem,
+or non-visual model sessions may not be able to view the staged images; use a local
+image-capable session with `read_file` and check its terminal. No special read grant
+or sandbox exception is created.
+
+Only fresh attachments on admitted human input are fetched, not embed/link previews,
+old history, bot/webhook messages, commands or unavailable targets. Up to ten
+attachments are considered with a 20 MiB aggregate streamed-byte budget and a shared
+30-second download deadline per message. These are local bridge containment limits,
+not Discord/provider limits. Failed, oversized and unsupported media are counted in
+session text and local diagnostics; successful siblings still arrive. Resend smaller
+supported images or supply text if needed. The existing 32,000-character message
+limit includes the generated attachment context; exceeding it refuses the message
+with local guidance, not truncation.
+
+Downloads use only HTTPS `cdn.discordapp.com/attachments/<channel>/<attachment>/...`
+URLs from the REST attachment array, with redirects refused and **no bot token**.
+The bridge verifies actual image signatures and byte counts, generates its own file
+names, and uses 0700 directories/0600 files. Original names, alt text and signed CDN
+URLs are not added to prompts, diagnostics or the journal. This does not sanitize
+information *inside the image* or make an image trustworthy. Reading sends image
+bytes to the session's configured provider under its normal data/privacy policy;
+normal tool results/history may retain image data. Do not send images you would not
+send to that provider.
+
+Staged originals remain in bridge state until the operator removes archived state;
+there is no automatic cleanup/eviction, including after completed jobs or a crash.
+Protect state and backups as private data, and account for disk use. Download
+failures are not retried from persisted URLs; Discord's signed URLs expire, so a new
+message is the recovery path. Existing journal/control schemas are unchanged.
+
+Discord's [Attachment Object](https://docs.discord.com/developers/resources/message#attachment-object)
+documents `id`, `size`, `url` and optional `content_type`.
+[Signed Attachment CDN URLs](https://docs.discord.com/developers/reference#signed-attachment-cdn-urls)
+documents expiry and fresh URLs from fetched messages. These are documented
+contracts, not evidence of live Discord validation. Offline fixtures verify the
+local route through `read_file` to actual model image content; live/mobile behavior
+and real-provider visual understanding still require an authorized check.
+
 ## Operational and advanced reference
 
 ## Attach the actual session, not a blank replacement
@@ -286,8 +339,7 @@ reinterpreting it.
   Only the configured human can originate channel input. Unknown/malformed targets
   never fall back to coordinator. Other users are silently ignored, without leaking
   session details. Unexpected channel data is rejected without advancing the cursor.
-* Text only; attachments, edits to previously consumed messages and message deletion
-  are not queue-edit commands. Submit a new message or use normal terminal controls.
+* Previously consumed message edits and deletions are not queue-edit commands. Submit a new message or use normal terminal controls.
 
 Human/peer identity is carried in the control request, terminal presentation and
 actual model/history text. The provider's transport role is still `user`, as with

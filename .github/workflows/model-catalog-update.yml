@@ -5,8 +5,9 @@ name: Update model catalog
 # throwaway directory, points PI_AI_DATA_DIR at it, and regenerates
 # source/providers/model-catalog/catalog.generated.ts via
 # `pnpm catalog:update`, runs typechecking and repository guards, and opens or
-# force-updates one predictable automation PR. The job exits cleanly (green
-# no-op) when a run produces no catalog changes.
+# force-updates one predictable automation PR. Reuses the full CI matrix at the
+# pushed commit, then merges that exact head on success. The workflow exits
+# cleanly (green no-op) when a run produces no catalog changes.
 on:
   schedule:
     # 06:00 UTC every Friday.
@@ -14,8 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 # Serialize runs: a weekly tick and a manual dispatch must never race on the
 # same PR branch. A queued run waits rather than cancels, so an in-flight
@@ -26,6 +26,15 @@ concurrency:
 
 jobs:
   update:
+    # Manual runs from other branches must never update or merge the shared PR.
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+      head: ${{ steps.pull-request.outputs.head }}
+      number: ${{ steps.pull-request.outputs.number }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -80,6 +89,7 @@ jobs:
           pnpm test
 
       - name: Open or update the automation pull request
+        id: pull-request
         if: steps.changes.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -104,10 +114,40 @@ jobs:
           git commit -m "$PR_TITLE"
           git push -u origin "$BRANCH" --force
 
-          PR_NUMBER="$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')"
+          PR_NUMBER="$(gh pr list --state open --head "$BRANCH" --base "$BASE" --json number --jq '.[0].number // empty')"
           if [ -n "$PR_NUMBER" ]; then
             echo "Updating existing PR #${PR_NUMBER}."
             gh pr edit "$PR_NUMBER" --title "$PR_TITLE" --body "$PR_BODY"
           else
             gh pr create --title "$PR_TITLE" --body "$PR_BODY" --head "$BRANCH" --base "$BASE"
+            PR_NUMBER="$(gh pr list --state open --head "$BRANCH" --base "$BASE" --json number --jq '.[0].number')"
           fi
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+  # GITHUB_TOKEN-created PRs do not trigger pull_request workflows. Call the
+  # same four CI jobs explicitly instead of bypassing CI or requiring a PAT.
+  ci:
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.update.outputs.head }}
+
+  merge:
+    needs: [update, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Merge the validated catalog update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.update.outputs.number }}
+          HEAD_SHA: ${{ needs.update.outputs.head }}
+        # No --admin or --auto: honor branch rules, fail if the PR changed, and
+        # do not depend on the repository's optional auto-merge setting. A merge
+        # by GITHUB_TOKEN does not emit a new push CI run; CI already ran above.
+        run: gh pr merge "$PR_NUMBER" --squash --match-head-commit "$HEAD_SHA"

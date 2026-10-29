@@ -4,6 +4,12 @@ name: CI
 # All four tiers remain required; the existing four jobs share their work.
 # Provider cases still drive the built CLI against deterministic loopback fixtures.
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to validate for the catalog updater
+        required: true
+        type: string
   push:
     branches:
       - main
@@ -17,7 +23,7 @@ permissions:
 # A newer push to main supersedes an in-flight run of an older commit;
 # cancel the stale run instead of queueing behind it.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 
 # The same four runners now share the complete inventory. Each tier keeps its
@@ -30,6 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-tests
         with:
@@ -47,6 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-tests
         with:
@@ -61,6 +69,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
       - name: Build dist
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
@@ -72,6 +82,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
       - name: Build dist
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build

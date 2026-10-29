@@ -28051,6 +28051,148 @@
         "notes": "The common record template incorrectly labelled direct non-test static/lint commands and blocked verifier attempts as NODE_ENV=test. Parent direct lint/typecheck/ESLint/Prettier/guard ran under ambient production; independent direct static/lint ambient value was not retained and is unknown. No counts/outcomes/source claims change. Test runner records remain correctly NODE_ENV=test."
       },
       "notes": "Append-only correction; historical observations untouched. No test rerun or behavior change inferred."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-integration-build-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "7efb73e70d7436bb3035d3eab26d15db9f261e9a",
+      "revision_kind": "committed_feature",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "build-static",
+      "command": "main: pnpm build; isolated checkout: pnpm install --offline --frozen-lockfile && pnpm build && pnpm typecheck && pnpm check:no-unit-tests",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "production"
+        },
+        "notes": "Ordinary .worktrees/discord-reactions checkout with its own dependencies; local main has the same source. Ambient shell NODE_ENV=production; test scripts explicitly set test."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/integration-evidence/main-build.log",
+        "/home/qduc/coord/term2/tasks/discord-reactions/integration-evidence/candidate-checks.log"
+      ],
+      "notes": "All commands exited 0 after fast-forwarding accepted source to local main. No source edits. No full global lint rerun: inherited ledger formatting failure already independently reproduced on the base."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-integration-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "7efb73e70d7436bb3035d3eab26d15db9f261e9a",
+      "revision_kind": "committed_feature",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord source/services/control-socket",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Ordinary .worktrees/discord-reactions checkout with its own dependencies; local main has the same source. Ambient shell NODE_ENV=production; test scripts explicitly set test."
+      },
+      "result": {
+        "passed": 129,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 6,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/integration-evidence/candidate-checks.log"
+      ],
+      "notes": "Actual Discord/image/reaction/private control-boundary integrations; no live Discord effects or paid provider calls."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-integration-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "7efb73e70d7436bb3035d3eab26d15db9f261e9a",
+      "revision_kind": "committed_feature",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "e2e",
+      "command": "pnpm test:e2e source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Ordinary .worktrees/discord-reactions checkout with its own dependencies; local main has the same source. Ambient shell NODE_ENV=production; test scripts explicitly set test."
+      },
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/integration-evidence/candidate-checks.log"
+      ],
+      "notes": "Built CLI fixture workflow, not live Discord acceptance."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-integration-runtime-compatibility",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "7efb73e70d7436bb3035d3eab26d15db9f261e9a",
+      "revision_kind": "committed_feature",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "runtime-compatibility",
+      "command": "node --input-type=module: offline old/new discord_send input and scripted-return schema parsing",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "production"
+        },
+        "notes": "Ordinary .worktrees/discord-reactions checkout with its own dependencies; local main has the same source. Ambient shell NODE_ENV=production; test scripts explicitly set test."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/integration-evidence/runtime-compatibility.json",
+        "/home/qduc/coord/term2/tasks/discord-reactions/integration-evidence/runtime-observation.json"
+      ],
+      "notes": "PASS discriminating probe: retained live-runtime definitions reject react input and new acknowledged-send result; integrated definitions accept both. Live server source separately rejects reaction origin. Activation blocked until coordinated runtime replacement; no live reaction sent. No framework test count claimed."
     }
   ]
 }

@@ -24513,6 +24513,85 @@
       "failures": [],
       "notes": "Both commands exit0; ESLint ignores scripts/restart-work.e2e.test.ts under existing repository configuration (one warning). Prettier checks all3; typecheck covers project. See focused-eslint.log and base-ledger-format.log too.",
       "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/focused-prettier.log"]
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6b9592214fabebe1aaed94990f31fb05c4a53f9c",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "tree": "98b858eb308172c183664d49a90893fb97bd0181",
+      "revision_kind": "pre-commit source snapshot; committed source tree identical; temporary PTY test untracked",
+      "task_ids": [
+        "2026-10-29-restart-menu-order"
+      ],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree and PTY fixture; no live provider or service."
+      },
+      "id": "2026-10-29-restart-menu-e2e",
+      "suite": "focused terminal and restart e2e",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts scripts/menu-order-temp.e2e.test.ts scripts/restart.e2e.test.ts --reporter=verbose",
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Real terminal menu initial model/effort; final skills/restart/quit/help; restart successful and six failure scenarios pass. Temporary PTY test removed; second isolated run captured /help order.",
+      "evidence": [
+        "/tmp/restart-menu-e2e.log",
+        "/tmp/restart-menu-order.log"
+      ]
+    },
+    {
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "6b9592214fabebe1aaed94990f31fb05c4a53f9c",
+      "base_commit": "8c2b514dda12a3e3794849437ef3ca16f95e10e1",
+      "tree": "98b858eb308172c183664d49a90893fb97bd0181",
+      "revision_kind": "pre-commit source snapshot; committed source tree identical; temporary PTY test untracked",
+      "task_ids": [
+        "2026-10-29-restart-menu-order"
+      ],
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree and PTY fixture; no live provider or service."
+      },
+      "id": "2026-10-29-restart-menu-checks",
+      "suite": "typecheck build and lint",
+      "command": "pnpm typecheck; pnpm build; pnpm lint; pnpm exec eslint source/hooks/use-app-commands.ts; pnpm exec prettier --check source/hooks/use-app-commands.ts",
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "test": "pnpm lint prettier --check .",
+          "actual": "Prettier formatting failure; ESLint 0 errors, 31 warnings",
+          "classification": "pre-existing; parent ledger snapshot reproduced with prettier"
+        }
+      ],
+      "notes": "Typecheck, build and focused ESLint/Prettier passed. Initial lint included temporary test formatting; clean rerun failed only on baseline ledger. Pre-existing failure documented at afde70a94e3c8af8ce545497079b189b7f9045c2.",
+      "evidence": [
+        "/tmp/restart-menu-typecheck.log",
+        "/tmp/restart-menu-build.log",
+        "/tmp/restart-menu-lint.log",
+        "/tmp/restart-menu-lint-clean.log"
+      ]
     }
   ]
 }

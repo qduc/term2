@@ -27272,6 +27272,736 @@
         "/home/qduc/coord/term2/tasks/discord-image/activation-evidence/post-cutover-review.md"
       ],
       "notes": "Live old bridge2980590 replaced by3282449/start339473165, candidate8bd4743. Exact journal/cursor unchanged56done/145sent/142proactive. Coordinator2980031, writer/current log/public session, Herdr129259 and other panes/credentials unchanged. Only bridgeEntry changed; enabled units stay inactive. Real image/CDN/provider semantics and physical boot pending; no Discord sends/prompts/replay/remote push/publish/deploy."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-existing",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_precommit_snapshot",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": 108,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-existing.log"
+      ],
+      "notes": "Compatibility run on initial feature dirty snapshot before new reaction tests; not a clean-commit run."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-expanded",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_precommit_snapshot",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": 118,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-integration.log"
+      ],
+      "notes": "Expanded reaction workflows on dirty pre-final snapshot; subsequent cap/compatibility checks added."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-final-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_precommit_snapshot",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts source/services/discord/discord-images.integration.test.ts source/services/control-socket",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": 129,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 6,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-integration-final.log"
+      ],
+      "notes": "Dirty precommit snapshot; source subsequently checkpointed as d91c0617. Before final fixture-ID assertion and actual-root prompt wiring/inspection; focused final checks follow. No full general integration/e2e claim."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-fixture-red",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_precommit_snapshot",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration-red-proof",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t \"routes real Gateway add/remove/add\"",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 111,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "test": "routes real Gateway add/remove/add feedback to the acknowledged chunk owner, not the default session",
+          "diagnostic": "Created fixture IDs10,12 vs acknowledged11,13; response advanced nextId twice. New equality oracle catches drift."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-fixture-red.log"
+      ],
+      "notes": "Intentional temporary reproduction of latent HTTP fixture ID drift, not production failure. Restored immediately."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-fixture-green",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_precommit_snapshot",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t \"routes real Gateway add/remove/add|executes explicit Unicode/custom\"",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 110,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-fixture-green.log"
+      ],
+      "notes": "Final fixture single-ID owner and stronger equality oracle; explicit run_code test also asserts actual assembled root prompt reaction instructions. Precommit dirty source, then standard-hook commit d91c0617."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-lint-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "dirty_precommit_snapshot",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "diagnostic": "prettier --check rejects inherited formatting; base stdin reproduction exit1, build-evidence/discord-reactions-base-format.log."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-lint.log"
+      ],
+      "notes": "ESLint0errors31warnings. Formatting failure exact-base docs/test-results.json inherited; reproduced git show26bccb1e:docs/test-results.json through prettier stdin. Historical formatting retained, not called passing."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-changed-eslint",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "static",
+      "command": "pnpm exec eslint source/services/discord/discord-reactions.ts source/services/discord/discord-gateway.ts source/services/discord/discord-bridge.ts source/services/discord/discord-outbound.ts source/services/discord/discord-command.ts source/services/control-socket/control-socket.ts source/services/control-socket/control-session-port.ts source/tools/discord-send.ts source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-changed-eslint.log"
+      ],
+      "notes": "Exact clean d91c0617;0errors0warnings. Paths are source services Discord/control and tools/discord-send plus three changed integration files."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-static-final",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "static",
+      "command": "pnpm typecheck && pnpm check:no-unit-tests && pnpm exec prettier --check source/services/discord/discord-reactions.ts source/services/discord/discord-gateway.ts source/services/discord/discord-bridge.ts source/services/discord/discord-outbound.ts source/services/discord/discord-command.ts source/services/control-socket/control-socket.ts source/services/control-socket/control-session-port.ts source/tools/discord-send.ts source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts && git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-static-final.log"
+      ],
+      "notes": "Exact clean committed candidate. All commands succeeded; no permanent unit tests. No test-tier counts inferred from static checks."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-provider-initial",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": 194,
+        "failed": 1,
+        "skipped": 18,
+        "files_passed": 26,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/turn-decisions.blackbox.ts",
+          "test": "resumes repeated questions once per decision and settles cancellation before the next turn",
+          "diagnostic": "Timed out waiting for PTY child state after 40000ms; SELECT_A_SECOND_COLOR with Amber/Violet visible. No timeout or production fix applied."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-provider.log"
+      ],
+      "notes": "Build succeeded on clean d91c0617; runner bail1,28scheduled files213observed tests. Same historical signature/environment is candidate evidence only; no causal exact-base attribution. Bounded unchanged-source rerun follows."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-provider-bounded",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "provider-black-box",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts --reporter=verbose --maxWorkers=2",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": 223,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 28,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-provider-bounded.log"
+      ],
+      "notes": "Uses preceding successful build, exact clean same committed source.124.94s; supports full offline tier pass with supported worker bound. Weakens deterministic regression but does not establish initial timeout root cause.",
+      "comparison": {
+        "classification": "resolved_observationally",
+        "baseline_commit": null,
+        "resolves_run_ids": [
+          "2026-10-29-discord-reactions-provider-initial"
+        ],
+        "notes": "No source changes between attempts; bounded concurrency is experimental condition, not a proven causal diagnosis."
+      }
+    },
+    {
+      "id": "2026-10-29-discord-reactions-cli-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "e2e",
+      "command": "pnpm test:e2e source/services/discord/discord-cli.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/discord-reactions-e2e.log"
+      ],
+      "notes": "Built clean d91c0617 against synthetic offline provider/Discord boundaries;69.51s. No live Discord actions."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-independent-blocked",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "independent-verification",
+      "command": "pnpm install --offline --frozen-lockfile; pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-gateway.integration.test.ts source/services/discord/discord-command.integration.test.ts",
+      "command_complete": false,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated discord-reactions worktree with own pnpm install; offline loopback fixtures only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "diagnostic": "command blocked - explorer can only run read-only (GREEN) shell commands"
+        }
+      ],
+      "evidence": [],
+      "notes": "joyous-morning-481 explorer-role tool policy blocked both commands before execution.0independent tests ran; no verdict/report. Superseded by execution-capable independent verifier, not implementation rejection."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-independent-discord",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent valiant-conifer-673 in isolated verify-reactions worktree; cached pnpm install, offline loopback only."
+      },
+      "result": {
+        "passed": 127,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 4,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/independent-verification.md"
+      ],
+      "notes": "Independently executed clean source candidate;116.16s. All Discord Gateway/bridge/command/images integrations, including13new reaction scenarios. Not full repository integration."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-independent-probes",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "temporary_verifier_probe_snapshot",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts -t \"independent verifier:\"",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent valiant-conifer-673 in isolated verify-reactions worktree; cached pnpm install, offline loopback only."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 112,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/independent-verification.md"
+      ],
+      "notes": "4.84s. Temporary boundary probes on unchanged d91c0617 production source: real lost POST acknowledgement never associates feedback; same Gateway epoch duplicate suppressed after restart, wrong actor/channel do not advance cursor, fresh epoch seq1 admitted after old seq100. Exact probe additions removed; candidate clean at completion."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-independent-control",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "integration",
+      "command": "pnpm test:integration source/services/control-socket",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent valiant-conifer-673 in isolated verify-reactions worktree; cached pnpm install, offline loopback only."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/independent-verification.md"
+      ],
+      "notes": "1.61s; independently executed adjacent control identity/restart checks."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-independent-provider",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent valiant-conifer-673 in isolated verify-reactions worktree; cached pnpm install, offline loopback only."
+      },
+      "result": {
+        "passed": 223,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 28,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/independent-verification.md"
+      ],
+      "notes": "Build passed and independently executed standard full offline tier;87.71s. Initial parent timeout not reproduced; no causal root conclusion. No live provider/API calls."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-independent-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "static",
+      "command": "pnpm typecheck && pnpm check:no-unit-tests; git diff --name-only 26bccb1e2efdb32e3dbca54e56b7687de2207b4a..HEAD | xargs pnpm exec prettier --check && git diff --exit-code HEAD && git status --short && git rev-parse HEAD",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent valiant-conifer-673 in isolated verify-reactions worktree; cached pnpm install, offline loopback only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/independent-verification.md"
+      ],
+      "notes": "All checks passed;14changed files formatted. Exact candidate/source clean after all temporary probes removed. No tier counts inferred from static checks."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-independent-lint-probes",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "temporary_verifier_probe_snapshot",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent valiant-conifer-673 in isolated verify-reactions worktree; cached pnpm install, offline loopback only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "diagnostic": "Inherited formatting rejection."
+        },
+        {
+          "file": "source/services/discord/discord-bridge.integration.test.ts",
+          "diagnostic": "Temporary verifier-probe formatting only; additions removed exactly before final checks."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/independent-verification.md"
+      ],
+      "notes": "Temporary probes present: ESLint0errors31warnings, inherited test-results formatting plus temporary probe formatting. Probes subsequently exactly removed; not a production failure."
+    },
+    {
+      "id": "2026-10-29-discord-reactions-independent-lint-final",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "committed_feature",
+      "base_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "lint",
+      "command": "pnpm lint; git show 26bccb1e2efdb32e3dbca54e56b7687de2207b4a:docs/test-results.json | pnpm exec prettier --check --stdin-filepath docs/test-results.json",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent valiant-conifer-673 in isolated verify-reactions worktree; cached pnpm install, offline loopback only."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "diagnostic": "Historical formatting independently reproduced on exact base; no historical row rewritten."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/independent-verification.md"
+      ],
+      "notes": "After exact probe removal:0ESLint errors31warnings; only unchanged docs/test-results.json fails Prettier. Independent exact-base stdin reproduction exit1. No candidate changed-file formatting failures.",
+      "comparison": {
+        "classification": "pre_existing_exact_base_reproduced",
+        "baseline_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
+        "notes": "Failure signature and exact file content reproduced independently at candidate base."
+      }
     }
   ]
 }

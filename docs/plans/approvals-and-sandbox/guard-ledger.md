@@ -1,5 +1,44 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Personal memory prompt section (2026-10-30)
+
+Owner: `renderPersonalContext` / `FileMemoryStore.personalContextSync`; access,
+scope, effective budget and failure recovery: `MemoryCapabilityBuilder.build`.
+Class: context shaping. Harm: copying unbounded personal records/full evidence
+into every normal project request. Signal: rendered UTF-16 character count,
+directly measured including framing/omission pointer. Only root agents with
+memory capability/context enabled use this path, not bare or subagent prompts.
+
+Effective value: min(2400, current `memory.contextBudgetChars` minus the pinned
+global context length minus two separator characters). The existing setting
+resolves through normal environment/persisted/CLI/default precedence; default
+8000, positive integer. Global index allocation is min(3000, floor(configured
+budget / 2)); its per-session pinning is unchanged. The actual configured 3000
+budget previously let global memories consume nearly all space: the first real
+workflow probe reproduced an absent personal section. Reserving half avoids that
+starvation without exceeding the configured total. No new configuration,
+migration, deadline or retry limit.
+The 2400 cap accommodates the observed seven short personal summaries plus
+framing (~2000 chars), while preventing accumulation from nightly additions.
+Large legitimate sets remain intact on disk and retrievable. Newest-updated
+whole-summary prefix only; never cut a sentence or skip a newer entry to admit
+an older one. Overflow reports its count and memory_search/memory_list; if even
+the framing/pointer cannot fit, omit the section. No admitted work or memory is
+discarded. Missing index is empty; corrupt index warns without content and omits
+the section; next request retries the read. No provider continuation state is
+reset. Dynamic instruction changes may reduce prefix-cache reuse; unchanged
+sections are deterministic. Rollback: remove the request suffix wiring; storage
+is unchanged; restore the prior global allocation too when reverting the feature. No new payload telemetry.
+
+Red proof: personal-memory integration file on pre-change tree: 5 failures
+(absent context/resolver); initial green run exposed two fixture API mistakes
+(`remove`, `app.activeProfileId`), not product failures. Permanent filesystem
+integration checks cover add/edit/delete/tag removal, role/scope/tool gates,
+whole-summary overflow, small budget, corruption/recovery and normal agent
+assembly. Verification results and independent disposition are in the task-linked
+`docs/test-results.json` entries; do not infer acceptance merely from this row.
+
+
 ## Coordinator launcher bridge-stop grace (2026-10-28)
 
 Owner: `stop_bridge` in `deployment/coord-startup/startup.py`; recovery owner:

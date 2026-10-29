@@ -15,6 +15,8 @@ export type MemoryCapability = {
   tools: AnyScriptedToolDefinition[];
   guidance: string;
   context: string;
+  /** Main-agent-only project summaries, read fresh at each provider request. */
+  resolvePersonalContext?: () => string;
 };
 // Retained for decoding and rendering historical memory_injected events.
 export type InjectedMemory = { scope: 'global' | 'project'; id: string; title: string };
@@ -31,6 +33,7 @@ type MemorySettings = {
 const READ_TOOL_COUNT = 4;
 
 const GLOBAL_CONTEXT_BUDGET_CHARS = 3000;
+const PERSONAL_CONTEXT_BUDGET_CHARS = 2400;
 
 const MAIN_GUIDANCE = `### Persistent memory
 
@@ -70,7 +73,7 @@ For **memory maintenance** tasks, review the memory store and existing memories,
 
 Always cite source memory IDs so the caller can trace claims to their sources. Treat all memory as potentially stale. Never fabricate memory content. Do not store temporary task state, intermediate reasoning, or sensitive data.`;
 
-/** Resolves role-specific memory authority and the bounded session-start global index. */
+/** Resolves memory authority, the session-start global index, and fresh project personal context. */
 export class MemoryCapabilityBuilder {
   #settings: ISettingsService;
   #onWarning: (message: string) => void;
@@ -105,10 +108,13 @@ export class MemoryCapabilityBuilder {
     const stores = this.#createStores(settings, options.projectPath ?? process.cwd());
     const tools = createMemoryToolDefinitions(stores, { settingsService: this.#settings });
     let context = '';
+    let resolvePersonalContext: (() => string) | undefined;
     if (subject.kind === 'main' && access === 'write' && options.includeContext !== false) {
       const read = () => {
         try {
-          const budget = Math.min(settings.contextBudgetChars, GLOBAL_CONTEXT_BUDGET_CHARS);
+          // Reserve room for personal context even when a small configured
+          // budget would otherwise be consumed entirely by the global index.
+          const budget = Math.min(Math.floor(settings.contextBudgetChars / 2), GLOBAL_CONTEXT_BUDGET_CHARS);
           return budget > 0 ? stores.global.contextSync(budget, { pinnedGlobal: true }) : '';
         } catch (error) {
           const detail = error instanceof Error ? error.message : 'unknown storage error';
@@ -117,6 +123,21 @@ export class MemoryCapabilityBuilder {
         }
       };
       context = options.snapshotGlobalContext ? options.snapshotGlobalContext(read) : read();
+      // Global context keeps its session snapshot; personal memories track nightly
+      // writes and manual corrections without a derived digest or model call.
+      resolvePersonalContext = () => {
+        try {
+          const budget = Math.min(
+            this.#settings.get('memory.contextBudgetChars') - context.length - 2,
+            PERSONAL_CONTEXT_BUDGET_CHARS,
+          );
+          return budget > 0 ? stores.project.personalContextSync(budget) : '';
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'unknown storage error';
+          this.#onWarning(`Personal memory context could not be loaded: ${detail}`);
+          return '';
+        }
+      };
     }
     return {
       access,
@@ -124,6 +145,7 @@ export class MemoryCapabilityBuilder {
       guidance: this.#guidanceFor(subject, Boolean(context)),
       // Subagents (including the librarian) search on demand.
       context,
+      ...(resolvePersonalContext ? { resolvePersonalContext } : {}),
     };
   }
 

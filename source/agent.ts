@@ -417,7 +417,7 @@ export const getAgentDefinition = (
     { kind: 'main' },
     {
       projectPath: executionContext?.getCwd() ?? process.cwd(),
-      includeContext: memoryContextEnabled && hasCapability('memory'),
+      includeContext: !bareMode && memoryContextEnabled && hasCapability('memory'),
       snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
     },
   );
@@ -769,14 +769,19 @@ export const getAgentDefinition = (
       ? '\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.'
       : ''
   }`;
+  const withPersonalContext = (context: string) => (context ? `\n\n${context}` : '');
   const resolveInstructionsForRequest =
-    deps.getGoal || deps.isDiscordInputEnabled
+    deps.getGoal || deps.isDiscordInputEnabled || memoryCapability.resolvePersonalContext
       ? () =>
           `${instructions}${
             discordSendEnabled && deps.isDiscordInputEnabled?.()
               ? `\n\n${resolvePrompt(path.join(BASE_PROMPT_PATH, 'discord-communication.md'))}`
               : ''
-          }${deps.getGoal ? renderDurableGoalContext(deps.getGoal()) : ''}`
+          }${deps.getGoal ? renderDurableGoalContext(deps.getGoal()) : ''}${
+            memoryCapability.resolvePersonalContext
+              ? withPersonalContext(memoryCapability.resolvePersonalContext())
+              : ''
+          }`
       : undefined;
   return {
     name: 'Terminal Assistant',

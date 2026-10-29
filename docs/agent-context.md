@@ -20,6 +20,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Settings value entry:** [Field editor](plans/settings/settings-field-editor.md)
 - **Settings infrastructure:** [Legacy debt](plans/settings/settings-legacy-debt.md)
 - **Session queries/persistence:** [SQLite index](plans/sessions/session-query-index.md)
+- **Personal memory context:** [Automatic project-scoped summaries](reference/personal-memory-context.md)
 - **Session retrieval UX:** [Observed usage](research/session-retrieval-observed-usage.md), [seek/tail cell](research/session-retrieval-seek-cell.md), [paired protocol](research/session-retrieval-paired-protocol.md), and [cursor format](plans/context-and-memory/memory-progressive-disclosure.md)
 - **Modes:** [Profile architecture](profiles/README.md)
 - **Model/effort step-down:** [Benchmark](plans/providers/model-effort-step-down-benchmark.md) and [cache economics](research/model-effort-step-down-cache-economics.md)

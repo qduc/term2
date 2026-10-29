@@ -28193,6 +28193,283 @@
         "/home/qduc/coord/term2/tasks/discord-reactions/integration-evidence/runtime-observation.json"
       ],
       "notes": "PASS discriminating probe: retained live-runtime definitions reject react input and new acknowledged-send result; integrated definitions accept both. Live server source separately rejects reaction origin. Activation blocked until coordinated runtime replacement; no live reaction sent. No framework test count claimed."
+    },
+    {
+      "id": "2026-10-29-conversation-time-gap-static",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a03753356d2017ccd3aa89cdd5a2e1b3c712e73e",
+      "revision_kind": "committed_source",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "suite": "static-guards",
+      "command": "pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated conversation-time-gap worktree; UTC recording date, terminal reporter uses UTC+07:00. Loopback fixtures only; no paid APIs or live runtime changes."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-final-static.log"
+      ],
+      "notes": "Final source commit; temporary policy probes removed before this run."
+    },
+    {
+      "id": "2026-10-29-conversation-time-gap-provider",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a03753356d2017ccd3aa89cdd5a2e1b3c712e73e",
+      "revision_kind": "committed_source",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated conversation-time-gap worktree; UTC recording date, terminal reporter uses UTC+07:00. Loopback fixtures only; no paid APIs or live runtime changes."
+      },
+      "result": {
+        "passed": 224,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 29,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-final-provider.log"
+      ],
+      "notes": "Final source commit; command rebuilt shipped CLI. Includes actual idle2h/short-turn/persisted --resume2h timing journey and unchanged wire user text; notice counts [0,1,1,2]. Duration 76.45s."
+    },
+    {
+      "id": "2026-10-29-conversation-time-gap-e2e",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a03753356d2017ccd3aa89cdd5a2e1b3c712e73e",
+      "revision_kind": "committed_source",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated conversation-time-gap worktree; UTC recording date, terminal reporter uses UTC+07:00. Loopback fixtures only; no paid APIs or live runtime changes."
+      },
+      "result": {
+        "passed": 58,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 11,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-final-e2e.log"
+      ],
+      "notes": "Final source commit; full E2E tier including fake Codex network. Duration 81.38s."
+    },
+    {
+      "id": "2026-10-29-conversation-time-gap-queue",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a03753356d2017ccd3aa89cdd5a2e1b3c712e73e",
+      "revision_kind": "committed_source",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "suite": "focused-integration",
+      "command": "TERM2_CI_PREBUILT_CLI=1 NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/queue/restart.integration.test.ts --reporter=verbose",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated conversation-time-gap worktree; UTC recording date, terminal reporter uses UTC+07:00. Loopback fixtures only; no paid APIs or live runtime changes."
+      },
+      "result": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-queue.log",
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/independent-verification.md"
+      ],
+      "notes": "Real filesystem storage plus adapter admission/recovery/dispatch retains captured humanInputAt; missing/invalid/changed storage failure paths. Independently repeated on the committed candidate."
+    },
+    {
+      "id": "2026-10-29-conversation-time-gap-independent",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a03753356d2017ccd3aa89cdd5a2e1b3c712e73e",
+      "revision_kind": "committed_source",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "suite": "independent-verification",
+      "command": "Isolated pnpm install --frozen-lockfile; pnpm build; focused CLI blackbox; queue restart integration; temporary policy/provenance probes; pnpm typecheck; pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated conversation-time-gap worktree; UTC recording date, terminal reporter uses UTC+07:00. Loopback fixtures only; no paid APIs or live runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/independent-verification.md",
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/policy-probes.ts"
+      ],
+      "notes": "Independent worker dusky-lava-576 ACCEPT. Counts are deliberately not aggregated across overlapping checks: CLI 1/1, queue 12/12, retained temporary probes20/20, independent extensions2/2. Production tree clean afterward. Clock advancement simulated only inside disposable child. No live Discord behavior claimed."
+    },
+    {
+      "id": "2026-10-29-conversation-time-gap-typecheck-lint",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "a03753356d2017ccd3aa89cdd5a2e1b3c712e73e",
+      "revision_kind": "committed_source",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "suite": "typecheck-lint",
+      "command": "pnpm typecheck; pnpm lint; git show HEAD^:docs/test-results.json | pnpm exec prettier --check --stdin-filepath docs/test-results.json",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated conversation-time-gap worktree; UTC recording date, terminal reporter uses UTC+07:00. Loopback fixtures only; no paid APIs or live runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "test": "prettier --check .",
+          "expected": "formatted JSON",
+          "actual": "Code style issues found in docs/test-results.json; same failure reproduced on source parent.",
+          "classification": "confirmed-pre-existing-formatting"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-final-typecheck.log",
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-lint.log",
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-base-format.log",
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/independent-verification.md"
+      ],
+      "notes": "Typecheck PASS; lint ESLint0 errors31 warnings, Prettier fails only existing docs/test-results.json. Reproduced independently on source parent; feature commit leaves that file unchanged. New ledger entries preserve historical bytes rather than reformat thousands of lines."
+    },
+    {
+      "id": "2026-10-29-conversation-time-gap-preacceptance-red",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "revision_kind": "pre-commit dirty snapshot",
+      "task_ids": [
+        "2026-10-29-conversation-time-gap"
+      ],
+      "suite": "pre-acceptance-regression-probes",
+      "command": "Temporary run-loop FIFO steer probe; filesystem queue restart integration",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Isolated conversation-time-gap worktree; UTC recording date, terminal reporter uses UTC+07:00. Loopback fixtures only; no paid APIs or live runtime changes."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "source/services/conversation/conversation-time-gap.tmp.test.ts",
+          "test": "FIFO pending steers compare with each preceding admitted human",
+          "expected": "one long-gap notice for steers at02:00 and02:01 after00:00 input",
+          "actual": "two notices from stale pre-admission history",
+          "resolution": "derive timing at FIFO admission; max human arrival baseline also protects released-steer reordering"
+        },
+        {
+          "file": "source/services/queue/restart.integration.test.ts",
+          "test": "retains human arrival through adapter admission, filesystem queue recovery and dispatch",
+          "expected": "2026-10-29T02:00:00.000Z",
+          "actual": "undefined humanInputAt in persisted pending input",
+          "resolution": "persist optional queue humanInputAt and restore recovered UserTurn without restamping dispatch time"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-fifo-red.log",
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-queue-red.log",
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-policy.log",
+        "/home/qduc/coord/term2/tasks/conversation-time-gap/evidence/conversation-time-gap-queue.log"
+      ],
+      "notes": "Uncommitted feature-draft failures, not escaped defects. Code-only independent review found both; parent reproduced red then fixed. Green policy checks20/20; queue12/12. Snapshot hash was not captured.",
+      "base_commit": "d1c27c1a5e18a1134ac6196e5289ced5152a4803"
     }
   ]
 }

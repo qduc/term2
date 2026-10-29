@@ -1,3 +1,4 @@
+import { withHumanInputTime } from './conversation-time-gap.js';
 import { describeError } from '../../utils/error-helpers.js';
 import { createMessageIdFactory } from '../../utils/message-id-factory.js';
 import type { ConversationOrchestratorConfig } from './conversation-orchestrator.types.js';
@@ -813,6 +814,7 @@ export class ConversationOrchestrator {
       inputSurgeApproval?: InputSurgeApproval;
       busyMode?: 'steer' | 'follow_up';
       presentation?: UserMessage['presentation'];
+      inputSource?: 'human' | 'automatic';
       onAdmitted?: (messageId: string, delivery: 'started' | 'queued' | 'steering') => void;
       onSteerSettled?: (steered: boolean) => void;
       /** Correlated remote outcome; null means cancelled, discarded or failed. */
@@ -821,7 +823,10 @@ export class ConversationOrchestrator {
     },
   ): Promise<void> {
     let remoteTerminal: ConversationTerminal | null = null;
-    const turn = normalizeUserTurn(input);
+    const turn = withHumanInputTime(input, {
+      inputSource: options?.inputSource,
+      rolloverBrief: options?.presentation === 'session_rollover',
+    });
     if (!hasUserTurnContent(turn)) {
       return;
     }
@@ -835,6 +840,7 @@ export class ConversationOrchestrator {
     let userMessage: UserMessage = {
       id: this.createMessageId(),
       sender: 'user',
+      ...(turn.humanInputAt ? { humanInputAt: turn.humanInputAt } : {}),
       text: formatUserTurnForDisplay(turn),
       ...(turn.skill ? { skill: turn.skill } : {}),
       ...(options?.presentation ? { presentation: options.presentation } : {}),
@@ -937,6 +943,7 @@ export class ConversationOrchestrator {
           busyMode: options?.busyMode,
           preferredMessageId: userMessage.id,
           rolloverBrief: options?.presentation === 'session_rollover',
+          inputSource: options?.inputSource,
         },
         {
           onSteerSettled: (admitted, latestInput) => {
@@ -1102,6 +1109,7 @@ export class ConversationOrchestrator {
 
       try {
         const result = await this.config.conversationService.sendMessage('Please continue with your previous task.', {
+          inputSource: 'automatic',
           onEvent: this.createOnEventHandler(applyConversationEvent),
         });
 
@@ -1811,6 +1819,7 @@ export class ConversationOrchestrator {
         resolved = {
           id: messageId,
           sender: 'user',
+          ...(turn.humanInputAt ? { humanInputAt: turn.humanInputAt } : {}),
           text: formatUserTurnForDisplay(turn),
           ...(turn.skill ? { skill: turn.skill } : {}),
         };

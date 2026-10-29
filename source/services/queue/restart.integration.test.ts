@@ -28,6 +28,59 @@ afterEach(() => {
 });
 
 describe('restart handoff against actual queue storage', () => {
+  it('retains human arrival through adapter admission, filesystem queue recovery and dispatch', async () => {
+    const { persistence } = store();
+    const seed = queue(persistence);
+    seed.holdDispatch();
+    await seed.command({ kind: 'submit', id: 'seed', text: 'old retained input' });
+    const deps = {
+      sessionId: 'timing-restart',
+      startedAt: '2026-10-29T00:00:00.000Z',
+      queueForeground: true,
+      queuePersistence: persistence,
+      logger: { info() {}, warn() {}, error() {}, debug() {}, getCorrelationId: () => undefined },
+      sessionContextService: { runWithContext: (_context: unknown, run: () => unknown) => run() },
+      userTurns: { listUserTurns: () => [] },
+      logs: { dispatchEventToLog() {} },
+      approval: {},
+      turnFlow: {},
+    };
+    const adapter = new ConversationAdapter(deps as any);
+    let admitted!: () => void;
+    const admission = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    void adapter
+      .submitMessage(
+        { text: 'timed pending human', humanInputAt: '2026-10-29T02:00:00.000Z' },
+        {
+          preferredMessageId: 'timed',
+          onAdmission: admitted,
+        },
+      )
+      .catch(() => undefined);
+    await admission;
+    const release = await adapter.prepareRestart();
+    const record = persistence.load() as any;
+    expect(record.queue.find((item: any) => item.id === 'timed').humanInputAt).toBe('2026-10-29T02:00:00.000Z');
+    release();
+    let dispatch!: (turn: unknown) => void;
+    const dispatched = new Promise<any>((resolve) => {
+      dispatch = resolve;
+    });
+    const restored = new ConversationAdapter({
+      ...deps,
+      turnFlow: {
+        async *start(turn: any) {
+          if (turn.text === 'timed pending human') dispatch(turn);
+          yield { type: 'final', finalText: 'done' };
+        },
+      },
+    } as any);
+    await restored.resumeQueue();
+    expect((await dispatched).humanInputAt).toBe('2026-10-29T02:00:00.000Z');
+  });
+
   it('retains plain input exactly once and paused across reconstruction and reversible hold', async () => {
     const { file, persistence } = store();
     const first = queue(persistence);

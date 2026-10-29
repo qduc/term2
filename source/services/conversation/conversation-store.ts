@@ -1,5 +1,6 @@
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
-import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
+import { userTurnToProviderItem } from './user-turn-item.js';
+import { type UserTurn } from '../../types/user-turn.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import { projectConversationMessage } from './conversation-message-projection.js';
 import { normalizeRunItem } from './run-item-normalizer.js';
@@ -71,33 +72,7 @@ export class ConversationStore {
   #historyIdentity = crypto.randomUUID();
 
   addUserTurn(input: string | UserTurn): void {
-    const turn = normalizeUserTurn(input);
-    const images = turn.images ?? [];
-    const text = turn.text ?? '';
-
-    if (images.length === 0) {
-      this.addUserMessage(text);
-      return;
-    }
-
-    const content: any[] = [];
-    if (text) {
-      content.push({ type: 'input_text', text });
-    }
-    for (const image of images) {
-      content.push({
-        type: 'input_image',
-        image: `data:${image.mimeType};base64,${image.data}`,
-        detail: 'auto',
-      });
-    }
-
-    const item: ProviderInputItem = {
-      role: 'user',
-      type: 'message',
-      content,
-    };
-    this.#history.push(item);
+    this.#history.push(userTurnToProviderItem(input, { history: this.#history }));
     this.#historyRevision++;
   }
 

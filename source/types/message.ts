@@ -3,6 +3,8 @@ import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { SkillAttachment } from '../types/user-turn.js';
 
 export interface UserMessage {
+  /** Human arrival time, independent of processing/queue delay. */
+  humanInputAt?: string;
   id: string;
   sender: 'user';
   text: string;

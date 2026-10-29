@@ -1,3 +1,4 @@
+import { userTurnToProviderItem } from './user-turn-item.js';
 import { pairToolOccurrences, toolOccurrenceKey, toolOccurrenceMetadata } from './tool-occurrence.js';
 import { buildToolLedgerFromAssistantTurnItems } from './journal-to-ledger.js';
 import { alignHistoryToolOccurrences, normalizeToolLedgerOccurrences } from '../tool-execution-ledger.js';
@@ -535,11 +536,15 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       state.messages.push(cloneMessage(event.message));
       state.activeTurnStartIndex = state.messages.length;
       state.trailingUserMessage = true;
-      state.history.push({
-        role: 'user',
-        type: 'message',
-        content: event.message.text ?? '',
-      });
+      state.history.push(
+        userTurnToProviderItem(
+          {
+            text: event.message.text ?? '',
+            ...(event.message.humanInputAt !== undefined ? { humanInputAt: event.message.humanInputAt } : {}),
+          },
+          { history: state.history },
+        ),
+      );
       return;
     }
     case 'assistant_journal_delta': {

@@ -58,6 +58,8 @@ export function createControlSessionPort(input: {
       let admissionReported = false;
       const send = orchestrator.sendUserMessage(text, {
         busyMode,
+        // Generic control/project submissions have no human provenance.
+        inputSource: bridge?.origin.kind === 'human' ? 'human' : 'automatic',
         onSteerSettled,
         ...(bridge
           ? {

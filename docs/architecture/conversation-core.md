@@ -93,3 +93,29 @@ the production execution structure. Earlier implementation evidence remains in
 [WORK.md (historical)](https://github.com/qduc/term2/blob/3eb1659181eeda00bb32f971ef15096911380172/docs/research/single-turn-owner/WORK.md). Source structure and passing
 workflows do not establish that human comprehension improved; that remains
 unmeasured.
+
+## Human-arrival timing
+
+Root conversation submissions retain a host-observed `humanInputAt` on the
+user turn, including through the durable pending queue. At a gap of at least
+one hour, model input gets a separate `[Conversation timing]` system message;
+the user's text and transcript presentation stay unchanged. The note gives
+whole elapsed minutes and both UTC timestamps, and describes human arrivals,
+not agent inactivity. One hour avoids noise during ordinary back-and-forth;
+there is no setting or background timer.
+
+`conversation-time-gap.ts` owns this policy. Timing metadata stays attached to
+its user item so replay and rewind cannot duplicate or orphan the notice.
+Pending steers derive their gap at FIFO admission, not at mailbox offer time;
+released-steer priority must not move the latest human-arrival baseline
+backwards. Automatic continuations, background/model-only input, rollover
+briefs, generic project/control submissions, and Discord agent/reaction origins
+do not advance that clock. Explicit Discord human origins do; their timestamp
+is local Term2 receipt, not Discord's original send time.
+
+Missing, invalid, or backwards clock evidence produces no inferred gap. Legacy
+sessions and legacy pending queues without this metadata have no reliable
+baseline until new timestamped human input is accepted. Native compaction that
+discards the timestamped history likewise cannot supply that baseline. Replaying
+history does not stamp a new arrival time. The record describes wall-clock
+observations; it does not measure model experience or promise a spoken reminder.

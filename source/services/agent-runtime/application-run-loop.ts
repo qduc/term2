@@ -1,3 +1,4 @@
+import { conversationTimeGap, formatConversationTimeGap } from '../conversation/conversation-time-gap.js';
 import { isOpenAICompaction, projectModelRequestHistory } from '../conversation/conversation-state-projector.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from './model-context-policy.js';
@@ -1020,6 +1021,16 @@ export class ApplicationRunLoop {
 
   #admitPendingSteers(state: RunState, stream: AgentStream, queue: EventQueue): void {
     this.#turnInputMailbox.admitAtRequestBoundary((item) => {
+      // Earlier pending steers become history only here, in FIFO order.
+      if (item.role === 'user' && item.humanInputAt !== undefined) {
+        item = {
+          ...item,
+          conversationTimeGap: conversationTimeGap(
+            typeof item.humanInputAt === 'string' ? item.humanInputAt : undefined,
+            state.history,
+          ),
+        };
+      }
       const text =
         typeof item.content === 'string'
           ? item.content
@@ -2220,7 +2231,13 @@ export function normalizeApplicationInput(
 ): StreamedModelTurnInput[] {
   if (typeof input === 'string') return [{ type: 'message', role: 'user', content: [{ type: 'text', text: input }] }];
   const items = (Array.isArray(input) ? input : [input]) as readonly ProviderInputItem[];
-  return items.flatMap((item) => normalizeInputItem(item));
+  return items.flatMap((item) => {
+    const notice = item.role === 'user' ? formatConversationTimeGap(item.conversationTimeGap) : null;
+    return [
+      ...(notice ? normalizeInputItem({ type: 'message', role: 'system', content: notice }) : []),
+      ...normalizeInputItem(item),
+    ];
+  });
 }
 
 function normalizeInput(input: ProviderInput): StreamedModelTurnInput[] {

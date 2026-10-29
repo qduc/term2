@@ -13,6 +13,8 @@ export type SkillAttachment = {
 };
 
 export type UserTurn = {
+  /** Host receipt time for human input only; retained across queue waits and replay. */
+  humanInputAt?: string;
   text: string;
   images?: UserTurnImage[];
   skill?: SkillAttachment;
@@ -34,6 +36,7 @@ export function normalizeUserTurn(input: string | UserTurn): UserTurn {
     text: stripImageSentinels(input.text ?? ''),
     ...(input.images?.length ? { images: input.images } : {}),
     ...(input.skill ? { skill: input.skill } : {}),
+    ...(input.humanInputAt !== undefined ? { humanInputAt: input.humanInputAt } : {}),
   };
 }
 

@@ -1,3 +1,4 @@
+import { withHumanInputTime } from './conversation-time-gap.js';
 import { injectSkillIntoTurn } from '../../types/user-turn.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import type { ApprovalRequiredEvent, ConversationEvent, ConversationEventSink } from './conversation-events.js';
@@ -28,6 +29,8 @@ import {
 import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 
 export type SendMessageOptions = {
+  /** Nonhuman requests must not advance the human conversation clock. */
+  inputSource?: 'human' | 'automatic';
   /** Internal admission callback; called when a queued submission is accepted or rejected. */
   onAdmission?: (error?: unknown) => void;
   onTextChunk?: (fullText: string, chunk: string) => void;
@@ -540,6 +543,8 @@ export class ConversationAdapter {
   /** Keep the executable payload and display projection in the same mutation. */
   async editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
     if (this.#restartHeld) throw new Error('Restart is being prepared; pending input was not changed.');
+    const original = this.#submissions.get(id);
+    if (original) turn = { ...turn, humanInputAt: normalizeUserTurn(original.input).humanInputAt };
     if (this.#submissions.get(id)?.stage === 'pending_steer') {
       if (!this.#turnFlow.editSteer) {
         throw new Error(
@@ -600,6 +605,7 @@ export class ConversationAdapter {
     if (this.#restartHeld) throw new Error('Restart is being prepared; this message was not admitted.');
     const id = options.preferredMessageId ?? String(this.#nextQueuedMessageId++);
     if (this.#submissions.has(id)) throw new Error(`A submission already uses request id ${id}`);
+    input = withHumanInputTime(input, options);
     const submission: Submission = {
       stage: 'pending_steer',
       prepareInput: (value) => (typeof value === 'string' ? value : injectSkillIntoTurn(value)),
@@ -672,7 +678,7 @@ export class ConversationAdapter {
   }
 
   sendMessage(input: string | UserTurn, options: SendMessageOptions = {}): Promise<ConversationTerminal> {
-    return this.#sendMessage(input, options);
+    return this.#sendMessage(withHumanInputTime(input, options), options);
   }
 
   async #sendMessage(
@@ -743,6 +749,7 @@ export class ConversationAdapter {
           kind: rolloverBrief ? 'submit_held' : busyMode === 'steer' ? 'steer' : 'submit',
           id: requestId,
           text: controllerText,
+          humanInputAt: normalizeUserTurn(input).humanInputAt,
         })
         .then(async (result) => {
           if (result.kind !== 'accepted') {
@@ -765,6 +772,7 @@ export class ConversationAdapter {
   }
 
   async prepareMessage(input: string | UserTurn, ids: PreparedMessageIds): Promise<PreparedMessageResult> {
+    input = withHumanInputTime(input);
     const now = Date.now();
     for (const [leaseId, prepared] of this.#preparedMessages) {
       if (prepared.expiresAt <= now) this.#preparedMessages.delete(leaseId);
@@ -979,7 +987,10 @@ export class ConversationAdapter {
       const recoveredInput =
         execution.item.text === QUEUED_NON_TEXT_PLACEHOLDER || execution.item.text === LEGACY_QUEUED_MESSAGE_PLACEHOLDER
           ? null
-          : execution.item.text;
+          : {
+              text: execution.item.text,
+              ...(execution.item.humanInputAt !== undefined ? { humanInputAt: execution.item.humanInputAt } : {}),
+            };
       if (!message && !recoveredInput) {
         throw new Error('Recovered queued message has no executable text input');
       }

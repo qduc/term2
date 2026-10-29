@@ -1,5 +1,6 @@
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
+import { conversationTimeGap } from './conversation-time-gap.js';
 import { withSteeringNotice } from '../../prompts/steering-notice.js';
 
 /**
@@ -12,15 +13,23 @@ import { withSteeringNotice } from '../../prompts/steering-notice.js';
  */
 export function userTurnToProviderItem(
   input: string | UserTurn,
-  { steering = false }: { steering?: boolean } = {},
+  { steering = false, history = [] }: { steering?: boolean; history?: readonly unknown[] } = {},
 ): ProviderInputItem {
   const turn = normalizeUserTurn(input);
   const images = turn.images ?? [];
   const rawText = turn.text ?? '';
   const text = steering ? withSteeringNotice(rawText) : rawText;
 
+  const timing =
+    turn.humanInputAt === undefined
+      ? {}
+      : {
+          humanInputAt: turn.humanInputAt,
+          conversationTimeGap: conversationTimeGap(turn.humanInputAt, history),
+        };
+
   if (images.length === 0) {
-    return { role: 'user', type: 'message', content: text };
+    return { role: 'user', type: 'message', content: text, ...timing };
   }
 
   const content: unknown[] = [];
@@ -29,5 +38,5 @@ export function userTurnToProviderItem(
     content.push({ type: 'input_image', image: `data:${image.mimeType};base64,${image.data}`, detail: 'auto' });
   }
 
-  return { role: 'user', type: 'message', content } as ProviderInputItem;
+  return { role: 'user', type: 'message', content, ...timing } as ProviderInputItem;
 }

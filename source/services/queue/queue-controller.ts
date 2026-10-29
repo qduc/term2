@@ -38,6 +38,8 @@ export interface PersistedQueueItem {
   readonly text: string;
   readonly sequence: number;
   readonly submittedAt: string;
+  /** Human receipt time, not queue dispatch time. Absent for automatic/legacy input. */
+  readonly humanInputAt?: string;
   /** Submitted as a steer, so it runs ahead of follow-ups queued before it. */
   readonly steer?: boolean;
   readonly preflight?: { readonly actionId: string; readonly kind: PreflightKind };
@@ -48,6 +50,8 @@ export interface QueueItem {
   readonly text: string;
   readonly sequence: number;
   readonly submittedAt: string;
+  /** Human receipt time, not queue dispatch time. Absent for automatic/legacy input. */
+  readonly humanInputAt?: string;
   /** Submitted as a steer, so it runs ahead of follow-ups queued before it. */
   readonly steer?: boolean;
   readonly preflight?: { readonly actionId: ActionId; readonly kind: PreflightKind };
@@ -100,10 +104,10 @@ export type QueueState<Snapshot> =
     };
 
 export type QueueCommand =
-  | { readonly kind: 'submit'; readonly text: string; readonly id?: string }
+  | { readonly kind: 'submit'; readonly text: string; readonly id?: string; readonly humanInputAt?: string }
   /** Session bootstrap only: start ahead of retained input and release an idle dispatch hold. */
-  | { readonly kind: 'submit_held'; readonly text: string; readonly id?: string }
-  | { readonly kind: 'steer'; readonly text: string; readonly id?: string }
+  | { readonly kind: 'submit_held'; readonly text: string; readonly id?: string; readonly humanInputAt?: string }
+  | { readonly kind: 'steer'; readonly text: string; readonly id?: string; readonly humanInputAt?: string }
   | { readonly kind: 'cancel' }
   | { readonly kind: 'cancellation_settled'; readonly executionId: ExecutionId }
   | {
@@ -200,6 +204,7 @@ const isPersistedQueueItem = (value: unknown): value is PersistedQueueItem => {
     (item.sequence as number) <= 0 ||
     !isNonEmptyString(item.submittedAt) ||
     Number.isNaN(Date.parse(item.submittedAt as string)) ||
+    (item.humanInputAt !== undefined && typeof item.humanInputAt !== 'string') ||
     (item.steer !== undefined && typeof item.steer !== 'boolean')
   ) {
     return false;
@@ -276,6 +281,7 @@ const queueItemToPersisted = (item: QueueItem): PersistedQueueItem => ({
   text: item.text,
   sequence: item.sequence,
   submittedAt: item.submittedAt,
+  ...(item.humanInputAt !== undefined ? { humanInputAt: item.humanInputAt } : {}),
   ...(item.steer ? { steer: true } : {}),
   preflight: item.preflight ? { actionId: item.preflight.actionId, kind: item.preflight.kind } : undefined,
 });
@@ -364,6 +370,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
         text: item.text,
         sequence: item.sequence,
         submittedAt: item.submittedAt,
+        humanInputAt: item.humanInputAt,
         steer: Boolean(item.steer),
         preflight: item.preflight?.kind,
       }));
@@ -555,6 +562,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
       text: cmd.text,
       sequence: this.#nextSequence++,
       submittedAt: this.#now(),
+      ...(cmd.humanInputAt !== undefined ? { humanInputAt: cmd.humanInputAt } : {}),
       ...(cmd.kind === 'steer' ? { steer: true as const } : {}),
     });
     if (cmd.kind === 'submit_held') {

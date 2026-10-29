@@ -7,6 +7,16 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 0.40.0 - October 29, 2026
+
+- Bare now supports subagent delegation while retaining its minimal shell-led prompt.
+- [Interactive restart](/term2/using-term2/sessions/#restart-the-built-cli) reloads a supported built CLI and resumes saved conversation and input text. `/restart stop` explicitly consents to stopping background work; POSIX Node with `process.execve` support is required.
+- The Discord bridge uses Gateway push to wake cursor-based REST delivery, with a 30-second connected safety poll and polling-only opt-out. Ingress stays in Discord while the default coordinator is unavailable; live Discord/mobile validation remains outstanding.
+- Gateway read-only grants work on writable folders without becoming write grants. Read-only sessions refuse shell execution outside the sandbox. Session reload/reconnect restores more recorded tool and reply state and forwards all multi-question answers.
+- Publication checks reject dirty, untagged, stale, or mismatched build identity. This protects future releases; it does not repair the immutable 0.39.0 artifact.
+
+See the [0.40.0 changelog](https://github.com/qduc/term2/blob/v0.40.0/CHANGELOG.md) for details.
+
 ## 0.39.0 - October 27, 2026
 
 Published on npm as `@qduc/term2@0.39.0`. A recovery publish built from untagged `main`, so this package reports `0.39.0-dev+3789257` in `term2 --version` and records a development build identity. Fresh installation and CLI help checks passed; this does not establish live Discord/mobile acceptance.
@@ -130,17 +140,9 @@ Highlights from 0.30.0:
 
 The release also improves provider-pool failover, gateway session lifecycle handling, and web search configuration. See the [0.30.0 changelog](https://github.com/qduc/term2/blob/v0.30.0/CHANGELOG.md) for details.
 
-## On main, ahead of releases
+## Documentation and application scope
 
 This documentation site builds from `main`, so it can describe work ahead of the published package.
-
-### 0.40.0 preparation (not yet published)
-
-- Bare now supports subagent delegation while retaining its minimal shell-led prompt.
-- [Interactive restart](/term2/using-term2/sessions/#restart-the-built-cli) reloads a supported built CLI and resumes saved conversation and input text. `/restart stop` explicitly consents to stopping background work; POSIX Node with `process.execve` support is required.
-- The Discord bridge uses Gateway push to wake cursor-based REST delivery, with a 30-second connected safety poll and polling-only opt-out. Ingress stays in Discord while the default coordinator is unavailable; live Discord/mobile validation remains outstanding.
-- Gateway read-only grants work on writable folders without becoming write grants. Read-only sessions refuse shell execution outside the sandbox. Session reload/reconnect restores more recorded tool and reply state and forwards all multi-question answers.
-- Publication checks reject dirty, untagged, stale, or mismatched build identity. This protects future releases; it does not repair the immutable 0.39.0 artifact.
 
 The `web-client/` application is separate from this documentation site and connects through the private `term2 serve` gateway. Follow [gateway setup](/term2/remote/web-gateway/) for integration requirements.
 

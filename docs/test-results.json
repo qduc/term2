@@ -24964,6 +24964,459 @@
         "/home/qduc/coord/term2/tasks/release-040/evidence/clean-untagged-guard.log",
         "/home/qduc/coord/term2/tasks/release-040/evidence/pack-inspection.json"
       ]
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-causal-before",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T21:30:24+07:00",
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "temporary-base-fixture-probe",
+      "tested_tree": null,
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "integration-causal-probe",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts scripts/release-identity-oidc-probe.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": 15,
+        "failed": 3,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "file": "scripts/release-identity-oidc-probe.integration.test.ts",
+          "test": "tag push: valid",
+          "expected": "no additional loopback requests",
+          "actual": "one extra request; GET /oidc?audience=npm%3A127.0.0.1",
+          "classification": "expected causal reproduction / injected regression, not a production identity-guard failure"
+        },
+        {
+          "file": "scripts/release-identity-oidc-probe.integration.test.ts",
+          "test": "manual dispatch: valid",
+          "expected": "no additional loopback requests",
+          "actual": "one extra request; GET /oidc?audience=npm%3A127.0.0.1",
+          "classification": "expected causal reproduction / injected regression, not a production identity-guard failure"
+        },
+        {
+          "file": "scripts/release-identity-oidc-probe.integration.test.ts",
+          "test": "manual dispatch: annotated tag",
+          "expected": "no additional loopback requests",
+          "actual": "one extra request; GET /oidc?audience=npm%3A127.0.0.1",
+          "classification": "expected causal reproduction / injected regression, not a production identity-guard failure"
+        }
+      ],
+      "notes": "Temporary copy of base fixture sets GITHUB_ACTIONS=true and dummy OIDC URL/token to its own loopback403sink; no production edits. Identity guard succeeds for valid releases; pnpm11.7.0 dry-run fetches OIDC and exits0 but violates zero-request assertion.15invalid scenarios still reject. Temporary source retained as oidc-probe-before.test.txt.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-repro-before.log",
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-probe-before.test.txt"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-causal-after",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T21:31:13+07:00",
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "temporary-two-line-fix-probe",
+      "tested_tree": null,
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "integration-causal-probe",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts scripts/release-identity-oidc-probe.integration.test.ts scripts/release-identity.integration.test.ts scripts/release-local.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Same synthetic outer environment; only2OIDC-clearing lines added to publish env. Probe18/18, original fixture18/18, local-release sibling3/3 pass. This predates final5line synthetic parent setup in persistent fixture; not claimed as final clean-source run.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-repro-after.log",
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-probe-after.test.txt"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-mutation-invalid-setup",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T21:31:50+07:00",
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "rejected-probe-setup",
+      "tested_tree": null,
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "integration-instrumentation-check",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts scripts/release-identity-oidc-probe.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "INVALID MUTATION EVIDENCE: whitespace assertion rejected helper insertion; shell continued running prior fixed probe. No demonstrated mutation;18passes not used to establish regression coverage. Replaced by genuine mutation below. Setup failure noted in oidc-work.md.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-regression-setup-invalid.log"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-regression-mutation",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T21:32:29+07:00",
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "temporary-mutated-final-fixture",
+      "tested_tree": null,
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "integration-fault-injection",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts scripts/release-identity-oidc-probe.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": 15,
+        "failed": 3,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "file": "scripts/release-identity-oidc-probe.integration.test.ts",
+          "test": "tag push: valid",
+          "expected": "no additional loopback requests",
+          "actual": "one extra request; GET /oidc?audience=npm%3A127.0.0.1",
+          "classification": "expected causal reproduction / injected regression, not a production identity-guard failure"
+        },
+        {
+          "file": "scripts/release-identity-oidc-probe.integration.test.ts",
+          "test": "manual dispatch: valid",
+          "expected": "no additional loopback requests",
+          "actual": "one extra request; GET /oidc?audience=npm%3A127.0.0.1",
+          "classification": "expected causal reproduction / injected regression, not a production identity-guard failure"
+        },
+        {
+          "file": "scripts/release-identity-oidc-probe.integration.test.ts",
+          "test": "manual dispatch: annotated tag",
+          "expected": "no additional loopback requests",
+          "actual": "one extra request; GET /oidc?audience=npm%3A127.0.0.1",
+          "classification": "expected causal reproduction / injected regression, not a production identity-guard failure"
+        }
+      ],
+      "notes": "Genuine disposable copy of final fixture with only2OIDC-clearing overrides removed. Synthetic parent defaults remain. Same3valid cases fail zero-request assertion;15invalid cases reject. Confirms permanent existing integration cases catch isolation removal without hosted credentials. Temporary test removed; source retained as .test.txt.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-regression-mutation.log",
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-regression-mutation.test.txt"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-focused-final",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T21:32:42+07:00",
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "pre-commit-dirty-tree",
+      "tested_tree": "41d6468a636d4473a213964a89da67565a631c88",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "integration",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts scripts/release-identity.integration.test.ts scripts/release-local.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Final7line fixture change:18identity cases(3valid/15invalid) pass with synthetic publishing-job capabilities always present in parent helper. All assertions unchanged. Sibling3cases pass; no production edit. Dirty snapshot tree exactly matches later source commit.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-focused-final.log"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-typecheck-and-no-unit",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "pre-commit-dirty-tree",
+      "tested_tree": "41d6468a636d4473a213964a89da67565a631c88",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "static-checks",
+      "command": "pnpm typecheck; pnpm check:no-unit-tests",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Both commands exit0. These are separate commands from the standard shell run; no test-count claim. Normal source commit hooks also pass. No permanent unit tests added.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-typecheck.log",
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-no-unit.log",
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-source-commit.log"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-lint",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "pre-commit-dirty-tree",
+      "tested_tree": "41d6468a636d4473a213964a89da67565a631c88",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "test": "prettier --check .",
+          "expected": "formatted ledger",
+          "actual": "Code style issues found in docs/test-results.json; ESLint0errors/31warnings",
+          "classification": "pre-existing unchanged base blob reproduced",
+          "base_reproduced_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c"
+        }
+      ],
+      "notes": "Changed-file Prettier passes. Default ESLint ignores integration fixture; forcing --no-ignore fails on repository configuration referencing missing packages/core/tsconfig.json (not a normal-lint failure or changed production code). No unrelated lint/config/history rewrite. Base ledger checked from exact a2cc7781 blob via stdin, exit1.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-lint.log",
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-base-ledger-format.log",
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-focused-style.log",
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-focused-eslint-no-ignore.log"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-static",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T21:33:51+07:00",
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "pre-commit-dirty-tree",
+      "tested_tree": "41d6468a636d4473a213964a89da67565a631c88",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "static-guards",
+      "command": "pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "All existing static guards pass on exact final precommit tree.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-static.log"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-integration",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T21:33:57+07:00",
+      "commit": null,
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "pre-commit-dirty-tree",
+      "tested_tree": "41d6468a636d4473a213964a89da67565a631c88",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "integration",
+      "command": "CI=true pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "CI": "true"
+        },
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": 400,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 39,
+        "files_failed": 0,
+        "files_skipped": 1,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Full integration tier; CI=true selects normal2worker bound. Production private integration CLI built by global setup in this isolated checkout. Final precommit source tree exactly matches8ee367cf;117.90s. No e2e/provider-black-box or release build rerun: only one integration fixture changed, not runtime/config/manifest.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-integration.log"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-29-release-040-oidc-independent",
+      "recorded_on": "2026-10-29",
+      "run_at": "2026-10-29T21:36:41+07:00",
+      "commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "source_commit": "8ee367cf6b39965d17c02a298b212b9c93dbd63e",
+      "revision_kind": "clean-source-commit",
+      "tested_tree": "41d6468a636d4473a213964a89da67565a631c88",
+      "base_commit": "a2cc7781f8fd36ea5ed5b3463d6490bdaeaf632c",
+      "task_ids": [
+        "2026-10-29-release-040-oidc-fixture"
+      ],
+      "suite": "independent-integration",
+      "command": "NODE_ENV=test pnpm --dir /home/qduc/term2/.worktrees/release-oidc exec vitest run --config vitest.integration.config.ts scripts/release-identity.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {},
+        "notes": "Isolated release-oidc worktree. Synthetic loopback OIDC only; no real credentials or publication."
+      },
+      "result": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "notes": "Independent execution verifier ashen-teal-870: accept; exact source HEAD confirmed, guard unchanged from base, checkout clean before/after;10.86s. Earlier read-only verifier could inspect but could not execute; pinned-worker attempt rejected unknown worktree before launch. Final explicit-path execution closes focused dynamic gap. Not full release/hosted OIDC acceptance.",
+      "evidence": {
+        "logs": [
+          "/home/qduc/coord/term2/tasks/release-040/evidence/oidc-independent-verification.md"
+        ]
+      }
     }
   ]
 }

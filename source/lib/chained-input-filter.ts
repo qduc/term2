@@ -102,7 +102,7 @@ export const isOrphanedChainedToolOutputError = (error: unknown): error is Orpha
  *
  * Assumption: Deltas are expected to be either:
  *  (a) trailing tool results (when the model has just called tools and is continuing), or
- *  (b) a new user message plus everything after it (when starting a new turn).
+ *  (b) a trailing user-message block, including application notices and system timing (new turn).
  *
  * If the input ends with a replayed assistant message that follows a tool output,
  * this function falls back to searching for the last user message, which may over-retain.
@@ -111,7 +111,10 @@ export const isOrphanedChainedToolOutputError = (error: unknown): error is Orpha
  */
 export const findChainedDeltaStart = (input: unknown[]): number => {
   let endUserIndex = input.length;
-  while (endUserIndex > 0 && isUserInputMessage(input[endUserIndex - 1])) {
+  while (
+    endUserIndex > 0 &&
+    (isUserInputMessage(input[endUserIndex - 1]) || asRecord(input[endUserIndex - 1])?.role === 'system')
+  ) {
     endUserIndex--;
   }
 
@@ -122,6 +125,10 @@ export const findChainedDeltaStart = (input: unknown[]): number => {
     }
     return toolStart;
   }
+
+  // An admitted human item can normalize into data + timing + untouched text.
+  // Keep that whole new block, not just its last user message.
+  if (endUserIndex < input.length) return endUserIndex;
 
   for (let index = input.length - 1; index >= 0; index--) {
     if (isUserInputMessage(input[index])) {

@@ -2,17 +2,35 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
+import { startFakeProviderHttpServer } from './fake-provider-http-server.js';
 import { startFakeCodexServer } from '../fake-codex-server-lib.js';
 import { FileMemoryStore } from '../../source/services/memory/memory-store.js';
 import { projectScopeKey } from '../../source/utils/project-scope.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit, type PtyChildDriver } from './provider-test-harness.js';
 
-// Actual built CLI + persisted sessions + exact Codex websocket frames. No backend cache simulation.
-it.each(['gpt-6.1-sol', 'gpt-5.6-luna'])(
-  '%s appends changed personal data at human turns and retains it across Bare resume/opt-out',
-  async (model) => {
-    const server = await startFakeCodexServer({ scenario: 'success' });
-    const workspace = await createIsolatedWorkspaceLease({ env: { CODEX_BASE_URL: server.baseUrl } });
+// Actual built CLI + persisted sessions + exact provider frames. No backend cache simulation.
+it.each([
+  { provider: 'codex', model: 'gpt-6.1-sol' },
+  { provider: 'codex', model: 'gpt-5.6-luna' },
+  { provider: 'openai', model: 'gpt-5.6-luna' },
+])(
+  '$provider/$model appends changed personal data at human turns and retains it across Bare resume/opt-out',
+  async ({ provider, model }) => {
+    const codex = provider === 'codex' ? await startFakeCodexServer({ scenario: 'success' }) : undefined;
+    const http =
+      provider === 'openai'
+        ? await startFakeProviderHttpServer({ scenario: 'success', protocol: 'responses' })
+        : undefined;
+    const server = codex ?? {
+      baseUrl: http!.baseUrl,
+      get receivedRequests() {
+        return http!.requests.map((request) => request.body as Record<string, unknown>);
+      },
+      close: () => http!.close(),
+    };
+    const workspace = await createIsolatedWorkspaceLease({
+      env: { CODEX_BASE_URL: server.baseUrl, OPENAI_BASE_URL: server.baseUrl },
+    });
     let child: PtyChildDriver | undefined;
     try {
       const project = join(workspace.root, 'project');
@@ -33,7 +51,12 @@ it.each(['gpt-6.1-sol', 'gpt-5.6-luna'])(
       await writeFile(
         join(workspace.paths.logDir, 'settings.json'),
         JSON.stringify({
-          agent: { modelSelection: { provider: 'codex', model }, transport: 'websocket', retryAttempts: 0 },
+          agent: {
+            modelSelection: { provider, model },
+            transport: provider === 'codex' ? 'websocket' : 'http',
+            retryAttempts: 0,
+            openai: { apiKey: 'fixture' },
+          },
           app: { activeProfileId: 'builtin:bare' },
           memory: { directory: memory },
           sandbox: { enabled: false },
@@ -67,7 +90,8 @@ it.each(['gpt-6.1-sol', 'gpt-5.6-luna'])(
         const input = body.input as { type: string; role?: string; content?: { text?: string }[] }[];
         const leading = { instructions: body.instructions, developer: input.filter((x) => x.role === 'developer') };
         if (instructions === undefined) instructions = leading;
-        else if (!body.previous_response_id || model !== 'gpt-5.6-luna') expect(leading).toEqual(instructions);
+        else if (!body.previous_response_id || provider !== 'codex' || model !== 'gpt-5.6-luna')
+          expect(leading).toEqual(instructions);
         else expect(leading).toEqual({ instructions: '', developer: [] });
         expect(JSON.stringify(leading)).not.toContain('A saved shared moment');
         const messages = input

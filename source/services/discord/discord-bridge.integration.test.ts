@@ -2373,7 +2373,39 @@ it('quarantines a proactive POST interrupted by actual bridge process death and 
   child.stderr.on('data', (chunk) => {
     errors += chunk.toString();
   });
-  expect(String((await once(child.stdout, 'data'))[0]), errors).toContain('READY');
+  let startupOutput = '';
+  await new Promise<void>((resolve, reject) => {
+    const cleanupReadinessListeners = () => {
+      child.stdout.removeListener('data', onData);
+      child.removeListener('exit', onExit);
+      child.removeListener('error', onError);
+    };
+    const onData = (chunk: Buffer | string) => {
+      startupOutput += String(chunk);
+      if (startupOutput.includes('READY')) {
+        cleanupReadinessListeners();
+        resolve();
+      }
+    };
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      cleanupReadinessListeners();
+      reject(
+        new Error(
+          `Bridge child exited before READY (code=${code} signal=${
+            signal ?? 'none'
+          }). stdout:\n${startupOutput}\nstderr:\n${errors}`,
+        ),
+      );
+    };
+    const onError = (error: Error) => {
+      cleanupReadinessListeners();
+      reject(new Error(`Bridge child failed before READY: ${error.message}\n${errors}`));
+    };
+    child.stdout.on('data', onData);
+    child.once('exit', onExit);
+    child.once('error', onError);
+  });
+  expect(startupOutput, errors).toContain('READY');
   const binding = f.sessions.coord!.socket.binding;
   expect(
     await sendDiscord(f.root, binding, { action: 'send', requestId: 'killed', text: 'crash notification' }),

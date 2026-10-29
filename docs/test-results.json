@@ -15258,6 +15258,103 @@
         "Coordinated dirty/clean ID collision remains a documented non-blocking limit by user direction",
         "Separate57 replay/ref-state change not included"
       ]
+    },
+    {
+      "id": "2026-10-28-eliminate-wasteful-test-waits",
+      "task_ids": ["2026-10-28-eliminate-wasteful-test-waits"],
+      "recorded_at": "2026-10-28T14:50:56.856Z",
+      "commit": "63b480d0469b551bb3259adb9eb4e187b3dae181",
+      "dirty": true,
+      "environment": "macOS (darwin arm64), Node v24.16.0; Discord success checks used TMPDIR=/tmp to avoid the platform Unix-socket path limit.",
+      "tiers": [
+        {
+          "name": "focused-e2e-intermediate-failures",
+          "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts source/first-run-setup.e2e.test.ts source/task-menu-row-wrap.e2e.test.ts",
+          "exit": 1,
+          "result": { "attempts": 2, "files_passed": 2, "files_failed": 2, "tests_passed": 2, "tests_failed": 4 },
+          "notes": "Two intermediate runs exposed a macOS-specific settings path assumption and then a missing waitForHarnessComposerValue import. Both were corrected; the final focused and full e2e runs below passed."
+        },
+        {
+          "name": "focused-e2e",
+          "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts source/first-run-setup.e2e.test.ts source/task-menu-row-wrap.e2e.test.ts",
+          "exit": 0,
+          "result": { "files_passed": 2, "tests_passed": 3, "duration_seconds": 3.96 }
+        },
+        {
+          "name": "e2e",
+          "command": "pnpm test:e2e",
+          "exit": 0,
+          "result": {
+            "files_passed": 7,
+            "files_skipped": 1,
+            "tests_passed": 35,
+            "tests_skipped": 4,
+            "duration_seconds": 4.58
+          }
+        },
+        {
+          "name": "provider-black-box",
+          "command": "pnpm test:provider-black-box",
+          "exit": 0,
+          "result": { "files_passed": 28, "tests_passed": 223, "tests_skipped": 1, "duration_seconds": 62.31 }
+        },
+        {
+          "name": "focused-integration-short-tmp",
+          "command": "TMPDIR=/tmp NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts scripts/release-local.integration.test.ts source/services/logging/logging-failures.integration.test.ts source/services/discord/discord-command.integration.test.ts source/acp-v2/serve.integration.test.ts source/acp-v2/session-backend.integration.test.ts",
+          "exit": 0,
+          "result": { "files_passed": 5, "tests_passed": 21, "duration_seconds": 8.47 }
+        },
+        {
+          "name": "focused-integration-default-tmp-platform-failures",
+          "command": "NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts scripts/release-local.integration.test.ts source/services/logging/logging-failures.integration.test.ts source/services/discord/discord-command.integration.test.ts source/services/discord/discord-bridge.integration.test.ts source/acp-v2/serve.integration.test.ts source/acp-v2/session-backend.integration.test.ts",
+          "exit": 1,
+          "result": { "tests_passed": 78, "tests_failed": 32, "duration_seconds": 24.33 },
+          "notes": "All release, logging and ACP tests passed. Four Discord runner cases and 28 Discord bridge cases failed under the default long macOS temp path; signatures include Unix-socket listen EINVAL and downstream bridge startup assertions. The rerun with TMPDIR=/tmp passed all four runner modes."
+        },
+        {
+          "name": "discord-bridge-ready-platform-limitation",
+          "command": "TMPDIR=/tmp NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts -t \"quarantines a proactive POST interrupted\"",
+          "exit": 1,
+          "result": { "tests_failed": 1, "tests_skipped": 88, "duration_seconds": 2.19 },
+          "notes": "The child reached READY without the 30-second readiness stall. The case then failed at its pre-existing macOS process-admission boundary: expected delivery=queued, received unavailable (Linux /proc start-time support is absent)."
+        },
+        {
+          "name": "typecheck",
+          "command": "pnpm typecheck",
+          "exit": 0,
+          "result": { "errors": 0 }
+        },
+        {
+          "name": "lint",
+          "command": "pnpm lint",
+          "exit": 0,
+          "result": { "errors": 0, "warnings": 31 },
+          "notes": "Prettier check passed; ESLint warnings were reported in other existing source files."
+        },
+        {
+          "name": "repository-guards",
+          "command": "pnpm test",
+          "exit": 0,
+          "result": { "files_passed": 7, "tests_passed": 28 }
+        },
+        {
+          "name": "diff-check",
+          "command": "git diff --check",
+          "exit": 0,
+          "result": { "whitespace_errors": 0 }
+        }
+      ],
+      "verification": {
+        "independent": false,
+        "verifier": null,
+        "verdict": "author checks passed; independent verification pending",
+        "rework_rounds": 0
+      },
+      "uncertain": [
+        "No comparable healthy full-suite baseline was measured; suite-wide wall-clock savings are not claimed.",
+        "Full Discord bridge assertions remain unverified on a compatible Linux host; macOS socket-path and /proc limitations are recorded above.",
+        "Independent verification of the provider black-box fixture change remains pending."
+      ]
     }
   ]
 }

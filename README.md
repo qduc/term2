@@ -75,7 +75,7 @@ attaches existing opted-in terminal sessions. Start with `term2 discord --help`.
 Replies require explicit `discord_send`; status, approvals and questions stay local.
 Live Discord/mobile validation is still outstanding.
 
-`/restart` reloads the built CLI in place and resumes the conversation, recovering queued and editor text. It requires POSIX Node with `process.execve` support (Node 24 recommended), a built `dist/cli.js` entry, and no Node flags, loaders, or `NODE_OPTIONS`. Live background work blocks restart unless you explicitly use `/restart stop`; active workspace leases reset to home scope. Finish foreground shell commands and pending input confirmations first. See [session restart](https://qduc.github.io/term2/using-term2/sessions/#restart-the-built-cli) for recovery limits.
+`/restart` reloads the built CLI in place and resumes the conversation, recovering durably queued text (not unsaved editor drafts). It requires POSIX Node with `process.execve` support (Node 24 recommended), a built `dist/cli.js` entry, and no Node flags, loaders, or `NODE_OPTIONS`. Live background work blocks restart unless you explicitly use `/restart stop`; active workspace leases reset to home scope. Finish foreground shell commands and pending input confirmations first. See [session restart](https://qduc.github.io/term2/using-term2/sessions/#restart-the-built-cli) for recovery limits.
 
 ## Approvals and sandbox
 

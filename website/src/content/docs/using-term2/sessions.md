@@ -59,14 +59,14 @@ term2 provides granular control over conversation history:
 
 ## Restart the Built CLI
 
-Use `/restart` in the interactive terminal to reload the built CLI in place and resume the same saved conversation. This reloads the installed build; it does not install an update or compile source changes. Queued and editor text are recovered from durable storage rather than submitted again automatically.
+Use `/restart` in the interactive terminal to reload the built CLI in place and resume the same saved conversation. This reloads the installed build; it does not install an update or compile source changes. Durably queued text is recovered from storage rather than submitted again automatically. Unsaved composer and queue-edit drafts are not part of that durable handoff; submit or save them before restarting.
 
 - Requires POSIX Node with `process.execve` support (Node 24 recommended) and a built `dist/cli.js` entry. The general Node 20+ installation requirement does not guarantee restart support.
 - Windows, Node flags/loaders, and non-empty `NODE_OPTIONS` are not supported. Unsupported launch contexts are refused with a manual resume command.
 - Finish a foreground shell command or pending input confirmation before restarting.
 - Live background shells and agents block `/restart`. Use `/restart stop` only when you consent to stopping that work; running processes are not transferred to the replacement runtime.
 - Active workspace leases reset to their home scope. Model/provider, reasoning, profile, approval/sandbox settings, SSH target, and control-socket attachment are carried into the resume context, but this is not a snapshot of every live attachment or UI state.
-- Pending image attachments cannot be durably handed off by this restart path; submit them or remove them first. Do not assume unsent attachments are preserved just because text is recoverable.
+- Pending images, skills, or other non-durable queued input cannot be handed off by this restart path; submit, edit, or explicitly discard that input first. Do not assume unsent attachments are preserved just because text is recoverable.
 
 If automatic restart is refused or fails during shutdown, inspect the error and the printed manual resume/recovery command before continuing. Restart does not undo tool effects from the interrupted turn.
 

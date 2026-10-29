@@ -99,7 +99,7 @@ it
     if (!address || typeof address === 'string') throw new Error('No fixture address');
     const seedId = randomUUID();
     const workspace = await createIsolatedWorkspaceLease({
-      env: { ...productionEnv, SHELL_AUTO_APPROVE_MODE: 'always', SANDBOX_ENABLED: 'false' },
+      env: productionEnv,
       prepare: async (root, paths) => {
         work = join(root, 'work');
         await mkdir(work);
@@ -121,6 +121,9 @@ it
               modelSelection: { model: 'fixture', provider: 'fixture-provider' },
               completionVerification: false,
             },
+            // This journey tests ownership, not sandbox availability or approval.
+            shell: { autoApproveMode: 'always' },
+            sandbox: { enabled: false },
             memory: { enabled: false },
           }),
         );

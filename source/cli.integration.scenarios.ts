@@ -2107,7 +2107,7 @@ fs.createWriteStream = (filename, options) => {
           const request = mock.capturedRequests()[0];
           const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
           // Bare has no editors or activate_skill: the shell does both.
-          expect(names).toEqual(['goal_check', 'run_code', 'shell']);
+          expect(names).toEqual(['goal_check', 'run_code', 'run_subagent', 'shell']);
           const runCode = (request.tools as { function: { name: string; description: string } }[]).find(
             (t) => t.function.name === 'run_code',
           )!;

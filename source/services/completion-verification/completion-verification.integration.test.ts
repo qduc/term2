@@ -788,29 +788,51 @@ it('the run loop cannot mark a durable goal achieved before verification passes'
 });
 
 it('a repair deadline stops a nonresponsive model and retains the persisted repair budget', async () => {
-  const orchestrator = new CompletionVerificationOrchestrator(
-    store,
-    operations({ verify: async (request) => report(request, 'FAIL') }),
-    { ...budgets, taskTimeoutMs: 150 },
-  );
-  const verdict = await orchestrator.propose(proposal);
-  expect(verdict.action).toBe('repair');
-  let calls = 0;
-  const loop = new ApplicationRunLoop({
-    resolveModel: () => ({
-      async *stream() {
-        if (++calls > 1) await new Promise(() => {});
-        yield { type: 'completion', responseId: 'first', output: [] };
-      },
-    }),
-  });
-  const stream = loop.startStream({ name: 'Worker', model: 'fixture', instructions: '', tools: [] }, 'Work', {
-    onNormalStop: () => ({ action: 'continue', reminder: 'Repair required', repairDeadline: verdict.record!.deadline }),
-  });
-  await stream.completed;
-  expect(calls).toBe(2);
-  expect(stream.terminalCause).toBe('completion_verification_blocked');
-  expect(store.read('task')?.repairs).toBe(1);
+  // Git snapshots and SQLite stay real; only the task clock is controlled so
+  // slow setup cannot spend the repair window before the model is reached.
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  try {
+    const orchestrator = new CompletionVerificationOrchestrator(
+      store,
+      operations({ verify: async (request) => report(request, 'FAIL') }),
+      { ...budgets, taskTimeoutMs: 150 },
+    );
+    const verdict = await orchestrator.propose(proposal);
+    expect(verdict.action).toBe('repair');
+    let calls = 0;
+    let repairStarted!: () => void;
+    const repairing = new Promise<void>((resolve) => {
+      repairStarted = resolve;
+    });
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream() {
+          if (++calls > 1) {
+            repairStarted();
+            await new Promise(() => {});
+          }
+          yield { type: 'completion', responseId: 'first', output: [] };
+        },
+      }),
+    });
+    const stream = loop.startStream({ name: 'Worker', model: 'fixture', instructions: '', tools: [] }, 'Work', {
+      onNormalStop: () => ({
+        action: 'continue',
+        reminder: 'Repair required',
+        repairDeadline: verdict.record!.deadline,
+      }),
+    });
+    await repairing;
+    await vi.advanceTimersByTimeAsync(149);
+    expect(stream.terminalCause).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    await stream.completed;
+    expect(calls).toBe(2);
+    expect(stream.terminalCause).toBe('completion_verification_blocked');
+    expect(store.read('task')?.repairs).toBe(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('new user steering supersedes an autonomous repair deadline without changing the persisted budget', async () => {

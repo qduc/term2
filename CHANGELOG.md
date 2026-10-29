@@ -1,7 +1,22 @@
 ## [Unreleased]
 
+## [0.40.0] - 2026-10-29
+
+### Features
+- Enable subagent delegation in the Bare profile while retaining its minimal shell-led prompt.
+- Add `/restart` to reload the supported built CLI in place and resume the conversation with durable queued-text recovery (not unsaved editor drafts). `/restart stop` explicitly consents to stopping live background work. Requires POSIX Node with `process.execve` support and a built `dist/cli.js` entry; Windows, Node flags/loaders, and `NODE_OPTIONS` are unsupported. Active workspace leases reset to home scope; non-durable pending input must be handled before restart.
+
 ### Improvements
-- The Discord bridge now uses a Gateway connection as a wake-up signal, so new messages are read immediately instead of on the next one-second poll; REST reads drop to a 30-second safety poll while push is connected. Content still comes only from the cursor-based REST read. Set `TERM2_DISCORD_GATEWAY=off` to keep polling only.
+- The Discord bridge now uses a Gateway connection as a wake-up signal, so new messages are read immediately instead of on the next one-second poll; REST reads drop to a 30-second safety poll while push is connected. Content still comes only from the cursor-based REST read. Set `TERM2_DISCORD_GATEWAY=off` to keep polling only. Live Discord/mobile validation remains outstanding.
+
+### Bug Fixes
+- Preserve Discord ingress while the configured default coordinator is unavailable, and improve bridge transport and shutdown cleanup.
+- Admit read-only gateway grants on physically writable directories without widening write authority, and propagate the launcher's write policy to the runtime. Read-only gateway sessions refuse shell execution outside the sandbox, including when the sandbox is disabled or execution uses SSH.
+- Restore recorded tool-result bodies and stopped partial replies on gateway session reload, replay in-flight turns from their start, improve reconnect/backpressure handling, and forward all multi-question answers.
+- Reject publication with a dirty, untagged, stale, or mismatched build identity. The local publish route rebuilds after creating or reusing the exact release tag; this does not repair the already-published 0.39.0 artifact.
+
+### Separate Web Client
+- Refresh Markdown/code rendering, grouped tool calls, composer/sidebar layout, workspace selection, multi-select questions, and reload recovery in the private Next.js `web-client/` app. This frontend is not included in the npm CLI package; update and rebuild it separately. Gateway backend fixes above ship with the CLI.
 
 ## [0.39.0] - 2026-10-27
 

@@ -28002,6 +28002,55 @@
         "baseline_commit": "26bccb1e2efdb32e3dbca54e56b7687de2207b4a",
         "notes": "Failure signature and exact file content reproduced independently at candidate base."
       }
+    },
+    {
+      "id": "2026-10-29-discord-reactions-environment-annotation-correction",
+      "recorded_on": "2026-10-29",
+      "run_at": null,
+      "commit": "d91c0617daa155e2b0fd3e7c28043639c2ba3b4d",
+      "revision_kind": "documentation_correction",
+      "task_ids": [
+        "2026-10-29-discord-reactions"
+      ],
+      "suite": "evidence-metadata",
+      "command": "printenv NODE_ENV",
+      "command_complete": true,
+      "environment": {
+        "os": "linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": {
+          "NODE_ENV": "production"
+        },
+        "notes": "Directly observed ambient parent shell after tests. Integration/e2e/provider scripts explicitly set NODE_ENV=test for Vitest; direct bounded provider invocation also set test."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/discord-reactions/build-evidence/environment-observation.txt",
+        "/home/qduc/coord/term2/tasks/discord-reactions/independent-verification.md"
+      ],
+      "comparison": {
+        "classification": "metadata_correction",
+        "resolves_run_ids": [
+          "2026-10-29-discord-reactions-lint-initial",
+          "2026-10-29-discord-reactions-changed-eslint",
+          "2026-10-29-discord-reactions-static-final",
+          "2026-10-29-discord-reactions-independent-blocked",
+          "2026-10-29-discord-reactions-independent-static",
+          "2026-10-29-discord-reactions-independent-lint-probes",
+          "2026-10-29-discord-reactions-independent-lint-final"
+        ],
+        "notes": "The common record template incorrectly labelled direct non-test static/lint commands and blocked verifier attempts as NODE_ENV=test. Parent direct lint/typecheck/ESLint/Prettier/guard ran under ambient production; independent direct static/lint ambient value was not retained and is unknown. No counts/outcomes/source claims change. Test runner records remain correctly NODE_ENV=test."
+      },
+      "notes": "Append-only correction; historical observations untouched. No test rerun or behavior change inferred."
     }
   ]
 }

@@ -80,6 +80,14 @@ export type SessionUpdate =
   | { readonly kind: 'fact'; readonly entry: LogEntry }
   | { readonly kind: 'live'; readonly turnId: TurnId; readonly event: EngineEvent };
 
+export type SessionPosition = { readonly generation: string; readonly position: number };
+export type CapturedSessionUpdate = { readonly position: SessionPosition; readonly update: SessionUpdate };
+export type SessionCapture = {
+  readonly state: SessionState;
+  readonly position: SessionPosition;
+  readonly unsubscribe: () => void;
+};
+
 export type Admission =
   | { readonly kind: 'started'; readonly turnId: TurnId }
   | { readonly kind: 'queued'; readonly position: number }
@@ -104,6 +112,7 @@ export interface Session {
   compact(): Promise<void>;
   setModel(model: ModelRef): Promise<void>;
   subscribe(fromSeq: number, listener: (update: SessionUpdate) => void): () => void;
+  capture(listener: (update: CapturedSessionUpdate) => void): SessionCapture;
   /** Disposes the live handle while retaining the conversation for later open. */
   close(): Promise<void>;
   /** Writes session_closed with one fixed retention deadline. */

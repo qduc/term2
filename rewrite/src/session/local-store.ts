@@ -363,7 +363,43 @@ export class LocalSessionStore implements SessionStore {
   ): Promise<{ session: Session; submission?: AdoptedSubmissionPort }> {
     let current = state;
     const pendingAdmissions = new Map<string, { hash: string; turnId: string; admitted: Promise<void> }>();
-    const factListeners = new Set<(entry: import('./index.js').LogEntry) => void>();
+    type Update = import('./index.js').SessionUpdate;
+    type Captured = import('./index.js').CapturedSessionUpdate;
+    const generation = crypto.randomUUID();
+    let position = 0;
+    const listeners = new Set<(update: Captured) => void>();
+    const queue: { item: Captured; listeners: readonly ((update: Captured) => void)[] }[] = [];
+    let delivering = false;
+    const enqueue = (updates: readonly Update[]) => {
+      for (const update of updates) {
+        if (!Number.isSafeInteger(position + 1)) throw new Error('Session position exhausted');
+        const item = { position: { generation, position: ++position }, update: structuredClone(update) };
+        queue.push({ item, listeners: [...listeners] });
+      }
+      if (delivering) return;
+      delivering = true;
+      try {
+        while (queue.length) {
+          const { item, listeners: targets } = queue.shift()!;
+          for (const listener of targets) {
+            if (!listeners.has(listener)) continue;
+            try {
+              const result: unknown = listener(item);
+              if (
+                result != null &&
+                (typeof result === 'object' || typeof result === 'function') &&
+                typeof (result as { then?: unknown }).then === 'function'
+              )
+                void Promise.resolve(result).catch(() => {});
+            } catch {
+              /* Observers cannot undo publication. */
+            }
+          }
+        }
+      } finally {
+        delivering = false;
+      }
+    };
     const context: SessionDriverContext = {
       id,
       root: log.root,
@@ -378,7 +414,7 @@ export class LocalSessionStore implements SessionStore {
           { history: restored.history, messages: restored.messages },
           restored.history as unknown as Item[],
         );
-        for (const entry of entries) for (const listener of factListeners) listener(entry);
+        enqueue(entries.map((entry) => ({ kind: 'fact', entry })));
         return entries;
       },
     };
@@ -495,18 +531,21 @@ export class LocalSessionStore implements SessionStore {
     const ensureOpen = () => {
       if (handleClosed) throw new Error('Session handle is closed');
     };
+    const unsubscribeDriver = driver.subscribe(current.lastSeq, (update) => {
+      if (update.kind === 'live') enqueue([update]);
+    });
     const subscribeCombined: Session['subscribe'] = (fromSeq, listener) => {
       ensureOpen();
       let stopped = false;
       let delivering = false;
       let lastSeq = fromSeq;
-      const queue: import('./index.js').SessionUpdate[] = [];
-      const deliver = () => {
+      const pending: Update[] = [];
+      const drain = () => {
         if (delivering) return;
         delivering = true;
         try {
-          while (!stopped && queue.length) {
-            const update = queue.shift()!;
+          while (!stopped && pending.length) {
+            const update = pending.shift()!;
             if (update.kind === 'fact') {
               if (update.entry.seq <= lastSeq) continue;
               lastSeq = update.entry.seq;
@@ -527,32 +566,21 @@ export class LocalSessionStore implements SessionStore {
           delivering = false;
         }
       };
-      let replaying = true;
-      const enqueue = (update: import('./index.js').SessionUpdate) => {
-        if (stopped) return;
-        queue.push(update);
-        if (!replaying) deliver();
+      const wrapped = (item: Captured) => {
+        pending.push(structuredClone(item.update));
+        drain();
       };
-      const onFact = (entry: import('./index.js').LogEntry) => enqueue({ kind: 'fact', entry });
-      factListeners.add(onFact);
-      const unsubscribeDriver = driver.subscribe(fromSeq, (update) => {
-        if (update.kind === 'live') enqueue(update);
-      });
-      // Only replay entries already projected by commit; append may have completed
-      // before its awaiting commit continuation updates current state.
-      const highWater = current.lastSeq;
-      const replay = log
-        .entries()
-        .filter((entry) => entry.seq > fromSeq && entry.seq <= highWater)
-        .map((entry) => ({ kind: 'fact' as const, entry }));
-      queue.unshift(...replay);
-      replaying = false;
-      deliver();
+      listeners.add(wrapped);
+      pending.push(
+        ...log
+          .entries()
+          .filter((entry) => entry.seq > fromSeq && entry.seq <= current.lastSeq)
+          .map((entry) => ({ kind: 'fact' as const, entry: structuredClone(entry) })),
+      );
+      drain();
       return () => {
         stopped = true;
-        queue.length = 0;
-        factListeners.delete(onFact);
-        unsubscribeDriver();
+        listeners.delete(wrapped);
       };
     };
     const session: Session = {
@@ -634,12 +662,21 @@ export class LocalSessionStore implements SessionStore {
         ensureOpen();
         return driver.setModel(model);
       },
-      subscribe: combined
-        ? subscribeCombined
-        : (...args) => {
-            ensureOpen();
-            return driver.subscribe(...args);
+      subscribe: subscribeCombined,
+      capture: (listener) => {
+        ensureOpen();
+        const snapshot = structuredClone(current);
+        const captured = { generation, position };
+        const wrapped = (update: Captured) => listener(structuredClone(update));
+        listeners.add(wrapped);
+        return {
+          state: snapshot,
+          position: captured,
+          unsubscribe: () => {
+            listeners.delete(wrapped);
           },
+        };
+      },
       close: () => {
         if (closePromise) return closePromise;
         handleClosed = true;
@@ -655,7 +692,8 @@ export class LocalSessionStore implements SessionStore {
           } catch (error) {
             failure ??= error;
           }
-          factListeners.clear();
+          unsubscribeDriver();
+          listeners.clear();
           if (failure !== undefined) throw failure;
         })();
         return closePromise;

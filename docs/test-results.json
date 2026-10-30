@@ -29508,6 +29508,102 @@
       "failures": [],
       "evidence": [],
       "notes": "Exact 194798 root/rewrite typechecks, 527-edge guard, inventory, no-unit, source lint, rebuilt old CLI parity 9/9 and retained C1 approval, stage2 interaction 5/5, retry tool, held-tool and postexecute pass. Retained memory 9/9 covers real disk receipt, image/skill/disabled, graph-lifetime storage failure disable, retry and cold reopen, manual approval physical effect with zero writes, failure and cancellation. New app graph avoids legacy adapter/coordinator entrypoints; independent canonical durability and held-storage cancellation barrier pass. Actual shell advisory held across cancellation passes; optional guard after awaited policy callbacks is static hardening, not a reproduced late grant. Initial response only preserves source policy: manual approval continuation and retry do not write memory. This is Slice A only; stage5 remaining lifecycle/goal/network/read projection, C3b/C4/K2 and full #76 remain open. See /tmp/c3a-stage5-final-*.log and independent reviewer report."
+    },
+    {
+      "id": "2026-10-30-c3a-capture-p1",
+      "timestamp": "2026-10-30T20:43:28Z",
+      "commit": "0866b251",
+      "tree": "4ce1a671eeeb4fb325836039b11e2fe6b7ef0b8d",
+      "revision_kind": "source commit",
+      "base_commit": "61794a0ba3cadff6ded89c98b1f4c6d0b16412ca",
+      "task_ids": [
+        "2026-10-30-c3a-capture-p1"
+      ],
+      "suite": "C3a P1 atomic capture focused verification",
+      "command": "pnpm exec tsc --noEmit -p rewrite/tsconfig.json; node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-capture.mts; temporary adapted c3a-input-fsync capture check; commit lint-staged and no-unit hook",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; network-enabled sandbox for local provider and git hook."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Real Session+Engine verifies fact/live ordering, reentrant capture, throwing and unsubscribing listeners, retained state, and new generation on reopen. Adapted existing accepted-input fsync injection verifies failed append is not published and capture position does not advance. Historical private-sequence gaps, adversarial reentrant producer publication, and complete C4 semantic state remain unproven. Independent review pending; this is not full C4 acceptance."
+    },
+    {
+      "id": "2026-10-30-c3a-capture-p1-final",
+      "timestamp": "2026-10-30T20:47:26Z",
+      "commit": "6640eca5e590aa147f695f8867c8704314575525",
+      "tree": "9537e30fdfb873724b764bc62399bb550f00aaf6",
+      "revision_kind": "source commit",
+      "base_commit": "61794a0ba3cadff6ded89c98b1f4c6d0b16412ca",
+      "task_ids": [
+        "2026-10-30-c3a-capture-p1"
+      ],
+      "suite": "C3a P1 capture final verification",
+      "command": "root and rewrite tsc; rewrite inventory and layer guard; strict retained c3a-capture bench; independent capture review and probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree with network-enabled local provider."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Root/rewrite typechecks, inventory, 527-edge guard and actual Session+Engine retained bench pass. Private admission position/sequence ordering and fresh generation verified; independent Sol review /tmp/term2-c3a-stage5-capture-independent-review.md verifies reentrant producer, accepted-input fsync failure and live/historical subscriber mutation isolation. Earlier source 0866 allowed legacy subscriber mutation; negative control reproduced, 76cf fixed live and 6640 fixed historical. P2 semantic projection, legacy sidecar sequence gaps and full C4 acceptance remain open."
+    },
+    {
+      "id": "2026-10-30-c3a-capture-main-integration",
+      "timestamp": "2026-10-30T20:49:11Z",
+      "commit": "0191ff5a1d8bfd37412a1cb53195d34e2d7f6b0c",
+      "tree": "9e569987647445588b6f09f1953a30318ad44a38",
+      "revision_kind": "merge commit",
+      "base_commit": "5f329234f914622c5bb7a63456a7fa19fd689213",
+      "task_ids": [
+        "2026-10-30-c3a-capture-p1"
+      ],
+      "suite": "C3a capture after stage 5 Slice A integration",
+      "command": "rewrite tsc; rewrite layer guard and inventory; node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-capture.mts; git diff --check and ledger parse",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; network-enabled local provider."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Merged main 5f329 with both append-only verification histories preserved. Capture production files and bench identical to previously independently reviewed source. Rewrite typecheck, 527-edge layer check, inventory and real Session/Engine capture bench pass. P2 semantic projection and full C4 acceptance remain open."
     }
   ]
 }

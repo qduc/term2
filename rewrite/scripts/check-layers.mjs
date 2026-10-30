@@ -25,8 +25,11 @@ const LAYER_DEPENDENCIES = {
 const SOURCE_LAYERS = [
   ['config', 'services/settings/'],
   ['config', 'services/profiles/'],
+  ['model', 'services/model-service.ts'],
+  ['shared', 'services/service-interfaces.ts'],
   ['model', 'providers/'],
   ['model', 'services/models/'],
+  ['shared', 'tools/agent/ask-user-constants.ts'],
   ['tools', 'tools/'],
   ...['shell', 'mcp', 'sandboxed-code-host', 'memory', 'skills', 'workspace', 'subagents'].map((name) => ['tools', `services/${name}/`]),
   ['engine', 'services/agent-runtime/'],
@@ -34,6 +37,7 @@ const SOURCE_LAYERS = [
   ['engine', 'lib/agent-client.ts'],
   ...['conversation', 'session', 'logging', 'queue', 'hooks', 'approval'].map((name) => ['session', `services/${name}/`]),
   ['session', 'prompts/'],
+  ['shared', 'gateway/interaction-protocol.ts'],
   ['host', 'gateway/'],
   ...['components/', 'hooks/', 'commands/', 'skins/', 'theme/', 'acp-v2/'].map((name) => ['clients', name]),
   ['clients', 'app.tsx'],
@@ -100,6 +104,7 @@ function imports(file) {
 
 const problems = new Set();
 const legacyEdges = new Set();
+const actualEdges = new Set();
 const reachedUnknown = new Set();
 const sourceFiles = [...files(sourceRoot)];
 
@@ -122,6 +127,7 @@ for (const importer of sourceFiles) {
     if (!target || !target.startsWith(sourceRoot + path.sep)) continue;
     const toLayer = sourceLayer(target);
     if (!fromLayer || !toLayer) continue;
+    actualEdges.add(sourceEdge(importer, target, fromLayer, toLayer));
     if (fromLayer !== 'shared' && toLayer !== 'shared' && fromLayer !== toLayer && !LAYER_DEPENDENCIES[fromLayer]?.includes(toLayer)) {
       legacyEdges.add(sourceEdge(importer, target, fromLayer, toLayer));
     }
@@ -136,7 +142,7 @@ try {
   process.exit(1);
 }
 for (const edge of legacyEdges) if (!allowedLegacyEdges.has(edge)) problems.add(`new source dependency edge: ${edge}`);
-for (const edge of allowedLegacyEdges) if (!legacyEdges.has(edge)) console.log(`stale allowlist entry: ${edge}`);
+for (const edge of allowedLegacyEdges) if (!actualEdges.has(edge)) console.log(`stale allowlist entry: ${edge}`);
 
 // source/ must not reach back into rewrite/, including indirect imports.
 for (const importer of sourceFiles) {
@@ -161,16 +167,15 @@ for (const entry of files(rewriteSrc)) {
       if (layer && !allowed) {
         problems.add(`${path.relative(repo, entry)} (${adoptedLayer}/) directly imports source/${sourceRelative(target)} (${layer}/)`);
       }
-      if (!layer || allowed) queue.push({ file: target, grandfatheredLayers: new Set() });
+      if (!layer || allowed) queue.push({ file: target, context: layer && layer !== 'shared' ? layer : adoptedLayer });
     }
   }
   if (!adoptedLayer) continue;
-  const grandfatheredLayers = new Set();
   while (queue.length) {
     const state = queue.shift();
     const current = state.file;
-    const grandfatheredLayers = state.grandfatheredLayers;
-    const stateKey = `${current}\0${[...grandfatheredLayers].sort().join(',')}`;
+    const context = state.context;
+    const stateKey = `${current}\0${context}`;
     if (visited.has(stateKey)) continue;
     visited.add(stateKey);
     const layer = sourceLayer(current);
@@ -181,18 +186,17 @@ for (const entry of files(rewriteSrc)) {
       if (target && target.startsWith(sourceRoot + path.sep)) {
         const targetLayer = sourceLayer(target);
         const fromLayer = sourceLayer(current);
-        // Once an explicit legacy edge admits a layer, its existing internal imports remain reachable.
-        // Other forbidden layers still need their own allowlisted boundary edge.
-        const nextGrandfatheredLayers = new Set(grandfatheredLayers);
-        if (targetLayer && targetLayer !== 'shared' && targetLayer !== adoptedLayer && !LAYER_DEPENDENCIES[adoptedLayer]?.includes(targetLayer) && !nextGrandfatheredLayers.has(targetLayer)) {
+        // Shared and unmapped files retain the caller's restrictions; a mapped
+        // layer takes responsibility for its own outgoing edges.
+        const effectiveLayer = fromLayer && fromLayer !== 'shared' ? fromLayer : context;
+        if (targetLayer && targetLayer !== 'shared' && targetLayer !== effectiveLayer && !LAYER_DEPENDENCIES[effectiveLayer]?.includes(targetLayer)) {
           const edge = fromLayer ? sourceEdge(current, target, fromLayer, targetLayer) : null;
           if (!edge || !allowedLegacyEdges.has(edge)) {
-            problems.add(`${path.relative(repo, entry)} (${adoptedLayer}/) reaches source/${sourceRelative(target)} (${targetLayer}/) through ${edge ?? `unmapped source/${sourceRelative(current)}`}`);
+            problems.add(`${path.relative(repo, entry)} (${adoptedLayer}/) reaches source/${sourceRelative(target)} (${targetLayer}/) through ${edge ?? `unmapped source/${sourceRelative(current)}`} [context ${effectiveLayer}]`);
             continue;
           }
-          nextGrandfatheredLayers.add(targetLayer);
         }
-        queue.push({ file: target, grandfatheredLayers: nextGrandfatheredLayers });
+        queue.push({ file: target, context: targetLayer && targetLayer !== 'shared' ? targetLayer : effectiveLayer });
       }
       if (target && target.startsWith(rewriteRoot + path.sep)) problems.add(`source/${sourceRelative(current)} imports rewrite/${path.relative(rewriteRoot, target).split(path.sep).join('/')}`);
     }
@@ -207,4 +211,4 @@ if (problems.size) {
   console.error([...problems].sort().join('\n'));
   process.exit(1);
 }
-console.log(`layer check passed (${legacyEdges.size} allowlisted source edges)`);
+console.log(`layer check passed (${allowedLegacyEdges.size} allowlisted source edges)`);

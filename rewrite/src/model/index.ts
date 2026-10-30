@@ -13,18 +13,46 @@ export type ToolCallId = string & { readonly __brand: 'ToolCallId' };
 
 export type ContentPart =
   | { readonly type: 'text'; readonly text: string }
-  | { readonly type: 'image'; readonly mediaType: string; readonly data: string };
+  | { readonly type: 'image'; readonly mediaType: string; readonly data: string; readonly detail?: string };
+
+/** Provider-native response items carried untouched until they return to their source provider. */
+export type ProviderOpaqueItem = {
+  readonly type: 'provider_opaque';
+  readonly id: ItemId;
+  readonly provider: string;
+  readonly sourceProvider?: string;
+  readonly item: Readonly<Record<string, unknown>>;
+};
+
+/** Stream inputs that the portable Item variants cannot represent exactly. */
+export type ProviderInputItem = {
+  readonly type: 'provider_input';
+  readonly id: ItemId;
+  readonly provider: string;
+  readonly input: Readonly<Record<string, unknown>>;
+};
 
 export type Item =
   | { readonly type: 'user_message'; readonly id: ItemId; readonly content: readonly ContentPart[] }
   | { readonly type: 'assistant_message'; readonly id: ItemId; readonly content: readonly ContentPart[] }
-  | { readonly type: 'reasoning'; readonly id: ItemId; readonly summary: string; readonly opaque?: unknown }
+  | {
+      readonly type: 'reasoning';
+      readonly id: ItemId;
+      readonly summary: string;
+      readonly opaque?: unknown;
+      readonly providerMetadata?: Readonly<Record<string, unknown>>;
+      readonly providerItemId?: string;
+    }
   | {
       readonly type: 'tool_call';
       readonly id: ItemId;
       readonly callId: ToolCallId;
       readonly toolName: string;
       readonly input: unknown;
+      readonly rawArguments?: string;
+      readonly argumentsSnapshot?: unknown;
+      readonly providerMetadata?: Readonly<Record<string, unknown>>;
+      readonly toolType?: 'function' | 'custom';
     }
   | {
       readonly type: 'tool_result';
@@ -32,9 +60,12 @@ export type Item =
       readonly callId: ToolCallId;
       readonly output: string;
       readonly isError: boolean;
+      readonly providerOutput?: readonly Readonly<Record<string, unknown>>[];
+      readonly toolType?: 'function' | 'custom';
     }
-  /** Replaces a span of earlier items after compaction. */
-  | { readonly type: 'summary'; readonly id: ItemId; readonly text: string; readonly replaces: readonly ItemId[] };
+  | { readonly type: 'summary'; readonly id: ItemId; readonly text: string; readonly replaces: readonly ItemId[] }
+  | ProviderOpaqueItem
+  | ProviderInputItem;
 
 // ---------- Requests and streamed responses ----------
 
@@ -58,6 +89,10 @@ export type ModelRequest = {
   readonly maxOutputTokens?: number;
   /** Provider-side continuation, e.g. a previous response id. Opaque to callers. */
   readonly continuation?: unknown;
+  /** Explicit provider continuation accepted by source-backed model adapters. */
+  readonly previousResponseId?: string | null;
+  /** Send a self-contained request and suppress provider-side continuation. */
+  readonly disableChaining?: boolean;
 };
 
 export type Usage = {
@@ -69,13 +104,24 @@ export type Usage = {
 export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal';
 
 export type ModelEvent =
-  | { readonly type: 'text_delta'; readonly delta: string }
-  | { readonly type: 'reasoning_delta'; readonly delta: string }
+  | { readonly type: 'text_delta'; readonly delta: string; readonly partId?: string }
+  | {
+      readonly type: 'reasoning_delta';
+      readonly delta: string;
+      readonly id?: string;
+      readonly providerMetadata?: Readonly<Record<string, unknown>>;
+    }
   /** A complete item the model produced; the engine appends these to history. */
   | { readonly type: 'item'; readonly item: Item }
   | { readonly type: 'usage'; readonly usage: Usage }
   | { readonly type: 'retrying'; readonly attempt: number; readonly delayMs: number; readonly error: ModelError }
-  | { readonly type: 'done'; readonly stopReason: StopReason; readonly continuation?: unknown };
+  | {
+      readonly type: 'done';
+      readonly stopReason: StopReason;
+      readonly continuation?: unknown;
+      readonly providerMetadata?: Readonly<Record<string, unknown>>;
+      readonly costUsd?: number | string;
+    };
 
 export type ModelErrorKind =
   | 'authentication'

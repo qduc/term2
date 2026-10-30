@@ -1137,6 +1137,11 @@ export function createAdoptedForeground(options: {
         return promise;
       },
       retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult> {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (target !== 'turn' && target !== 'tool') return Promise.reject(new Error('Invalid retry target'));
         if (closing || context.state().status === 'closed')
           return Promise.resolve({ kind: 'rejected', reason: 'closed' });
@@ -1217,6 +1222,11 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       decide(command: AdoptedInteractionCommand): Promise<void> {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         const owned = structuredClone(command);
         const operation = decisionTail
@@ -1244,6 +1254,11 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       submit(value: AdoptedSubmissionInput, submitOptions?: AdoptedSubmissionOptions): Promise<Admission> {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
         if (interrupting || settingMutation) return Promise.reject(new Error('Session mutation is in progress'));
         const captured = captureAdoptedInput(value.input);

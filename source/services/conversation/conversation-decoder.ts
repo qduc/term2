@@ -403,6 +403,21 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
     return null;
   }
   const eventObj = obj['event'] as Record<string, unknown>;
+  const strictSettings =
+    eventObj['type'] === 'session_settings_initialized' ||
+    (eventObj['type'] === 'settings_changed' && Object.hasOwn(eventObj, 'sessionMutation'));
+  if (
+    strictSettings &&
+    (!Number.isSafeInteger(obj['v']) ||
+      !Number.isSafeInteger(obj['seq']) ||
+      Number(obj['seq']) < 0 ||
+      typeof obj['ts'] !== 'string' ||
+      typeof obj['logId'] !== 'string' ||
+      !obj['logId'] ||
+      typeof obj['eventId'] !== 'string' ||
+      !obj['eventId'])
+  )
+    throw new Error('invalid session settings envelope');
   if (
     eventObj['truncated'] === true &&
     (eventObj['type'] === 'session_settings_initialized' ||

@@ -65,6 +65,8 @@ export interface ResultBuilderDeps {
   /** Explicit nested/test-only legacy approval state. */
   nestedCompatibility?: NestedToolCompatibilityState;
   toolCallMarkers?: ToolCallMarkerStore;
+  /** Reject stale turn authority after asynchronous policy work. */
+  assertCurrent?: () => void;
 }
 
 export interface ResultBuilderInput {
@@ -261,6 +263,7 @@ export async function buildConversationResult(
       args: parseResult.arguments,
       context: runContext,
     });
+    deps.assertCurrent?.();
 
     if (registryDecision.kind === 'error' || registryDecision.kind === 'interceptor_denied') {
       logger.warn('Tool approval policy refused a direct call', {
@@ -331,6 +334,7 @@ export async function buildConversationResult(
         interruption,
         siblings: result.interruptions || [],
       });
+      deps.assertCurrent?.();
 
       if (shellAutoApproval.shouldAutoApprove(llmAdvisory)) {
         logger.debug('Tool auto-approved by LLM', {

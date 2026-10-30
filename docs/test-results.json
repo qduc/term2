@@ -27923,6 +27923,192 @@
         }
       ],
       "notes": "Both typechecks, guard 520 and inventory passed. Existing focused integration 4/4 and temporary driver probes 8/8 passed; 37 other verifier tests deliberately deselected. Approved A4 source diff versus its original base is byte-identical to integrated diff versus main. Nine old CLI goldens and native tracer passed before integration; admin native shutdown failure and base reproduction are recorded in the preceding A4 run. Independent Sol approved original source 78bd9980; hosted CI pending."
+    },
+    {
+      "id": "2026-10-30-c3a-request-history",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:17:56Z",
+      "commit": "855fd52bb59c29523f169c6e7358cb036ee78bc2",
+      "tree": "9f240577652c8d03a2e23c10845ceaa5c205efef",
+      "revision_kind": "clean source commit before documentation",
+      "base_commit": "ba3f0a8582d87cafc87776cc033c2604cd92a2a8",
+      "task_ids": [
+        "2026-10-30-c3a-request-history"
+      ],
+      "suite": "old CLI request and history evidence",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-history-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts -t \"resumes a completed conversation|refuses a switched-provider request\" --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, network-enabled local provider/PTy fixture; marker wrapper imports built old CLI."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 7,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-history-cli.mjs"
+        }
+      ],
+      "notes": "Focused PTY 2/2; nine old parity goldens 9/9; rewrite typecheck, layer guard 524 and inventory passed. Exploratory old CLI reopen following foreign refusal retained rejected input in persisted log and later original-provider request; same-process follow-up excludes it. This is a legacy replay defect characterization, not required parity; approved C2 exact-reference rollback governs new Session. Picker attempts using explicit --provider were intercepted and selected current provider; favorite picker path succeeds. Independent review pending. Other matrix rows remain unproven."
+    },
+    {
+      "id": "2026-10-30-c3a-request-history-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:18:14Z",
+      "commit": "855fd52bb59c29523f169c6e7358cb036ee78bc2",
+      "tree": "9f240577652c8d03a2e23c10845ceaa5c205efef",
+      "revision_kind": "clean source commit, independently reviewed",
+      "base_commit": "ba3f0a8582d87cafc87776cc033c2604cd92a2a8",
+      "task_ids": [
+        "2026-10-30-c3a-request-history"
+      ],
+      "suite": "independent selected CLI continuity and refusal",
+      "command": "TERM2_TEST_CLI=/tmp/c3a-history-review-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts -t \"resumes a completed conversation|refuses a switched-provider request\" --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol review, selected marker wrapper importing built old CLI."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 7,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-history-review-cli.mjs"
+        }
+      ],
+      "notes": "Sol accepted with no findings; 2/2 passed in 13.40s and four selected CLI launches recorded. Same-process refusal rollback and completed resume continuity confirmed. No durable reopen rollback claim; legacy leak is diagnostic and approved C2 rollback remains binding."
+    },
+    {
+      "id": "2026-10-30-c3a-input-evidence",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:24:28Z",
+      "commit": "ab2539488891321b1e081fe4caa23cee336b8e5f",
+      "tree": "fac2ea6c03b916128f4b332f249b4f07e0206059",
+      "revision_kind": "clean source commit before documentation",
+      "base_commit": "19bcef77",
+      "task_ids": [
+        "2026-10-30-c3a-input-evidence"
+      ],
+      "suite": "old CLI image and profile notice",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-input-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/input-notice.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; local provider PTY and fixture xclip; selected wrapper imports old CLI."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-input-cli.mjs"
+        }
+      ],
+      "notes": "Old CLI focused PTY passed 1/1, nine parity goldens 9/9, rewrite typecheck, 524-edge guard and inventory passed. Exploratory assertion that second request omits prior image failed once (second input contained image); earlier three runs passed it. The cause and response chain of this observation are unverified; no second-image assertion retained. Five subsequent raw captures had previous_response_id notice-response-0 and one text-only user item. The notice absence remains asserted. No blocked/guard, skill, retry or new Session claim. Independent review pending."
+    },
+    {
+      "id": "2026-10-30-c3a-input-evidence-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:26:00Z",
+      "commit": "ab2539488891321b1e081fe4caa23cee336b8e5f",
+      "tree": "fac2ea6c03b916128f4b332f249b4f07e0206059",
+      "revision_kind": "clean source commit independently reviewed",
+      "base_commit": "19bcef77",
+      "task_ids": [
+        "2026-10-30-c3a-input-evidence"
+      ],
+      "suite": "independent old CLI image and notice evidence",
+      "command": "TERM2_TEST_CLI=<independent marker wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/input-notice.blackbox.ts --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol review; marker wrapper selects built old CLI."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Sol accepted without findings; selected wrapper launch included --lite --profile plan; focused test passed 1/1 in 2.96s. Previous image observation remains unclassified; no second-image omission assertion or guard coverage claim."
+    },
+    {
+      "id": "2026-10-30-c3a-evidence-batch-integrated",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:29:52Z",
+      "commit": "13e251cb41e8f8055565e7c7b3cb95429a8cd0f7",
+      "tree": "407cb807e3ba9b651e6d935d4e7f3319be7c6fbd",
+      "revision_kind": "clean source commit before documentation",
+      "base_commit": "5085596a56342bf524aee30725aa0a5bbe8b424f",
+      "task_ids": [
+        "2026-10-30-c3a-request-history",
+        "2026-10-30-c3a-input-evidence"
+      ],
+      "suite": "integrated old CLI evidence batch",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-batch-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts scripts/provider-black-box/input-notice.blackbox.ts -t \"resumes a completed conversation|refuses a switched-provider request|sends a pasted image\" --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm exec prettier --check on both changed test files; node scripts/check-no-unit-tests.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, local provider and PTY; marker wrapper imports current old CLI."
+      },
+      "result": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 7,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-batch-cli.mjs"
+        }
+      ],
+      "notes": "Selected PTY 3/3, 5 marker launches, nine old parity goldens 9/9, rewrite typecheck, 520-edge guard, inventory, formatting and no-unit guard passed. ESLint reports both test files ignored by repository configuration. Source files exactly match independently reviewed 855fd52 and ab253948. Legacy reopen leakage and single unclassified second-image observation remain diagnostics, not new-build parity requirements. Further C3a matrix, blocked guard/notice and new Session remain unproven; independent integrated review pending."
     }
   ]
 }

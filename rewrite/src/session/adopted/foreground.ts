@@ -945,6 +945,7 @@ export function createAdoptedForeground(options: {
         const existing = historyOperations.get(key);
         if (existing) return existing;
         const operation = serial.then(async (): Promise<HistoryMutationResult> => {
+          context.assertHealthy();
           if (closing) throw new Error('Session handle is closed');
           if (poisoned !== undefined) throw poisoned;
           const reservation = runtime.state.reserveHistoryMutation(owned);
@@ -1077,6 +1078,7 @@ export function createAdoptedForeground(options: {
           settingMutation = true;
         }
         const operation = serial.then(async () => {
+          context.assertHealthy();
           if (closing || poisoned !== undefined) throw new Error('Session is unavailable');
           cancellation.abort();
           cancellation = new AbortController();
@@ -1161,6 +1163,7 @@ export function createAdoptedForeground(options: {
         if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
         active?.cancel();
         const operation = serial.then(async (): Promise<AdoptedRetryResult> => {
+          context.assertHealthy();
           if (poisoned !== undefined) throw poisoned;
           await decisionTail;
           await completion;
@@ -1231,6 +1234,7 @@ export function createAdoptedForeground(options: {
         const owned = structuredClone(command);
         const operation = decisionTail
           .then(() => {
+            context.assertHealthy();
             if (closing || !decideCurrent) throw new Error('No current interaction');
             return decideCurrent(owned);
           })

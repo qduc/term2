@@ -26956,6 +26956,42 @@
         "https://github.com/qduc/term2/commit/dfe03a0fe0de0b54f73daf702379c2c8df7d03b9"
       ],
       "notes": "On the combined G2/G3 state, root CLI build, inventory, old CLI parity 6/6, rewrite typecheck, workflow formatting and exact no-golden-diff check passed. Layer guard passed with 490 allowlisted source edges. No golden files differ from rebased main 47190949fed9244632512a9f55175670892f1a96. Hosted CI and final independent review on the rebased head remain pending."
+    },
+    {
+      "id": "2026-10-30-port-g2-rebased-hosted-final",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:20:22Z",
+      "commit": "821225aaf3036932448ed2713a55492f98c2d427",
+      "tree": null,
+      "revision_kind": "clean rebased PR head; hosted CI run on exact commit",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 hosted final acceptance after golden-probe revert and rebase",
+      "command": "GitHub Actions CI run 41062406745 on PR #90",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub Actions; ubuntu-22.04 and ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": null,
+        "notes": "All five jobs passed on rebased final head 821225aaf3036932448ed2713a55492f98c2d427; port also passed inventory, old CLI parity, rewrite typecheck and layer guard after artifact download."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/41062406745",
+        "https://github.com/qduc/term2/actions/runs/41062406745/job/124085585618"
+      ],
+      "notes": "Final hosted run after the temporary golden probe was reverted and the branch was rebased onto main 47190949fed9244632512a9f55175670892f1a96. The golden tree matches main; no golden-change label was applied. Expected negative failure evidence is preserved separately in 2026-10-30-port-g2-golden-negative-ci. Final independent review is pending."
     }
   ]
 }

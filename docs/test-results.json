@@ -27511,6 +27511,56 @@
         }
       ],
       "notes": "Old CLI parity 9/9 and old-first C2 resume 1/1 passed; no existing golden changes. Kill and fault probes exercised approval and answer recovery and admission/event boundary write and fsync failures. Terminal fsync failure may leave a complete batch despite nonzero exit and no final success. Layer guard passed with 491 edges and reported four existing unmapped source files. Independent final review and hosted CI pending; full CLI integration/e2e not run locally."
+    },
+    {
+      "id": "2026-10-30-port-c2-blocked-rollback",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T14:32:27Z",
+      "commit": "c3806476fdbb544ab3a0e12571d822489b3e96f3",
+      "tree": "b52e7fcd8f88e1cb9b02fb62099b40e88f55a47c",
+      "revision_kind": "clean source commit following independent review corrections",
+      "base_commit": "c535dcfeae8bb60057f057a29767d34a3abce2de",
+      "task_ids": [
+        "2026-10-30-port-c2-session"
+      ],
+      "suite": "C2 blocked admission rollback and integrated independent verification",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --pretty false; pnpm exec tsc -p rewrite/tsconfig.c2-proof.json --pretty false; node rewrite/scripts/check-layers.mjs; node /tmp/c2-independent/blocked-rollback.mjs rewrite/bench-dist; independent: node /tmp/c2-independent/review-runtime.mjs rewrite/bench-dist; node /tmp/c2-independent/retry-projection.mjs rewrite/bench-dist; node /tmp/c2-independent/decision-validation.mjs rewrite/bench-dist; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, network-enabled sandbox for local subprocess fixtures. Independent reviewer rebuilt proof and CLI artifacts."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c2-independent/blocked-rollback.mjs"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c2-independent/review-runtime.mjs"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c2-independent/retry-projection.mjs"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c2-independent/decision-validation.mjs"
+        }
+      ],
+      "notes": "Independent review exposed blocked input retained in canonical history and duplicate rollback delivery. Exact admission reference, retraction, source undo snapshot and settlement are committed atomically, with one-shot delivery. Independent rollback 4/4 (normal, duplicate, write failure, fsync failure), runtime 13/13, retry 14/14, decision 3/3 and old CLI parity 9/9 passed. Rewrite and proof typechecks and layer guard 491 passed. Four pre-existing unmapped source files reported. Independent reviewer approved this source after all four process benches, native tracer, inventory, typechecks and old-first proof resume 1/1 passed. Review: /tmp/c2-independent/final-review.md. Hosted CI for this head pending; prior 98a5920 CI passed. Queue orchestration is C3b scope."
     }
   ]
 }

@@ -90,7 +90,9 @@ it('attaches a selected skill to one user request and retains the plain next tur
     await writePtyTextAndSubmit(child, '/retry-turn');
     await child.waitForState(() => requests.length === 2);
     expect(JSON.stringify(requests[1]!.input)).toContain('SKILL_BODY_MARKER');
-    expect(JSON.stringify(requests[1]!.input)).toContain('FIRST_SKILL_INPUT');
+    expect(JSON.stringify(requests[1]!.input).match(/FIRST_SKILL_INPUT/g)).toHaveLength(1);
+    expect(JSON.stringify(requests[1]!.input).match(/SKILL_BODY_MARKER/g)).toHaveLength(1);
+    expect(requests[1]!.previous_response_id).toBeUndefined();
     complete(1);
     await child.waitForVisibleOutput('NOTICE_DONE_1');
     const retryIdle = await child.waitForIdleInput({ after: nextIdle });

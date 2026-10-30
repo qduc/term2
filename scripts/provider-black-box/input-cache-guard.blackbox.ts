@@ -126,7 +126,8 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
     await child.waitForState((state) => state.output.slice(confirmationMarker).includes('Large request'));
     await child.write('y');
     await child.waitForState(() => requests.length === 3);
-    expect(JSON.stringify(requests[2]!.input)).toContain('Plan Mode is ON');
+    expect(JSON.stringify(requests[2]!.input).match(/Plan Mode is ON/g)).toHaveLength(1);
+    expect(JSON.stringify(requests[2]!.input).match(/LARGE_DRAFT_START/g)).toHaveLength(1);
     expect(JSON.stringify(requests[2]!.input)).toContain('LARGE_DRAFT_START' + 'x'.repeat(270_000) + 'LARGE_DRAFT_END');
     complete(2);
     await child.waitForVisibleOutput('NOTICE_DONE_2');

@@ -132,6 +132,7 @@ export function createAdoptedForeground(options: {
       const count = buffered.length;
       try {
         const entries = await context.commit([...buffered.slice(0, count), ...facts]);
+        context.assertHealthy();
         buffered.splice(0, count);
         if (options.publishFacts !== false) for (const entry of entries) publish({ kind: 'fact', entry });
         return facts.length ? entries.slice(-facts.length) : [];

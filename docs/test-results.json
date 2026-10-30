@@ -27142,6 +27142,42 @@
         "/tmp/term2-a1-failure-probe.mts"
       ],
       "notes": "Rebased A1 source commit 1892bcdb4edbfccd3dd9496cf38dcc5f9df449aa has byte-identical adapter files to Sol-approved source commit fed84efbbac36c373bd81d36854c9b86d3e34249. Independent review approved the original source commit (see /tmp/term2-a1-independent-review.md). Rewrite typecheck passed; corrected layer guard passed with 490 allowlisted edges; inventory passed (136 settings tracked); old CLI parity passed 6/6. Focused real XDG settings probes passed, including durable set/watch, per-session override isolation/no disk writes, runtime-only writes, and rejection on failed persistent write. No source changes were made by the shared guard fix. Full CLI integration/e2e suites not run."
+    },
+    {
+      "id": "2026-10-30-port-a1-g2-rebase-verification",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:30:06Z",
+      "commit": "df7ff1f4bd505f0fb74c67e05c09b9bc2f4105bd",
+      "tree": null,
+      "revision_kind": "A1 source rebased onto origin/main 5fdbb10c00c83f4c05d507c0da771c80edd52513",
+      "base_commit": "5fdbb10c00c83f4c05d507c0da771c80edd52513",
+      "task_ids": [
+        "2026-10-30-port-a1-config-settings-adapter"
+      ],
+      "suite": "A1 final rebase typecheck, guard, inventory and focused settings checks",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; node --import tsx /tmp/term2-a1-settings-probe.mts; node --import tsx /tmp/term2-a1-failure-probe.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Existing worktree dependencies; focused probes used isolated temporary XDG roots and network-enabled additional sandbox permissions."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/tmp/term2-a1-settings-probe.mts",
+        "/tmp/term2-a1-failure-probe.mts"
+      ],
+      "notes": "On G2 merge base 5fdbb10c00c83f4c05d507c0da771c80edd52513, rewrite typecheck passed; layer guard passed with 490 allowlisted source edges; inventory passed (136 settings tracked); durable settings/session/runtime and failed-persistence probes passed. Source commit df7ff1f4bd505f0fb74c67e05c09b9bc2f4105bd has byte-identical adapter files to Sol-approved source fed84efbbac36c373bd81d36854c9b86d3e34249. No additional parity or tracer rerun was needed because the adapter files are unchanged. Full CLI integration/e2e suites not run."
     }
   ]
 }

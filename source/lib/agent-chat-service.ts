@@ -49,6 +49,7 @@ export class AgentChatService {
   #modelCache = new Map<string, Promise<StreamedModelTurn>>();
   #helperLeases = new Set<{ release(): Promise<void> }>();
   #activeRunLoops = new Set<ApplicationRunLoop>();
+  #activePreparations = new Set<AbortController>();
   #disposePromise?: Promise<void>;
 
   constructor(deps: AgentChatServiceDeps) {
@@ -79,6 +80,7 @@ export class AgentChatService {
 
   /** Abort every active simple or structured chat operation. */
   abort(): void {
+    for (const controller of this.#activePreparations) controller.abort();
     for (const loop of this.#activeRunLoops) loop.abort();
   }
 
@@ -226,6 +228,18 @@ export class AgentChatService {
   }
 
   async chatDetailed(message: string, options: AgentClientChatOptions = {}): Promise<AgentClientChatResult> {
+    if (!this.#deps.modelBinding) return this.#chatDetailed(message, options);
+    const controller = new AbortController();
+    this.#activePreparations.add(controller);
+    const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
+    try {
+      return await this.#chatDetailed(message, { ...options, signal });
+    } finally {
+      this.#activePreparations.delete(controller);
+    }
+  }
+
+  async #chatDetailed(message: string, options: AgentClientChatOptions): Promise<AgentClientChatResult> {
     const { agentConfig, settings, logger } = this.#deps;
 
     const tempProvider = options.provider || agentConfig.getProvider();
@@ -345,6 +359,28 @@ export class AgentChatService {
       signal?: AbortSignal;
     },
   ): Promise<unknown> {
+    if (!this.#deps.modelBinding) return this.#chatJson(message, options);
+    const controller = new AbortController();
+    this.#activePreparations.add(controller);
+    const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
+    try {
+      return await this.#chatJson(message, { ...options, signal });
+    } finally {
+      this.#activePreparations.delete(controller);
+    }
+  }
+
+  async #chatJson(
+    message: string,
+    options: {
+      model?: string;
+      provider?: string;
+      reasoningEffort?: ReasoningEffortSetting | null;
+      instructions?: string;
+      outputType: JsonSchemaDefinition;
+      signal?: AbortSignal;
+    },
+  ): Promise<unknown> {
     const { agentConfig, settings, logger } = this.#deps;
 
     const tempProvider = options.provider || agentConfig.getProvider();
@@ -414,7 +450,7 @@ export class AgentChatService {
 
       const result = await this.#runAgentWithProvider(tempProvider, agentForChat, message, {
         maxTurns: 1,
-        ...(options.signal ? { signal: options.signal } : {}),
+        ...(this.#deps.modelBinding && options.signal ? { signal: options.signal } : {}),
       });
 
       // Some OpenAI-compatible providers (including OpenRouter) can complete a

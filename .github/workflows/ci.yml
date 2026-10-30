@@ -111,6 +111,7 @@ jobs:
           pnpm exec tsx rewrite/bench/c3a-foreground.mts
           pnpm exec tsx rewrite/bench/c3a-owned-handle.mts
           for mode in repeat batch reject ask-nav ask-cancel; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-interactions.mts; done
+          for failure in none session_interaction_pending session_interaction_resolved; do FAIL_TYPE="$failure" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-postexecute.mts; done
           pnpm exec tsx rewrite/bench/c3a-input-fsync.mts
           PROBE_MODE=unknown pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts
           PROBE_MODE=tool pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts

@@ -1,6 +1,6 @@
+import type { NestedRunDriverFactory, ApplicationAgent } from '../../contracts/nested-run-driver.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentResult } from './types.js';
@@ -35,6 +35,7 @@ interface MentorConsultation {
 const mentorLabel = (index: number): string => `Mentor ${String.fromCharCode(65 + index)}`;
 
 export class MentorRunner {
+  #driverFactory?: NestedRunDriverFactory;
   #logger: ILoggingService;
   #settings: ISettingsService;
   #sessionContextService: ISessionContextService;
@@ -43,6 +44,7 @@ export class MentorRunner {
   #onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
 
   constructor(deps: {
+    driverFactory?: NestedRunDriverFactory;
     logger: ILoggingService;
     settings: ISettingsService;
     sessionContextService: ISessionContextService;
@@ -50,6 +52,7 @@ export class MentorRunner {
     onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
     session?: SubagentSession;
   }) {
+    this.#driverFactory = deps.driverFactory;
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
@@ -312,7 +315,9 @@ export class MentorRunner {
 
     const supportsChaining = providerDef.capabilities?.supportsConversationChaining ?? false;
     const input = mentorSession.getInput(task, supportsChaining);
-    const loop = new ApplicationRunLoop({
+    const factory = this.#driverFactory;
+    if (!factory) throw new Error('Missing nested run driver');
+    const loop = factory({
       resolveModel: () => streamedModel,
       resolveMaxParallelToolCalls: () => this.#settings.get('agent.maxParallelToolCalls'),
     });

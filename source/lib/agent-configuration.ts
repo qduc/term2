@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory } from '../contracts/nested-run-driver.js';
 import type { DiscordSend } from '../services/discord/discord-outbound.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
@@ -36,6 +37,7 @@ export interface AgentSource {
 }
 
 export interface AgentConfigurationDeps {
+  driverFactory?: NestedRunDriverFactory;
   logger: ILoggingService;
   settings: ISettingsService;
   getGoal?: () => DurableGoal | undefined;
@@ -93,6 +95,7 @@ export class AgentConfiguration implements AgentSource {
   // Callback for side effects before rebuild
   #onConfigChanged?: (changedKey?: string) => void;
 
+  #driverFactory?: NestedRunDriverFactory;
   #logger: ILoggingService;
   #settings: ISettingsService;
   #getGoal?: () => DurableGoal | undefined;
@@ -144,6 +147,7 @@ export class AgentConfiguration implements AgentSource {
     deps: AgentConfigurationDeps,
   ) {
     // Store deps
+    this.#driverFactory = deps.driverFactory;
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#getGoal = deps.getGoal;
@@ -264,6 +268,7 @@ export class AgentConfiguration implements AgentSource {
   // Build the factory deps (used by buildAgent and for agent rebuilds)
   #buildFactoryDeps(approvalPolicyRegistry = this.#approvalPolicyRegistry): AgentFactoryDeps {
     return {
+      driverFactory: this.#driverFactory,
       settings: this.#settings,
       logger: this.#logger,
       ...(this.#getGoal ? { getGoal: this.#getGoal } : {}),

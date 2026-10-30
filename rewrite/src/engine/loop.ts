@@ -144,7 +144,13 @@ async function* loop(
 }
 
 function toolContext(deps: EngineDeps, input: TurnInput): Omit<ToolContext, 'signal' | 'progress'> {
-  return { workspace: input.workspace, settings: deps.settings };
+  return {
+    workspace: input.workspace,
+    settings: deps.settings,
+    runNested: async () => {
+      throw new Error('Nested runs are unavailable');
+    },
+  };
 }
 
 async function askFor(

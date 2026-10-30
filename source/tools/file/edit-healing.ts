@@ -1,4 +1,4 @@
-import { ApplicationRunLoop, type ApplicationAgent } from '../../services/agent-runtime/application-run-loop.js';
+import type { ApplicationAgent, NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { getProvider } from '../../providers/index.js';
@@ -12,6 +12,7 @@ export interface HealingResult {
 }
 
 type HealingDeps = {
+  driverFactory?: NestedRunDriverFactory;
   settingsService?: ISettingsService;
   loggingService?: ILoggingService;
   providerId?: string;
@@ -156,7 +157,8 @@ export async function runHealingPrompt(
   instructions: string,
   model: string,
   apiKey: string,
-  deps: Required<Pick<HealingDeps, 'settingsService' | 'loggingService' | 'providerId' | 'timeoutMs'>>,
+  deps: Required<Pick<HealingDeps, 'settingsService' | 'loggingService' | 'providerId' | 'timeoutMs'>> &
+    Pick<HealingDeps, 'driverFactory'>,
 ): Promise<string> {
   const { settingsService, loggingService, providerId, timeoutMs } = deps;
   const providerDef = getProvider(providerId);
@@ -190,7 +192,8 @@ export async function runHealingPrompt(
   // Keep model creation inside the run loop. This makes the same deadline and
   // abort signal cover asynchronous provider initialization as well as model
   // streaming (some providers lazily construct clients here).
-  const loop = new ApplicationRunLoop({
+  if (!deps.driverFactory) throw new Error('Missing nested run driver');
+  const loop = deps.driverFactory({
     resolveModel: async () => {
       const streamedModel = await providerDef.createStreamedModel!(model, {
         settingsService,
@@ -268,6 +271,7 @@ export async function healSearchReplaceParams(
       });
     } else if (deps.settingsService && deps.loggingService) {
       modelOutput = await runHealingPrompt(prompt, instructions, model, apiKey, {
+        driverFactory: deps.driverFactory,
         settingsService: deps.settingsService,
         loggingService: deps.loggingService,
         providerId,

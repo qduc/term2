@@ -1,3 +1,6 @@
+import { healPatchOperation } from '../../tools/file/patch-healing.js';
+import type { NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
+import { healSearchReplaceParams } from '../../tools/file/edit-healing.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -1043,6 +1046,7 @@ export class SubagentToolPolicy {
 }
 
 export class SubagentToolFactory {
+  #driverFactory?: NestedRunDriverFactory;
   #settings: ISettingsService;
   #logger: ILoggingService;
   #executionContext?: ExecutionContext;
@@ -1056,6 +1060,7 @@ export class SubagentToolFactory {
   #sessionBrowser?: SessionBrowser;
 
   constructor(deps: {
+    driverFactory?: NestedRunDriverFactory;
     settings: ISettingsService;
     logger: ILoggingService;
     executionContext?: ExecutionContext;
@@ -1067,6 +1072,7 @@ export class SubagentToolFactory {
     /** Prior-session transcript browser; provisioned to the librarian only. */
     sessionBrowser?: SessionBrowser;
   }) {
+    this.#driverFactory = deps.driverFactory;
     this.#settings = deps.settings;
     this.#logger = deps.logger;
     this.#executionContext = deps.executionContext;
@@ -1251,6 +1257,11 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createApplyPatchToolDefinition({
+                patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
+                  healPatchOperation(path, diff, content, diagnosis, model, key, {
+                    ...healingDeps,
+                    driverFactory: this.#driverFactory,
+                  }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,
@@ -1270,6 +1281,11 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createSearchReplaceToolDefinition({
+                editHealing: (params, content, model, key, healingDeps) =>
+                  healSearchReplaceParams(params, content, model, key, {
+                    ...healingDeps,
+                    driverFactory: this.#driverFactory,
+                  }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,

@@ -32,6 +32,7 @@ const SOURCE_LAYERS = [
   ['app', 'lib/agent-factory.ts'],
   ['engine', 'lib/subagent-bridge.ts'],
   ['engine', 'services/agent-stream.ts'],
+  ['engine', 'services/completion-verification/verifier.ts'],
   ['engine', 'services/decision-shadow/decision-client.ts'],
   ['engine', 'services/decision-shadow/decision-shadow-observer.ts'],
   ['engine', 'services/decision-shadow/failure-observation.ts'],

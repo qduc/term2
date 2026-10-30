@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
@@ -20,6 +21,7 @@ import type { SessionBrowser } from '../conversation/session-browser.js';
 import { classifyPoolEntryFailure } from '../retry/provider-failure-classification.js';
 
 export interface SubagentRuntimeDeps {
+  driverFactory?: NestedRunDriverFactory;
   logger: ILoggingService;
   settings: ISettingsService;
   sessionContextService: ISessionContextService;
@@ -76,6 +78,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
   });
 
   const toolFactory = new SubagentToolFactory({
+    driverFactory: deps.driverFactory,
     settings: deps.settings,
     logger: deps.logger,
     executionContext: deps.executionContext,
@@ -94,6 +97,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
   const rolePoolSelector = new SubagentRolePoolSelector(deps.settings);
 
   const nestedRunner = new NestedSubagentRunner({
+    driverFactory: deps.driverFactory,
     logger: deps.logger,
     settings: deps.settings,
     sessionContextService: deps.sessionContextService,
@@ -161,6 +165,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
 
   const mentorSession = new SubagentSession('mentor', 'mentor');
   const mentorRunner = new MentorRunner({
+    driverFactory: deps.driverFactory,
     logger: deps.logger,
     settings: deps.settings,
     sessionContextService: deps.sessionContextService,

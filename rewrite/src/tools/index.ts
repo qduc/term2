@@ -6,7 +6,7 @@
  * Depends on: model (ToolSpec), config.
  */
 
-import type { Item, ToolSpec } from '../model/index.js';
+import type { Item, ToolSpec, ModelRef, ModelError, ReasoningEffort } from '../model/index.js';
 import type { SettingsReader } from '../config/index.js';
 
 export type Workspace = {
@@ -16,7 +16,32 @@ export type Workspace = {
   readonly target: string;
 };
 
+export type NestedRunBudget =
+  | { readonly kind?: 'native'; readonly maxModelCalls: number; readonly maxToolCalls: number }
+  | { readonly kind: 'adopted' };
+
+export type NestedRunOutcome =
+  | { readonly kind: 'completed' }
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'budget_exhausted' }
+  | {
+      readonly kind: 'interrupted';
+      readonly terminalCause?: 'goal_check_unresolved' | 'completion_verification_blocked';
+    }
+  | { readonly kind: 'failed'; readonly error: ModelError };
+
+export type NestedRunRequest = {
+  readonly instructions: string;
+  readonly items: readonly Item[];
+  readonly toolNames: readonly string[];
+  readonly model: ModelRef;
+  readonly reasoning?: ReasoningEffort;
+  readonly budget: NestedRunBudget;
+};
+export type NestedRunResult = { readonly items: readonly Item[]; readonly outcome: NestedRunOutcome };
+
 export type ToolContext = {
+  runNested(request: NestedRunRequest): Promise<NestedRunResult>;
   readonly workspace: Workspace;
   readonly settings: SettingsReader;
   readonly signal: AbortSignal;

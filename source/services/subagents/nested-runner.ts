@@ -1,10 +1,10 @@
+import type {
+  NestedRunDriverFactory,
+  ApplicationAgent,
+  AgentModelSettings,
+} from '../../contracts/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import {
-  ApplicationRunLoop,
-  type AgentModelSettings,
-  type ApplicationAgent,
-} from '../agent-runtime/application-run-loop.js';
 import { ApprovalLedger, type ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
 import { getProvider } from '../../providers/index.js';
 import type { AnyToolDefinition } from '../../tools/types.js';
@@ -116,6 +116,7 @@ function parseNestedSubagentResult(raw: unknown): NestedSubagentResult {
 }
 
 export class NestedSubagentRunner {
+  #driverFactory?: NestedRunDriverFactory;
   #logger: ILoggingService;
   #settings: ISettingsService;
   #sessionContextService: ISessionContextService;
@@ -140,6 +141,7 @@ export class NestedSubagentRunner {
   readonly #resolveRole?: (role: SupportedSubagentRole) => SubagentDefinition;
 
   constructor(deps: {
+    driverFactory?: NestedRunDriverFactory;
     logger: ILoggingService;
     settings: ISettingsService;
     sessionContextService: ISessionContextService;
@@ -157,6 +159,7 @@ export class NestedSubagentRunner {
     /** Session-scoped round-robin cursor over each role's model pool. Shared with the async registry so both spawn paths draw from the same cursor. */
     rolePoolSelector?: SubagentRolePoolSelector;
   }) {
+    this.#driverFactory = deps.driverFactory;
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
@@ -438,7 +441,9 @@ export class NestedSubagentRunner {
         // control lane. Preserve the provider-history context captured at
         // launch instead of inheriting that unrelated caller context.
         const trafficContext = this.#sessionContextService.getContext();
-        const loop = new ApplicationRunLoop({
+        const factory = this.#driverFactory;
+        if (!factory) throw new Error('Missing nested run driver');
+        const loop = factory({
           resolveMaxParallelToolCalls: () => this.#settings.get('agent.maxParallelToolCalls'),
           resolveModel: (model) =>
             createStreamedModel(model, {

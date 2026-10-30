@@ -29731,6 +29731,47 @@
           "2026-10-30-memory-append-openai-red"
         ]
       }
+    },
+    {
+      "id": "2026-10-30-memory-append-main-integration",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "59ea50ffe546886b8855894dd2c8b467cdf60bf1",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_commit",
+      "source_tree": "77dedd7440d3aef94ca4aeb569237cc1caaa30c5",
+      "suite": "local-main-integration-focused-compatibility",
+      "command": "pnpm install --frozen-lockfile; pnpm build; pnpm typecheck; NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/personal-memory-context.blackbox.ts scripts/provider-black-box/conversation-time-gap.blackbox.ts; NODE_ENV=test TERM2_INTEGRATION_USE_DIST=1 pnpm exec vitest run --config vitest.integration.config.ts source/services/memory/personal-memory.integration.test.ts source/services/discord/discord-bridge.integration.test.ts source/services/discord/discord-command.integration.test.ts; NODE_ENV=test pnpm exec vitest run; retained checkout pnpm install --frozen-lockfile && pnpm build; pnpm exec tsx /home/qduc/coord/term2/tasks/personal-memory-injection/append-timing-probe.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "runner_env": null,
+        "notes": "Main plus normal retained .worktrees/memory-append-context checkout; own real installed node_modules. Isolated synthetic stores and loopback provider fixtures. No backend calls. TERM2_INTEGRATION_USE_DIST is not a recognized build-selection flag: integration setup compiled its usual private CLI; provider black-box suite used fresh main dist."
+      },
+      "result": {
+        "passed": 157,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 12,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-integration-main-build.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-integration-main-typecheck.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-integration-main-provider.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-integration-main-focused.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-integration-main-static.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-integration-retained-build.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-integration-timing.log"
+      ],
+      "notes": "4 built-CLI checks (3 personal-memory provider variants, 1 time-gap), 125 filesystem/Discord integration cases including reactions, 28 existing static checks. Combined two-day gap + personal-data projection retains all three notices/human items and strips opaque application metadata. Both builds stamped 0.40.0-dev+59ea50f. Source unchanged from independently accepted fa0fd319. Full e2e not rerun: prior accepted-source full run 57 passed/1 composer-ack timeout; focused restart rerun 7/7. No live activation or backend cache/model-compliance claim. No duplicate completed-task record."
     }
   ]
 }

@@ -1,7 +1,7 @@
 /**
  * Tracer bullet: one request through every layer, including a real crash.
  *
- *   node rewrite/dist/app/tracer.js
+ *   node rewrite/dist/rewrite/src/app/tracer.js
  *
  * Scenarios:
  *   1. An approval survives a restart: the session is dropped while waiting,

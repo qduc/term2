@@ -1,0 +1,56 @@
+{
+  "scenario": "headless-plain-answer",
+  "runs": [
+    {
+      "exitCode": 0,
+      "stdout": "Hello there.\n",
+      "stderr": "Profile: bare\n",
+      "requests": [
+        {
+          "model": "mock-alpha",
+          "stream": true,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant working in the user's checkout. Use the shell to read, search, and edit files.\n\n- Combine independent reads and steps into one shell call, and filter large output before returning it.\n- Be concise.\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "say hello"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "shell",
+              "schema": "23a8b74ecf2b7b03"
+            },
+            {
+              "name": "goal_check",
+              "schema": "f01466518d95a1dc"
+            },
+            {
+              "name": "run_subagent",
+              "schema": "b45d1b1b0a8ed3fa"
+            },
+            {
+              "name": "run_code",
+              "schema": "48405a8f4c5881c4"
+            }
+          ],
+          "other": {
+            "stream_options": {
+              "include_usage": true
+            },
+            "max_tokens": 32000
+          }
+        }
+      ]
+    }
+  ],
+  "files": {}
+}

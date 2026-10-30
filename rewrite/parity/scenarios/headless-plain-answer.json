@@ -1,0 +1,6 @@
+{
+  "id": "headless-plain-answer",
+  "description": "A prompt on the command line runs one non-interactive turn and prints the answer.",
+  "runs": [{ "args": ["say hello"] }],
+  "provider": [{ "text": "Hello there." }]
+}

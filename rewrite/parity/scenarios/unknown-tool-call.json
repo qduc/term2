@@ -1,0 +1,10 @@
+{
+  "id": "unknown-tool-call",
+  "description": "A call to a tool the profile does not offer is answered with an error result, and the turn carries on.",
+  "runs": [{ "args": ["--profile", "full", "--auto-approve", "fix the typo in notes.txt"] }],
+  "seed": { "notes.txt": "helo world\n" },
+  "provider": [
+    { "toolCalls": [{ "name": "read_file", "arguments": { "path": "notes.txt" } }] },
+    { "text": "I cannot read files directly here." }
+  ]
+}

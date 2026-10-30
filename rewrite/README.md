@@ -70,6 +70,31 @@ compaction, progress events are buffered until a tool returns, an idempotent
 tool that needs approval is asked again after a crash, and each checkpoint
 stores the full turn input.
 
+## Porting: completeness and parity
+
+`parity/` holds the two checks that gate the port of `source/` onto these
+layers. The full plan, including the task breakdown, lives in the "term2 port
+plan" doc.
+
+- `parity/inventory.mjs` extracts every feature of the current architecture
+  (CLI flags and subcommands, slash commands, tools, settings, providers, hook
+  events, gateway routes, persisted log events) and checks them against the
+  tracker `parity/features.json`. It fails on an untracked feature, a vanished
+  one not marked `dropped`, or a `ported` entry no scenario proves. `--write`
+  adds new features as `todo`.
+- `parity/run.mjs` runs each scenario in `parity/scenarios/` against a CLI
+  build, with a scripted fake provider, and compares exit code, output, every
+  provider request and the workspace files against `parity/goldens/`. Goldens
+  are recorded only from the old architecture.
+
+```sh
+node rewrite/parity/inventory.mjs
+node rewrite/parity/run.mjs check --cli dist/cli.js          # old CLI: must stay green
+node rewrite/parity/run.mjs check --cli <new build>/cli.js   # new CLI: the port's progress
+node rewrite/parity/run.mjs record --cli dist/cli.js <id>    # new scenario, from the old CLI only
+TERM2_TEST_CLI=<new build>/cli.js pnpm test:integration      # CLI-level suite against any build
+```
+
 ## Checks
 
 These use the root `node_modules` (for `@types/node` and `tsc`), so run

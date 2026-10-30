@@ -108,6 +108,12 @@ jobs:
         run: |
           pnpm exec tsx rewrite/bench/c1-adopted-approval.mts
           pnpm exec tsx rewrite/bench/c1-adopted-kill.mts
+          pnpm exec tsx rewrite/bench/c3a-foreground.mts
+          pnpm exec tsx rewrite/bench/c3a-owned-handle.mts
+          pnpm exec tsx rewrite/bench/c3a-input-fsync.mts
+          PROBE_MODE=unknown pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts
+          PROBE_MODE=tool pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts
+          for mode in valid forged changed-image changed-skill reuse mismatch-reuse; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-surge-capability.mts; done
 
   integration:
     runs-on: ubuntu-22.04

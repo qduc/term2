@@ -627,6 +627,12 @@
       "parity": [],
       "consumedByNewCode": true
     },
+    "log-event:user_input_accepted": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
     "log-event:user_message": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",

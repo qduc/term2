@@ -1,5 +1,11 @@
 /** Canonical filesystem SessionStore. The source conversation log is its sole authority. */
 import crypto from 'node:crypto';
+import {
+  captureAdoptedInput,
+  type AdoptedAdmissionContext,
+  type AdoptedAdmissionReceipt,
+  type AdoptedSubmissionPort,
+} from './adopted/submission.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Item, ModelRef } from '../model/index.js';
@@ -31,11 +37,17 @@ export type SessionDriver = Pick<
 >;
 export type SessionDriverContext = {
   readonly id: SessionId;
+  readonly root: string;
   readonly log: SessionLog;
   state(): SessionState;
   /** Replace state only after the caller has durably appended the supplied facts. */
   commit(facts: readonly SessionFact[]): Promise<readonly import('./index.js').LogEntry[]>;
 };
+export interface AdoptedSessionHandle {
+  readonly driver: SessionDriver;
+  readonly submission: AdoptedSubmissionPort;
+  shutdown(): Promise<void>;
+}
 export type SessionStoreOptions = {
   readonly root: string;
   readonly logger: Parameters<typeof CanonicalSessionLog.create>[0]['logger'];
@@ -45,6 +57,10 @@ export type SessionStoreOptions = {
   readonly fileSystem?: Parameters<typeof CanonicalSessionLog.create>[0]['fileSystem'];
   /** Adopted source runtime driver; the store remains the only log writer. */
   readonly driverFactory: (context: SessionDriverContext) => SessionDriver;
+  readonly adoptedHandleFactory?: (
+    context: AdoptedAdmissionContext,
+  ) => AdoptedSessionHandle | Promise<AdoptedSessionHandle>;
+  readonly adoptedSubmissionFactory?: (context: AdoptedAdmissionContext) => AdoptedSubmissionPort;
 };
 
 export class LocalSessionStore implements SessionStore {
@@ -78,10 +94,65 @@ export class LocalSessionStore implements SessionStore {
       logger: this.#options.logger,
       fileSystem: this.#options.fileSystem,
     });
-    return this.#makeSession(id, log, replayState(id, log, this.#options));
+    return (await this.#makeSession(id, log, replayState(id, log, this.#options), false)).session;
+  }
+
+  async createAdopted(
+    workspace: Workspace,
+    model: ModelRef,
+    binding?: SessionBinding,
+  ): Promise<{ session: Session; submission: AdoptedSubmissionPort }> {
+    if (!this.#options.adoptedSubmissionFactory && !this.#options.adoptedHandleFactory)
+      throw new Error('Adopted submission factory is required');
+    if (this.#options.adoptedSubmissionFactory && this.#options.adoptedHandleFactory)
+      throw new Error('Ambiguous adopted factories');
+    fs.mkdirSync(this.#options.root, { recursive: true });
+    const id = `ses_${crypto.randomUUID()}` as SessionId;
+    const log = CanonicalSessionLog.create({
+      root: this.#options.root,
+      id,
+      metadata: { projectPath: workspace.root, model: model.model, provider: model.provider },
+      workspace,
+      model,
+      ...(binding ? { binding } : {}),
+      logger: this.#options.logger,
+      fileSystem: this.#options.fileSystem,
+    });
+    try {
+      return (await this.#makeSession(id, log, replayState(id, log, this.#options), true)) as {
+        session: Session;
+        submission: AdoptedSubmissionPort;
+      };
+    } catch (error) {
+      try {
+        await log.dispose();
+      } catch {
+        // Preserve the original construction failure.
+      }
+      throw error;
+    }
   }
 
   async open(id: SessionId, expectedBinding?: SessionBinding): Promise<Session> {
+    return (await this.#open(id, expectedBinding, false)).session;
+  }
+
+  async openAdopted(
+    id: SessionId,
+    expectedBinding?: SessionBinding,
+  ): Promise<{ session: Session; submission: AdoptedSubmissionPort }> {
+    if (!this.#options.adoptedSubmissionFactory && !this.#options.adoptedHandleFactory)
+      throw new Error('Adopted submission factory is required');
+    if (this.#options.adoptedSubmissionFactory && this.#options.adoptedHandleFactory)
+      throw new Error('Ambiguous adopted factories');
+    return this.#open(id, expectedBinding, true) as Promise<{ session: Session; submission: AdoptedSubmissionPort }>;
+  }
+
+  async #open(
+    id: SessionId,
+    expectedBinding: SessionBinding | undefined,
+    adopted: boolean,
+  ): Promise<{ session: Session; submission?: AdoptedSubmissionPort }> {
     if (expectedBinding) {
       const existing = CanonicalSessionLog.readOnly(this.#options.root, id);
       const binding = existing.find((entry) => entry.fact.type === 'session_bound')?.fact;
@@ -186,7 +257,7 @@ export class LocalSessionStore implements SessionStore {
         await log.append(facts);
         state = replayState(id, log, this.#options);
       }
-      return this.#makeSession(id, log, state);
+      return await this.#makeSession(id, log, state, adopted);
     } catch (error) {
       await log.dispose();
       throw error;
@@ -284,11 +355,18 @@ export class LocalSessionStore implements SessionStore {
     return { deleted, errors };
   }
 
-  #makeSession(id: SessionId, log: CanonicalLog, state: SessionState): Session {
+  async #makeSession(
+    id: SessionId,
+    log: CanonicalLog,
+    state: SessionState,
+    adopted: boolean,
+  ): Promise<{ session: Session; submission?: AdoptedSubmissionPort }> {
     let current = state;
     const pendingAdmissions = new Map<string, { hash: string; turnId: string; admitted: Promise<void> }>();
+    const factListeners = new Set<(entry: import('./index.js').LogEntry) => void>();
     const context: SessionDriverContext = {
       id,
+      root: log.root,
       log,
       state: () => current,
       commit: async (facts) => {
@@ -300,15 +378,174 @@ export class LocalSessionStore implements SessionStore {
           { history: restored.history, messages: restored.messages },
           restored.history as unknown as Item[],
         );
+        for (const entry of entries) for (const listener of factListeners) listener(entry);
         return entries;
       },
     };
-    const driver = this.#options.driverFactory(context);
-    return {
+    const receipts = new Map<AdoptedAdmissionReceipt, 'outstanding' | 'activating' | 'activated'>();
+    let handleClosed = false;
+    const adoptedContext: AdoptedAdmissionContext = {
+      ...context,
+      admit: async ({ requestId, input }, message) => {
+        if (handleClosed || current.status === 'closed') return { kind: 'rejected', reason: 'closed' };
+        const { input: owned, hash } = captureAdoptedInput(input);
+        const ownedMessage = structuredClone(message);
+        ownedMessage.text = owned.text;
+        if (owned.skill) ownedMessage.skill = structuredClone(owned.skill);
+        else delete ownedMessage.skill;
+        ownedMessage.submittedTurn = structuredClone(owned);
+        const pending = pendingAdmissions.get(requestId);
+        if (pending) {
+          if (pending.hash !== hash) return { kind: 'rejected', reason: 'request_conflict' };
+          await pending.admitted;
+          return { kind: 'duplicate', turnId: pending.turnId as never };
+        }
+        const prior = newestAdmission(current, requestId, Date.now());
+        if (prior)
+          return prior.normalizedBodyHash === hash
+            ? { kind: 'duplicate', turnId: prior.turnId }
+            : { kind: 'rejected', reason: 'request_conflict' };
+        const turnId = crypto.randomUUID() as import('../engine/index.js').TurnId;
+        const createdAt = new Date().toISOString();
+        const expiresAt = new Date(Date.now() + (this.#options.admissionTtlMs ?? 60_000)).toISOString();
+        let resolveAdmitted!: () => void;
+        let rejectAdmitted!: (error: unknown) => void;
+        const admitted = new Promise<void>((resolve, reject) => {
+          resolveAdmitted = resolve;
+          rejectAdmitted = reject;
+        });
+        // Observe rejection even when no duplicate waiter exists.
+        void admitted.catch(() => {});
+        pendingAdmissions.set(requestId, { hash, turnId, admitted });
+        try {
+          const entries = await context.commit([
+            { type: 'user_message', message: ownedMessage },
+            {
+              type: 'session_admitted',
+              version: 1,
+              clientRequestId: requestId,
+              normalizedBodyHash: hash,
+              turnId,
+              disposition: 'started',
+              createdAt,
+              expiresAt,
+            },
+          ]);
+          const receipt: AdoptedAdmissionReceipt = { requestId, turnId, userMessageRef: entries[0]!.ref, input: owned };
+          receipts.set(receipt, 'outstanding');
+          resolveAdmitted();
+          return { kind: 'admitted', receipt };
+        } catch (error) {
+          rejectAdmitted(error);
+          throw error;
+        } finally {
+          pendingAdmissions.delete(requestId);
+        }
+      },
+      activate: async (receipt) => {
+        const admission = current.admissions[receipt.requestId];
+        if (
+          current.status === 'closed' ||
+          receipts.get(receipt) !== 'outstanding' ||
+          !admission ||
+          admission.turnId !== receipt.turnId ||
+          admission.result ||
+          current.activeTurnId !== null
+        )
+          throw new Error('Invalid or stale adopted admission receipt');
+        receipts.set(receipt, 'activating');
+        try {
+          await context.commit([
+            { type: 'session_turn_started', version: 1, turnId: receipt.turnId, clientRequestId: receipt.requestId },
+          ]);
+          receipts.set(receipt, 'activated');
+        } catch (error) {
+          receipts.delete(receipt);
+          throw error;
+        }
+      },
+    };
+    const combined =
+      adopted && this.#options.adoptedHandleFactory
+        ? await this.#options.adoptedHandleFactory(adoptedContext)
+        : undefined;
+    const driver = combined?.driver ?? this.#options.driverFactory(context);
+    const rawSubmission = adopted
+      ? combined?.submission ?? this.#options.adoptedSubmissionFactory!(adoptedContext)
+      : undefined;
+    const submission: AdoptedSubmissionPort | undefined = rawSubmission && {
+      submit: (...args) =>
+        handleClosed ? Promise.resolve({ kind: 'rejected', reason: 'closed' }) : rawSubmission.submit(...args),
+    };
+    let closePromise: Promise<void> | undefined;
+    const ensureOpen = () => {
+      if (handleClosed) throw new Error('Session handle is closed');
+    };
+    const subscribeCombined: Session['subscribe'] = (fromSeq, listener) => {
+      ensureOpen();
+      let stopped = false;
+      let delivering = false;
+      let lastSeq = fromSeq;
+      const queue: import('./index.js').SessionUpdate[] = [];
+      const deliver = () => {
+        if (delivering) return;
+        delivering = true;
+        try {
+          while (!stopped && queue.length) {
+            const update = queue.shift()!;
+            if (update.kind === 'fact') {
+              if (update.entry.seq <= lastSeq) continue;
+              lastSeq = update.entry.seq;
+            }
+            try {
+              const result: unknown = listener(update);
+              if (
+                result != null &&
+                (typeof result === 'object' || typeof result === 'function') &&
+                typeof (result as { then?: unknown }).then === 'function'
+              )
+                void Promise.resolve(result).catch(() => {});
+            } catch {
+              /* Observer failure cannot undo durable work. */
+            }
+          }
+        } finally {
+          delivering = false;
+        }
+      };
+      let replaying = true;
+      const enqueue = (update: import('./index.js').SessionUpdate) => {
+        if (stopped) return;
+        queue.push(update);
+        if (!replaying) deliver();
+      };
+      const onFact = (entry: import('./index.js').LogEntry) => enqueue({ kind: 'fact', entry });
+      factListeners.add(onFact);
+      const unsubscribeDriver = driver.subscribe(fromSeq, (update) => {
+        if (update.kind === 'live') enqueue(update);
+      });
+      // Only replay entries already projected by commit; append may have completed
+      // before its awaiting commit continuation updates current state.
+      const highWater = current.lastSeq;
+      const replay = log
+        .entries()
+        .filter((entry) => entry.seq > fromSeq && entry.seq <= highWater)
+        .map((entry) => ({ kind: 'fact' as const, entry }));
+      queue.unshift(...replay);
+      replaying = false;
+      deliver();
+      return () => {
+        stopped = true;
+        queue.length = 0;
+        factListeners.delete(onFact);
+        unsubscribeDriver();
+      };
+    };
+    const session: Session = {
       id,
       state: () => current,
       submit: async (requestId, items) => {
-        if (current.status === 'closed') return { kind: 'rejected', reason: 'closed' };
+        if (handleClosed || current.status === 'closed') return { kind: 'rejected', reason: 'closed' };
         const hash = normalizedBodyHash(items);
         const pending = pendingAdmissions.get(requestId);
         if (pending) {
@@ -321,6 +558,7 @@ export class LocalSessionStore implements SessionStore {
           return prior.normalizedBodyHash === hash
             ? { kind: 'duplicate', turnId: prior.turnId }
             : { kind: 'rejected', reason: 'request_conflict' };
+        if (adopted) throw new Error('Use adopted submission.submit for new requests on this session');
         const turnId = crypto.randomUUID();
         const createdAt = new Date().toISOString();
         const expiresAt = new Date(Date.now() + (this.#options.admissionTtlMs ?? 60_000)).toISOString();
@@ -362,21 +600,62 @@ export class LocalSessionStore implements SessionStore {
         pendingAdmissions.delete(requestId);
         return driver.submit(requestId, items);
       },
-      decide: (decision: SessionDecision) => driver.decide(decision),
-      cancel: () => driver.cancel(),
-      retry: () => driver.retry(),
-      compact: () => driver.compact(),
-      setModel: (model) => driver.setModel(model),
-      subscribe: (...args) => driver.subscribe(...args),
-      close: () => log.dispose(),
+      decide: (decision: SessionDecision) => {
+        ensureOpen();
+        return driver.decide(decision);
+      },
+      cancel: () => {
+        ensureOpen();
+        return driver.cancel();
+      },
+      retry: () => {
+        ensureOpen();
+        return driver.retry();
+      },
+      compact: () => {
+        ensureOpen();
+        return driver.compact();
+      },
+      setModel: (model) => {
+        ensureOpen();
+        return driver.setModel(model);
+      },
+      subscribe: combined
+        ? subscribeCombined
+        : (...args) => {
+            ensureOpen();
+            return driver.subscribe(...args);
+          },
+      close: () => {
+        if (closePromise) return closePromise;
+        handleClosed = true;
+        closePromise = (async () => {
+          let failure: unknown;
+          try {
+            await combined?.shutdown();
+          } catch (error) {
+            failure = error;
+          }
+          try {
+            await log.dispose();
+          } catch (error) {
+            failure ??= error;
+          }
+          factListeners.clear();
+          if (failure !== undefined) throw failure;
+        })();
+        return closePromise;
+      },
       closeLog: async (
         closedAt = new Date().toISOString(),
         retentionEligibleAt = new Date(Date.parse(closedAt) + 30 * 86400000).toISOString(),
       ) => {
+        ensureOpen();
         if (current.status === 'closed') return;
         await context.commit([{ type: 'session_closed', version: 1, closedAt, retentionEligibleAt }]);
       },
     };
+    return { session, ...(submission ? { submission } : {}) };
   }
 }
 

@@ -122,6 +122,50 @@ const hasNumber = (value: UnknownObject, key: string): boolean => typeof value[k
 
 const isMessage = (value: unknown): boolean => isObject(value) && hasString(value, 'id') && hasString(value, 'sender');
 
+const isSubmittedTurn = (value: unknown): boolean => {
+  if (!isObject(value) || !hasString(value, 'text')) return false;
+  if (
+    value['images'] !== undefined &&
+    (!Array.isArray(value['images']) ||
+      !value['images'].every(
+        (image: unknown) =>
+          isObject(image) &&
+          hasString(image, 'id') &&
+          hasString(image, 'data') &&
+          hasString(image, 'mimeType') &&
+          typeof image['byteSize'] === 'number' &&
+          Number.isFinite(image['byteSize']) &&
+          typeof image['displayNumber'] === 'number' &&
+          Number.isFinite(image['displayNumber']),
+      ))
+  )
+    return false;
+  return (
+    value['skill'] === undefined ||
+    (isObject(value['skill']) &&
+      hasString(value['skill'], 'name') &&
+      hasString(value['skill'], 'description') &&
+      hasString(value['skill'], 'body'))
+  );
+};
+const isJsonValue = (value: unknown, seen = new Set<object>()): boolean => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'object' || seen.has(value)) return false;
+  if (
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) !== Object.prototype &&
+    Object.getPrototypeOf(value) !== null
+  )
+    return false;
+  seen.add(value);
+  const valid = Array.isArray(value)
+    ? value.every((item) => isJsonValue(item, seen))
+    : Object.values(value).every((item) => isJsonValue(item, seen));
+  seen.delete(value);
+  return valid;
+};
+
 const isSnapshot = (value: unknown): boolean =>
   isObject(value) &&
   Array.isArray(value['history']) &&
@@ -211,6 +255,25 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       );
     }
     case 'user_message':
+      return (
+        isMessage(event['message']) &&
+        isObject(event['message']) &&
+        (event['message']['submittedTurn'] === undefined || isSubmittedTurn(event['message']['submittedTurn']))
+      );
+    case 'user_input_accepted':
+      return (
+        event['version'] === 1 &&
+        hasString(event, 'turnId') &&
+        !!event['turnId'] &&
+        isEventReferences([event['userMessageRef']]) &&
+        isSnapshot(event['snapshot']) &&
+        isObject(event['snapshot']) &&
+        Array.isArray(event['snapshot']['history']) &&
+        event['snapshot']['history'].every((item: unknown) => isObject(item) && !Array.isArray(item)) &&
+        (event['snapshot']['model'] === undefined || typeof event['snapshot']['model'] === 'string') &&
+        (event['snapshot']['provider'] === undefined || typeof event['snapshot']['provider'] === 'string') &&
+        isJsonValue(event['snapshot'])
+      );
     case 'command_message':
       return isMessage(event['message']);
     case 'assistant_journal_delta':

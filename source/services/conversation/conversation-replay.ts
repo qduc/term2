@@ -542,6 +542,15 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       });
       return;
     }
+    case 'user_input_accepted': {
+      const snap = cloneSnapshot(event.snapshot);
+      state.history = snap.history;
+      state.previousResponseId = snap.previousResponseId;
+      state.toolLedger = snap.toolLedger;
+      state.snapshotModel = snap.model ?? state.snapshotModel;
+      state.snapshotProvider = snap.provider ?? state.snapshotProvider;
+      return;
+    }
     case 'assistant_journal_delta': {
       const journal = getOrCreateJournal(state, ts, journalKeyForEvent(event, state), event.turnId);
       // Coalesce same-kind fragments; the latest delta wins for that kind.
@@ -1285,8 +1294,52 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     lastEventTs: undefined,
   };
 
+  // Validate each accepted adjunct against the then-current earlier user. Later
+  // retraction makes the adjunct inactive, without invalidating its historical reference.
+  const keyOf = (ref: { logId: string; eventId: string }) => JSON.stringify([ref.logId, ref.eventId]);
+  const retracted = new Set<string>();
+  const acceptedRefs = new Map<PersistedLogEnvelope, string>();
+  let currentUser: string | null = null;
+  let activeTurn: string | null = null;
+  const seenUsers = new Set<string>();
+  for (const envelope of envelopes) {
+    if (!envelope || !envelope.event || isTruncatedLogEvent(envelope.event)) continue;
+    const event = envelope.event;
+    if (event.type === 'user_message') {
+      currentUser =
+        envelope.logId && envelope.eventId ? keyOf({ logId: envelope.logId, eventId: envelope.eventId }) : null;
+      if (currentUser) seenUsers.add(currentUser);
+    } else if ((event.type as string) === 'session_turn_started') {
+      const turnId = (event as unknown as { turnId?: unknown }).turnId;
+      activeTurn = typeof turnId === 'string' ? turnId : null;
+    } else if (
+      event.type === 'assistant_turn' ||
+      event.type === 'undo' ||
+      event.type === 'session_cleared' ||
+      (event.type as string) === 'session_turn_ended' ||
+      (event.type as string) === 'session_admission_settled' ||
+      (event.type as string) === 'session_interrupted' ||
+      (event.type as string) === 'session_closed'
+    ) {
+      currentUser = null;
+      activeTurn = null;
+    } else if (event.type === 'events_retracted') {
+      for (const ref of event.refs) retracted.add(keyOf(ref));
+      if (currentUser && retracted.has(currentUser)) currentUser = null;
+    } else if (event.type === 'user_input_accepted') {
+      const ref = keyOf(event.userMessageRef);
+      if (!seenUsers.has(ref) || currentUser !== ref || retracted.has(ref) || activeTurn !== event.turnId)
+        throw new Error('Invalid user_input_accepted reference');
+      acceptedRefs.set(envelope, ref);
+    }
+  }
+
   for (const envelope of envelopes) {
     if (!envelope || envelope.event == null) continue;
+    const acceptedUser = acceptedRefs.get(envelope);
+    const envelopeKey =
+      envelope.logId && envelope.eventId ? keyOf({ logId: envelope.logId, eventId: envelope.eventId }) : null;
+    if (acceptedUser && (retracted.has(acceptedUser) || (envelopeKey && retracted.has(envelopeKey)))) continue;
     if (isTruncatedLogEvent(envelope.event)) {
       // Truncated events carry no usage to accumulate; applyEvent records the
       // truncation warning and returns.

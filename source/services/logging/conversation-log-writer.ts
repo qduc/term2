@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { isToolResultHistoryItem } from '../tool-execution-ledger.js';
 import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
@@ -313,6 +314,33 @@ export function sanitizeSubagentResult(value: unknown): unknown {
   return value;
 }
 
+/** Preserve new input facts exactly except for source-classified tool outputs. */
+function sanitizeLogFact<T extends { readonly type: string }>(fact: T): T {
+  if (fact.type === 'user_message') {
+    const event = fact as unknown as Extract<LogEvent, { type: 'user_message' }>;
+    if (event.message.submittedTurn) {
+      const sanitized = sanitizeSubagentResult(event) as typeof event;
+      sanitized.message.text = event.message.text;
+      if (event.message.skill === undefined) delete sanitized.message.skill;
+      else sanitized.message.skill = structuredClone(event.message.skill);
+      sanitized.message.submittedTurn = structuredClone(event.message.submittedTurn);
+      return sanitized as unknown as T;
+    }
+  }
+  if (fact.type === 'user_input_accepted') {
+    const event = structuredClone(fact) as unknown as Extract<LogEvent, { type: 'user_input_accepted' }>;
+    const scrubItem = (item: unknown) => (isToolResultHistoryItem(item) ? sanitizeSubagentResult(item) : item);
+    event.snapshot.history = event.snapshot.history.map(scrubItem) as typeof event.snapshot.history;
+    event.snapshot.toolLedger = event.snapshot.toolLedger.map((entry) => ({
+      ...entry,
+      ...('output' in entry ? { output: sanitizeSubagentResult(entry.output) } : {}),
+      ...(entry.historyItems ? { historyItems: entry.historyItems.map(scrubItem) } : {}),
+    }));
+    return event as unknown as T;
+  }
+  return sanitizeSubagentResult(fact) as T;
+}
+
 function acquireLock(
   dir: string,
   sessionId: string,
@@ -482,7 +510,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter, AtomicConversa
     if (this.#closed || this.#fd === null) {
       return;
     }
-    const sanitizedEvent = sanitizeSubagentResult(event) as LogEvent;
+    const sanitizedEvent = sanitizeLogFact(event) as LogEvent;
     const envelope: LogEnvelope = {
       v: LOG_ENVELOPE_VERSION,
       seq: ++this.#seq,
@@ -547,7 +575,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter, AtomicConversa
         ts: at,
         logId: this.#sessionId,
         eventId: crypto.randomUUID(),
-        event: sanitizeSubagentResult(fact) as T,
+        event: sanitizeLogFact(fact) as T,
       }),
     );
     const final = entries.at(-1)!;

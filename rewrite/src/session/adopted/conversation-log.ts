@@ -152,6 +152,7 @@ const LIFECYCLE_TYPES = new Set([
 ]);
 const NON_EMPTY = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const SHA256 = /^[0-9a-f]{64}$/;
+const ADOPTED_USER_TURN_HASH = /^adopted-user-turn-v1:[0-9a-f]{64}$/;
 const UTC = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/;
 const isUtcTime = (value: unknown): value is string =>
   typeof value === 'string' && UTC.test(value) && Number.isFinite(Date.parse(value));
@@ -204,7 +205,10 @@ export function validateSessionFact(value: unknown): asserts value is SessionFac
     case 'session_admitted':
       if (
         !NON_EMPTY(value['clientRequestId']) ||
-        !SHA256.test(String(value['normalizedBodyHash'])) ||
+        !(
+          SHA256.test(String(value['normalizedBodyHash'])) ||
+          ADOPTED_USER_TURN_HASH.test(String(value['normalizedBodyHash']))
+        ) ||
         !NON_EMPTY(value['turnId']) ||
         !['started', 'queued'].includes(String(value['disposition'])) ||
         !isUtcTime(value['createdAt']) ||

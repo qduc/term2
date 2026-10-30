@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Ratchet the rewrite's size: allowlisted source edges and file lengths may
-// only shrink. Budgets live in complexity-budget.json beside this script.
+// Keep the rewrite's size visible: allowlisted source edges may only shrink, and
+// long files need a recorded reason. Budgets live in complexity-budget.json.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,19 +30,26 @@ const walk = (dir) => {
 };
 walk(path.join(repo, 'rewrite/src'));
 
+// The line limit is a prompt to look for a second job, not a target: a file that
+// reads better whole keeps a ceiling, with the reason written next to it.
 for (const full of files.sort()) {
   const file = path.relative(repo, full).split(path.sep).join('/');
   const lines = fs.readFileSync(full, 'utf8').split('\n').length - 1;
   const ceiling = budget.fileCeilings[file];
-  const limit = ceiling ?? budget.maxLines;
-  if (lines > limit)
+  if (ceiling && !ceiling.reason?.trim()) problems.push(`${file} has a ceiling without a reason.`);
+  if (!ceiling && lines > budget.maxLines)
     problems.push(
-      ceiling === undefined
-        ? `${file} has ${lines} lines (limit ${budget.maxLines}). Split it by job.`
-        : `${file} grew to ${lines} lines (ceiling ${ceiling}). It is already over the limit; split it rather than grow it.`,
+      `${file} has ${lines} lines (limit ${budget.maxLines}). If it does more than one job, split it along that ` +
+        'seam. If it reads better whole, give it a ceiling with a one-line reason.',
     );
-  else if (ceiling !== undefined && lines <= budget.maxLines) hints.push(`remove the ceiling for ${file}`);
-  else if (ceiling !== undefined && lines < ceiling) hints.push(`lower the ceiling for ${file} to ${lines}`);
+  else if (ceiling && lines > ceiling.lines)
+    problems.push(
+      `${file} grew to ${lines} lines (ceiling ${ceiling.lines}, recorded reason: "${ceiling.reason}"). ` +
+        'Split out the new job, or ' +
+        'raise the ceiling and say in the reason why it still reads better as one file.',
+    );
+  else if (ceiling && lines <= budget.maxLines) hints.push(`remove the ceiling for ${file}`);
+  else if (ceiling && lines < ceiling.lines) hints.push(`lower the ceiling for ${file} to ${lines}`);
 }
 for (const file of Object.keys(budget.fileCeilings))
   if (!fs.existsSync(path.join(repo, file))) hints.push(`remove the ceiling for missing ${file}`);

@@ -66,13 +66,13 @@ stores the full turn input.
 ## Keeping it readable
 
 The point of this rewrite is that a person can follow it. Three checks in CI
-keep that measurable, and each budget in `scripts/complexity-budget.json` may
-only go down:
+keep that measurable through `scripts/complexity-budget.json`:
 
 - `scripts/check-complexity.mjs` fails when the source-edge allowlist grows, or
-  when a file passes 500 lines. Files already over that have a ceiling and can
-  only shrink. When something gets smaller, the check prints the new number to
-  record.
+  when a file passes 500 lines. The line limit is a prompt to look for a second
+  job, not a target: split along a real seam, or, when a file reads better
+  whole, give it a ceiling with a one-line reason. When something gets smaller,
+  the check prints the new number to record.
 - `bench/hops.mts` sends one message and follows its async chain from Session
   submit to the provider call. It fails when the path gets longer (hops, where
   consecutive frames in one file count once) or touches more files. Today the

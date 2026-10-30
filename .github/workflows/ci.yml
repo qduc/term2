@@ -45,8 +45,51 @@ jobs:
         run: pnpm check:no-unit-tests
       - name: Build dist
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
+      - name: Upload built CLI for rewrite port checks
+        uses: actions/upload-artifact@v4
+        with:
+          name: term2-dist
+          path: dist/
+          if-no-files-found: error
       - name: Run guards, CLI integration and safety provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
+
+  port:
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-tests
+      - name: Download built CLI
+        uses: actions/download-artifact@v4
+        with:
+          name: term2-dist
+          path: dist/
+      - name: Reject unapproved golden changes
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          GOLDEN_CHANGE_ALLOWED: ${{ contains(github.event.pull_request.labels.*.name, 'golden-change') }}
+        run: |
+          changed="$(git diff --name-only "$PR_BASE...$PR_HEAD" -- rewrite/parity/goldens/)"
+          if [[ -n "$changed" && "$GOLDEN_CHANGE_ALLOWED" != 'true' ]]; then
+            echo "Golden changes require the golden-change label:"
+            echo "$changed"
+            exit 1
+          fi
+      - name: Check rewrite inventory and old CLI parity
+        run: |
+          node rewrite/parity/inventory.mjs
+          node rewrite/parity/run.mjs check --cli dist/cli.js
+      - name: Typecheck rewrite and check layer boundaries
+        run: |
+          pnpm exec tsc -p rewrite/tsconfig.json
+          node rewrite/scripts/check-layers.mjs
 
   integration:
     runs-on: ubuntu-22.04

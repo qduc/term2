@@ -26679,6 +26679,43 @@
       "notes": "Tracer 14/14; layer guard passed with 480 allowlisted source edges; inventory passed; old CLI parity 6/6. Before commit, temporary probes produced: rewrite/src/tools/adopted/g1-probe.ts (tools/) directly imports source/gateway/gateway.ts (host/); rewrite/src/tools/g1-probe.ts imports source/tools/types.ts outside adopted/. Both probes removed. Initial tracer attempts in default sandbox failed at scenario 2 with child did not report a session, empty stdout and SIGKILL. A minimal Node spawnSync child that writes hello then kills itself returned error EPERM, signal SIGKILL and empty stdout in that sandbox; with network-enabled additional permissions it returned hello and SIGKILL without error. The successful tracer was run under the latter permissions. Full integration/e2e suites not run locally."
     },
     {
+      "id": "2026-10-30-port-g1-hosted-acceptance",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T12:41:02Z",
+      "commit": "7e2b7ee00f577a7129c2d605f21eda433277cb1b",
+      "tree": null,
+      "revision_kind": "G1 PR commit; merged as cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "base_commit": "a99172d151189ffdc631a6b9e4c070dff5ba63da",
+      "task_ids": [
+        "2026-10-30-port-g1-build-guard"
+      ],
+      "suite": "G1 hosted CI acceptance and independent review",
+      "command": "GitHub Actions CI run 41057187634; independent review of PR #89",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub Actions; ubuntu-22.04 and ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": null,
+        "notes": "All four existing CI jobs succeeded on tested PR commit 7e2b7ee0; source commit 2525064bf0c2bf7674cfef000af05331e40030f3 received independent review."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/41057187634",
+        "/tmp/term2-g1-independent/review.md",
+        "https://github.com/qduc/term2/commit/7e2b7ee00f577a7129c2d605f21eda433277cb1b"
+      ],
+      "notes": "GitHub Actions CI run 41057187634 tested PR commit 7e2b7ee00f577a7129c2d605f21eda433277cb1b; all four jobs succeeded. G1 source commit 2525064bf0c2bf7674cfef000af05331e40030f3 was merged as PR #89 at cf6015a2a30871ecb7295f03f738c2f0810342a7. Independent review evidence is retained at /tmp/term2-g1-independent/review.md. This hosted acceptance is appended separately; the original local G1 verification row remains unchanged."
+    },
+    {
       "id": "2026-10-30-port-guard-followup",
       "recorded_on": "2026-10-30",
       "run_at": "2026-10-30T12:59:00Z",

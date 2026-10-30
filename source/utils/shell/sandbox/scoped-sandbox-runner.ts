@@ -92,7 +92,7 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
     child.on('disconnect', lost);
     child.on('message', (message: any) => {
       if (!message || message.version !== 1 || !Number.isSafeInteger(message.id) || message.id < 1) {
-        child.kill();
+        child.kill('SIGKILL');
         return;
       }
       if (message?.type === 'ask') {
@@ -102,7 +102,7 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
           (message.port !== undefined && !isSandboxNetworkPort(message.port)) ||
           message.id <= this.#lastAskId
         ) {
-          child.kill();
+          child.kill('SIGKILL');
           return;
         }
         this.#lastAskId = message.id;
@@ -110,7 +110,7 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
           try {
             if (child.connected) child.send({ version: 1, type: 'answer', id: message.id, allowed }, () => {});
           } catch {
-            child.kill();
+            child.kill('SIGKILL');
           }
         });
       } else if (message?.type === 'bridges') {
@@ -127,7 +127,7 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
                 !/^claude-(http|socks)-[a-f0-9]{16}\.sock$/.test(basename(path))),
           )
         ) {
-          child.kill();
+          child.kill('SIGKILL');
           return;
         }
       } else if (message?.type === 'result') {
@@ -137,7 +137,7 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
           !hasOnly(message, ['version', 'type', 'id', 'result', 'error']) ||
           (message.error !== undefined && (typeof message.error !== 'string' || Object.hasOwn(message, 'result')))
         ) {
-          child.kill();
+          child.kill('SIGKILL');
           return;
         }
         const result = message.result;
@@ -166,14 +166,14 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
               )
             : result === undefined;
         if (message.error === undefined && !validResult) {
-          child.kill();
+          child.kill('SIGKILL');
           return;
         }
         this.#pending.delete(message.id);
         if (message.error) pending.reject(new Error(message.error));
         else pending.resolve(message.result);
       } else {
-        child.kill();
+        child.kill('SIGKILL');
       }
     });
     return child;
@@ -186,7 +186,7 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
         try {
           if (child.connected) child.send({ version: 1, type: 'abort', id }, () => {});
         } catch {
-          child.kill();
+          child.kill('SIGKILL');
         }
       };
       signal?.addEventListener('abort', onAbort, { once: true });
@@ -264,7 +264,7 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
             this.#call('dispose'),
             new Promise<never>((_, reject) => {
               timer = setTimeout(() => {
-                this.#child?.kill();
+                this.#child?.kill('SIGKILL');
                 reject(new Error('Sandbox helper disposal timed out'));
               }, 5000);
             }),
@@ -276,7 +276,7 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
         }
       }
       this.#closed = true;
-      this.#child?.kill();
+      this.#child?.kill('SIGKILL');
     })();
     return this.#disposePromise;
   }

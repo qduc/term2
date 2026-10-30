@@ -73,6 +73,34 @@ describe('scoped sandbox helpers', () => {
     expect(await b).toBe('allow-once');
     coordinator.dispose();
   });
+  it('terminates an unresponsive helper during graph disposal', async () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'term2-helper-test-'));
+    const marker = join(fixture, 'temp-path');
+    const helper = join(fixture, 'helper.mjs');
+    writeFileSync(
+      helper,
+      `import { writeFileSync } from 'node:fs'; import { tmpdir } from 'node:os'; writeFileSync(${JSON.stringify(
+        marker,
+      )}, tmpdir()); process.on('message', x => { if (x.type === 'availability') process.send({version:1,type:'result',id:x.id,result:{type:'available'}}); });`,
+    );
+    const scope = createScopedSandboxNetworkAccess({ workspaceRoot: fixture, requestApproval: async () => false });
+    const runner = new ScopedSandboxRunner(
+      scope,
+      () => {},
+      async () => {},
+      pathToFileURL(helper),
+    );
+    try {
+      expect((await runner.availability()).type).toBe('available');
+      const ownedTemp = readFileSync(marker, 'utf8');
+      await runner.dispose();
+      await vi.waitFor(() => expect(existsSync(ownedTemp)).toBe(false), { timeout: 5000 });
+      expect(await scope.request({ host: 'blocked.example' })).toBe(false);
+    } finally {
+      await runner.dispose();
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  }, 15_000);
   it('fails closed and removes its owned temp tree when the initialized helper is killed', async () => {
     const fixture = mkdtempSync(join(tmpdir(), 'term2-helper-test-'));
     const marker = join(fixture, 'temp-path');

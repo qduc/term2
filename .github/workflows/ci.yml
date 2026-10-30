@@ -104,6 +104,8 @@ jobs:
         run: |
           pnpm exec tsc -p rewrite/tsconfig.json
           node rewrite/scripts/check-layers.mjs
+          node rewrite/scripts/check-complexity.mjs
+          node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts
       - name: Check adopted approval and crash recovery
         run: |
           pnpm exec tsx rewrite/bench/c1-adopted-approval.mts

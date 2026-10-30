@@ -1,0 +1,12 @@
+{
+  "maxSourceEdges": 527,
+  "maxLines": 500,
+  "fileCeilings": {
+    "rewrite/src/session/adopted/foreground.ts": 1346,
+    "rewrite/src/engine/adopted/index.ts": 877,
+    "rewrite/src/session/local-store.ts": 827,
+    "rewrite/src/model/adopted/index.ts": 748,
+    "rewrite/src/session/adopted/conversation-log.ts": 627
+  },
+  "messagePath": { "maxHops": 29, "maxFiles": 7 }
+}

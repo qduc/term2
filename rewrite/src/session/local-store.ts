@@ -563,7 +563,7 @@ export class LocalSessionStore implements SessionStore {
         }
       };
       const wrapped = (item: Captured) => {
-        pending.push(item.update);
+        pending.push(structuredClone(item.update));
         drain();
       };
       listeners.add(wrapped);

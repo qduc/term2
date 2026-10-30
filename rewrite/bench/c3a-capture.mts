@@ -118,6 +118,9 @@ const store = new LocalSessionStore({
   }),
 });
 const { session, submission } = await store.createAdopted(workspaceConfig, modelRef);
+session.subscribe(session.state().lastSeq, (update) => {
+  if (update.kind === 'fact') (update.entry as any).seq = 999999;
+});
 const received: any[] = [];
 const suffix: any[] = [];
 let nested: ReturnType<typeof session.capture> | undefined;
@@ -159,6 +162,10 @@ await done;
 assert.equal(session.state().status, 'idle');
 assert.deepEqual(first.state, retained, 'capture state stays immutable across commits');
 assert.ok(received.some((x) => x.update.kind === 'fact'));
+assert.ok(
+  received.filter((x) => x.update.kind === 'fact').every((x) => x.update.entry.seq < 999999),
+  'legacy listeners cannot mutate captured updates',
+);
 assert.ok(received.some((x) => x.update.kind === 'live'));
 assert.equal(stoppedCalls, 1);
 assert.ok(nested);

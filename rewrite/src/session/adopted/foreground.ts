@@ -923,6 +923,7 @@ export function createAdoptedForeground(options: {
         });
       },
       history(command: HistoryMutation): Promise<HistoryMutationResult> {
+        if (poisoned !== undefined) return Promise.reject(poisoned);
         if (closing || context.state().status === 'closed')
           return Promise.reject(new Error('Session handle is closed'));
         if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
@@ -1035,6 +1036,7 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       setRuntimeSettings(input: RuntimeSettingMutation) {
+        if (poisoned !== undefined) return Promise.reject(poisoned);
         let command: RuntimeSettingMutation;
         try {
           command = parseRuntimeMutation(input);

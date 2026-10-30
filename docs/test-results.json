@@ -26540,6 +26540,39 @@
       "failures": [],
       "evidence": [],
       "notes": "Guard negative check: a temporary clients/ -> session/ import made check-layers exit 1 with 'clients/ may not import session/'; reverted before commit."
+    },
+    {
+      "id": "2026-10-30-rewrite-tracer-bullet",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T10:45:00Z",
+      "commit": "dde41aa094e7f819133c97ce97fcc3ca72b1d71c",
+      "tree": "59e7658a5daeb75a2962ea33cff4411d3d97d719",
+      "revision_kind": "clean committed source",
+      "base_commit": "a36c369",
+      "task_ids": [
+        "2026-10-30-rewrite-tracer-bullet"
+      ],
+      "suite": "rewrite/ tracer bullet (typecheck, layer guard, three-scenario tracer with real SIGKILL child processes)",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; pnpm exec tsc -p rewrite/tsconfig.build.json && node rewrite/dist/app/tracer.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.44-fc-v185",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Cloud container; root deps installed with pnpm install --frozen-lockfile --ignore-scripts. Root test tiers not run: no file under source/ changed."
+      },
+      "result": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "14 tracer assertions across 3 scenarios. Fault injection on built output: forcing reconcile to never resume failed scenario 2 ('reopened turn resumes from its checkpoint and completes'); forcing it to always resume failed scenario 3 ('reopened session is interrupted'). Both restored; clean rebuild passes. The layer guard caught host/ importing model/ during development, fixed by moving command handling to protocol/commands.ts."
     }
   ]
 }

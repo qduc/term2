@@ -92,6 +92,54 @@ export class PendingInteractionState {
   #nextRevision = 1;
   #observer: ((snapshot: PendingInteractionSnapshot | null) => void) | null = null;
 
+  /** Prepare an adopted transition without mutating or publishing live state. */
+  prepareTransition<T>(transition: (draft: PendingInteractionState) => T): {
+    readonly value: T;
+    readonly snapshot: PendingInteractionSnapshot | null;
+    commit(): void;
+  } {
+    const original = this.#current;
+    const nextId = this.#nextInteractionId;
+    const nextRevision = this.#nextRevision;
+    const draft = new PendingInteractionState();
+    draft.#current = original
+      ? {
+          ...original,
+          askUserAnswers: original.askUserAnswers.map((answer) => (Array.isArray(answer) ? [...answer] : answer)),
+        }
+      : null;
+    draft.#nextInteractionId = nextId;
+    draft.#nextRevision = nextRevision;
+    const value = transition(draft);
+    const snapshot = draft.getSnapshot();
+    let committed = false;
+    return {
+      value,
+      snapshot,
+      commit: () => {
+        if (
+          committed ||
+          this.#current !== original ||
+          this.#nextInteractionId !== nextId ||
+          this.#nextRevision !== nextRevision
+        )
+          throw new Error('Pending interaction transition is stale');
+        committed = true;
+        if (
+          draft.#nextInteractionId === nextId &&
+          draft.#nextRevision === nextRevision &&
+          ((draft.#current === null && original === null) ||
+            (draft.#current !== null && original !== null && draft.#current.revision === original.revision))
+        )
+          return;
+        this.#current = draft.#current;
+        this.#nextInteractionId = draft.#nextInteractionId;
+        this.#nextRevision = draft.#nextRevision;
+        this.#observer?.(this.getSnapshot());
+      },
+    };
+  }
+
   getSnapshot(): PendingInteractionSnapshot | null {
     return this.#current ? cloneSnapshot(this.#current) : null;
   }

@@ -110,6 +110,7 @@ jobs:
           pnpm exec tsx rewrite/bench/c1-adopted-kill.mts
           pnpm exec tsx rewrite/bench/c3a-foreground.mts
           pnpm exec tsx rewrite/bench/c3a-owned-handle.mts
+          for mode in repeat batch reject ask-nav ask-cancel; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-interactions.mts; done
           pnpm exec tsx rewrite/bench/c3a-input-fsync.mts
           PROBE_MODE=unknown pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts
           PROBE_MODE=tool pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts

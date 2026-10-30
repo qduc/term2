@@ -27030,6 +27030,44 @@
         "Inventory check passed; rewrite typecheck and build passed; layer check passed with 480 allowlisted source edges."
       ],
       "notes": "One G3 implementation cycle; five incorrect fixture iterations were corrected before final acceptance: direct read_file/grep were unknown provider tools; nested apply_patch was unavailable (nested API provides search_replace/create_file); run_subagent foreground was schema-rejected (background required); the first background response script lacked a completion reply. Final parity checks had no failures. Initial pre-commit run in default sandbox failed at scripts/check-no-unit-tests.mjs with spawnSync git EPERM; same commit succeeded with network-enabled subprocess permission. ESLint invocation exited 0 but ignored both .mjs files by repository config; no lint claim. Full CLI integration/e2e suites were not run. Sol review and any owner-controlled golden-change PR label remain pending."
+    },
+    {
+      "id": "2026-10-30-port-g3-settings-observability-fix",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:23:46Z",
+      "commit": "5d099cb4eb40d8d82ad23e1d9c62031f2f61ac11",
+      "tree": null,
+      "revision_kind": "clean source commit; evidence appended separately",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": ["2026-10-30-port-g3-batch-parity"],
+      "suite": "G3 settings observability correction and rebased parity verification",
+      "command": "node rewrite/parity/run.mjs check --cli dist/cli.js (twice); isolated OLD CLI ablation of each settings-batch setting; node rewrite/parity/inventory.mjs; node rewrite/scripts/check-layers.mjs; pnpm exec prettier --check rewrite/parity/features.json rewrite/parity/scenarios/settings-batch.json rewrite/parity/goldens/settings-batch.json; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/build.mjs; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated .worktrees/port-g3; network-enabled additional sandbox permissions for child processes and loopback fake provider; per-worktree dependencies."
+      },
+      "result": {
+        "passed": true,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "Corrected agent.modelSelection to explicit mock-beta/mockprov, distinct from the parity runner's mock-alpha/mockprov defaults; only the new settings-batch golden was rerecorded from unchanged OLD CLI dist/cli.js. Existing six goldens are unchanged.",
+        "Independent one-key-at-a-time ablations each changed the OLD CLI observable: agent.modelSelection, agent.reasoningEffort, agent.temperature, agent.maxOutputTokens, app.activeProfileId, tools.shell.enabled, tools.web.enabled, tools.memory.enabled, tools.fileWrite.enabled, tools.subagents.enabled.",
+        "Full parity matched 9/9 scenarios twice consecutively.",
+        "Inventory passed with 10/10 setting feature rows covered and 6/43 tools covered; layer guard passed with 490 allowlisted source edges.",
+        "Prettier, rewrite TypeScript check, rewrite build, and diff whitespace check passed.",
+        "run_subagent coverage remains limited to the supported background-only invocation; the fake provider observes the background tool request and completion notification."
+      ],
+      "notes": "Review correction for redundant mock-alpha model selection. The earlier historical run remains unchanged and records the rejected baseline; this resolving run establishes per-key observability of the corrected settings golden. Full CLI integration/e2e suites were not run locally."
     }
   ]
 }

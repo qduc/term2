@@ -3,7 +3,7 @@
   "runs": [
     {
       "exitCode": 0,
-      "stdout": "Hello there. \n",
+      "stdout": "Hello there.\n",
       "stderr": "Profile: bare\n",
       "requests": [
         {

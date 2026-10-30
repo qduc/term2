@@ -29806,6 +29806,38 @@
       ],
       "evidence": [],
       "notes": "At exact clean merge: root and rewrite typechecks, 527-edge layer guard and inventory passed. Network dual ownership, background idle, nested running/late and SIGKILL recovery passed (5/5); budget human/refusal/fsync passed (3/3). pnpm wrapper attempted inaccessible home store; direct local tsc succeeded. Independent Sol review at 50f423c1 passed bounded local scope; combined revision needs final review. Prior CI 41128676929 passed native integration at earlier e0e4a; latest-head native supported-host CI mandatory, no claim of enforcement from controlled local runner."
+    },
+    {
+      "id": "2026-10-30-c3a-stage5-settings-network-integration",
+      "timestamp": "2026-10-30T21:54:00Z",
+      "commit": "b6a4118aad128c6c8fe8a8e495f0f8754e855c2b",
+      "tree": "87eef4b1bda468be1923d01bb4ecd2d3ce131c0e",
+      "revision_kind": "source merge commit",
+      "base_commit": "d204ab1e144c97bf60d088d4f0dff2877e9344ce",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-settings-network-integration"
+      ],
+      "suite": "C3a stage 5 settings, network and budget integration",
+      "command": "rewrite tsc and layer guard; retained settings, legacy chronology, budget and network dual/background/nested/kill integration; independent affected shared authority and settings probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, strict unhandled rejection mode, local controlled provider and network-enabled sandbox. Direct local tsc used after pnpm attempted install in unwritable home."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "At exact b6a, rewrite tsc and layer guard 527 pass; retained settings 5/5, budget 3/3 and network dual/background/nested running+late/kill 5/5 pass. Sol independent bounded acceptance 10/10 affected actual checks includes network durable-answer other-owner poison fencing grant, cached decision, stored allow and S/U/closeLog; see /tmp/term2-c3a-stage5-settings-independent-review.md. N main d204 previously passed all five CI jobs including native actual sandbox; these controlled checks do not establish external provider availability or complete stage5/#76, C3b, P2/C4."
     }
   ]
 }

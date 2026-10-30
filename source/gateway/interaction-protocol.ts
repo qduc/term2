@@ -78,6 +78,13 @@ function text(value: unknown, max = MAX_TEXT, required = false): string {
   return value;
 }
 
+/** Budget check-ins are source-formatted with line feeds; all other controls remain forbidden. */
+function budgetDisplayText(value: unknown): string {
+  if (typeof value !== 'string' || value.length > MAX_TEXT || /[\u0000-\u0009\u000b-\u001f\u007f]/.test(value))
+    throw new InteractionProtocolError();
+  return value;
+}
+
 function redact(value: string): string {
   return value
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer <redacted>')
@@ -125,7 +132,8 @@ function runBudgetEvidence(approval: Record<string, unknown>): Record<string, nu
     const result: Record<string, number> = {};
     for (const key of ['used', 'limit', 'headroom']) {
       const value = (evidence as Record<string, unknown>)[key];
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new InteractionProtocolError();
+      if (typeof value !== 'number' || !Number.isFinite(value) || (key !== 'headroom' && value < 0))
+        throw new InteractionProtocolError();
       result[key] = value;
     }
     if (Object.keys(result).length) return result;
@@ -154,7 +162,8 @@ export function projectPendingInteraction(
   }
   const agentName = text(input.agentName, 256, true);
   const toolName = text(input.toolName, 256, true);
-  const argumentsText = text(input.argumentsText, MAX_TEXT, true);
+  const argumentsText =
+    input.checkIn === 'run_budget' ? budgetDisplayText(input.argumentsText) : text(input.argumentsText, MAX_TEXT, true);
   const isAskUser = toolName === 'ask_user';
   const checkIn = input.checkIn === 'max_turns' || input.checkIn === 'run_budget' ? input.checkIn : undefined;
   const deniedRead = input.deniedRead;
@@ -381,7 +390,8 @@ export function validatePendingInteractionDto(value: unknown): PendingInteractio
   const descriptorValue = descriptor as Record<string, unknown>;
   text(descriptorValue.agentName, 256, true);
   text(descriptorValue.toolName, 256, true);
-  text(descriptorValue.argumentsText, MAX_TEXT, true);
+  if (dto.variant === 'run_budget') budgetDisplayText(descriptorValue.argumentsText);
+  else text(descriptorValue.argumentsText, MAX_TEXT, true);
   if (
     descriptorValue.callId !== undefined &&
     (typeof descriptorValue.callId !== 'string' || !OPAQUE_ID.test(descriptorValue.callId))
@@ -433,8 +443,9 @@ export function validatePendingInteractionDto(value: unknown): PendingInteractio
   if (descriptorValue.runBudgetEvidence !== undefined) {
     if (!descriptorValue.runBudgetEvidence || typeof descriptorValue.runBudgetEvidence !== 'object')
       throw new InteractionProtocolError();
-    for (const value of Object.values(descriptorValue.runBudgetEvidence as Record<string, unknown>))
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new InteractionProtocolError();
+    for (const [key, value] of Object.entries(descriptorValue.runBudgetEvidence as Record<string, unknown>))
+      if (typeof value !== 'number' || !Number.isFinite(value) || (key !== 'headroom' && value < 0))
+        throw new InteractionProtocolError();
   }
   if (!Array.isArray(dto.choices) || dto.choices.length === 0 || dto.choices.length > MAX_OPTIONS)
     throw new InteractionProtocolError();

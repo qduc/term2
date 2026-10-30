@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
@@ -41,7 +41,10 @@ it('edits and retracts pending steering while one turn crosses two manual approv
   });
   const child = await lease.start({
     command: process.execPath,
-    args: [join(process.cwd(), 'dist/cli.js'), '--lite'],
+    args: [
+      process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
+      '--lite',
+    ],
     cwd: lease.root,
     cols: 120,
     rows: 40,

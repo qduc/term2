@@ -191,7 +191,7 @@ function itemToInput(item: Item): StreamedModelTurnInput {
     case 'reasoning':
       return {
         type: 'reasoning',
-        ...(item.providerItemId ? { id: item.providerItemId } : {}),
+        ...(item.providerItemId !== undefined ? { id: item.providerItemId } : {}),
         text: item.summary,
         ...(item.providerMetadata ? { providerMetadata: item.providerMetadata } : {}),
       };
@@ -232,7 +232,7 @@ function outputToItem(
       return {
         type: 'reasoning',
         id: id(output.id),
-        ...(output.id ? { providerItemId: output.id } : {}),
+        ...(output.id !== undefined ? { providerItemId: output.id } : {}),
         summary: output.text,
         ...(output.providerMetadata ? { providerMetadata: output.providerMetadata } : {}),
       };
@@ -310,7 +310,7 @@ async function* modelEvents(
   provider: string,
   signal: AbortSignal,
 ): AsyncIterable<ModelEvent> {
-  const observedToolCalls = new Set<string>();
+  const streamedToolCalls = new Map<string, Extract<StreamedModelTurnEvent, { type: 'tool_call' }>>();
   let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
   try {
     for await (const event of original.stream(request)) {
@@ -328,8 +328,9 @@ async function* modelEvents(
           };
           break;
         case 'tool_call': {
-          observedToolCalls.add(event.id);
-          yield { type: 'item', item: outputToItem(event, provider) };
+          // Completion output is authoritative for the full call. Keep the event as a fallback
+          // until that output arrives so late provider metadata/final arguments are not lost.
+          streamedToolCalls.set(event.id, event);
           break;
         }
         case 'completion':
@@ -344,9 +345,30 @@ async function* modelEvents(
               },
             };
           }
+          const completedToolCalls = new Set<string>();
           for (const output of event.output) {
-            if (output.type === 'tool_call' && observedToolCalls.has(output.id)) continue;
+            if (output.type === 'tool_call') {
+              const streamed = streamedToolCalls.get(output.id);
+              if (streamed) completedToolCalls.add(output.id);
+              const completeCall = streamed
+                ? {
+                    ...streamed,
+                    ...output,
+                    ...(output.providerMetadata !== undefined || streamed.providerMetadata === undefined
+                      ? {}
+                      : { providerMetadata: streamed.providerMetadata }),
+                    ...(streamed.toolType ? { toolType: streamed.toolType } : {}),
+                  }
+                : output;
+              yield { type: 'item', item: outputToItem(completeCall, provider) };
+              continue;
+            }
             yield { type: 'item', item: outputToItem(output, provider) };
+          }
+          for (const [callId, streamed] of streamedToolCalls) {
+            if (!completedToolCalls.has(callId)) {
+              yield { type: 'item', item: outputToItem(streamed, provider) };
+            }
           }
           yield {
             type: 'done',
@@ -360,7 +382,12 @@ async function* modelEvents(
           break;
       }
     }
-    if (!completion) yield { type: 'done', stopReason: 'end_turn' };
+    if (!completion) {
+      for (const streamed of streamedToolCalls.values()) {
+        yield { type: 'item', item: outputToItem(streamed, provider) };
+      }
+      yield { type: 'done', stopReason: 'end_turn' };
+    }
   } catch (error) {
     throw toModelError(error, signal);
   }

@@ -95,12 +95,17 @@ export function createAdoptedForeground(options: {
   let decisionTail = Promise.resolve();
   let decideCurrent: ((command: AdoptedInteractionCommand) => Promise<void>) | undefined;
   const buffered: LogEvent[] = [];
+  const poison = (error: unknown): unknown => {
+    poisoned = error ?? new Error('Session mutation failed');
+    context.poison(poisoned);
+    return poisoned;
+  };
   const capture = (event: LogEvent) => {
     if (poisoned !== undefined) return;
     try {
       buffered.push(structuredClone(event));
     } catch (error) {
-      poisoned = error;
+      poison(error);
     }
   };
   runtime.record.setJournalSink(capture);
@@ -131,8 +136,7 @@ export function createAdoptedForeground(options: {
         if (options.publishFacts !== false) for (const entry of entries) publish({ kind: 'fact', entry });
         return facts.length ? entries.slice(-facts.length) : [];
       } catch (error) {
-        poisoned = error;
-        throw new FatalPersistenceError(error);
+        throw new FatalPersistenceError(poison(error));
       }
     });
     writeTail = operation.then(
@@ -956,8 +960,7 @@ export function createAdoptedForeground(options: {
           try {
             restored = reservation.apply();
           } catch (error) {
-            poisoned = error ?? new Error('History mutation failed');
-            throw poisoned;
+            throw poison(error ?? new Error('History mutation failed'));
           }
           if (!restored) return { kind: 'stale' };
           const committedGeneration = runtime.generationGuard.capture();
@@ -1095,8 +1098,7 @@ export function createAdoptedForeground(options: {
             if (closing || signal.aborted) throw new Error('Settings became stale');
             return { kind: 'applied' as const, settings };
           } catch (error) {
-            poisoned = error ?? new Error('Settings mutation failed');
-            context.poison(poisoned);
+            poison(error ?? new Error('Settings mutation failed'));
             runtime.generationGuard.invalidate();
             if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
             active?.cancel();
@@ -1151,8 +1153,7 @@ export function createAdoptedForeground(options: {
           const original = loadCanonicalRetryTarget(context.id, context.root);
           if (target === 'turn' && !original) return { kind: 'ineligible', target };
           if (target === 'tool' && !runtime.state.peekLastToolOutput()) {
-            poisoned = new Error('Canonical retry eligibility disagrees with source state');
-            throw poisoned;
+            throw poison(new Error('Canonical retry eligibility disagrees with source state'));
           }
           const before = structuredClone(runtime.record.getHistory());
           const rewound =
@@ -1160,8 +1161,7 @@ export function createAdoptedForeground(options: {
               ? runtime.state.retryLastUserTurn({ logUndo: false })
               : runtime.state.retryLastToolOutput();
           if (!rewound) {
-            poisoned = new Error('Canonical retry eligibility disagrees with source state');
-            throw poisoned;
+            throw poison(new Error('Canonical retry eligibility disagrees with source state'));
           }
           const turnId = crypto.randomUUID() as TurnInput['turnId'];
           const token = runtime.generationGuard.capture();
@@ -1169,8 +1169,7 @@ export function createAdoptedForeground(options: {
           try {
             rewindRemovedUserCount(before, snapshot.history);
           } catch (error) {
-            poisoned = error;
-            throw error;
+            throw poison(error);
           }
           const fact: SessionFact =
             target === 'turn'

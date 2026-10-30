@@ -27068,6 +27068,80 @@
         "run_subagent coverage remains limited to the supported background-only invocation; the fake provider observes the background tool request and completion notification."
       ],
       "notes": "Review correction for redundant mock-alpha model selection. The earlier historical run remains unchanged and records the rejected baseline; this resolving run establishes per-key observability of the corrected settings golden. Full CLI integration/e2e suites were not run locally."
+    },
+    {
+      "id": "2026-10-30-port-a1-config-settings-adapter",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "commit": "fed84efbbac36c373bd81d36854c9b86d3e34249",
+      "tree": "b63158f8764379520544c38991c1587025d912c9",
+      "revision_kind": "clean committed source",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-a1-config-settings-adapter"
+      ],
+      "suite": "A1 settings adapter probes, rewrite build/tracer, typecheck, inventory, old CLI parity and layer guard",
+      "command": "Individual commands: pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/build.mjs && node rewrite/dist/rewrite/src/app/tracer.js; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; node rewrite/scripts/check-layers.mjs; node --import tsx /tmp/term2-a1-settings-probe.mts; node --import tsx /tmp/term2-a1-failure-probe.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Worktree dependencies installed directly with pnpm store/cache/state in /tmp. Native install scripts encountered read-only /home/agent/.npm access (EROFS) and used their build fallback; no home writes occurred. Child-process checks used network-enabled additional sandbox permissions."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": null
+      },
+      "failures": [
+        "node rewrite/scripts/check-layers.mjs: source/services/model-service.ts and source/services/service-interfaces.ts are missing from the source-layer map; adopted SettingsService reaches model providers through services/model-service.ts and also reaches session/engine through lib/chained-input-filter.ts -> services/conversation/run-item-normalizer.ts, services/logging/provider-traffic.ts -> services/retry/provider-failure-classification.ts, utils/error-helpers.ts -> services/retry/retry-error-classification.ts, and contracts/streamed-model-turn.ts -> services/retry/retry-recovery-budget.ts."
+      ],
+      "evidence": [
+        "/tmp/term2-a1-settings-probe.mts",
+        "/tmp/term2-a1-failure-probe.mts"
+      ],
+      "notes": "Rewrite typecheck, rewrite build, tracer (14/14), inventory, old CLI build and parity (6/6), and real XDG settings probes passed. The real settings probe verified persisted model/tool reads, a persistent set and previous/next watch event, per-session override isolation including caller-map mutation and masked host events, no override disk writes, sibling-session isolation, unsubscription, and runtime-mode memory-only writes. The read-only-directory probe confirmed persistent set rejects when durable persistence fails. Layer guard remains blocked pending the shared G1 transitive-edge correction and independent review; no A1 guard/allowlist exceptions were added. Full CLI integration/e2e suites were not run."
+    },
+    {
+      "id": "2026-10-30-port-a1-guard-rebase-verification",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:16:12Z",
+      "commit": "1892bcdb4edbfccd3dd9496cf38dcc5f9df449aa",
+      "tree": null,
+      "revision_kind": "rebased A1 source commit on origin/main 47190949fed9244632512a9f55175670892f1a96",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-a1-config-settings-adapter"
+      ],
+      "suite": "A1 post-rebase acceptance checks",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js; node --import tsx /tmp/term2-a1-settings-probe.mts; node --import tsx /tmp/term2-a1-failure-probe.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Existing worktree dependencies and temporary XDG test roots; child-process checks used network-enabled additional sandbox permissions."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/tmp/term2-a1-settings-probe.mts",
+        "/tmp/term2-a1-failure-probe.mts"
+      ],
+      "notes": "Rebased A1 source commit 1892bcdb4edbfccd3dd9496cf38dcc5f9df449aa has byte-identical adapter files to Sol-approved source commit fed84efbbac36c373bd81d36854c9b86d3e34249. Independent review approved the original source commit (see /tmp/term2-a1-independent-review.md). Rewrite typecheck passed; corrected layer guard passed with 490 allowlisted edges; inventory passed (136 settings tracked); old CLI parity passed 6/6. Focused real XDG settings probes passed, including durable set/watch, per-session override isolation/no disk writes, runtime-only writes, and rejection on failed persistent write. No source changes were made by the shared guard fix. Full CLI integration/e2e suites not run."
     }
   ]
 }

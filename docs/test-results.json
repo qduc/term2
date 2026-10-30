@@ -29249,6 +29249,72 @@
       "failures": [],
       "evidence": [],
       "notes": "Integrated production source matches 485712c8. Typechecks, guard 527, inventory, no-unit guard, retained real approval and SIGKILL benches, build and immutable parity 9/9 passed. Independent delta review pending. Previous native restart PTY 6/7 failure /proc children ENOENT also reproduced on clean base 62f68b80; no final rerun claimed."
+    },
+    {
+      "id": "2026-10-30-c1-final-composition",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:19:39Z",
+      "commit": "1d7224186ba370798cd10f561fe2ca4d86416e3e",
+      "tree": "6b903d9229a6e68349ade51a4c2e8aad4678033d",
+      "revision_kind": "integrated candidate",
+      "base_commit": "86d2e5f4cd8da34d32efa0d492c0537521554ce5",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "adopted engine composition and hosted CI",
+      "command": "temporary mixed-policy-manual, root-goal-stop, paid-compaction and child-goal-separation probes; hosted CI 41105352334",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, local fake provider; hosted CI has its own environment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Four real-source composition probes passed: mixed policy/manual decision staging without early effect; root goal normal stop; paid compaction budget accounting; and child goal separation using public adopted nested helper in a source parent loop. The last is not an adopted engine parent composition claim. Hosted CI 41105352334 passed all five jobs. Local native restart PTY 6/7 /proc children ENOENT reproduced on clean base; hosted e2e passed. Independent settlement review pending."
+    },
+    {
+      "id": "2026-10-30-c1-final-independent-review",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:21:40Z",
+      "commit": "1d7224186ba370798cd10f561fe2ca4d86416e3e",
+      "tree": "6b903d9229a6e68349ade51a4c2e8aad4678033d",
+      "revision_kind": "independently reviewed integrated candidate",
+      "base_commit": "86d2e5f4cd8da34d32efa0d492c0537521554ce5",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "independent settlement and composition review",
+      "command": "Independent Sol source/lifecycle review and strict settlement, disposal, registry, root, child and parallel source-loop probes; independent strict reruns of four composition probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Local fixture providers; independent review and temporary probes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Independent Sol PASS, no actionable findings. Five seam probes pass integrated source; parallel actual read_file group proves held already-started sibling prevents settlement/admission after injected second dispatch-gate failure and cancel. This probe does not inject C2 fsync; separately reviewed real C2 fsync-failure probe covers that boundary. Four composition probes independently rerun strict and pass. Representative actual folder grant plus 63 source grant choices do not claim all platform grant effects or complete Session orchestration. Prior local restart PTY /proc ENOENT reproduced on base; hosted CI e2e passed."
     }
   ]
 }

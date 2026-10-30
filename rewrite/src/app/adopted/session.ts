@@ -63,6 +63,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
       },
       () => network.cancelAll('execution_ended'),
     );
+    let grantHumanRunBudgetExtension: (() => { granted: boolean; extensionsGranted: number }) | undefined;
     try {
       const engineOptions = synchronous(options.engine(context), 'engine options');
       assembly = createAppAdoptedEngine({
@@ -80,6 +81,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
         },
         bindSessionClient(client) {
           clientForNetwork = client;
+          grantHumanRunBudgetExtension = () => client.grantRunBudgetExtension();
           cancelBackground = () => {
             let failure: unknown;
             let failed = false;
@@ -128,6 +130,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
         onSourceEvent: options.onSourceEvent,
         publishFacts: false,
         cancelBackground,
+        grantHumanRunBudgetExtension,
         makeInput(turnId) {
           const state = context.state();
           const prompt = owned.turnPrompt();

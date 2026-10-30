@@ -925,6 +925,7 @@ export function createAdoptedForeground(options: {
         });
       },
       history(command: HistoryMutation): Promise<HistoryMutationResult> {
+        if (poisoned !== undefined) return Promise.reject(poisoned);
         if (closing || context.state().status === 'closed')
           return Promise.reject(new Error('Session handle is closed'));
         if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
@@ -1121,6 +1122,7 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       decide(command: AdoptedInteractionCommand): Promise<void> {
+        if (poisoned !== undefined) return Promise.reject(poisoned);
         if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         const owned = structuredClone(command);
         const operation = decisionTail
@@ -1148,6 +1150,7 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       submit(value: AdoptedSubmissionInput, submitOptions?: AdoptedSubmissionOptions): Promise<Admission> {
+        if (poisoned !== undefined) return Promise.reject(poisoned);
         if (closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
         if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         const captured = captureAdoptedInput(value.input);
@@ -1179,6 +1182,13 @@ export function createAdoptedForeground(options: {
         void result.finally(() => pending.delete(value.requestId)).catch(() => {});
         return result;
       },
+    },
+    failPersistence(error: unknown): void {
+      poisoned ??= error;
+      cancellation.abort();
+      runtime.generationGuard.invalidate();
+      if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
+      active?.cancel();
     },
     shutdown(): Promise<void> {
       shutdownPromise ??= (async () => {

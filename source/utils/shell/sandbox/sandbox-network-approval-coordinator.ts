@@ -53,6 +53,22 @@ export class SandboxNetworkApprovalCoordinator {
     active.resolve(answer);
   }
 
+  cancel(request: SandboxNetworkAccessRequest): boolean {
+    if (this.#disposed) return false;
+    if (this.#active?.request === request) {
+      const active = this.#active;
+      this.#active = null;
+      this.#showNext();
+      active.resolve('deny');
+      return true;
+    }
+    const index = this.#queue.findIndex((pending) => pending.request === request);
+    if (index < 0) return false;
+    const [pending] = this.#queue.splice(index, 1);
+    pending!.resolve('deny');
+    return true;
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;

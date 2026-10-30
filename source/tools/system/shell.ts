@@ -681,6 +681,7 @@ export function createShellToolDefinition(deps: {
   executionContext?: ExecutionContext;
   executeShellCommandImpl?: typeof executeShellCommand;
   shellSandboxRunner?: ShellSandboxRunner;
+  registerSandboxNetworkPauseController?: import('../../utils/shell/execute-shell.js').ExecuteShellOptions['registerSandboxNetworkPauseController'];
   dockerHostControlFactory?: () => DockerHostControl;
   sessionId?: string;
   orchestratorMode?: boolean;
@@ -701,6 +702,7 @@ export function createShellToolDefinition(deps: {
     options: { enabled?: boolean; intervalMs?: number },
   ) => void;
   shellChildRegistry?: ShellChildRegistry;
+  sandboxChildRegistry?: ShellChildRegistry;
   /** Gateway-only: reject any spawn that omits the sanitized env. */
   gatewayMode?: boolean;
   /** Explicit gateway posture; read-only sessions cannot write workspace files via shell. */
@@ -714,6 +716,7 @@ export function createShellToolDefinition(deps: {
     executionContext,
     executeShellCommandImpl = executeShellCommand,
     shellSandboxRunner = getDefaultShellSandboxRunner(),
+    registerSandboxNetworkPauseController,
     dockerHostControlFactory = createDockerHostControl,
     orchestratorMode = false,
     searchViaShell: searchViaShellExplicit,
@@ -724,6 +727,7 @@ export function createShellToolDefinition(deps: {
     backgroundShellWatches,
     configureCheckIn,
     shellChildRegistry,
+    sandboxChildRegistry,
     gatewayMode = false,
     readOnly = false,
     allowUnsandboxed = true,
@@ -1107,9 +1111,10 @@ export function createShellToolDefinition(deps: {
                 })
               : undefined,
             pauseOnSandboxNetworkApproval: sandboxed,
+            registerSandboxNetworkPauseController,
             signal,
             sshService,
-            childRegistry: shellChildRegistry,
+            childRegistry: sandboxed ? sandboxChildRegistry ?? shellChildRegistry : shellChildRegistry,
             onOutputChunk: (stream, text) => {
               if (observedJobId) backgroundShellRegistry?.recordOutputChunk(observedJobId);
               // Monitoring is background-only: the store stream is opened only
@@ -1123,7 +1128,7 @@ export function createShellToolDefinition(deps: {
           const stdout = result.stdout ?? '';
           const rawStderr = result.stderr ?? '';
           const annotatedStderr = sandboxed
-            ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr)
+            ? await shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr)
             : rawStderr;
 
           const readPolicy = settingsService.get('sandbox.readPolicy');
@@ -1290,13 +1295,14 @@ export function createShellToolDefinition(deps: {
         };
 
         const cleanupAfterExecution = async () => {
-          if (sandboxed) {
-            await shellSandboxRunner.cleanupAfterCommand?.();
+          try {
+            if (sandboxed) await shellSandboxRunner.cleanupAfterCommand?.();
+          } finally {
+            sandboxLeaseRelease?.();
+            sandboxLeaseRelease = undefined;
+            dockerHostControl?.cleanup();
+            restoreForegroundCorrelation();
           }
-          sandboxLeaseRelease?.();
-          sandboxLeaseRelease = undefined;
-          dockerHostControl?.cleanup();
-          restoreForegroundCorrelation();
         };
 
         if (background) {
@@ -1400,13 +1406,14 @@ export function createShellToolDefinition(deps: {
         return (await executePreparedCommand(toolSignal)).output;
       } finally {
         if (!backgroundCleanupDeferred) {
-          if (sandboxed) {
-            await shellSandboxRunner.cleanupAfterCommand?.();
+          try {
+            if (sandboxed) await shellSandboxRunner.cleanupAfterCommand?.();
+          } finally {
+            sandboxLeaseRelease?.();
+            sandboxLeaseRelease = undefined;
+            dockerHostControl?.cleanup();
+            restoreForegroundCorrelation();
           }
-          sandboxLeaseRelease?.();
-          sandboxLeaseRelease = undefined;
-          dockerHostControl?.cleanup();
-          restoreForegroundCorrelation();
         }
       }
     },

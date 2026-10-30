@@ -113,6 +113,10 @@ jobs:
           for mode in basic held fsync; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-history-commands.mts; done
           for mode in plain image skill disabled error retry approval failure cancel; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-memory.mts; done
           pnpm exec tsx rewrite/bench/c3a-owned-handle.mts
+          pnpm exec tsx rewrite/bench/c3a-network.mts
+          pnpm exec tsx rewrite/bench/c3a-network-background.mts
+          for mode in running late; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-network-nested.mts; done
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-network-kill.mts
           node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-capture.mts
           for mode in repeat batch reject ask-nav ask-cancel; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-interactions.mts; done
           pnpm exec tsx rewrite/bench/c3a-retry-turn.mts

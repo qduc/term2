@@ -60,6 +60,10 @@ export interface AdoptedSubmissionPort {
   decide(command: AdoptedInteractionCommand): Promise<void>;
   retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult>;
   interruptFromUser(): Promise<void>;
+  readonly networkApproval?: Pick<
+    ReturnType<typeof import('./network-authority.js').createNetworkAuthority>,
+    'getSnapshot' | 'subscribe' | 'decide'
+  >;
 }
 export interface AdoptedAdmissionContext extends SessionDriverContext {
   admit(

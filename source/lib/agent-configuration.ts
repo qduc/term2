@@ -65,6 +65,7 @@ export interface AgentConfigurationDeps {
   /** Root-session-owned output store + watch layer; nested clients omit it. */
   backgroundShellOutput?: BackgroundShellOutputBundle;
   shellChildRegistry?: ShellChildRegistry;
+  scopedSandbox?: import('../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
   /** False for non-interactive / headless sessions where user prompts cannot be answered. */
@@ -120,6 +121,7 @@ export class AgentConfiguration implements AgentSource {
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
   #shellChildRegistry?: ShellChildRegistry;
+  #scopedSandbox?: import('../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   #allowBackgroundShell: boolean;
   #allowAskUser: boolean;
   #sessionBrowser?: SessionBrowser;
@@ -175,6 +177,7 @@ export class AgentConfiguration implements AgentSource {
     this.#backgroundShellRegistry = deps.backgroundShellRegistry;
     this.#backgroundShellOutput = deps.backgroundShellOutput;
     this.#shellChildRegistry = deps.shellChildRegistry;
+    this.#scopedSandbox = deps.scopedSandbox;
     this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
     this.#allowAskUser = deps.allowAskUser ?? true;
     this.#sessionBrowser = deps.sessionBrowser;
@@ -323,6 +326,7 @@ export class AgentConfiguration implements AgentSource {
       backgroundShellRegistry: this.#backgroundShellRegistry,
       backgroundShellOutput: this.#backgroundShellOutput,
       shellChildRegistry: this.#shellChildRegistry,
+      scopedSandbox: this.#scopedSandbox,
       allowBackgroundShell: this.#allowBackgroundShell,
       allowAskUser: this.#allowAskUser,
       sessionBrowser: this.#sessionBrowser,

@@ -18,6 +18,8 @@ const signalChild = (child: ChildProcess): void => {
 export class ShellChildRegistry {
   readonly #children = new Set<ChildProcess>();
 
+  assertAvailable(): void {}
+
   add(child: ChildProcess): void {
     this.#children.add(child);
     processChildren.add(child);
@@ -32,6 +34,25 @@ export class ShellChildRegistry {
     for (const child of this.#children) signalChild(child);
     for (const child of this.#children) processChildren.delete(child);
     this.#children.clear();
+  }
+}
+
+/** A failed graph capability rejects children registered after invalidation. */
+export class InvalidatableShellChildRegistry extends ShellChildRegistry {
+  #invalid = false;
+
+  override assertAvailable(): void {
+    if (this.#invalid) throw new Error('Sandbox execution capability is no longer available');
+  }
+
+  override add(child: ChildProcess): void {
+    super.add(child);
+    if (this.#invalid) super.killAll();
+  }
+
+  invalidate(): void {
+    this.#invalid = true;
+    super.killAll();
   }
 }
 

@@ -29606,6 +29606,38 @@
       "notes": "Merged main 5f329 with both append-only verification histories preserved. Capture production files and bench identical to previously independently reviewed source. Rewrite typecheck, 527-edge layer check, inventory and real Session/Engine capture bench pass. P2 semantic projection and full C4 acceptance remain open."
     },
     {
+      "id": "2026-10-30-c3a-capture-recovery-fix",
+      "timestamp": "2026-10-30T20:58:39Z",
+      "commit": "c765f36d442db9a1f1f6f9f9d2218786d8a7b578",
+      "tree": "291415a5fb0ec9c974c7e8b6540b86a358d4b828",
+      "revision_kind": "source commit",
+      "base_commit": "1495fc59799a76718be3d0788c4e319c29b48445",
+      "task_ids": [
+        "2026-10-30-c3a-capture-recovery-fix"
+      ],
+      "suite": "C3a capture cold recovery CI correction",
+      "command": "rewrite tsc and layer guard; complete CI adopted approval/crash recovery bench step with strict Node and network-enabled local provider; independent retained kill/capture reruns",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; network-enabled local provider and commit hooks."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "PR119 CI run 41126383748 failed c1-adopted-kill cold open: TypeError driver.subscribe is not a function at local-store.ts:530, reproduced at 1495. Recovery-only driver has no live subscription; c765 guards capability while canonical fact capture remains active. Unchanged C1 SIGKILL/reopen/no replay and enhanced actual recovery-only capture+closeLog pass; complete retained CI bench step, rewrite tsc and 527-edge layer guard pass. Independent Sol review and focused reruns pass; prior 6640 acceptance is corrected for this escaped regression. Other CI jobs were green. P2 and full C4 remain open."
+    },
+    {
       "id": "2026-10-30-c3a-network-provisional",
       "timestamp": "2026-10-30T21:05:23Z",
       "commit": "a24257c83f694962965fedf9c3db64b392fa89d7",

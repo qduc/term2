@@ -326,6 +326,10 @@ function sourceDriver(
         current.generation !== decision.generation
       )
         throw new Error('stale C2 interaction decision');
+      const expectedCallId = current.interaction.descriptor.callId ?? current.interaction.interactionId;
+      if (decision.decisions.length !== 1 || decision.decisions[0]?.callId !== expectedCallId) {
+        throw new Error('C2 interaction decision does not match the pending tool call');
+      }
       const answer = decision.decisions.every((item) => item.approve) ? 'y' : 'n';
       await persistDecision({ answer, rejectionReason: decision.decisions.find((item) => item.reason)?.reason });
       await adapter.handleApprovalDecision(answer, decision.decisions.find((item) => item.reason)?.reason);

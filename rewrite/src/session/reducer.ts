@@ -1,6 +1,7 @@
 import type { Item, ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { AdmissionRecord, LogEntry, Project, SessionId, SessionState } from './index.js';
+import { projectRetryEligibility } from './adopted/conversation-retry-projection.js';
 
 export function initialState(id: SessionId, workspace: Workspace, model: ModelRef): SessionState {
   return {
@@ -15,6 +16,7 @@ export function initialState(id: SessionId, workspace: Workspace, model: ModelRe
     pendingInteraction: null,
     queue: [],
     admissions: {},
+    retryEligibility: { turn: false, tool: false },
     canRetry: false,
     binding: null,
     closedAt: null,
@@ -104,10 +106,10 @@ export const projectLifecycle: Project = (state, entry: LogEntry) => {
     }
     case 'session_turn_ended':
       if (state.activeTurnId !== fact.turnId) return next;
-      return { ...next, status: 'idle', activeTurnId: null, pendingInteraction: null, canRetry: false };
+      return { ...next, status: 'idle', activeTurnId: null, pendingInteraction: null };
     case 'session_interrupted':
       if (fact.turnId !== null && state.activeTurnId !== fact.turnId) return next;
-      return { ...next, status: 'interrupted', activeTurnId: null, pendingInteraction: null, canRetry: false };
+      return { ...next, status: 'interrupted', activeTurnId: null, pendingInteraction: null };
     case 'session_closed':
       return {
         ...next,
@@ -115,6 +117,8 @@ export const projectLifecycle: Project = (state, entry: LogEntry) => {
         activeTurnId: null,
         pendingInteraction: null,
         queue: [],
+        retryEligibility: { turn: false, tool: false },
+        canRetry: false,
         closedAt: fact.closedAt,
       };
     default:
@@ -127,8 +131,12 @@ export function withTranscript(
   transcript: { readonly history: readonly unknown[]; readonly messages: readonly unknown[] },
   compatibilityItems: readonly Item[],
 ): SessionState {
+  const retryEligibility = projectRetryEligibility(transcript.history);
+  const available = state.status === 'closed' ? { turn: false, tool: false } : retryEligibility;
   return {
     ...state,
+    retryEligibility: available,
+    canRetry: available.turn,
     history: compatibilityItems,
     providerHistory: transcript.history,
     messages: transcript.messages,
@@ -149,6 +157,5 @@ export function statusFromLegacyAudit(
   return {
     ...state,
     status: outcome === 'empty' || outcome === 'settled' ? 'idle' : 'interrupted',
-    canRetry: false,
   };
 }

@@ -56,6 +56,8 @@ export type SessionState = {
   readonly queue: readonly AdmissionRecord[];
   readonly admissions: Readonly<Record<string, AdmissionRecord>>;
   /** Retry eligibility supplied by the adopted ConversationService policy. */
+  readonly retryEligibility: { readonly turn: boolean; readonly tool: boolean };
+  /** Compatibility alias for retryEligibility.turn. */
   readonly canRetry: boolean;
   readonly binding: SessionBinding | null;
   readonly closedAt: string | null;

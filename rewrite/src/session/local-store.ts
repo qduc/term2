@@ -739,6 +739,7 @@ export class LocalSessionStore implements SessionStore {
         retentionEligibleAt = new Date(Date.parse(closedAt) + 30 * 86400000).toISOString(),
       ) => {
         ensureOpen();
+        context.assertHealthy();
         if (settingsReserved || closingLog) throw new Error('Session mutation is in progress');
         if (current.status === 'closed') return;
         closingLog = true;

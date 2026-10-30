@@ -28580,6 +28580,291 @@
         "/home/qduc/coord/term2/tasks/bare-default/independent-coverage-note.md"
       ],
       "notes": "Independent executed checks and exact counts/commands in report; not counted as a full suite. Read-only first agent and provider503 failed worker did NOT count as acceptance."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-bare-default"],
+      "commit": "99e31c517c6c5b1df5c7b363eb624e7894a34651",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "9aaff00e62e07b2eebaf42c18bea9d1f423877ee",
+      "command_complete": true,
+      "id": "2026-10-30-bare-default-main-build",
+      "suite": "production build",
+      "command": "pnpm --dir /home/qduc/term2 build",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Local main, freshly built merged CLI 0.40.0-dev+99e31c5; isolated fixture state and loopback providers. Main tree exactly matches accepted feature tree. No live coordinator/bridge restart, activation, user-state edits, remote deployment or paid API calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/bare-default/integration-main-build.log",
+        "/home/qduc/coord/term2/tasks/bare-default/integration-main-protected-before.json",
+        "/home/qduc/coord/term2/tasks/bare-default/integration-main-protected-after.json"
+      ],
+      "notes": "Normal build after --no-ff merge; main previous output retained in dist.bak. First shell attempt rejected set -o pipefail before pnpm started; that attempt did not run a build. Protected active/rollback tree fingerprints, startup selector hash and nightly timer match before/after."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-bare-default"],
+      "commit": "99e31c517c6c5b1df5c7b363eb624e7894a34651",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "9aaff00e62e07b2eebaf42c18bea9d1f423877ee",
+      "command_complete": true,
+      "id": "2026-10-30-bare-default-main-typecheck",
+      "suite": "typecheck",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Local main, freshly built merged CLI 0.40.0-dev+99e31c5; isolated fixture state and loopback providers. Main tree exactly matches accepted feature tree. No live coordinator/bridge restart, activation, user-state edits, remote deployment or paid API calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/bare-default/integration-main-typecheck.log"],
+      "notes": ""
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-bare-default"],
+      "commit": "99e31c517c6c5b1df5c7b363eb624e7894a34651",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "9aaff00e62e07b2eebaf42c18bea9d1f423877ee",
+      "command_complete": true,
+      "id": "2026-10-30-bare-default-main-lint",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Local main, freshly built merged CLI 0.40.0-dev+99e31c5; isolated fixture state and loopback providers. Main tree exactly matches accepted feature tree. No live coordinator/bridge restart, activation, user-state edits, remote deployment or paid API calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "diagnostic": "ESLint: 9431 errors / 34 warnings; exit 1 before Prettier. All 9431 errors and 3 warnings belong to untracked .cache/.coord/.term2/packages artifacts; tracked files have 0 errors / 31 warnings.",
+          "classification": "confirmed-untracked-workspace-artifact-scan",
+          "evidence": "/home/qduc/coord/term2/tasks/bare-default/integration-main-lint-ownership.json"
+        }
+      ],
+      "evidence": ["/home/qduc/coord/term2/tasks/bare-default/integration-main-lint.log"],
+      "notes": "Normal pnpm lint did not pass. Direct file ownership classification against git ls-files establishes scope; older 2026-10-25-normal-main-lint ledger has identical counts/paths, but no claim that every old artifact was reproduced on base. Artifacts and lint configuration preserved. Separate tracked-file checks below passed."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-bare-default"],
+      "commit": "99e31c517c6c5b1df5c7b363eb624e7894a34651",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "9aaff00e62e07b2eebaf42c18bea9d1f423877ee",
+      "command_complete": true,
+      "id": "2026-10-30-bare-default-main-static",
+      "suite": "static",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Local main, freshly built merged CLI 0.40.0-dev+99e31c5; isolated fixture state and loopback providers. Main tree exactly matches accepted feature tree. No live coordinator/bridge restart, activation, user-state edits, remote deployment or paid API calls."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/bare-default/integration-main-static.log"],
+      "notes": ""
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-bare-default"],
+      "commit": "99e31c517c6c5b1df5c7b363eb624e7894a34651",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "9aaff00e62e07b2eebaf42c18bea9d1f423877ee",
+      "command_complete": true,
+      "id": "2026-10-30-bare-default-main-integration",
+      "suite": "focused integration",
+      "command": "pnpm exec vitest run --config vitest.integration.config.ts source/cli-headless.integration.test.ts source/services/memory/personal-memory.integration.test.ts source/gateway/runtime-factory.integration.test.ts --reporter=verbose",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {
+          "NODE_ENV": "test",
+          "TERM2_CI_PREBUILT_CLI": "1"
+        },
+        "notes": "Local main, freshly built merged CLI 0.40.0-dev+99e31c5; isolated fixture state and loopback providers. Main tree exactly matches accepted feature tree. No live coordinator/bridge restart, activation, user-state edits, remote deployment or paid API calls."
+      },
+      "result": {
+        "passed": 56,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/bare-default/integration-main-integration.log"],
+      "notes": "Focused integration only: headless 43, personal memory 9, gateway runtime 4. TERM2_CI_PREBUILT_CLI selects this exact freshly built main dist/cli.js, rather than a separately emitted CLI."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-bare-default"],
+      "commit": "99e31c517c6c5b1df5c7b363eb624e7894a34651",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "9aaff00e62e07b2eebaf42c18bea9d1f423877ee",
+      "command_complete": true,
+      "id": "2026-10-30-bare-default-main-provider",
+      "suite": "focused provider black-box",
+      "command": "pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/profile-default.blackbox.ts scripts/provider-black-box/personal-memory-context.blackbox.ts --reporter=verbose",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Local main, freshly built merged CLI 0.40.0-dev+99e31c5; isolated fixture state and loopback providers. Main tree exactly matches accepted feature tree. No live coordinator/bridge restart, activation, user-state edits, remote deployment or paid API calls."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/bare-default/integration-main-provider.log"],
+      "notes": "Actual built CLI with PTY + loopback HTTP fixtures: legacy Standard settings/history, typed retired aliases/picker, Bare rollover successor/brief/lineage, unchanged settings and history prefix; personal-memory append/resume/opt-out in codex Sol, codex Luna and OpenAI Luna protocol variants. No real backend model behavior measured."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-bare-default"],
+      "commit": "99e31c517c6c5b1df5c7b363eb624e7894a34651",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "9aaff00e62e07b2eebaf42c18bea9d1f423877ee",
+      "command_complete": true,
+      "id": "2026-10-30-bare-default-main-tracked-eslint",
+      "suite": "tracked source lint",
+      "command": "pnpm exec eslint --no-warn-ignored <1107 tracked JS/TS paths selected from git ls-files -z>",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Local main, freshly built merged CLI 0.40.0-dev+99e31c5; isolated fixture state and loopback providers. Main tree exactly matches accepted feature tree. No live coordinator/bridge restart, activation, user-state edits, remote deployment or paid API calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/bare-default/integration-main-tracked-eslint.log",
+        "/home/qduc/coord/term2/tasks/bare-default/integration-main-tracked-lint.json"
+      ],
+      "notes": "All tracked JS/TS extensions .js/.mjs/.cjs/.jsx/.ts/.tsx/.mts/.cts; 0 errors / 31 existing warnings. Normal project ignore rules retained. Diagnostic follow-up to workspace-wide lint failure; not mislabeled as pnpm lint success."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-bare-default"],
+      "commit": "99e31c517c6c5b1df5c7b363eb624e7894a34651",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "9aaff00e62e07b2eebaf42c18bea9d1f423877ee",
+      "command_complete": true,
+      "id": "2026-10-30-bare-default-main-tracked-prettier",
+      "suite": "tracked formatting",
+      "command": "pnpm exec prettier --check --ignore-unknown <2646 tracked paths selected from git ls-files -z>",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Local main, freshly built merged CLI 0.40.0-dev+99e31c5; isolated fixture state and loopback providers. Main tree exactly matches accepted feature tree. No live coordinator/bridge restart, activation, user-state edits, remote deployment or paid API calls."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/bare-default/integration-main-tracked-prettier.log",
+        "/home/qduc/coord/term2/tasks/bare-default/integration-main-tracked-lint.json"
+      ],
+      "notes": "All tracked paths passed under normal ignore rules; diagnostic follow-up, not a successful rerun of pnpm lint."
     }
   ]
 }

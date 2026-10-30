@@ -1,4 +1,4 @@
-import type { NestedRunDriverFactory } from '../contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../contracts/nested-run-driver.js';
 import type { DiscordSend } from '../services/discord/discord-outbound.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
@@ -11,6 +11,7 @@ import type { AgentFactoryDeps } from './agent-factory.js';
 import { buildAgent } from './agent-factory.js';
 import { createEditorImpl } from './editor-impl.js';
 import { getProvider } from '../providers/index.js';
+import type { ProviderDefinition } from '../providers/registry.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
@@ -37,7 +38,10 @@ export interface AgentSource {
 }
 
 export interface AgentConfigurationDeps {
+  assembleAgent?: typeof buildAgent;
+  providerCapabilities?: (providerId: string) => ProviderDefinition['capabilities'];
   driverFactory?: NestedRunDriverFactory;
+  modelBinding?: NestedModelBinding;
   logger: ILoggingService;
   settings: ISettingsService;
   getGoal?: () => DurableGoal | undefined;
@@ -96,6 +100,9 @@ export class AgentConfiguration implements AgentSource {
   #onConfigChanged?: (changedKey?: string) => void;
 
   #driverFactory?: NestedRunDriverFactory;
+  #modelBinding?: NestedModelBinding;
+  #assembleAgent?: typeof buildAgent;
+  #providerCapabilities?: (providerId: string) => ProviderDefinition['capabilities'];
   #logger: ILoggingService;
   #settings: ISettingsService;
   #getGoal?: () => DurableGoal | undefined;
@@ -148,6 +155,9 @@ export class AgentConfiguration implements AgentSource {
   ) {
     // Store deps
     this.#driverFactory = deps.driverFactory;
+    this.#modelBinding = deps.modelBinding;
+    this.#assembleAgent = deps.assembleAgent;
+    this.#providerCapabilities = deps.providerCapabilities;
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#getGoal = deps.getGoal;
@@ -196,7 +206,7 @@ export class AgentConfiguration implements AgentSource {
       this.#agent = config.agentOverride;
     } else {
       this.#isTransientClient = false;
-      const buildResult = buildAgent(
+      const buildResult = (this.#assembleAgent ?? buildAgent)(
         { selection: this.#selection, reasoningEffort: config.reasoningEffort },
         this.#buildFactoryDeps(),
       );
@@ -208,7 +218,9 @@ export class AgentConfiguration implements AgentSource {
   // AgentSource implementation
   getAgent(sessionId?: string, promptCacheKey?: string): ApplicationAgent {
     if (sessionId && !this.#isTransientClient) {
-      const capabilities = getProvider(this.#selection.provider)?.capabilities;
+      const capabilities = this.#providerCapabilities
+        ? this.#providerCapabilities(this.#selection.provider)
+        : getProvider(this.#selection.provider)?.capabilities;
       const supportsPromptCacheKey = capabilities?.supportsPromptCacheKey;
       if (!supportsPromptCacheKey || !sessionId) {
         return this.#agent;
@@ -269,6 +281,7 @@ export class AgentConfiguration implements AgentSource {
   #buildFactoryDeps(approvalPolicyRegistry = this.#approvalPolicyRegistry): AgentFactoryDeps {
     return {
       driverFactory: this.#driverFactory,
+      modelBinding: this.#modelBinding,
       settings: this.#settings,
       logger: this.#logger,
       ...(this.#getGoal ? { getGoal: this.#getGoal } : {}),
@@ -347,7 +360,7 @@ export class AgentConfiguration implements AgentSource {
   rebuildAgent(): void {
     if (this.#isTransientClient) return;
     const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
-    const buildResult = buildAgent(
+    const buildResult = (this.#assembleAgent ?? buildAgent)(
       {
         selection: this.#selection,
         reasoningEffort: this.#reasoningEffort as any,

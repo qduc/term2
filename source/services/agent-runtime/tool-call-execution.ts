@@ -8,7 +8,11 @@ import type {
   ToolExecutionLifecyclePort,
   ToolRegistry,
 } from '../../tools/types.js';
-import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-invariant-error.js';
+import {
+  HarnessInvariantError,
+  isCancellationError,
+  isHarnessInvariantError,
+} from '../../lib/harness-invariant-error.js';
 import { describeError } from '../../utils/error-helpers.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
@@ -63,6 +67,7 @@ export interface ToolCallExecutionContext {
   readonly onCall: (event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>) => void;
   readonly onDispatch: (entry: ToolPlanEntry) => void;
   readonly onExecutionStarted: (callId: string) => void;
+  readonly beforeToolDispatch?: (callId: string) => Promise<void>;
   readonly onToolStall: (input: { name: string; argumentsText: string; effect: AnyToolDefinition['effect'] }) => void;
   readonly onResult: (entry: ToolPlanEntry, result: unknown) => void;
 }
@@ -184,6 +189,21 @@ export class ToolCallExecution {
    * bare call id with no interruption object may select by id, and only when
    * that id is unique among the pending calls.
    */
+  validateApprovalBatch(
+    batch: readonly { readonly callId: string | undefined; readonly interruption: unknown }[],
+  ): void {
+    const seen = new Set<unknown>();
+    for (const decision of batch) {
+      const pending = this.#pendingApprovals.find((entry) => entry.interruption === decision.interruption);
+      if (!pending || seen.has(decision.interruption) || decision.callId !== pending.callId) {
+        throw new HarnessInvariantError(
+          'Approval batch references a stale, copied, duplicate or inconsistent interruption',
+        );
+      }
+      seen.add(decision.interruption);
+    }
+  }
+
   resolveApproval(
     target: { callId: string | undefined; interruption?: unknown },
     decision: 'approved' | 'rejected',
@@ -252,7 +272,7 @@ export class ToolCallExecution {
         },
         'tool.batch.dispatched',
       );
-      for (const entry of group) context.onDispatch(entry);
+      if (!context.beforeToolDispatch) for (const entry of group) context.onDispatch(entry);
       const results =
         group.length > 1
           ? await Promise.allSettled(group.map((entry) => this.#invoke(entry, context)))
@@ -303,8 +323,10 @@ export class ToolCallExecution {
   }
 
   async #invoke(entry: ToolPlanEntry, context: ToolCallExecutionContext): Promise<unknown> {
-    entry.status = 'completed';
-    if (entry.output !== undefined) return entry.output;
+    if (entry.output !== undefined) {
+      entry.status = 'completed';
+      return entry.output;
+    }
     const definition = entry.definition!;
     const callId = entry.event.id;
     const startedAt = Date.now();
@@ -319,6 +341,9 @@ export class ToolCallExecution {
       attempt,
       scope: context.hookScope ?? 'root',
     };
+    await context.beforeToolDispatch?.(callId);
+    if (context.beforeToolDispatch) context.onDispatch(entry);
+    entry.status = 'completed';
     context.onExecutionStarted(callId);
     await this.#notify(() => this.#deps.toolLifecycle?.before(lifecycleContext));
     try {

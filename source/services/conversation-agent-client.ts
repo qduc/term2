@@ -100,10 +100,17 @@ export interface SubagentEventSinkHost {
 
 /** Session acceptance, presentation and policy operations; the runtime owns execution. */
 export interface ConversationTurnSession {
+  readonly approvalBatch?: true;
+  readonly abortPendingModelReads?: true;
+  readonly recordBudgetStopCause?: true;
+  onDetachedModelRead?(operation: Promise<unknown>): void;
   prepare(signal: AbortSignal): Promise<{ input: ProviderInput; options: AgentClientRunOptions } | undefined>;
   beginSegment(stream: AgentStream): void;
   acceptEvent(event: ApplicationRunEvent): void;
   acceptToolDispatch(callId: string): void;
+  onModelDispatch?(input: { readonly requestId: string; readonly providerId?: string; readonly model: string }): void;
+  beforeToolDispatch?(callId: string): Promise<void>;
+  isFatalError?(error: unknown): boolean;
   acceptSegment(stream: AgentStream): void;
   consume(stream: AgentStream): Promise<void>;
   interrupted(stream: AgentStream): Promise<AgentClientRunOptions>;

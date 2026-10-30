@@ -104,6 +104,10 @@ jobs:
         run: |
           pnpm exec tsc -p rewrite/tsconfig.json
           node rewrite/scripts/check-layers.mjs
+      - name: Check adopted approval and crash recovery
+        run: |
+          pnpm exec tsx rewrite/bench/c1-adopted-approval.mts
+          pnpm exec tsx rewrite/bench/c1-adopted-kill.mts
 
   integration:
     runs-on: ubuntu-22.04

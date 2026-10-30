@@ -107,6 +107,8 @@ paths beneath `rewrite/dist/`; adopted imports therefore resolve to the emitted
 pnpm exec tsc -p rewrite/tsconfig.json                 # production typecheck
 node rewrite/scripts/check-layers.mjs                  # production dependency direction
 node rewrite/scripts/build.mjs                         # production build
+pnpm exec tsx rewrite/bench/c1-adopted-approval.mts   # real adopted approval and canonical replay
+pnpm exec tsx rewrite/bench/c1-adopted-kill.mts       # parked approval process-kill recovery
 pnpm exec tsc -p rewrite/tsconfig.native-tracer.json && node rewrite/bench-dist/rewrite/bench/native-tracer/tracer.js
 ```
 

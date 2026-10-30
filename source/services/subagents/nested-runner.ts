@@ -2,6 +2,7 @@ import type {
   NestedRunDriverFactory,
   ApplicationAgent,
   AgentModelSettings,
+  NestedModelBinding,
 } from '../../contracts/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -117,6 +118,7 @@ function parseNestedSubagentResult(raw: unknown): NestedSubagentResult {
 
 export class NestedSubagentRunner {
   #driverFactory?: NestedRunDriverFactory;
+  #modelBinding?: NestedModelBinding;
   #logger: ILoggingService;
   #settings: ISettingsService;
   #sessionContextService: ISessionContextService;
@@ -142,6 +144,7 @@ export class NestedSubagentRunner {
 
   constructor(deps: {
     driverFactory?: NestedRunDriverFactory;
+    modelBinding?: NestedModelBinding;
     logger: ILoggingService;
     settings: ISettingsService;
     sessionContextService: ISessionContextService;
@@ -160,6 +163,7 @@ export class NestedSubagentRunner {
     rolePoolSelector?: SubagentRolePoolSelector;
   }) {
     this.#driverFactory = deps.driverFactory;
+    this.#modelBinding = deps.modelBinding;
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
@@ -432,7 +436,9 @@ export class NestedSubagentRunner {
         const foregroundLease = detailsRecord?.foregroundSubagentLease;
         const signal = detailsRecord?.signal;
         const providerId = definition.provider;
-        const provider = getProvider(providerId);
+        const provider = this.#modelBinding
+          ? this.#modelBinding.providerDefinition(providerId)
+          : getProvider(providerId);
         if (!provider?.createStreamedModel) {
           throw new Error(`Provider '${providerId}' has no application-owned model for nested subagents`);
         }
@@ -446,11 +452,20 @@ export class NestedSubagentRunner {
         const loop = factory({
           resolveMaxParallelToolCalls: () => this.#settings.get('agent.maxParallelToolCalls'),
           resolveModel: (model) =>
-            createStreamedModel(model, {
-              settingsService: this.#settings,
-              loggingService: this.#logger,
-              sessionContextService: this.#sessionContextService,
-            }),
+            this.#modelBinding
+              ? this.#modelBinding.scopedModel(
+                  { provider: providerId, model },
+                  {
+                    settingsService: this.#settings,
+                    loggingService: this.#logger,
+                    sessionContextService: this.#sessionContextService,
+                  },
+                )
+              : createStreamedModel(model, {
+                  settingsService: this.#settings,
+                  loggingService: this.#logger,
+                  sessionContextService: this.#sessionContextService,
+                }),
         });
 
         let stream = loop.startStream(agent, task, {

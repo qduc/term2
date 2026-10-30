@@ -265,6 +265,7 @@ export class ConversationRecord {
       historyCommitted: snapshot.revision !== before,
       lastResponseId: selected.lastResponseId,
       unsettledToolCallIds: this.unsettledToolCallIdsForCurrentTurn(),
+      ...(selected.compactionEvidence ? { compactionEvidence: selected.compactionEvidence } : {}),
     };
     this.#providerContext?.acceptSegment(accepted, this.#checkpointObserver);
     return accepted;

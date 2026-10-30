@@ -1,4 +1,4 @@
-import type { NestedRunDriverFactory } from '../contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../contracts/nested-run-driver.js';
 import type { DiscordSend } from '../services/discord/discord-outbound.js';
 import { resolveModelContextPolicy, resolveOutputAllocation } from '../services/agent-runtime/model-context-policy.js';
 import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../tools/system/run-code/run-code.js';
@@ -51,6 +51,7 @@ import type { ResolvedSubagentLaunch } from './subagent-bridge.js';
 
 export interface AgentFactoryDeps {
   driverFactory?: NestedRunDriverFactory;
+  modelBinding?: NestedModelBinding;
   settings: ISettingsService;
   logger: ILoggingService;
   /** Reads the latest successfully persisted session goal at request time. */
@@ -140,8 +141,12 @@ const READ_ONLY_FILE_MUTATING_TOOLS = new Set(['apply_patch', 'create_file', 'se
 
 type ProviderCapabilities = NonNullable<ProviderDefinition['capabilities']>;
 
-function getProviderCapabilities(providerId: string): ProviderCapabilities {
-  return getProvider(providerId)?.capabilities ?? { supportsConversationChaining: false };
+function getProviderCapabilities(providerId: string, binding?: NestedModelBinding): ProviderCapabilities {
+  return (
+    (binding ? binding.providerDefinition(providerId) : getProvider(providerId))?.capabilities ?? {
+      supportsConversationChaining: false,
+    }
+  );
 }
 
 /** SDK-facing shim props attached to wrapped definitions by the factory; not part of the application contract. */
@@ -176,7 +181,7 @@ export function buildAgentTools({
       );
     }
   }
-  const providerCapabilities = getProviderCapabilities(deps.providerId);
+  const providerCapabilities = getProviderCapabilities(deps.providerId, deps.modelBinding);
   const useStrictToolSchema = shouldUseStrictToolSchema({
     providerId: deps.providerId,
     capabilities: providerCapabilities,
@@ -431,7 +436,7 @@ function buildModelSettings({
   if (
     useFlexServiceTier &&
     deps.serviceTierOverrideForNextRequest !== 'standard' &&
-    getProviderCapabilities(deps.providerId).supportsFlexServiceTier === true
+    getProviderCapabilities(deps.providerId, deps.modelBinding).supportsFlexServiceTier === true
   ) {
     modelSettings.providerData = {
       ...(modelSettings.providerData || {}),
@@ -443,7 +448,7 @@ function buildModelSettings({
   const contextCompactionMode = deps.settings.get('agent.contextCompaction.mode') ?? 'native';
   // Inline `context_management` is api.openai.com only. Codex uses POST
   // /responses/compact at the request boundary instead.
-  const providerCapabilities = getProviderCapabilities(deps.providerId);
+  const providerCapabilities = getProviderCapabilities(deps.providerId, deps.modelBinding);
   if (
     contextCompactionEnabled &&
     contextCompactionMode !== 'local' &&
@@ -471,7 +476,13 @@ function buildModelSettings({
     };
   }
 
-  Object.assign(modelSettings, getProvider(deps.providerId)?.defaultModelSettings?.());
+  Object.assign(
+    modelSettings,
+    (deps.modelBinding
+      ? deps.modelBinding.providerDefinition(deps.providerId)
+      : getProvider(deps.providerId)
+    )?.defaultModelSettings?.(),
+  );
 
   return modelSettings;
 }
@@ -502,6 +513,7 @@ export function buildAgent(
   } = getAgentDefinition(
     {
       driverFactory: deps.driverFactory,
+      modelBinding: deps.modelBinding,
       settingsService: deps.settings,
       loggingService: deps.logger,
       ...(deps.getGoal ? { getGoal: deps.getGoal } : {}),
@@ -544,7 +556,7 @@ export function buildAgent(
     resolvedModel,
   );
 
-  const providerCapabilities = getProviderCapabilities(deps.providerId);
+  const providerCapabilities = getProviderCapabilities(deps.providerId, deps.modelBinding);
   const shouldUseNativePatchToolForModel = shouldUseNativePatchToolPolicy({
     providerId: deps.providerId,
     model: resolvedModel,
@@ -561,8 +573,12 @@ export function buildAgent(
   const isDefaultSetting = deps.settings.get('agent.reasoningEffort') === 'default';
   if (isDefaultSetting && (!effectiveReasoningEffort || effectiveReasoningEffort === 'default')) {
     const defaultReasoningLevel =
-      getModelDefaultReasoningLevel(deps.providerId, resolvedModel) ??
-      getProviderDefaultReasoningLevel(deps.providerId);
+      (deps.modelBinding
+        ? deps.modelBinding.modelDefaultReasoningLevel(deps.providerId, resolvedModel, deps.settings)
+        : getModelDefaultReasoningLevel(deps.providerId, resolvedModel)) ??
+      (deps.modelBinding
+        ? deps.modelBinding.providerDefaultReasoningLevel(deps.providerId)
+        : getProviderDefaultReasoningLevel(deps.providerId));
     if (defaultReasoningLevel) {
       effectiveReasoningEffort = defaultReasoningLevel as ReasoningEffortSetting;
     }

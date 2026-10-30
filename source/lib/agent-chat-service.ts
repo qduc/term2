@@ -18,6 +18,7 @@ import type { AgentClientChatOptions, AgentClientChatResult } from '../services/
 import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import { normalizeUsage } from '../utils/ai/token-usage.js';
 import type { ProviderInputItem } from '../contracts/provider-input.js';
+import type { NestedModelBinding } from '../contracts/nested-run-driver.js';
 
 /** A failed dispatched helper still owns its request accounting. */
 export class AgentChatFailure extends Error {
@@ -32,6 +33,7 @@ export interface AgentChatServiceDeps {
   settings: ISettingsService;
   logger: ILoggingService;
   sessionContextService?: ISessionContextService;
+  modelBinding?: NestedModelBinding;
 }
 
 /**
@@ -44,6 +46,7 @@ export interface AgentChatServiceDeps {
 export class AgentChatService {
   #deps: AgentChatServiceDeps;
   #modelCache = new Map<string, Promise<StreamedModelTurn>>();
+  #helperLeases = new Set<{ release(): Promise<void> }>();
   #activeRunLoops = new Set<ApplicationRunLoop>();
   #disposePromise?: Promise<void>;
 
@@ -62,12 +65,14 @@ export class AgentChatService {
     this.abort();
     const models = [...this.#modelCache.values()];
     this.#modelCache.clear();
-    this.#disposePromise = Promise.allSettled(
-      models.map(async (cached) => {
-        const model = await cached;
-        await (model as StreamedModelTurn & { close?: () => unknown }).close?.();
-      }),
-    ).then(() => undefined);
+    const releases = this.#deps.modelBinding
+      ? [...this.#helperLeases].map((lease) => lease.release())
+      : models.map(async (cached) => {
+          const model = await cached;
+          await (model as StreamedModelTurn & { close?: () => unknown }).close?.();
+        });
+    this.#helperLeases.clear();
+    this.#disposePromise = Promise.allSettled(releases).then(() => undefined);
     return this.#disposePromise;
   }
 
@@ -92,7 +97,9 @@ export class AgentChatService {
     const cached = this.#modelCache.get(key);
     if (cached) return cached;
 
-    const providerDef = getProvider(providerId);
+    const providerDef = this.#deps.modelBinding
+      ? this.#deps.modelBinding.providerDefinition(providerId)
+      : getProvider(providerId);
     if (!providerDef?.createStreamedModel) {
       const providerLabel = providerDef?.label || providerId;
       throw new Error(
@@ -101,13 +108,14 @@ export class AgentChatService {
       );
     }
     const { settings, logger, sessionContextService } = this.#deps;
-    const created = Promise.resolve(
-      providerDef.createStreamedModel(modelId, {
-        settingsService: settings,
-        loggingService: logger,
-        sessionContextService,
-      }),
-    );
+    const modelDeps = {
+      settingsService: settings,
+      loggingService: logger,
+      sessionContextService,
+    };
+    const lease = this.#deps.modelBinding?.acquireHelper({ provider: providerId, model: modelId }, modelDeps);
+    if (lease) this.#helperLeases.add(lease);
+    const created = Promise.resolve(lease ? lease.original : providerDef.createStreamedModel(modelId, modelDeps));
     this.#modelCache.set(key, created);
     created.catch(() => {
       if (this.#modelCache.get(key) === created) this.#modelCache.delete(key);
@@ -123,7 +131,18 @@ export class AgentChatService {
   ): Promise<any> {
     // Resolve the model from inside the loop so cancellation also reaches a
     // provider factory that performs asynchronous initialization.
-    const loop = new ApplicationRunLoop({ resolveModel: () => this.#getModel(providerId, agent.model) });
+    const binding = this.#deps.modelBinding;
+    if (binding?.hasUnsettledReads()) throw new Error('A prior adopted model read has not settled');
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => this.#getModel(providerId, agent.model),
+      ...(binding
+        ? {
+            abortPendingModelReads: true as const,
+            recordBudgetStopCause: true as const,
+            onDetachedModelRead: (operation: Promise<unknown>) => binding.trackDetachedRead(operation),
+          }
+        : {}),
+    });
     this.#activeRunLoops.add(loop);
     try {
       const stream = loop.startStream(agent, input, { ...options, providerId });
@@ -218,7 +237,9 @@ export class AgentChatService {
     const isDefaultSetting = settings.get('agent.reasoningEffort') === 'default';
     if (tempProvider === 'codex' && isDefaultSetting) {
       try {
-        await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
+        if (this.#deps.modelBinding)
+          await this.#deps.modelBinding.fetchModels('codex', { settingsService: settings, loggingService: logger });
+        else await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
         agentConfig.refreshAgent({ configurationChanged: false });
       } catch (_err) {
         // ignore
@@ -255,7 +276,12 @@ export class AgentChatService {
         let effectiveEffort = tempEffort;
         if (isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
           const defaultReasoningLevel =
-            getModelDefaultReasoningLevel(tempProvider, tempModel) ?? getProviderDefaultReasoningLevel(tempProvider);
+            (this.#deps.modelBinding
+              ? this.#deps.modelBinding.modelDefaultReasoningLevel(tempProvider, tempModel, settings)
+              : getModelDefaultReasoningLevel(tempProvider, tempModel)) ??
+            (this.#deps.modelBinding
+              ? this.#deps.modelBinding.providerDefaultReasoningLevel(tempProvider)
+              : getProviderDefaultReasoningLevel(tempProvider));
           if (defaultReasoningLevel) {
             effectiveEffort = defaultReasoningLevel as ReasoningEffortSetting;
           }
@@ -320,7 +346,9 @@ export class AgentChatService {
     const isDefaultSetting = settings.get('agent.reasoningEffort') === 'default';
     if (tempProvider === 'codex' && isDefaultSetting) {
       try {
-        await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
+        if (this.#deps.modelBinding)
+          await this.#deps.modelBinding.fetchModels('codex', { settingsService: settings, loggingService: logger });
+        else await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
         agentConfig.refreshAgent({ configurationChanged: false });
       } catch (_err) {
         // ignore
@@ -337,7 +365,12 @@ export class AgentChatService {
       let effectiveEffort = tempEffort;
       if (isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
         const defaultReasoningLevel =
-          getModelDefaultReasoningLevel(tempProvider, tempModel) ?? getProviderDefaultReasoningLevel(tempProvider);
+          (this.#deps.modelBinding
+            ? this.#deps.modelBinding.modelDefaultReasoningLevel(tempProvider, tempModel, settings)
+            : getModelDefaultReasoningLevel(tempProvider, tempModel)) ??
+          (this.#deps.modelBinding
+            ? this.#deps.modelBinding.providerDefaultReasoningLevel(tempProvider)
+            : getProviderDefaultReasoningLevel(tempProvider));
         if (defaultReasoningLevel) {
           effectiveEffort = defaultReasoningLevel as ReasoningEffortSetting;
         }

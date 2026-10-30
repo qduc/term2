@@ -1,98 +1,117 @@
 {
-  "about": "Port tracker. One entry per feature of the current architecture. status: todo | in_progress | ported | dropped. parity: scenario ids in rewrite/parity/scenarios that prove it. Entries with manual: true are behaviours no extractor can see. Maintained by rewrite/parity/inventory.mjs.",
+  "about": "Port tracker. One entry per feature of the current architecture. status: todo | in_progress | adopted | ported | dropped. parity: scenario ids in rewrite/parity/scenarios that prove it. Entries with manual: true are behaviours no extractor can see. Maintained by rewrite/parity/inventory.mjs.",
   "features": {
     "behaviour:approval-call-binding": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:auto-approve-policy": {
       "status": "todo",
       "manual": true,
       "parity": [
-        "shell-auto-approve"
-      ]
+        "shell-auto-approve",
+        "tools-batch"
+      ],
+      "consumedByNewCode": true
     },
     "behaviour:background-shell-jobs": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:context-compaction": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:headless-prompt-run": {
       "status": "todo",
       "manual": true,
       "parity": [
-        "headless-plain-answer"
-      ]
+        "headless-plain-answer",
+        "settings-batch"
+      ],
+      "consumedByNewCode": true
     },
     "behaviour:headless-refuses-unapproved-tools": {
       "status": "todo",
       "manual": true,
       "parity": [
         "shell-refused-without-approval"
-      ]
+      ],
+      "consumedByNewCode": true
     },
     "behaviour:input-queue": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:interactive-tui": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:mcp-servers": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:old-conversations-resumable": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:profile-tool-surface": {
       "status": "todo",
       "manual": true,
       "parity": [
         "headless-plain-answer",
-        "unknown-tool-call"
-      ]
+        "unknown-tool-call",
+        "settings-batch"
+      ],
+      "consumedByNewCode": true
     },
     "behaviour:resume-replays-history": {
       "status": "todo",
       "manual": true,
       "parity": [
         "resume-follow-up"
-      ]
+      ],
+      "consumedByNewCode": true
     },
     "behaviour:sandbox-execution": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:skills-discovery": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:ssh-remote-workspace": {
       "status": "todo",
       "manual": true,
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "behaviour:unknown-tool-result": {
       "status": "todo",
       "manual": true,
       "parity": [
         "unknown-tool-call"
-      ]
+      ],
+      "consumedByNewCode": true
     },
     "cli-flag:auto-approve": {
       "status": "todo",
@@ -245,312 +264,374 @@
     "gateway-route:abort": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:command_invoke": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:credential_delete": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:credential_write": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:events_connect": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:interaction_resolve": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:message_submit": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:model_list": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:oauth_delete": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:oauth_login": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:oauth_select": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:session_create": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:session_list": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:session_read": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:session_update": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:settings_read": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:settings_write": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:workspace_candidate_browse": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:workspace_candidate_select": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:workspace_candidate_validate": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "gateway-route:workspace_list": {
       "status": "todo",
       "source": "source/gateway/gateway.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:approval.requested": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:approval.resolved": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:session.end": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:session.start": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:status.change": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:tool.after": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:tool.before": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:tool.error": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:turn.end": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:turn.error": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "hook-event:turn.start": {
       "status": "todo",
       "source": "source/services/hooks/hook-contracts.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:approval_required": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:approval_resolved": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:assistant_journal_delta": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:assistant_journal_item": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:assistant_turn": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:background_shell_completed": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:background_shell_output": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:background_shell_started": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:command_message": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:context_checkpoint_created": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:error": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:events_retracted": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:goal_changed": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:memory_injected": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:openai_root_checkpoint_lifecycle": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:openai_root_selector_parity": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:session_cleared": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:session_init": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:session_rollover": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:settings_changed": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:subagent_completed": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:subagent_interrupted": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:subagent_question": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:subagent_started": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:subagent_tool_started": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:subagent_transferred": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:tool_result": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:tool_started": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:undo": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "log-event:user_message": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
-      "parity": []
+      "parity": [],
+      "consumedByNewCode": true
     },
     "provider:ai-sdk-anthropic": {
       "status": "todo",
@@ -715,7 +796,9 @@
     "setting:agent.maxOutputTokens": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:agent.maxParallelToolCalls": {
       "status": "todo",
@@ -760,7 +843,9 @@
     "setting:agent.modelSelection": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:agent.openai.apiKey": {
       "status": "todo",
@@ -790,7 +875,9 @@
     "setting:agent.reasoningEffort": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:agent.retryAttempts": {
       "status": "todo",
@@ -910,7 +997,9 @@
     "setting:agent.temperature": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:agent.transport": {
       "status": "todo",
@@ -930,7 +1019,9 @@
     "setting:app.activeProfileId": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:app.liteMode": {
       "status": "todo",
@@ -1180,7 +1271,9 @@
     "setting:tools.fileWrite.enabled": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:tools.logFileOperations": {
       "status": "todo",
@@ -1190,7 +1283,9 @@
     "setting:tools.memory.enabled": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:tools.mentor.enabled": {
       "status": "todo",
@@ -1205,7 +1300,9 @@
     "setting:tools.shell.enabled": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:tools.skills.enabled": {
       "status": "todo",
@@ -1215,7 +1312,9 @@
     "setting:tools.subagents.enabled": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:tools.userInteraction.enabled": {
       "status": "todo",
@@ -1225,7 +1324,9 @@
     "setting:tools.web.enabled": {
       "status": "todo",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [
+        "settings-batch"
+      ]
     },
     "setting:ui.displayMode": {
       "status": "todo",
@@ -1485,7 +1586,9 @@
     "tool:grep": {
       "status": "todo",
       "source": "source/tools/file/grep.ts",
-      "parity": []
+      "parity": [
+        "tools-batch"
+      ]
     },
     "tool:list_models": {
       "status": "todo",
@@ -1540,7 +1643,9 @@
     "tool:read_file": {
       "status": "todo",
       "source": "source/tools/file/read-file.ts",
-      "parity": []
+      "parity": [
+        "tools-batch"
+      ]
     },
     "tool:run_agent_workflow": {
       "status": "todo",
@@ -1550,7 +1655,9 @@
     "tool:run_code": {
       "status": "todo",
       "source": "source/tools/system/run-code/run-code-runtime.ts",
-      "parity": []
+      "parity": [
+        "tools-batch"
+      ]
     },
     "tool:run_explorer": {
       "status": "todo",
@@ -1560,7 +1667,9 @@
     "tool:run_subagent": {
       "status": "todo",
       "source": "source/tools/agent/run-subagent.ts",
-      "parity": []
+      "parity": [
+        "subagent-batch"
+      ]
     },
     "tool:run_subagent_async": {
       "status": "todo",
@@ -1570,7 +1679,9 @@
     "tool:search_replace": {
       "status": "todo",
       "source": "source/tools/tool-names.ts",
-      "parity": []
+      "parity": [
+        "tools-batch"
+      ]
     },
     "tool:send_message": {
       "status": "todo",
@@ -1587,7 +1698,8 @@
       "source": "source/tools/system/shell.ts",
       "parity": [
         "shell-auto-approve",
-        "shell-refused-without-approval"
+        "shell-refused-without-approval",
+        "tools-batch"
       ]
     },
     "tool:web_fetch": {

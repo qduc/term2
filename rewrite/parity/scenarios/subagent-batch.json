@@ -1,0 +1,36 @@
+{
+  "id": "subagent-batch",
+  "description": "A headless turn launches a background explorer subagent and reports its result.",
+  "runs": [
+    {
+      "args": ["--auto-approve", "ask an explorer subagent to inspect the workspace and report its files"]
+    }
+  ],
+  "provider": [
+    {
+      "toolCalls": [
+        {
+          "name": "run_subagent",
+          "arguments": {
+            "execution": "background",
+            "role": "explorer",
+            "task": "Inspect the workspace and report the names of its files.",
+            "name": "batch-explorer",
+            "check_in": {
+              "enabled": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "text": "The explorer started.\n"
+    },
+    {
+      "text": "The explorer reported notes.txt."
+    },
+    {
+      "text": "The explorer finished and found notes.txt."
+    }
+  ]
+}

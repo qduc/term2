@@ -1057,6 +1057,7 @@ export class SubagentToolFactory {
   #nestedCompatibility?: NestedToolCompatibilityState;
   #readOnly: boolean;
   #shellSandboxRunner?: ShellSandboxRunner;
+  #scopedSandbox?: import('../../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   #runExplorer?: ExplorerRunner;
   #sessionBrowser?: SessionBrowser;
 
@@ -1071,6 +1072,7 @@ export class SubagentToolFactory {
     nestedCompatibility?: NestedToolCompatibilityState;
     readOnly?: boolean;
     shellSandboxRunner?: ShellSandboxRunner;
+    scopedSandbox?: import('../../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     /** Prior-session transcript browser; provisioned to the librarian only. */
     sessionBrowser?: SessionBrowser;
   }) {
@@ -1083,7 +1085,8 @@ export class SubagentToolFactory {
     this.#skillsService = deps.skillsService;
     this.#nestedCompatibility = deps.nestedCompatibility;
     this.#readOnly = deps.readOnly ?? false;
-    this.#shellSandboxRunner = deps.shellSandboxRunner;
+    this.#shellSandboxRunner = deps.scopedSandbox?.runner ?? deps.shellSandboxRunner;
+    this.#scopedSandbox = deps.scopedSandbox;
     this.#sessionBrowser = deps.sessionBrowser;
     this.#memoryCapabilities = new MemoryCapabilityBuilder(deps.settings);
   }
@@ -1238,6 +1241,12 @@ export class SubagentToolFactory {
           readOnly: this.#readOnly,
           nestedCompatibility: this.#nestedCompatibility,
           ...(this.#shellSandboxRunner ? { shellSandboxRunner: this.#shellSandboxRunner } : {}),
+          ...(this.#scopedSandbox
+            ? {
+                registerSandboxNetworkPauseController: this.#scopedSandbox.registerPauseController,
+                sandboxChildRegistry: this.#scopedSandbox.childRegistry,
+              }
+            : {}),
         }),
         fsReadScope,
       );

@@ -7,6 +7,10 @@ import {
   isTemperatureSetting,
 } from '../../../../source/services/settings/session-runtime-settings.js';
 import type { AgentClient } from '../../../../source/lib/agent-client.js';
+import { InvalidatableShellChildRegistry } from '../../../../source/utils/shell/shell-child-registry.js';
+import { createNetworkAuthority } from '../../session/adopted/network-authority.js';
+import { createScopedSandboxNetworkAccess } from '../../../../source/utils/shell/sandbox/scoped-sandbox-network-access.js';
+import { ScopedSandboxRunner } from '../../../../source/utils/shell/sandbox/scoped-sandbox-runner.js';
 import { createSessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
 import type { SessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
 import { createAdoptedForeground } from '../../session/adopted/foreground.js';
@@ -42,6 +46,37 @@ export function createAppAdoptedSessionHandleFactory(options: {
     let ownedClient: AgentClient | undefined;
     let graphModels: AdoptedModelRegistry | undefined;
     let grantHumanRunBudgetExtension: (() => { granted: boolean; extensionsGranted: number }) | undefined;
+    const scopedChildren = new InvalidatableShellChildRegistry();
+    let clientForNetwork: import('../../../../source/lib/agent-client.js').AgentClient | undefined;
+    let foregroundForNetwork: ReturnType<typeof createAdoptedForeground> | undefined;
+    let scope: ReturnType<typeof createScopedSandboxNetworkAccess>;
+    const network = createNetworkAuthority(
+      context,
+      () => {
+        const failure = new Error('Network persistence failed');
+        context.poison(failure);
+        foregroundForNetwork?.failPersistence(failure);
+        scopedChildren.invalidate();
+        clientForNetwork?.disposeShellChildren();
+        void runner.dispose();
+      },
+      (request, reason) => {
+        scope?.cancel(request, reason);
+      },
+    );
+    scope = createScopedSandboxNetworkAccess({
+      workspaceRoot: context.state().workspace.root,
+      requestApproval: network.requestApproval,
+      isLive: network.isLive,
+    });
+    const runner = new ScopedSandboxRunner(
+      scope,
+      () => {
+        scopedChildren.invalidate();
+        void network.cancelAll('helper_lost').catch(() => {});
+      },
+      () => network.cancelAll('execution_ended'),
+    );
     try {
       const engineOptions = synchronous(options.engine(context), 'engine options');
       const runtimeOptions = synchronous(options.runtime(context), 'runtime options');
@@ -65,11 +100,12 @@ export function createAppAdoptedSessionHandleFactory(options: {
           ...engineOptions.clientOptions,
           selection: initial.snapshot.selection,
           reasoningEffort: initial.snapshot.reasoningEffort,
-          deps: { ...engineOptions.clientOptions.deps, settings: binding.service },
+          deps: { ...engineOptions.clientOptions.deps, settings: binding.service, scopedSandbox: { runner, registerPauseController: scope.registerPauseController, childRegistry: scopedChildren } },
         },
         bindSessionClient(boundClient) {
           ownedClient = boundClient;
           const client = boundClient;
+          clientForNetwork = client;
           grantHumanRunBudgetExtension = () => client.grantRunBudgetExtension();
           cancelBackground = () => {
             let failure: unknown;
@@ -121,6 +157,19 @@ export function createAppAdoptedSessionHandleFactory(options: {
           },
         ]);
       const graph = runtime;
+      const originalPrepareRollover = graph.prepareRollover;
+      const assertNetworkIdle = () => {
+        if (network.hasPending()) throw new Error('Session rollover is blocked while a network approval is pending.');
+      };
+      graph.prepareRollover = (id, startedAt) => {
+        assertNetworkIdle();
+        const commit = originalPrepareRollover(id, startedAt);
+        return () => {
+          assertNetworkIdle();
+          commit();
+        };
+      };
+      graph.rollover = (id, startedAt) => graph.prepareRollover(id, startedAt)();
       const owned = assembly;
       const foreground = createAdoptedForeground({
         context,
@@ -156,14 +205,50 @@ export function createAppAdoptedSessionHandleFactory(options: {
           };
         },
       });
+      foregroundForNetwork = foreground;
       let closing: Promise<void> | undefined;
+      let networkClosing: Promise<void> | undefined;
+      const closeNetwork = () => {
+        networkClosing ??= (async () => {
+          let failure: unknown;
+          try {
+            scopedChildren.invalidate();
+          } catch (error) {
+            failure ??= error;
+          }
+          try {
+            clientForNetwork?.disposeShellChildren();
+          } catch (error) {
+            failure ??= error;
+          }
+          try {
+            cancelBackground?.();
+          } catch (error) {
+            failure ??= error;
+          }
+          try {
+            await network.close();
+          } catch (error) {
+            failure ??= error;
+          }
+          try {
+            await runner.dispose();
+          } catch (error) {
+            failure ??= error;
+          }
+          if (failure !== undefined) throw failure;
+        })();
+        return networkClosing;
+      };
       return {
         driver: foreground.driver,
-        submission: foreground.submission,
+        submission: { ...foreground.submission, networkApproval: network },
+        closeNetwork,
         shutdown() {
           closing ??= (async () => {
             let failure: unknown;
             for (const cleanup of [
+              () => closeNetwork(),
               () => foreground.shutdown(),
               () => graph.shutdown(),
               () => owned.engine.dispose(),
@@ -183,6 +268,12 @@ export function createAppAdoptedSessionHandleFactory(options: {
         },
       };
     } catch (error) {
+      try {
+        await network.close();
+        await runner.dispose();
+      } catch {
+        /* Preserve construction error. */
+      }
       try {
         await runtime?.shutdown();
       } catch {

@@ -111,6 +111,7 @@ export interface AgentFactoryDeps {
   /** Root-session-owned output store + watch layer for background jobs. */
   backgroundShellOutput?: BackgroundShellOutputBundle;
   shellChildRegistry?: ShellChildRegistry;
+  scopedSandbox?: import('../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
   /** False for non-interactive / headless sessions where user prompts cannot be answered. */
@@ -539,6 +540,7 @@ export function buildAgent(
       backgroundShellRegistry: deps.backgroundShellRegistry,
       backgroundShellOutput: deps.backgroundShellOutput,
       shellChildRegistry: deps.shellChildRegistry,
+      scopedSandbox: deps.scopedSandbox,
       allowBackgroundShell: deps.allowBackgroundShell,
       allowAskUser: deps.allowAskUser,
       sessionBrowser: deps.sessionBrowser,

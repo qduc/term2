@@ -30,8 +30,14 @@ export interface ShellSandboxRunner {
     },
   ): Promise<{ command: string; diagnostics?: string[] }>;
   cleanupAfterCommand?(): void | Promise<void>;
-  annotateFailure(command: string, stderr: string): string;
+  annotateFailure(command: string, stderr: string): string | Promise<string>;
 }
+
+export type ScopedShellSandbox = {
+  runner: ShellSandboxRunner;
+  registerPauseController(controller: { pause(): void | Promise<void>; resume(): void | Promise<void> }): () => void;
+  childRegistry?: import('../shell-child-registry.js').ShellChildRegistry;
+};
 
 export interface CreateSandboxRuntimeConfigOptions {
   /** When false, only the sandbox temp directory is writable. */

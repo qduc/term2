@@ -841,6 +841,7 @@ export class AgentClient {
       readOnly?: boolean;
       allowUnsandboxed?: boolean;
       mcpToolSource?: import('../services/mcp/mcp-tool-source.js').McpToolSource;
+      scopedSandbox?: import('../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     };
     /** Test seam: inject a pre-built SubagentBridge instead of creating one. */
     subagentBridge?: SubagentBridge;
@@ -927,6 +928,7 @@ export class AgentClient {
         backgroundShellRegistry: this.#backgroundShellRegistry,
         backgroundShellOutput: this.#backgroundShellOutput,
         shellChildRegistry: this.#shellChildRegistry,
+        scopedSandbox: deps.scopedSandbox,
         allowBackgroundShell,
         allowAskUser,
         sessionBrowser: deps.sessionBrowser,
@@ -997,6 +999,7 @@ export class AgentClient {
         executionContext: deps.executionContext,
         sessionContextService: this.#sessionContextService,
         readOnly: deps.readOnly,
+        scopedSandbox: deps.scopedSandbox,
         ...(deps.sessionBrowser ? { sessionBrowser: deps.sessionBrowser } : {}),
         chat: (message, options) => this.chat(message, options),
         // Factory lives here (not in SubagentBridge) so each subagent gets a

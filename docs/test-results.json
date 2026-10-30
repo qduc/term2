@@ -29732,6 +29732,80 @@
       "failures": [],
       "evidence": [],
       "notes": "Bounded human path and source DTO correction only. Author actual app human 3 requests/3 prompts with 2 continues then stop; refusal overrides exact client and leaves prompt; fsync failure denies resume and cold open interrupts; post-publication cancellation leaves 1 truthful resolution and no resume. Independent 5/5 processes passed: two real human grants with parent cap zero, duplicate/stale rejection, real writer fault, canonical LF and signed headroom controls, held fsynced resolution cancellation and fresh run, and simulated refusal. Root/rewrite types, 527-edge layer guard, inventory, no-unit, source lint and old parity 9/9 passed. Build wrapper failed nested pnpm default store access; equivalent tsc/write-build-info/copy/embed build succeeded. Independent report /tmp/term2-c3a-stage5-budget-independent-review.md. Real no-active-budget refusal, unattended parent-cap and legacy no-budget max-turn remain open for K1/C3b host; no blanket D02/stage5/#76 claim."
+    },
+    {
+      "id": "2026-10-30-c3a-network-provisional",
+      "timestamp": "2026-10-30T21:05:23Z",
+      "commit": "a24257c83f694962965fedf9c3db64b392fa89d7",
+      "tree": "926d5d17d0094291498ae8f0a44ba2127580da4f",
+      "revision_kind": "source commit; provisional",
+      "base_commit": "c765f36d442db9a1f1f6f9f9d2218786d8a7b578",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-network-provisional"
+      ],
+      "suite": "C3a network draft scoped verification",
+      "command": "source and rewrite tsc; rewrite layer guard; default guards; old CLI parity; actual Session dual-graph and idle-background controlled-runner benches; focused sandbox integration; independent source/C2 and actual app probes",
+      "command_complete": false,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; socat task-scoped; network enabled for loopback. Native better-sqlite3 rebuilt and checked."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": null
+      },
+      "failures": [
+        {
+          "test": "real wrapped sandbox test",
+          "message": "bwrap: setting up uid map: Read-only file system"
+        }
+      ],
+      "evidence": [],
+      "notes": "Provisional evidence includes pre-commit snapshots and source-equivalent focused reruns: guard tier 7 files/28 tests; old CLI parity 9/9 after full dist resources (initial tsc-only run lacked resources); source/rewrite tsc and 527-edge layer check; controlled-runner app dual/idle background and capture benches; 4 focused scoped integration tests passed, real sandbox case deselected for focused run; independent actual Session/C2 failure, close, nested process and late-spawn probes. Local real-sandbox attempt failed at host uid map. CI unfiltered real sandbox test and final review/integration are required; do not treat as acceptance."
+    },
+    {
+      "id": "2026-10-30-c3a-stage5-network-integrated",
+      "timestamp": "2026-10-30T21:41:05Z",
+      "commit": "7849fc1db189c1fbb79be8b1d5df6dc58edcaa29",
+      "tree": "12aaccd71b907d0e500d307080067615a54cf0a2",
+      "revision_kind": "clean source merge commit",
+      "base_commit": "a356db764b0be5de7b73fd3e271b0b174e0bfa17",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-network-integrated"
+      ],
+      "suite": "C3a network and budget integrated checks",
+      "command": "direct tsc root and rewrite; layer guard; inventory; no-unit guard; actual network dual, background, nested running and late, SIGKILL recovery; budget human, refusal and fsync benches",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; controlled runner for local network graph benches. Local sandbox disallows bubblewrap uid map."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": null
+      },
+      "failures": [
+        {
+          "test": "no-unit guard",
+          "message": "spawnSync git EPERM in sandbox; guard did not complete."
+        }
+      ],
+      "evidence": [],
+      "notes": "At exact clean merge: root and rewrite typechecks, 527-edge layer guard and inventory passed. Network dual ownership, background idle, nested running/late and SIGKILL recovery passed (5/5); budget human/refusal/fsync passed (3/3). pnpm wrapper attempted inaccessible home store; direct local tsc succeeded. Independent Sol review at 50f423c1 passed bounded local scope; combined revision needs final review. Prior CI 41128676929 passed native integration at earlier e0e4a; latest-head native supported-host CI mandatory, no claim of enforcement from controlled local runner."
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { projectNetworkFacts } from './adopted/network.js';
 /** Canonical filesystem SessionStore. The source conversation log is its sole authority. */
 import crypto from 'node:crypto';
 import {
@@ -50,6 +51,7 @@ export type SessionDriverContext = {
 export interface AdoptedSessionHandle {
   readonly driver: SessionDriver;
   readonly submission: AdoptedSubmissionPort;
+  closeNetwork?(): Promise<void>;
   shutdown(): Promise<void>;
 }
 export type SessionStoreOptions = {
@@ -175,6 +177,15 @@ export class LocalSessionStore implements SessionStore {
       let state = replayState(id, log, this.#options);
       if (state.status === 'closed') throw new Error(`session ${id} is closed`);
       const facts: SessionFact[] = [];
+      for (const request of projectNetworkFacts(log.entries().map((entry) => entry.fact))) {
+        facts.push({
+          type: 'session_network_resolved',
+          version: 1,
+          requestId: request.requestId,
+          generation: request.generation,
+          resolution: { kind: 'recovered', reason: 'process_restarted' },
+        });
+      }
       const pending = state.pendingInteraction;
       if (pending) {
         const identity = {
@@ -537,6 +548,7 @@ export class LocalSessionStore implements SessionStore {
       ? combined?.submission ?? this.#options.adoptedSubmissionFactory!(adoptedContext)
       : undefined;
     const submission: AdoptedSubmissionPort | undefined = rawSubmission && {
+      networkApproval: rawSubmission.networkApproval,
       history: (command) =>
         handleClosed ? Promise.reject(new Error('Session handle is closed')) : rawSubmission.history(command),
       listRewindTargets: () =>
@@ -744,6 +756,7 @@ export class LocalSessionStore implements SessionStore {
         if (current.status === 'closed') return;
         closingLog = true;
         try {
+          await combined?.closeNetwork?.();
           await context.commit([{ type: 'session_closed', version: 1, closedAt, retentionEligibleAt }]);
         } finally {
           closingLog = false;

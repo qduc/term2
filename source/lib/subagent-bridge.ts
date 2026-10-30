@@ -51,6 +51,7 @@ export interface SubagentBridgeDeps {
   /** Session-owned delivery path for approvals after foreground adoption. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   readOnly?: boolean;
+  scopedSandbox?: import('../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   /** Root session transcript browser, lent to the librarian subagent. */
   sessionBrowser?: SessionBrowser;
 }
@@ -182,6 +183,7 @@ export class SubagentBridge {
         skillsService: deps.skillsService,
         toolOwnership: deps.toolOwnership,
         readOnly: deps.readOnly,
+        scopedSandbox: deps.scopedSandbox,
         ...(deps.sessionBrowser ? { sessionBrowser: deps.sessionBrowser } : {}),
         ...(deps.backgroundApprovalPauseSink ? { backgroundApprovalPauseSink: deps.backgroundApprovalPauseSink } : {}),
       });

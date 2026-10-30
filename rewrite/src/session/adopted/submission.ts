@@ -67,6 +67,10 @@ export interface AdoptedSubmissionPort {
   setRuntimeSettings(
     command: RuntimeSettingMutation,
   ): Promise<{ kind: 'applied'; settings: RuntimeSettingsSnapshot } | { kind: 'unsupported' }>;
+  readonly networkApproval?: Pick<
+    ReturnType<typeof import('./network-authority.js').createNetworkAuthority>,
+    'getSnapshot' | 'subscribe' | 'decide'
+  >;
 }
 export interface AdoptedAdmissionContext extends SessionDriverContext {
   admit(

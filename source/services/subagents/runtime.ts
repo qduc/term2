@@ -37,6 +37,7 @@ export interface SubagentRuntimeDeps {
   /** Session-owned queue/control sink for pauses from adopted child runs. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   readOnly?: boolean;
+  scopedSandbox?: import('../../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   sessionBrowser?: SessionBrowser;
 }
 
@@ -88,6 +89,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     skillsService: deps.skillsService,
     nestedCompatibility,
     readOnly: deps.readOnly,
+    scopedSandbox: deps.scopedSandbox,
     sessionBrowser: deps.sessionBrowser,
   });
 

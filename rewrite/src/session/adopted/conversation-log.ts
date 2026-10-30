@@ -4,6 +4,7 @@ import {
   validateMarkedSettings,
   type SessionSettingsInitialized,
 } from '../../../../source/services/settings/session-runtime-settings.js';
+import { projectNetworkFacts, validateNetworkFact, type NetworkFact } from './network.js';
 /**
  * Adopt the source conversation JSONL record boundary for the new session
  * layer. The canonical file remains the only durable session authority;
@@ -137,7 +138,7 @@ export type SessionLifecycleFact =
       readonly retentionEligibleAt: string;
     };
 
-export type SessionFact = ExistingConversationLogEvent | SessionLifecycleFact | SessionSettingsInitialized;
+export type SessionFact = ExistingConversationLogEvent | SessionLifecycleFact | SessionSettingsInitialized | NetworkFact;
 /** Unknown and truncated legacy events are retained verbatim at the decoder boundary. */
 export type StoredSessionFact = SessionFact;
 export type SessionEventReference = { readonly logId: string; readonly eventId: string };
@@ -150,6 +151,8 @@ export type SessionLogEntry = {
 
 const LIFECYCLE_TYPES = new Set([
   'session_settings_initialized',
+  'session_network_requested',
+  'session_network_resolved',
   'session_bound',
   'session_admitted',
   'session_admission_settled',
@@ -200,6 +203,10 @@ export function validateSessionFact(value: unknown): asserts value is SessionFac
   switch (value['type']) {
     case 'session_settings_initialized':
       validateSettingsBaseline(value);
+      return;
+    case 'session_network_requested':
+    case 'session_network_resolved':
+      validateNetworkFact(value);
       return;
     case 'session_bound': {
       if (!isWorkspace(value['workspace']) || !isModel(value['model']))
@@ -451,6 +458,7 @@ export class CanonicalSessionLog implements SessionLog {
     }
     validatePendingRevisionSequence([...this.#entries.map((entry) => entry.fact), ...facts]);
     validateSettingsSequence([...this.#entries.map((entry) => entry.fact), ...facts]);
+    projectNetworkFacts([...this.#entries.map((entry) => entry.fact), ...facts]);
     const previousSeq = this.lastSeq;
     const sidecars = facts.filter((fact) => SIDECAR_EVENT_TYPES.has(fact.type as LogEvent['type']));
     for (const fact of sidecars) this.#writer.append(fact as LogEvent);
@@ -515,6 +523,7 @@ function loadEntries(id: string, root: string): SessionLogEntry[] {
   }
   validatePendingRevisionSequence(entries.map((entry) => entry.fact));
   validateSettingsSequence(entries.map((entry) => entry.fact));
+  projectNetworkFacts(entries.map((entry) => entry.fact));
   return entries;
 }
 

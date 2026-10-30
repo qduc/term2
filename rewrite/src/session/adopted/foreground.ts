@@ -1253,6 +1253,7 @@ export function createAdoptedForeground(options: {
         } catch (error) {
           return Promise.reject(error);
         }
+        if (poisoned !== undefined) return Promise.reject(poisoned);
         if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         const owned = structuredClone(command);
         const operation = decisionTail
@@ -1286,6 +1287,7 @@ export function createAdoptedForeground(options: {
         } catch (error) {
           return Promise.reject(error);
         }
+        if (poisoned !== undefined) return Promise.reject(poisoned);
         if (closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
         if (interrupting || settingMutation) return Promise.reject(new Error('Session mutation is in progress'));
         const captured = captureAdoptedInput(value.input);
@@ -1317,6 +1319,13 @@ export function createAdoptedForeground(options: {
         void result.finally(() => pending.delete(value.requestId)).catch(() => {});
         return result;
       },
+    },
+    failPersistence(error: unknown): void {
+      poison(error);
+      cancellation.abort();
+      runtime.generationGuard.invalidate();
+      if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
+      active?.cancel();
     },
     shutdown(): Promise<void> {
       shutdownPromise ??= (async () => {

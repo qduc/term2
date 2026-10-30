@@ -28683,6 +28683,72 @@
       "failures": [],
       "evidence": [],
       "notes": "Sol accepted integrated source: test byte-identical reviewed 235b80cd; merge contains only PR105 changes. Prior independent 1/1 applies to identical test, author integrated 1/1. No independent integrated process rerun claimed."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "commit": "efbba4b7975f0e991ee790eb061cf98bc1c4ba76",
+      "tree": "d01527d98c9ca85b9eeb6824d8b83d9d07d30686",
+      "base_commit": "78d1b1551a92084216465f5e13eae8ea880d4668",
+      "task_ids": [
+        "2026-10-30-c3a-goal-evidence"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Real old CLI PTY and controlled local Responses provider."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-goal-evidence",
+      "run_at": "2026-10-30T16:45:23Z",
+      "revision_kind": "clean source before documentation",
+      "suite": "old CLI durable goal stop outcomes",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-goal-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-stop.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "notes": "Selected CLI 1/1, nine old goldens 9/9, rewrite tsc, layer 520, inventory, source hooks pass. Two consecutive reminders then visible unresolved after three requests; blocked and deferred recorded same goal ID and sole goal_changed remains active. No achieved/criteriaEvidence/verification/six-total/work-reset or new Session claim."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "commit": "efbba4b7975f0e991ee790eb061cf98bc1c4ba76",
+      "tree": "d01527d98c9ca85b9eeb6824d8b83d9d07d30686",
+      "base_commit": "78d1b1551a92084216465f5e13eae8ea880d4668",
+      "task_ids": [
+        "2026-10-30-c3a-goal-evidence"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Real old CLI PTY and controlled local Responses provider."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-goal-evidence-independent",
+      "run_at": "2026-10-30T16:45:21Z",
+      "revision_kind": "clean source independently reviewed",
+      "suite": "independent old CLI durable goal stop outcomes",
+      "command": "TERM2_TEST_CLI=<independent marker wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-stop.blackbox.ts --maxWorkers=1",
+      "notes": "Sol accepted no findings; 1/1 in 3.93s, one --lite --profile full launch. Exact two consecutive reminder counters, visible unresolved, blocked/deferred results tied to sole persisted active goal. Same scope limits."
     }
   ]
 }

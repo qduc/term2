@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory } from '../contracts/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent, ConversationEventSink } from '../services/conversation/conversation-events.js';
@@ -30,6 +31,7 @@ import type { SessionBrowser } from '../services/conversation/session-browser.js
 import type { SubagentDefinition } from '../services/subagents/types.js';
 
 export interface SubagentBridgeDeps {
+  driverFactory?: NestedRunDriverFactory;
   logger: ILoggingService;
   settings: ISettingsService;
   executionContext?: ExecutionContext;
@@ -167,6 +169,7 @@ export class SubagentBridge {
       this.#subagentManager = deps.subagentManager;
     } else {
       this.#subagentManager = new SubagentManager({
+        driverFactory: deps.driverFactory,
         logger: deps.logger,
         settings: deps.settings,
         executionContext: deps.executionContext,

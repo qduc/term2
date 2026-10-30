@@ -1,3 +1,4 @@
+import { createLegacyNestedRunDriver } from '../agent-runtime/legacy-nested-driver.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chmod, mkdtemp, open, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -550,6 +551,7 @@ it('the real verifier starts fresh, reads actual artifacts, and returns an inspe
   const requests: StreamedModelTurnRequest[] = [];
   let factories = 0;
   const verifier = createIndependentVerifier({
+    driverFactory: createLegacyNestedRunDriver,
     model: () => 'fixture',
     resolveModel: () => {
       factories++;
@@ -627,6 +629,7 @@ it('a decision model failure over the real gate falls back rather than skipping'
 
 it('a failed-only filesystem probe cannot authorize the real verifier PASS', async () => {
   const verifier = createIndependentVerifier({
+    driverFactory: createLegacyNestedRunDriver,
     model: () => 'fixture',
     resolveModel: () => ({
       async *stream(request) {
@@ -875,6 +878,7 @@ it('an unsupported workspace blocks with a named reason and an operational alert
     },
   };
   const boundary = new RootCompletionBoundary({
+    driverFactory: createLegacyNestedRunDriver,
     settings: createMockSettings({ 'memory.enabled': false }),
     logger,
     executionContext: createMockExecutionContext(plain),

@@ -1,3 +1,4 @@
+import type { NestedApprovalLedger } from '../../contracts/nested-run-driver.js';
 import { isOpenAICompaction, projectModelRequestHistory } from '../conversation/conversation-state-projector.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from './model-context-policy.js';
@@ -9,7 +10,6 @@ import {
   isProviderContextOverflow,
 } from './request-input-limit.js';
 import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
-import type { JsonSchemaDefinition } from '../../contracts/model-types.js';
 import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
 import {
   createContinuationHandle,
@@ -91,41 +91,8 @@ const isToolResultContentParts = (value: unknown): value is readonly StreamedMod
  * another provider's opaque option bag. The index signature remains for legacy
  * provider settings before they are projected by the application configuration.
  */
-export interface AgentModelSettings {
-  temperature?: number;
-  reasoning?: { effort?: string; summary?: string };
-  maxTokens?: number;
-  maxRequestInputTokens?: number | null;
-  /** Hard per-request stream-output budget across text, reasoning, and tool arguments. */
-  maxStreamOutputChars?: number;
-  /** Optional total wall-clock ceiling for each provider request; 0 disables it. Opt-in backstop. */
-  maxModelRequestDurationMs?: number;
-  /** Provider-neutral inactivity window: abort if no streamed delta arrives within this many ms; 0 disables it. */
-  maxModelStreamIdleMs?: number;
-  retry?: { maxRetries?: number };
-  providerData?: Record<string, unknown>;
-  codex?: { promptCacheKey?: string; include?: readonly string[] };
-  [key: string]: unknown;
-}
-
-/** The application-owned agent shape consumed by the replacement run loop. */
-export interface ApplicationAgent {
-  readonly name: string;
-  readonly instructions: string;
-  /** Resolve session-dynamic instruction context once at each provider request boundary. */
-  readonly resolveInstructionsForRequest?: () => string;
-  /**
-   * Capture the session state rendered into a request, at that same request
-   * boundary. The response's tool calls execute with it (see `RequestSnapshot`).
-   */
-  readonly resolveRequestSnapshot?: () => RequestSnapshot;
-  readonly model: string;
-  readonly memoryContextEnabled?: boolean;
-  modelSettings?: AgentModelSettings;
-  defaultRunOptions?: any;
-  outputType?: JsonSchemaDefinition | 'text';
-  readonly tools: ToolRegistry;
-}
+export type { AgentModelSettings, ApplicationAgent } from '../../contracts/nested-run-driver.js';
+import type { ApplicationAgent } from '../../contracts/nested-run-driver.js';
 
 export interface ApplicationRequestPreparation {
   /** Observe the exact application request immediately before model dispatch. */
@@ -183,7 +150,7 @@ export interface ApplicationRunLoopOptions {
    * pre-seeded ledger to honor decisions already taken (e.g. parent approvals
    * replayed into a nested run — the F5 mechanism).
    */
-  readonly approvals?: ApprovalLedger;
+  readonly approvals?: NestedApprovalLedger;
   /**
    * Legacy model-turn ceiling. With `runBudget`, the policy's `turnBackstop`
    * owns staged behavior while this value remains visible to legacy tools;
@@ -364,7 +331,7 @@ type RunState = {
   /** The run's user context (from options), preserved across continuation. */
   context?: unknown;
   /** This run's approval ledger, preserved across continuation. */
-  approvals: ApprovalLedger;
+  approvals: NestedApprovalLedger;
   /** Model turns taken so far, preserved across continuation. */
   turnCount: number;
   /** Local automatic compactions already paid for in this run. */

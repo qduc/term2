@@ -2,28 +2,20 @@ import type { ModelRequestCost } from '../cost/model-cost.js';
 import { isSubscriptionProvider } from '../cost/subscription-providers.js';
 
 /** Settings-backed containment policy for one logical agent run. */
-export interface RunBudgetPolicy {
-  readonly maxUsdMicros: number;
-  readonly maxUnpricedTokens: number;
-  readonly maxActiveTimeMs: number;
-  readonly warningHeadroomUsdMicros: number;
-  readonly warningHeadroomUnpricedTokens: number;
-  readonly warningHeadroomActiveTimeMs: number;
-  readonly softHeadroomUsdMicros: number;
-  readonly softHeadroomUnpricedTokens: number;
-  readonly softHeadroomActiveTimeMs: number;
-  readonly turnBackstop: number;
-  readonly extensionPercent: number;
-  readonly maxParentExtensions: number;
-  readonly identicalToolCallThreshold: number;
-  /**
-   * What a non-soft stage does.
-   *
-   * `contain` keeps warning/stall advisory and parks at exhaustion. `warn`
-   * remains an explicit advisory opt-out; `pause` also parks on warning/stall.
-   */
-  readonly escalation: 'contain' | 'warn' | 'pause' | 'disabled';
-}
+export type {
+  RunBudgetPolicy,
+  RunBudgetStage,
+  RunBudgetDimension,
+  RunBudgetEvidence,
+  RunBudgetEvent,
+} from '../../contracts/nested-run-driver.js';
+import type {
+  RunBudgetPolicy,
+  RunBudgetEvent,
+  RunBudgetEvidence,
+  RunBudgetStage,
+  RunBudgetDimension,
+} from '../../contracts/nested-run-driver.js';
 
 interface RunBudgetSettingsReader {
   get(key: any): any;
@@ -69,26 +61,6 @@ export function clampRunBudgetPolicy(child: RunBudgetPolicy, parent?: RunBudgetP
     maxParentExtensions: Math.min(child.maxParentExtensions, parent.maxParentExtensions),
   };
 }
-
-export type RunBudgetStage = 'soft' | 'warning' | 'critical';
-export type RunBudgetDimension = 'usd' | 'unpriced_tokens' | 'active_time' | 'turns';
-
-export interface RunBudgetEvidence {
-  readonly dimension: RunBudgetDimension;
-  readonly used: number;
-  readonly limit: number;
-  readonly headroom: number;
-}
-
-export type RunBudgetEvent =
-  | { readonly type: 'budget_stage'; readonly stage: RunBudgetStage; readonly evidence: RunBudgetEvidence }
-  | {
-      readonly type: 'tool_stall';
-      readonly toolName: string;
-      readonly argumentsText: string;
-      readonly count: number;
-      readonly threshold: number;
-    };
 
 /**
  * Synthetic interruption used to park a main-agent run at a request boundary.

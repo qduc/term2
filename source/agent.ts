@@ -1,3 +1,6 @@
+import { healPatchOperation } from './tools/file/patch-healing.js';
+import type { NestedRunDriverFactory } from './contracts/nested-run-driver.js';
+import { healSearchReplaceParams } from './tools/file/edit-healing.js';
 import { createDiscordSendToolDefinition } from './tools/discord-send.js';
 import type { DiscordSend } from './services/discord/discord-outbound.js';
 import { createGrepToolDefinition } from './tools/file/grep.js';
@@ -231,6 +234,7 @@ function positiveIntegerSetting(
  */
 export const getAgentDefinition = (
   deps: {
+    driverFactory?: NestedRunDriverFactory;
     settingsService: ISettingsService;
     loggingService: ILoggingService;
     getGoal?: () => DurableGoal | undefined;
@@ -616,7 +620,17 @@ export const getAgentDefinition = (
     if (filesystemWriteEnabled) {
       if (usesPatchEditingSurface) {
         tools.push(
-          createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+          createApplyPatchToolDefinition({
+            settingsService,
+            loggingService,
+            executionContext,
+            sessionAccess,
+            patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
+              healPatchOperation(path, diff, content, diagnosis, model, key, {
+                ...healingDeps,
+                driverFactory: deps.driverFactory,
+              }),
+          }),
         );
       } else {
         tools.push(
@@ -627,6 +641,11 @@ export const getAgentDefinition = (
             sessionAccess,
           }),
           createSearchReplaceToolDefinition({
+            editHealing: (params, content, model, key, healingDeps) =>
+              healSearchReplaceParams(params, content, model, key, {
+                ...healingDeps,
+                driverFactory: deps.driverFactory,
+              }),
             settingsService,
             loggingService,
             executionContext,

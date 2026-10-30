@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { AnyToolDefinition } from '../../tools/types.js';
@@ -44,6 +45,7 @@ export class SubagentManager {
   #mentorActive = false;
 
   constructor(deps: {
+    driverFactory?: NestedRunDriverFactory;
     logger: ILoggingService;
     settings: ISettingsService;
     executionContext?: ExecutionContext;

@@ -1,3 +1,5 @@
+import type { NestedRunDriverFactory } from '../contracts/nested-run-driver.js';
+import { createLegacyNestedRunDriver } from '../services/agent-runtime/legacy-nested-driver.js';
 import type { ApplicationRunLoopOptions } from '../services/agent-runtime/application-run-loop.js';
 import type { ConversationTurnSession } from '../services/conversation-agent-client.js';
 import {
@@ -744,6 +746,7 @@ export class AgentClient {
   }
 
   constructor({
+    driverFactory = createLegacyNestedRunDriver,
     selection,
     reasoningEffort,
     maxTurns,
@@ -765,6 +768,7 @@ export class AgentClient {
     // projects chained input through the legacy mode.
     continuationProjectionMode: _continuationProjectionMode = 'legacy',
   }: {
+    driverFactory?: NestedRunDriverFactory;
     selection?: ModelSelection;
     reasoningEffort?: ReasoningEffortSetting | null;
     maxTurns?: number;
@@ -833,6 +837,7 @@ export class AgentClient {
     this.#unattended = !allowAskUser;
     if (!agentOverride)
       this.#completionBoundary = new RootCompletionBoundary({
+        driverFactory,
         settings: deps.settings,
         logger: deps.logger,
         executionContext: deps.executionContext,
@@ -857,6 +862,7 @@ export class AgentClient {
     this.#agentConfig = new AgentConfiguration(
       { selection, reasoningEffort, agentOverride, approvalPolicyRegistry },
       {
+        driverFactory,
         logger: deps.logger,
         settings: deps.settings,
         ...(deps.getGoal ? { getGoal: deps.getGoal } : {}),
@@ -937,6 +943,7 @@ export class AgentClient {
       this.#subagentBridge = subagentBridge;
     } else if (!agentOverride) {
       this.#subagentBridge = new SubagentBridge({
+        driverFactory,
         logger: deps.logger,
         settings: deps.settings,
         executionContext: deps.executionContext,
@@ -965,6 +972,7 @@ export class AgentClient {
           approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
         }) =>
           new AgentClient({
+            driverFactory,
             selection: { model: agent.model, provider },
             maxTurns,
             retryAttempts,

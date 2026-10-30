@@ -1,3 +1,4 @@
+import type { NestedApprovalLedger } from '../../contracts/nested-run-driver.js';
 import type { StreamedModelTurnEvent } from '../../contracts/streamed-model-turn.js';
 import type {
   AnyToolDefinition,
@@ -11,7 +12,7 @@ import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-
 import { describeError } from '../../utils/error-helpers.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
-import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
+import type { ToolInvocationContext } from './tool-invocation-context.js';
 
 export type ToolPlanEntry = {
   readonly event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>;
@@ -48,7 +49,7 @@ export interface ToolCallExecutionDependencies {
 
 export interface ToolCallExecutionContext {
   readonly tools: ToolRegistry;
-  readonly approvals: ApprovalLedger;
+  readonly approvals: NestedApprovalLedger;
   readonly toolContext: ToolInvocationContext;
   readonly sessionId?: string;
   readonly turnId?: string;
@@ -187,7 +188,7 @@ export class ToolCallExecution {
     target: { callId: string | undefined; interruption?: unknown },
     decision: 'approved' | 'rejected',
     message: string | undefined,
-    approvals: ApprovalLedger,
+    approvals: NestedApprovalLedger,
   ): void {
     const { callId, interruption } = target;
     let selectedIndex = -1;

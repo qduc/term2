@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory } from '../contracts/nested-run-driver.js';
 import type { DiscordSend } from '../services/discord/discord-outbound.js';
 import { resolveModelContextPolicy, resolveOutputAllocation } from '../services/agent-runtime/model-context-policy.js';
 import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../tools/system/run-code/run-code.js';
@@ -49,6 +50,7 @@ import type { NestedSubagentResult, SubagentRunHandle } from '../services/subage
 import type { ResolvedSubagentLaunch } from './subagent-bridge.js';
 
 export interface AgentFactoryDeps {
+  driverFactory?: NestedRunDriverFactory;
   settings: ISettingsService;
   logger: ILoggingService;
   /** Reads the latest successfully persisted session goal at request time. */
@@ -499,6 +501,7 @@ export function buildAgent(
     tools: toolDefinitions,
   } = getAgentDefinition(
     {
+      driverFactory: deps.driverFactory,
       settingsService: deps.settings,
       loggingService: deps.logger,
       ...(deps.getGoal ? { getGoal: deps.getGoal } : {}),

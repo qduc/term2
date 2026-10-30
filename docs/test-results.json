@@ -27343,6 +27343,48 @@
         }
       ],
       "notes": "Typecheck, inventory and own-worktree old CLI parity passed (6/6). Fake-server request matched headless-plain-answer after removing only system instructions and tools. Five lossless input round trips, previousResponseId/disableChaining, text partId/reasoning metadata deltas, binding identity, async factory rejection eviction, and owned/borrowed disposal assertions passed. Old CLI integration/e2e attempts were not completed: they started before this worktree old CLI build; e2e failures include missing local dist/cli.js and built worker files, and integration output showed denied /home/agent state path. These incomplete attempts are not adapter failures and are not claimed as passing. Independent Sol review and the common guard correction remain pending."
+    },
+    {
+      "id": "2026-10-30-port-a2-final-toolcall-reconcile",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:10:32Z",
+      "commit": "897464124749d0d89eef233a5ee9dc0905f3f930",
+      "tree": null,
+      "revision_kind": "committed correction; Sol independent review approved; layer guard correction pending",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-a2-adapter"
+      ],
+      "suite": "A2 final typecheck and fake-provider tracer after tool-call reconciliation correction",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; XDG_STATE_HOME=/tmp/term2-a2-xdg pnpm exec tsx /tmp/term2-a2-tracer.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Clean committed source worktree; worktree pnpm dependencies; fake OpenAI-compatible provider/server on loopback; network-enabled additional sandbox permissions for subprocesses."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-evidence.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-independent-review.md"
+        }
+      ],
+      "notes": "Tracer comparison matched headless-plain-answer after removing system instructions and tools. It asserts six lossless input cases, explicit previousResponseId/disableChaining, partId/reasoning metadata, completion-only tool signature and final raw arguments, one emission for matching streamed/final tool call, stream-only fallback, cache identity, async rejection eviction, and owned/borrowed disposal. Sol independently reproduced the completion-only signature probe, reran the full tracer, and approved source commit 897464124749d0d89eef233a5ee9dc0905f3f930; review report at /tmp/term2-a2-independent-review.md. The separate common layer guard correction remains pending; its exact earlier failure is recorded in 2026-10-30-port-a2-adapter."
     }
   ]
 }

@@ -27720,6 +27720,54 @@
         }
       ],
       "notes": "Sol accepted source and documentation with no findings; both PTY scenarios passed in 4.11s and marker recorded two invocations. First parked approval had no effect file, second had x, and completion boundaries had x and xx. Nine existing goldens untouched. This resolves the earlier pending independent review, without expanding coverage claims."
+    },
+    {
+      "id": "2026-10-30-port-a5-turn-prompt",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:07:00Z",
+      "commit": "afeef243230c8060c05d8f0f6cba78f6ea7db51a",
+      "tree": "c265d00e875331c6fb6b032918c54c204808e39c",
+      "revision_kind": "clean source commit; evidence documentation appended afterward",
+      "base_commit": "5130f32b16ef1a80a9a37acb9f90a7a29a526cea",
+      "task_ids": [
+        "2026-10-30-port-a5-turn-prompt"
+      ],
+      "suite": "A5 prompt projection, golden first requests, and layer verification",
+      "command": "pnpm typecheck; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs check; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec tsx rewrite/scripts/a5-first-request-probe.ts; independent: /tmp/a5-independent/first-request.mts; pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated A5 worktree; network-enabled sandbox permissions for local fake-provider requests and subprocess IPC."
+      },
+      "result": {
+        "passed": 16,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        "pnpm lint exits 1: Prettier reports pre-existing formatting differences in docs/test-results.json, rewrite/bench/c2-answer-kill.mjs, rewrite/bench/c2-approval-kill.mjs, rewrite/bench/c2-boundary-failure.mjs, rewrite/bench/c2-storage-failure.mjs, rewrite/parity/run.mjs, rewrite/scripts/check-layers.mjs. ESLint reported 0 errors and 31 warnings. The two A5 source files passed staged ESLint fix and Prettier checks."
+      ],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a5-first-request-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/a5-independent/first-request.mts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/a5-independent/review.md"
+        }
+      ],
+      "notes": "Source and rewrite typechecks, the 524-edge layer guard, inventory check, build, and all nine immutable old CLI parity scenarios passed. The A5 fake-provider probe matched each full first request against its existing golden for headless-plain-answer and shell-auto-approve, including instructions and all tool schema hashes. Both probes verified same-generation tool name order, exact adopted original identity/order, and request-time goal updates without changing offered tools; the independent reviewer also confirmed no unused capability callback executed. Independent review: /tmp/a5-independent/review.md. No golden was changed. The lint failure reflects the seven listed pre-existing formatting differences; targeted formatting and the commit's no-unit-test/pre-commit hook passed. Full integration/e2e suites and hosted CI were not run."
     }
   ]
 }

@@ -192,6 +192,20 @@ export class SessionLifecycle {
 
   // ── Undo ──────────────────────────────────────────────────────────
 
+  reserveHistoryMutation(command: Parameters<ConversationRecord['reserveHistoryMutation']>[0]) {
+    const reservation = this.#record.reserveHistoryMutation(command);
+    if (reservation.kind !== 'reserved') return reservation;
+    return {
+      kind: 'reserved' as const,
+      apply: () => {
+        if (!reservation.consume()) return null;
+        if (command.kind === 'undo_last') return this.undoLastUserTurn();
+        if (command.kind === 'undo_count') return this.undoNUserTurns(command.count);
+        return this.rewindToTarget(command.targetId as RewindTargetId);
+      },
+    };
+  }
+
   undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.#record.removeLastUserTurn();
     if (removed === null) return null;
@@ -347,6 +361,7 @@ export class SessionLifecycle {
 export type SessionState = Pick<
   SessionLifecycle,
   | 'reset'
+  | 'reserveHistoryMutation'
   | 'undoLastUserTurn'
   | 'retryLastUserTurn'
   | 'peekLastToolOutput'

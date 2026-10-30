@@ -29,6 +29,8 @@ import {
   type AdoptedInteractionCommand,
   type AdoptedRetryTarget,
   type AdoptedRetryResult,
+  type HistoryMutation,
+  type HistoryMutationResult,
 } from './submission.js';
 
 export class RunBudgetExtensionRefused extends Error {
@@ -74,6 +76,7 @@ export function createAdoptedForeground(options: {
   const listeners = new Set<(update: SessionUpdate) => void>();
   const pending = new Map<string, { hash: string; result: Promise<Admission> }>();
   let serial = Promise.resolve();
+  const historyOperations = new Map<string, Promise<HistoryMutationResult>>();
   let completion: Promise<void> = Promise.resolve();
   let active: AdoptedTurnRun | undefined;
   let activePostExecuteRunId: string | undefined;
@@ -914,6 +917,76 @@ export function createAdoptedForeground(options: {
   return {
     driver,
     submission: {
+      listRewindTargets() {
+        if (closing) return Promise.reject(new Error('Session handle is closed'));
+        return serial.then(() => {
+          if (closing) throw new Error('Session handle is closed');
+          return structuredClone(runtime.state.listRewindTargets());
+        });
+      },
+      history(command: HistoryMutation): Promise<HistoryMutationResult> {
+        if (closing || context.state().status === 'closed')
+          return Promise.reject(new Error('Session handle is closed'));
+        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
+        const owned = structuredClone(command);
+        if (!owned || typeof owned !== 'object' || !['undo_last', 'undo_count', 'rewind'].includes(owned.kind))
+          return Promise.reject(new Error('Invalid history command'));
+        const key = JSON.stringify(
+          owned.kind === 'undo_count'
+            ? [owned.kind, owned.count]
+            : owned.kind === 'rewind'
+            ? [owned.kind, owned.targetId]
+            : [owned.kind],
+        );
+        const existing = historyOperations.get(key);
+        if (existing) return existing;
+        const operation = serial.then(async (): Promise<HistoryMutationResult> => {
+          if (closing) throw new Error('Session handle is closed');
+          if (poisoned !== undefined) throw poisoned;
+          const reservation = runtime.state.reserveHistoryMutation(owned);
+          if (reservation.kind !== 'reserved') return reservation;
+          // Close the old callback gate before awaiting any physical settlement.
+          cancellation.abort();
+          cancellation = new AbortController();
+          const signal = cancellation.signal;
+          runtime.generationGuard.invalidate();
+          const token = runtime.generationGuard.capture();
+          if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
+          active?.cancel();
+          await decisionTail;
+          await completion;
+          if (active) await active.waitForSettlement(signal);
+          await engine.waitForAdmission(signal);
+          if (closing || signal.aborted || !runtime.generationGuard.isCurrent(token)) return { kind: 'stale' };
+          let restored: ReturnType<typeof reservation.apply>;
+          try {
+            restored = reservation.apply();
+          } catch (error) {
+            poisoned = error ?? new Error('History mutation failed');
+            throw poisoned;
+          }
+          if (!restored) return { kind: 'stale' };
+          const committedGeneration = runtime.generationGuard.capture();
+          await commit([]);
+          if (closing || signal.aborted || !runtime.generationGuard.isCurrent(committedGeneration))
+            return { kind: 'stale' };
+          return {
+            kind: 'applied',
+            restored: { text: restored.text, ...(restored.images ? { images: restored.images } : {}) },
+          };
+        });
+        serial = operation.then(
+          () => undefined,
+          () => undefined,
+        );
+        historyOperations.set(key, operation);
+        void operation
+          .finally(() => {
+            if (historyOperations.get(key) === operation) historyOperations.delete(key);
+          })
+          .catch(() => {});
+        return operation;
+      },
       interruptFromUser(): Promise<void> {
         if (closing || context.state().status === 'closed')
           return Promise.reject(new Error('Session handle is closed'));

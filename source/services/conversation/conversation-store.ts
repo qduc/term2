@@ -354,6 +354,30 @@ export class ConversationStore {
     });
   }
 
+  /** Reserve one existing target without mutating history. The token is valid only once. */
+  reserveHistoryMutation(
+    command: { kind: 'undo_last' } | { kind: 'undo_count'; count: number } | { kind: 'rewind'; targetId: string },
+  ): { kind: 'reserved'; consume(): boolean } | { kind: 'not_found' | 'stale' } {
+    const targets = this.listRewindTargets();
+    if (command.kind === 'undo_count' && (!Number.isSafeInteger(command.count) || command.count <= 0))
+      return { kind: 'not_found' };
+    const target =
+      command.kind === 'rewind'
+        ? targets.find((entry) => entry.id === command.targetId)
+        : targets.at(command.kind === 'undo_last' ? -1 : -Math.min(command.count, targets.length));
+    if (!target) return { kind: command.kind === 'rewind' ? 'stale' : 'not_found' };
+    const revision = this.#historyRevision;
+    let used = false;
+    return {
+      kind: 'reserved',
+      consume: () => {
+        if (used) return false;
+        used = true;
+        return this.#historyRevision === revision && this.listRewindTargets().some((entry) => entry.id === target.id);
+      },
+    };
+  }
+
   /**
    * Atomically rewind to a previously listed target. The target is valid only
    * for the exact store snapshot that issued it; stale or unknown targets are

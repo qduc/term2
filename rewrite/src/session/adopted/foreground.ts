@@ -268,7 +268,7 @@ export function createAdoptedForeground(options: {
         ...(retryOrigin ? { skipUserMessage: true, replayFromHistory: true } : {}),
       },
       async (terminal, address) => {
-        const answer = await interactions.request(terminal, address);
+        const answer = await interactions.requestDecision(terminal, address);
         if (!isCurrent()) throw new Error('Adopted turn is stale');
         return {
           init: runtime.approvalFlow.buildApprovalDecision(
@@ -443,7 +443,7 @@ export function createAdoptedForeground(options: {
             result,
           });
         await commit(facts);
-        if (result === 'accepted' && !retryOrigin && !interactions.requested && isCurrent()) {
+        if (result === 'accepted' && !retryOrigin && !interactions.askedForDecision && isCurrent()) {
           for await (const event of runtime.automaticMemoryFinalizer.record(receipt.input)) {
             if (!isCurrent()) break;
             runtime.conversationLogger.dispatchEventToLog(event);

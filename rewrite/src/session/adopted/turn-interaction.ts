@@ -41,7 +41,7 @@ export function createTurnInteraction(deps: {
 }) {
   const { runtime, engine, turn, commit, grantHumanRunBudgetExtension, turnId, token, signal, isCurrent } = deps;
   const { control, bound } = deps;
-  let requested = false;
+  let askedForDecision = false;
   let nextView: ((run: AdoptedTurnRun) => void) | undefined;
   let queuedView: AdoptedTurnRun | undefined;
   const takeView = () =>
@@ -90,7 +90,7 @@ export function createTurnInteraction(deps: {
     terminal: import('../../../../source/contracts/conversation.js').ConversationTerminal,
     address: unknown,
   ) => {
-    requested = true;
+    askedForDecision = true;
     if (terminal.type !== 'approval_required' || !isCurrent()) throw new Error('Interaction is stale');
     const staged = runtime.pendingInteraction.prepareTransition((draft) => draft.present(terminal.approval));
     const snapshot = staged.snapshot!;
@@ -274,7 +274,7 @@ export function createTurnInteraction(deps: {
       const registry = runtime.postExecutePending.snapshot();
       const entries = registry.entries.filter((entry) => entry.runId === bound().postExecuteRunId);
       if (entries.length && !interaction) {
-        requested = true;
+        askedForDecision = true;
         const terminal = bound().postExecuteTerminal(entries);
         await requestDecision(
           terminal,
@@ -473,7 +473,7 @@ export function createTurnInteraction(deps: {
   };
   return {
     /** Parks the turn on a source approval and resolves with the user's answer. */
-    request: requestDecision,
+    requestDecision,
     /** Applies one user command to the pending interaction. */
     decide,
     /** Raises post-execute approvals for this turn until `stopSignal` aborts. */
@@ -485,8 +485,8 @@ export function createTurnInteraction(deps: {
       if (interaction) interaction.setCheckpoint(checkpoint);
     },
     /** True once the turn has asked for any decision; such turns skip automatic memory. */
-    get requested(): boolean {
-      return requested;
+    get askedForDecision(): boolean {
+      return askedForDecision;
     },
   };
 }

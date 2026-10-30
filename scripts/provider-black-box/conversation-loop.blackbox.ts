@@ -1,5 +1,5 @@
 import { createServer, type ServerResponse } from 'node:http';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
@@ -66,7 +66,7 @@ it('edits and retracts pending steering while one turn crosses two manual approv
     status: 'completed',
     call_id: id,
     name: 'shell',
-    arguments: JSON.stringify({ command: 'pwd', sandbox: 'unsandboxed' }),
+    arguments: JSON.stringify({ command: 'printf x >> approval-effects.txt', sandbox: 'unsandboxed' }),
   });
   const message = (text: string) => ({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] });
   try {
@@ -108,6 +108,7 @@ it('edits and retracts pending steering while one turn crosses two manual approv
       ),
     ).toHaveLength(1);
     expect(requests[1]!.previous_response_id).toBe('loop-response-0');
+    expect(await readFile(join(lease.root, 'approval-effects.txt'), 'utf8')).toBe('x');
     const secondApprovalMarker = child.getOutput().length;
     complete(1, [call('loop-second')]);
     await child.waitForState((s) => s.output.slice(secondApprovalMarker).includes('Allow this action?'));
@@ -123,6 +124,7 @@ it('edits and retracts pending steering while one turn crosses two manual approv
       ),
     ).toHaveLength(1);
     expect(requests[2]!.previous_response_id).toBe('loop-response-1');
+    expect(await readFile(join(lease.root, 'approval-effects.txt'), 'utf8')).toBe('xx');
     const idle = child.readIdleGeneration();
     await writePtyTextAndSubmit(child, 'FALLBACK_PARENT');
     await child.waitForState(() => requests.length === 4);

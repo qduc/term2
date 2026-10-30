@@ -117,5 +117,9 @@ Missing, invalid, or backwards clock evidence produces no inferred gap. Legacy
 sessions and legacy pending queues without this metadata have no reliable
 baseline until new timestamped human input is accepted. Native compaction that
 discards the timestamped history likewise cannot supply that baseline. Replaying
-history does not stamp a new arrival time. The record describes wall-clock
-observations; it does not measure model experience or promise a spoken reminder.
+history does not stamp a new arrival time. Rollover briefs carry the latest
+validated human timestamp as `humanInputBaseline`, not `humanInputAt`, so the
+next human can still receive timing context after rollover or successor resume.
+The brief neither advances the clock nor generates a notice itself. This does
+not repair already-created legacy successors with no baseline. The record
+describes wall-clock observations; it does not measure model experience or promise a spoken reminder.

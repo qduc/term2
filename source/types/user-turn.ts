@@ -15,6 +15,8 @@ export type SkillAttachment = {
 export type UserTurn = {
   /** Host receipt time for human input only; retained across queue waits and replay. */
   humanInputAt?: string;
+  /** Inherited human arrival on a nonhuman rollover brief; never a new arrival. */
+  humanInputBaseline?: string;
   text: string;
   images?: UserTurnImage[];
   skill?: SkillAttachment;
@@ -37,6 +39,7 @@ export function normalizeUserTurn(input: string | UserTurn): UserTurn {
     ...(input.images?.length ? { images: input.images } : {}),
     ...(input.skill ? { skill: input.skill } : {}),
     ...(input.humanInputAt !== undefined ? { humanInputAt: input.humanInputAt } : {}),
+    ...(input.humanInputBaseline !== undefined ? { humanInputBaseline: input.humanInputBaseline } : {}),
   };
 }
 

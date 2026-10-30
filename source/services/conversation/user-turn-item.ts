@@ -20,6 +20,7 @@ export function userTurnToProviderItem(
   const rawText = turn.text ?? '';
   const text = steering ? withSteeringNotice(rawText) : rawText;
 
+  const baseline = turn.humanInputBaseline === undefined ? {} : { humanInputBaseline: turn.humanInputBaseline };
   const timing =
     turn.humanInputAt === undefined
       ? {}
@@ -29,7 +30,7 @@ export function userTurnToProviderItem(
         };
 
   if (images.length === 0) {
-    return { role: 'user', type: 'message', content: text, ...timing };
+    return { role: 'user', type: 'message', content: text, ...baseline, ...timing };
   }
 
   const content: unknown[] = [];
@@ -38,5 +39,5 @@ export function userTurnToProviderItem(
     content.push({ type: 'input_image', image: `data:${image.mimeType};base64,${image.data}`, detail: 'auto' });
   }
 
-  return { role: 'user', type: 'message', content, ...timing } as ProviderInputItem;
+  return { role: 'user', type: 'message', content, ...baseline, ...timing } as ProviderInputItem;
 }

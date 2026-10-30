@@ -5,6 +5,8 @@ import type { SkillAttachment } from '../types/user-turn.js';
 export interface UserMessage {
   /** Human arrival time, independent of processing/queue delay. */
   humanInputAt?: string;
+  /** Inherited human arrival on a nonhuman rollover brief; never a new arrival. */
+  humanInputBaseline?: string;
   id: string;
   sender: 'user';
   text: string;

@@ -9,7 +9,7 @@
   "settings": {
     "agent": {
       "modelSelection": {
-        "model": "mock-alpha",
+        "model": "mock-beta",
         "provider": "mockprov"
       },
       "reasoningEffort": "high",
@@ -37,9 +37,5 @@
       }
     }
   },
-  "provider": [
-    {
-      "text": "Hello there."
-    }
-  ]
+  "provider": [{ "text": "Hello there." }]
 }

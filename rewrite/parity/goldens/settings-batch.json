@@ -7,7 +7,7 @@
       "stderr": "Profile: pair\n",
       "requests": [
         {
-          "model": "mock-alpha",
+          "model": "mock-beta",
           "stream": true,
           "messages": [
             {

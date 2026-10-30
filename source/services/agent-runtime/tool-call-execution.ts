@@ -341,8 +341,10 @@ export class ToolCallExecution {
       attempt,
       scope: context.hookScope ?? 'root',
     };
-    await context.beforeToolDispatch?.(callId);
-    if (context.beforeToolDispatch) context.onDispatch(entry);
+    if (context.beforeToolDispatch) {
+      await context.beforeToolDispatch(callId);
+      context.onDispatch(entry);
+    }
     entry.status = 'completed';
     context.onExecutionStarted(callId);
     await this.#notify(() => this.#deps.toolLifecycle?.before(lifecycleContext));

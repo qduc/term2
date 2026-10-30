@@ -87,6 +87,7 @@ export async function createProofPersistence(input: ProofContext, options: Proof
   let currentTurnId: string | null = null;
   let currentRequestId: string | null = null;
   let admittedUserRef: { readonly logId: string; readonly eventId: string } | null = null;
+  let blockedRollbackDone = false;
   let pendingObservation: { answer: string; rejectionReason?: string } | null = null;
   const assertHealthy = () => {
     if (poison !== undefined) throw poison;
@@ -94,6 +95,7 @@ export async function createProofPersistence(input: ProofContext, options: Proof
   };
   const capture = (event: LogEvent) => {
     if (poison !== undefined) return;
+    if (blockedRollbackDone && event.type === 'error') return;
     try {
       if (event.type === 'approval_resolved' && pendingObservation) {
         const expected = pendingObservation;
@@ -138,6 +140,7 @@ export async function createProofPersistence(input: ProofContext, options: Proof
       const expiresAt = new Date(Date.now() + 60_000).toISOString();
       currentTurnId = turnId;
       currentRequestId = requestId;
+      blockedRollbackDone = false;
       const admitted = await commit([
         { type: 'user_message', message: { id: userMessageId, sender: 'user', text: prompt } },
         {
@@ -197,6 +200,7 @@ export async function createProofPersistence(input: ProofContext, options: Proof
     },
     eventBoundary: async (event: ConversationEvent) => {
       assertHealthy();
+      if (event.type === 'error' && event.droppedUserMessage && blockedRollbackDone) return;
       if (!currentTurnId && state().activeTurnId) currentTurnId = state().activeTurnId;
       if (!currentRequestId && currentTurnId) {
         currentRequestId =
@@ -251,6 +255,7 @@ export async function createProofPersistence(input: ProofContext, options: Proof
         if (event.type === target) fault?.arm();
       }
       await commit(facts);
+      if (event.type === 'error' && event.droppedUserMessage) blockedRollbackDone = true;
       if (event.type === 'approval_required' && options.barrierFile) {
         await fs.promises.writeFile(options.barrierFile, `${state().lastSeq}\n`, { flag: 'w' });
         await new Promise<void>(() => {});

@@ -27611,6 +27611,115 @@
         }
       ],
       "notes": "Guard passed 524 exact baseline edges with no unmapped files; nine old CLI parity scenarios passed. Actual buildAgent run_code batch matches G3 golden, PNG provider output survives A2 conversion, strict/custom declarations and adapter cancellation pass. Native tracer passed at documented bench-dist path after an initial command pointed at the wrong output path and failed MODULE_NOT_FOUND. Sol independently approved this integrated source; five synthetic forbidden-edge checks, fatal/multimodal/call identity and helper probes passed. Review: /tmp/term2-a3-independent-review.md. Hosted CI pending; full integration/e2e suites not run."
+    },
+    {
+      "id": "2026-10-30-c3a-evidence-interactive",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:00:06Z",
+      "commit": "5d926d759adac061f9614aff05a24d433373b48d",
+      "tree": "b84523369ff658ca4fc249f2346e22b20bcf9474",
+      "revision_kind": "clean source commit before documentation",
+      "base_commit": "5130f32b16ef1a80a9a37acb9f90a7a29a526cea",
+      "task_ids": [
+        "2026-10-30-c3a-evidence-interactive"
+      ],
+      "suite": "old CLI interactive evidence and selectable CLI",
+      "command": "pnpm build; node rewrite/parity/run.mjs check; TERM2_TEST_CLI=/tmp/term2-c3a-selected-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/turn-decisions.blackbox.ts scripts/provider-black-box/conversation-loop.blackbox.ts --maxWorkers=1; focused conversation-loop rerun after effect assertions",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; local provider and PTY with network-enabled sandbox. Marker wrapper imports built old CLI."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-c3a-selected-cli.mjs"
+        }
+      ],
+      "notes": "Nine old parity goldens passed; both selectable interactive scenarios passed 2/2 with marker wrapper, and final effect-gating focused scenario passed 1/1. One exploratory assertion expecting no-answer text in fresh successor provider input failed: actual input contained only fresh user message; persisted log contains no-answer. This is not evidence of queued cancellation notice or full-history behavior. No new goldens; C3a matrix remains incomplete. Independent Sol review of earlier source 276e5e8c passed both scenarios; final additions awaiting review."
+    },
+    {
+      "id": "2026-10-30-c3a-evidence-static",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:00:45Z",
+      "commit": "5d926d759adac061f9614aff05a24d433373b48d",
+      "tree": "b84523369ff658ca4fc249f2346e22b20bcf9474",
+      "revision_kind": "clean source commit before documentation",
+      "base_commit": "5130f32b16ef1a80a9a37acb9f90a7a29a526cea",
+      "task_ids": [
+        "2026-10-30-c3a-evidence-interactive"
+      ],
+      "suite": "rewrite static gates",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Rewrite typecheck, layer guard (524 allowlisted edges), and parity inventory passed."
+    },
+    {
+      "id": "2026-10-30-c3a-evidence-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:03:29Z",
+      "commit": "5d926d759adac061f9614aff05a24d433373b48d",
+      "tree": "b84523369ff658ca4fc249f2346e22b20bcf9474",
+      "revision_kind": "clean source commit; independently reviewed with documentation head 492bd04c",
+      "base_commit": "5130f32b16ef1a80a9a37acb9f90a7a29a526cea",
+      "task_ids": [
+        "2026-10-30-c3a-evidence-interactive"
+      ],
+      "suite": "independent selected CLI interactive evidence",
+      "command": "TERM2_TEST_CLI=/tmp/term2-c3a-review-selected.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/turn-decisions.blackbox.ts scripts/provider-black-box/conversation-loop.blackbox.ts --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol review; selected marker wrapper imports built old CLI."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-c3a-review-selected.mjs"
+        }
+      ],
+      "notes": "Sol accepted source and documentation with no findings; both PTY scenarios passed in 4.11s and marker recorded two invocations. First parked approval had no effect file, second had x, and completion boundaries had x and xx. Nine existing goldens untouched. This resolves the earlier pending independent review, without expanding coverage claims."
     }
   ]
 }

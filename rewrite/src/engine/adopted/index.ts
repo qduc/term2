@@ -679,6 +679,7 @@ export function createAdoptedEngine(options: {
               (candidate) =>
                 !matched.has(candidate) &&
                 same(candidate.checkpoint, sourceItem) &&
+                logical.compactions.filter((other) => same(other.checkpoint, sourceItem)).length === 1 &&
                 (candidate.index === index ||
                   sourceHistory.filter((item) => same(candidate.checkpoint, item)).length === 1),
             );

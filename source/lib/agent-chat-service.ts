@@ -19,6 +19,7 @@ import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import { normalizeUsage } from '../utils/ai/token-usage.js';
 import type { ProviderInputItem } from '../contracts/provider-input.js';
 import type { NestedModelBinding } from '../contracts/nested-run-driver.js';
+import { waitForAbortableRead } from '../contracts/abort-aware-wait.js';
 
 /** A failed dispatched helper still owns its request accounting. */
 export class AgentChatFailure extends Error {
@@ -237,11 +238,20 @@ export class AgentChatService {
     const isDefaultSetting = settings.get('agent.reasoningEffort') === 'default';
     if (tempProvider === 'codex' && isDefaultSetting) {
       try {
-        if (this.#deps.modelBinding)
-          await this.#deps.modelBinding.fetchModels('codex', { settingsService: settings, loggingService: logger });
-        else await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
+        if (this.#deps.modelBinding) {
+          const operation = this.#deps.modelBinding.fetchModels('codex', {
+            settingsService: settings,
+            loggingService: logger,
+            signal: options.signal,
+          });
+          if (options.signal)
+            await waitForAbortableRead(operation, options.signal, this.#deps.modelBinding.trackDetachedRead);
+          else await operation;
+          options.signal?.throwIfAborted();
+        } else await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
         agentConfig.refreshAgent({ configurationChanged: false });
       } catch (_err) {
+        if (this.#deps.modelBinding) options.signal?.throwIfAborted();
         // ignore
       }
     }
@@ -332,6 +342,7 @@ export class AgentChatService {
       reasoningEffort?: ReasoningEffortSetting | null;
       instructions?: string;
       outputType: JsonSchemaDefinition;
+      signal?: AbortSignal;
     },
   ): Promise<unknown> {
     const { agentConfig, settings, logger } = this.#deps;
@@ -346,11 +357,20 @@ export class AgentChatService {
     const isDefaultSetting = settings.get('agent.reasoningEffort') === 'default';
     if (tempProvider === 'codex' && isDefaultSetting) {
       try {
-        if (this.#deps.modelBinding)
-          await this.#deps.modelBinding.fetchModels('codex', { settingsService: settings, loggingService: logger });
-        else await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
+        if (this.#deps.modelBinding) {
+          const operation = this.#deps.modelBinding.fetchModels('codex', {
+            settingsService: settings,
+            loggingService: logger,
+            signal: options.signal,
+          });
+          if (options.signal)
+            await waitForAbortableRead(operation, options.signal, this.#deps.modelBinding.trackDetachedRead);
+          else await operation;
+          options.signal?.throwIfAborted();
+        } else await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
         agentConfig.refreshAgent({ configurationChanged: false });
       } catch (_err) {
+        if (this.#deps.modelBinding) options.signal?.throwIfAborted();
         // ignore
       }
     }
@@ -394,6 +414,7 @@ export class AgentChatService {
 
       const result = await this.#runAgentWithProvider(tempProvider, agentForChat, message, {
         maxTurns: 1,
+        ...(options.signal ? { signal: options.signal } : {}),
       });
 
       // Some OpenAI-compatible providers (including OpenRouter) can complete a

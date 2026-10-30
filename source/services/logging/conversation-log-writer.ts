@@ -41,6 +41,18 @@ export interface ConversationLogWriter {
   close(): Promise<void>;
 }
 
+/** Durable one-record batch API used by the new conversation session store. */
+export interface AtomicConversationLogWriter extends ConversationLogWriter {
+  /** Initializes the canonical log with `session_init` and accompanying facts in one physical record. */
+  initBatch(meta: Omit<SessionInitEvent, 'type'>, facts: readonly { readonly type: string }[]): void;
+  /** Opens and locks an existing canonical log without manufacturing a new lifecycle fact. */
+  openExisting(meta: Omit<SessionInitEvent, 'type'>): void;
+  /** Writes all facts in one newline-terminated storage envelope and fsyncs it before returning. */
+  appendBatch<T extends { readonly type: string }>(facts: readonly T[]): Promise<readonly LogEnvelope<T>[]>;
+  /** Delete the canonical file and sidecar while retaining this writer's exclusive lock. */
+  deleteSessionFiles(): Promise<void>;
+}
+
 export class LockConflictError extends Error {
   readonly sessionId: string;
   readonly lockPath: string;
@@ -70,7 +82,8 @@ type WriterFileSystem = Pick<
   | 'fsyncSync'
   | 'closeSync'
   | 'unlinkSync'
->;
+> &
+  Partial<Pick<typeof fs, 'ftruncateSync'>>;
 
 interface WriterOptions {
   sessionId: string;
@@ -233,6 +246,36 @@ function readLogTailState(
   }
 }
 
+/** Remove only an unterminated new atomic batch tail while the caller holds its lock. */
+function discardUnterminatedBatchTail(fileSystem: WriterFileSystem, filePath: string): void {
+  if (!fileSystem.existsSync(filePath)) return;
+  const fd = fileSystem.openSync(filePath, 'r+');
+  try {
+    const size = fileSystem.fstatSync(fd).size;
+    if (size === 0) return;
+    const finalByte = Buffer.allocUnsafe(1);
+    fileSystem.readSync(fd, finalByte, 0, 1, size - 1);
+    if (finalByte[0] === 0x0a) return;
+    const start = findLineStart(fileSystem, fd, size);
+    const tail = readLine(fileSystem, fd, start, size - start);
+    let isBatch = /"type"\s*:\s*"session_fact_batch"/.test(tail);
+    if (!isBatch) {
+      try {
+        const value = JSON.parse(tail) as { event?: { type?: unknown } };
+        isBatch = value.event?.type === 'session_fact_batch';
+      } catch {
+        // A partial JSON prefix can still identify an interrupted batch.
+      }
+    }
+    if (!isBatch) return;
+    if (!fileSystem.ftruncateSync) throw new Error('filesystem cannot repair an incomplete session batch');
+    fileSystem.ftruncateSync(fd, start);
+    fileSystem.fsyncSync(fd);
+  } finally {
+    fileSystem.closeSync(fd);
+  }
+}
+
 export function sanitizeSubagentResult(value: unknown): unknown {
   if (!value) {
     return value;
@@ -334,7 +377,7 @@ function releaseLock(dir: string, sessionId: string, fileSystem: WriterFileSyste
   }
 }
 
-class ConversationLogWriterImpl implements ConversationLogWriter {
+class ConversationLogWriterImpl implements ConversationLogWriter, AtomicConversationLogWriter {
   #sessionId: string;
   #dir: string;
   #logger: ILoggingService;
@@ -370,13 +413,35 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     this.#initialize(meta, true);
   }
 
-  #initialize(meta: Omit<SessionInitEvent, 'type'>, recoverSequence: boolean): void {
+  initBatch(meta: Omit<SessionInitEvent, 'type'>, facts: readonly { readonly type: string }[]): void {
+    this.#initialize(meta, true, [{ type: 'session_init', ...meta }, ...facts]);
+  }
+
+  openExisting(meta: Omit<SessionInitEvent, 'type'>): void {
+    const existing = logPath(this.#dir, this.#sessionId);
+    if (!this.#fileSystem.existsSync(existing)) throw new Error(`conversation ${this.#sessionId} does not exist`);
+    this.#hasUnsettledTurn = this.#fileSystem.existsSync(deltaPath(this.#dir, this.#sessionId));
+    this.#initialize(meta, true, undefined, false);
+  }
+
+  #initialize(
+    meta: Omit<SessionInitEvent, 'type'>,
+    recoverSequence: boolean,
+    initialBatch?: readonly { readonly type: string }[],
+    appendSessionInit = true,
+  ): void {
     this.#projectPath = meta.projectPath;
     this.#sshHost = meta.sshHost;
     ensureDir(this.#fileSystem, this.#dir);
     acquireLock(this.#dir, this.#sessionId, this.#fileSystem, this.#isPidAlive);
     try {
       const filePath = logPath(this.#dir, this.#sessionId);
+      if (
+        initialBatch !== undefined &&
+        (this.#fileSystem.existsSync(filePath) || this.#fileSystem.existsSync(deltaPath(this.#dir, this.#sessionId)))
+      )
+        throw new Error(`conversation ${this.#sessionId} already exists`);
+      discardUnterminatedBatchTail(this.#fileSystem, filePath);
       const tailState = readLogTailState(this.#fileSystem, filePath, recoverSequence);
       // Sequence numbers are shared across both files so recovery can merge
       // them by `seq`. Deltas outnumber everything else ~10:1, so after a crash
@@ -395,7 +460,9 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
           throw err;
         }
       }
-      this.append({ type: 'session_init', ...meta });
+      if (initialBatch !== undefined) {
+        if (initialBatch.length > 0) void this.appendBatch(initialBatch);
+      } else if (appendSessionInit) this.append({ type: 'session_init', ...meta });
     } catch (err: unknown) {
       if (this.#fd !== null) {
         try {
@@ -452,6 +519,71 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       }
       this.#logWriteFailure(err);
     }
+  }
+
+  appendBatch<T extends { readonly type: string }>(facts: readonly T[]): Promise<readonly LogEnvelope<T>[]> {
+    this.#throwIfFailed();
+    if (facts.length === 0) return Promise.resolve([]);
+    if (this.#closed || this.#fd === null) throw new Error('conversation log writer is not open');
+    if (
+      facts.some(
+        (fact) =>
+          !fact ||
+          typeof fact.type !== 'string' ||
+          fact.type.length === 0 ||
+          fact.type === 'session_fact_batch' ||
+          SIDECAR_EVENT_TYPES.has(fact.type as LogEvent['type']),
+      )
+    ) {
+      throw new Error('atomic batch contains an invalid or unsupported event');
+    }
+
+    const at = new Date().toISOString();
+    const firstSeq = this.#seq + 1;
+    const entries = facts.map(
+      (fact, index): LogEnvelope<T> => ({
+        v: LOG_ENVELOPE_VERSION,
+        seq: firstSeq + index,
+        ts: at,
+        logId: this.#sessionId,
+        eventId: crypto.randomUUID(),
+        event: sanitizeSubagentResult(fact) as T,
+      }),
+    );
+    const final = entries.at(-1)!;
+    const physical =
+      JSON.stringify({
+        v: LOG_ENVELOPE_VERSION,
+        seq: final.seq,
+        ts: final.ts,
+        logId: final.logId,
+        eventId: final.eventId,
+        event: { type: 'session_fact_batch', version: 1, entries },
+      }) + '\n';
+    // Serialize before touching the file so cycles or unsupported values never
+    // leave a partially written record.
+    const bytes = Buffer.from(physical, 'utf8');
+    try {
+      let offset = 0;
+      while (offset < bytes.length) {
+        const written = this.#fileSystem.writeSync(this.#fd, bytes, offset, bytes.length - offset);
+        if (!Number.isInteger(written) || written <= 0) throw new Error('atomic batch write made no progress');
+        offset += written;
+      }
+      this.#fileSystem.fsyncSync(this.#fd);
+    } catch (error) {
+      this.#recordFailure(error);
+      throw error;
+    }
+    this.#seq = final.seq;
+    for (const fact of facts) {
+      if (fact.type === 'user_message') this.#hasUnsettledTurn = true;
+      else if (TURN_SETTLING_EVENTS.has(fact.type as LogEvent['type'])) this.#hasUnsettledTurn = false;
+    }
+    if (!this.#deferLastConversationPublication) {
+      this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+    }
+    return Promise.resolve(entries);
   }
 
   /**
@@ -570,6 +702,50 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     }
   }
 
+  async deleteSessionFiles(): Promise<void> {
+    if (this.#closed || this.#fd === null) throw new Error('conversation log writer is not open');
+    this.#throwIfFailed();
+    this.#closed = true;
+    let failure: unknown = null;
+    try {
+      this.#fileSystem.fsyncSync(this.#fd);
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      this.#fileSystem.closeSync(this.#fd);
+    } catch (error) {
+      failure ??= error;
+    }
+    this.#fd = null;
+    failure ??= this.#closeDeltaFd();
+    if (failure === null) {
+      try {
+        this.#fileSystem.unlinkSync(deltaPath(this.#dir, this.#sessionId));
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'ENOENT') failure = error;
+      }
+    }
+    if (failure === null) {
+      try {
+        this.#fileSystem.unlinkSync(logPath(this.#dir, this.#sessionId));
+        const directoryFd = this.#fileSystem.openSync(this.#dir, 'r');
+        try {
+          this.#fileSystem.fsyncSync(directoryFd);
+        } finally {
+          this.#fileSystem.closeSync(directoryFd);
+        }
+      } catch (error) {
+        failure = error;
+      }
+    }
+    releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+    if (failure !== null) {
+      this.#recordFailure(failure);
+      throw failure;
+    }
+  }
+
   async close(): Promise<void> {
     if (this.#closed) {
       this.#throwIfFailed();
@@ -643,6 +819,6 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   }
 }
 
-export function createConversationLogWriter(opts: WriterOptions): ConversationLogWriter {
+export function createConversationLogWriter(opts: WriterOptions): ConversationLogWriter & AtomicConversationLogWriter {
   return new ConversationLogWriterImpl(opts);
 }

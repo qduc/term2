@@ -1,270 +1,440 @@
+/** Canonical filesystem SessionStore. The source conversation log is its sole authority. */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Item, ModelRef, ToolCallId } from '../model/index.js';
-import type { ToolRegistry, Workspace } from '../tools/index.js';
-import type { SettingsReader } from '../config/index.js';
-import type { ApprovalDecision, Engine, TurnBudget, TurnCheckpoint, TurnId, TurnRun } from '../engine/index.js';
+import type { Item, ModelRef } from '../model/index.js';
+import type { Workspace } from '../tools/index.js';
 import type {
-  Admission,
-  ClientRequestId,
-  InteractionId,
-  LogEntry,
   Session,
+  SessionDecision,
   SessionFact,
   SessionId,
   SessionLog,
   SessionState,
   SessionStore,
   SessionSummary,
-  SessionUpdate,
 } from './index.js';
-import { JsonlSessionLog } from './jsonl-log.js';
-import { initialState, project } from './reducer.js';
+import {
+  CanonicalSessionLog,
+  auditCanonicalConversation,
+  loadCanonicalConversation,
+  normalizedBodyHash,
+  type CanonicalSessionLog as CanonicalLog,
+  type SessionBinding,
+} from './adopted/conversation-log.js';
+import { SessionIndexService } from './adopted/conversation-index.js';
+import { initialState, newestAdmission, projectLifecycle, statusFromLegacyAudit, withTranscript } from './reducer.js';
 
-export type LocalStoreOptions = {
+export type SessionDriver = Pick<
+  Session,
+  'submit' | 'decide' | 'cancel' | 'retry' | 'compact' | 'setModel' | 'subscribe'
+>;
+export type SessionDriverContext = {
+  readonly id: SessionId;
+  readonly log: SessionLog;
+  state(): SessionState;
+  /** Replace state only after the caller has durably appended the supplied facts. */
+  commit(facts: readonly SessionFact[]): Promise<readonly import('./index.js').LogEntry[]>;
+};
+export type SessionStoreOptions = {
   readonly root: string;
-  readonly engine: Engine;
-  readonly tools: ToolRegistry;
-  readonly settings: SettingsReader;
-  readonly instructions: string;
-  readonly budget: TurnBudget;
+  readonly logger: Parameters<typeof CanonicalSessionLog.create>[0]['logger'];
+  readonly defaultWorkspace: Workspace;
+  readonly defaultModel: ModelRef;
+  readonly admissionTtlMs?: number;
+  readonly fileSystem?: Parameters<typeof CanonicalSessionLog.create>[0]['fileSystem'];
+  /** Adopted source runtime driver; the store remains the only log writer. */
+  readonly driverFactory: (context: SessionDriverContext) => SessionDriver;
 };
 
-const newId = <T extends string>(prefix: string): T => `${prefix}_${crypto.randomUUID()}` as T;
-
-/** Sessions as JSONL files under one directory. */
 export class LocalSessionStore implements SessionStore {
-  readonly #options: LocalStoreOptions;
-
-  constructor(options: LocalStoreOptions) {
+  readonly #options: SessionStoreOptions;
+  constructor(options: SessionStoreOptions) {
     this.#options = options;
-    fs.mkdirSync(options.root, { recursive: true });
   }
 
-  async create(workspace: Workspace, model: ModelRef): Promise<Session> {
-    const id = newId<SessionId>('ses');
-    const session = new LocalSession(id, new JsonlSessionLog(this.#file(id)), [], this.#options);
-    await session.commit([{ type: 'session_created', workspace, model }]);
-    return session;
+  async create(workspace: Workspace, model: ModelRef, binding?: SessionBinding): Promise<Session> {
+    fs.mkdirSync(this.#options.root, { recursive: true });
+    const id = `ses_${crypto.randomUUID()}` as SessionId;
+    return this.createWithId(id, workspace, model, binding);
   }
 
-  async open(id: SessionId): Promise<Session> {
-    const file = this.#file(id);
-    if (!fs.existsSync(file)) throw new Error(`no session ${id}`);
-    const log = new JsonlSessionLog(file);
-    const entries: LogEntry[] = [];
-    for await (const entry of log.read()) entries.push(entry);
-    const session = new LocalSession(id, log, entries, this.#options);
-    await session.reconcile();
-    return session;
+  /** Proof/adapter composition keeps the source runtime's already-selected ID. */
+  async createWithId(
+    id: SessionId,
+    workspace: Workspace,
+    model: ModelRef,
+    binding?: SessionBinding,
+    metadata: Partial<import('./adopted/conversation-log.js').CanonicalSessionLogOptions['metadata']> = {},
+  ): Promise<Session> {
+    fs.mkdirSync(this.#options.root, { recursive: true });
+    const log = CanonicalSessionLog.create({
+      root: this.#options.root,
+      id,
+      metadata: { projectPath: workspace.root, model: model.model, provider: model.provider, ...metadata },
+      workspace,
+      model,
+      ...(binding ? { binding } : {}),
+      logger: this.#options.logger,
+      fileSystem: this.#options.fileSystem,
+    });
+    return this.#makeSession(id, log, replayState(id, log, this.#options));
   }
 
-  async list(): Promise<{ readonly sessions: readonly SessionSummary[]; readonly nextCursor: string | null }> {
-    const sessions: SessionSummary[] = [];
-    for (const name of fs.readdirSync(this.#options.root)) {
-      if (!name.endsWith('.jsonl')) continue;
-      const id = name.slice(0, -'.jsonl'.length) as SessionId;
-      const log = new JsonlSessionLog(this.#file(id));
-      let state = initialState(id);
-      let updatedAt = '';
-      for await (const entry of log.read()) {
-        state = project(state, entry);
-        updatedAt = entry.at;
+  async open(id: SessionId, expectedBinding?: SessionBinding): Promise<Session> {
+    if (expectedBinding) {
+      const existing = CanonicalSessionLog.readOnly(this.#options.root, id);
+      const binding = existing.find((entry) => entry.fact.type === 'session_bound')?.fact;
+      if (binding?.type !== 'session_bound' || !sameBinding(binding.binding, expectedBinding)) {
+        throw new Error('session binding does not match the expected owner/workspace/grant');
       }
+    }
+    // Acquire the existing source writer lock before replay and reconciliation.
+    const log = CanonicalSessionLog.open({
+      root: this.#options.root,
+      id,
+      logger: this.#options.logger,
+      fileSystem: this.#options.fileSystem,
+    });
+    try {
+      let state = replayState(id, log, this.#options);
+      if (state.status === 'closed') throw new Error(`session ${id} is closed`);
+      const facts: SessionFact[] = [];
+      const pending = state.pendingInteraction;
+      if (pending) {
+        const identity = {
+          turnId: pending.turnId,
+          interactionId: pending.interaction.interactionId,
+          revision: pending.interaction.revision,
+          generation: pending.generation,
+        };
+        facts.push({ type: 'session_interaction_recovered', version: 1, ...identity, reason: 'daemon_restart' });
+        const pendingFact = [...log.entries()]
+          .reverse()
+          .find(
+            (entry) => entry.fact.type === 'session_interaction_pending' && entry.fact.turnId === pending.turnId,
+          )?.fact;
+        if (
+          pendingFact?.type === 'session_interaction_pending' &&
+          pendingFact.settleOnRecovery === 'child_interrupted'
+        ) {
+          facts.push({
+            type: 'subagent_interrupted',
+            agentId: pendingFact.child?.agentId ?? pending.interaction.descriptor.agentName,
+            role: pendingFact.child?.role ?? pending.interaction.descriptor.agentName,
+            finalText: 'Child interaction interrupted by daemon restart.',
+          });
+        }
+        facts.push({ type: 'session_interaction_resolved', version: 1, ...identity, outcome: 'cancelled' });
+      }
+      for (const admission of Object.values(state.admissions)) {
+        if (admission.result) continue;
+        const started = log
+          .entries()
+          .some((entry) => entry.fact.type === 'session_turn_started' && entry.fact.turnId === admission.turnId);
+        const terminal = [...log.entries()]
+          .reverse()
+          .find((entry) => entry.fact.type === 'session_turn_ended' && entry.fact.turnId === admission.turnId)?.fact;
+        if (admission.disposition === 'queued' && !started && !terminal) {
+          facts.push({
+            type: 'session_admission_settled',
+            version: 1,
+            clientRequestId: admission.clientRequestId,
+            turnId: admission.turnId,
+            result: 'queue_discarded',
+          });
+        } else if (terminal?.type === 'session_turn_ended') {
+          const result =
+            terminal.outcome === 'completed' ? 'accepted' : terminal.outcome === 'cancelled' ? 'aborted' : 'failed';
+          facts.push({
+            type: 'session_admission_settled',
+            version: 1,
+            clientRequestId: admission.clientRequestId,
+            turnId: admission.turnId,
+            result,
+          });
+        } else if (!terminal && (admission.disposition === 'started' || started)) {
+          facts.push({
+            type: 'session_admission_settled',
+            version: 1,
+            clientRequestId: admission.clientRequestId,
+            turnId: admission.turnId,
+            result: 'aborted',
+          });
+        }
+      }
+      const priorInterrupt = log
+        .entries()
+        .some(
+          (entry) =>
+            entry.fact.type === 'session_interrupted' &&
+            (state.activeTurnId === null || entry.fact.turnId === state.activeTurnId),
+        );
+      if (
+        (state.status === 'running' || state.status === 'awaiting_interaction' || state.status === 'interrupted') &&
+        !priorInterrupt
+      ) {
+        facts.push({
+          type: 'session_interrupted',
+          version: 1,
+          turnId: state.activeTurnId,
+          reason: 'daemon_restart',
+          interruptedAt: new Date().toISOString(),
+        });
+      }
+      if (facts.length) {
+        await log.append(facts);
+        state = replayState(id, log, this.#options);
+      }
+      return this.#makeSession(id, log, state);
+    } catch (error) {
+      await log.dispose();
+      throw error;
+    }
+  }
+
+  async list(cursor?: string): Promise<{ sessions: readonly SessionSummary[]; nextCursor: string | null }> {
+    const names = fs.existsSync(this.#options.root)
+      ? fs
+          .readdirSync(this.#options.root)
+          .filter((name) => name.endsWith('.jsonl'))
+          .map((name) => name.slice(0, -6))
+          .sort()
+      : [];
+    const start = cursor ? Math.max(0, names.findIndex((id) => id === cursor) + 1) : 0;
+    const page = names.slice(start, start + 100);
+    const sessions: SessionSummary[] = [];
+    for (const id of page) {
+      const entries = CanonicalSessionLog.readOnly(this.#options.root, id);
+      const state = replayState(
+        id as SessionId,
+        { entries: () => entries } as unknown as CanonicalLog,
+        this.#options,
+        this.#options.root,
+      );
       sessions.push({
-        id,
+        id: state.id,
         status: state.status,
         workspace: state.workspace,
         lastSeq: state.lastSeq,
-        title: null,
-        updatedAt,
+        title: state.messages.length
+          ? String((state.messages.at(-1) as { text?: unknown })?.text ?? '').slice(0, 80) || null
+          : null,
+        updatedAt: entries.at(-1)?.at ?? new Date(0).toISOString(),
       });
     }
-    return { sessions, nextCursor: null };
+    return { sessions, nextCursor: start + page.length < names.length && page.length ? page.at(-1)! : null };
   }
 
-  #file(id: SessionId): string {
-    if (!/^ses_[0-9a-f-]{36}$/.test(id)) throw new Error('invalid session id');
-    return path.join(this.#options.root, `${id}.jsonl`);
+  /** Delete only explicitly closed sessions whose fixed retention deadline has passed. */
+  async expireClosed(
+    now = new Date(),
+  ): Promise<{ readonly deleted: readonly string[]; readonly errors: readonly { id: string; message: string }[] }> {
+    const deleted: string[] = [];
+    const errors: { id: string; message: string }[] = [];
+    const names = fs.existsSync(this.#options.root)
+      ? fs.readdirSync(this.#options.root).filter((name) => name.endsWith('.jsonl'))
+      : [];
+    for (const name of names) {
+      const id = name.slice(0, -'.jsonl'.length);
+      let snapshot: readonly import('./adopted/conversation-log.js').SessionLogEntry[];
+      try {
+        snapshot = CanonicalSessionLog.readOnly(this.#options.root, id);
+      } catch (error) {
+        errors.push({ id, message: error instanceof Error ? error.message : String(error) });
+        continue;
+      }
+      if (!isRetentionEligible(snapshot, now.getTime())) continue;
+      let locked: CanonicalLog | undefined;
+      try {
+        locked = CanonicalSessionLog.open({
+          root: this.#options.root,
+          id,
+          logger: this.#options.logger,
+          fileSystem: this.#options.fileSystem,
+        });
+        if (!isRetentionEligible(locked.entries(), now.getTime())) {
+          await locked.dispose();
+          continue;
+        }
+        await locked.deleteFiles();
+        deleted.push(id);
+      } catch (error) {
+        if (locked) {
+          try {
+            await locked.dispose();
+          } catch {
+            /* keep the original delete error */
+          }
+        }
+        errors.push({ id, message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    if (deleted.length) {
+      try {
+        const result = await new SessionIndexService({
+          conversationsDir: this.#options.root,
+          backend: 'direct',
+        }).reconcile();
+        if (!result.ok) errors.push({ id: '*index*', message: result.error ?? 'session index reconciliation failed' });
+      } catch (error) {
+        errors.push({ id: '*index*', message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { deleted, errors };
+  }
+
+  #makeSession(id: SessionId, log: CanonicalLog, state: SessionState): Session {
+    let current = state;
+    const pendingAdmissions = new Map<string, { hash: string; turnId: string; admitted: Promise<void> }>();
+    const context: SessionDriverContext = {
+      id,
+      log,
+      state: () => current,
+      commit: async (facts) => {
+        const entries = await log.append(facts);
+        for (const entry of entries) current = projectLifecycle(current, entry);
+        const restored = loadCanonicalConversation(id, log.root);
+        current = withTranscript(
+          current,
+          { history: restored.history, messages: restored.messages },
+          restored.history as unknown as Item[],
+        );
+        return entries;
+      },
+    };
+    const driver = this.#options.driverFactory(context);
+    return {
+      id,
+      state: () => current,
+      submit: async (requestId, items) => {
+        if (current.status === 'closed') return { kind: 'rejected', reason: 'closed' };
+        const hash = normalizedBodyHash(items);
+        const pending = pendingAdmissions.get(requestId);
+        if (pending) {
+          if (pending.hash !== hash) return { kind: 'rejected', reason: 'request_conflict' };
+          await pending.admitted;
+          return { kind: 'duplicate', turnId: pending.turnId as never };
+        }
+        const prior = newestAdmission(current, requestId, Date.now());
+        if (prior)
+          return prior.normalizedBodyHash === hash
+            ? { kind: 'duplicate', turnId: prior.turnId }
+            : { kind: 'rejected', reason: 'request_conflict' };
+        const turnId = crypto.randomUUID();
+        const createdAt = new Date().toISOString();
+        const expiresAt = new Date(Date.now() + (this.#options.admissionTtlMs ?? 60_000)).toISOString();
+        const text = items
+          .map((item) =>
+            item.type === 'user_message'
+              ? item.content.map((part) => (part.type === 'text' ? part.text : '')).join('')
+              : '',
+          )
+          .join('\n');
+        let resolveAdmitted!: () => void;
+        let rejectAdmitted!: (error: unknown) => void;
+        const admitted = new Promise<void>((resolve, reject) => {
+          resolveAdmitted = resolve;
+          rejectAdmitted = reject;
+        });
+        pendingAdmissions.set(requestId, { hash, turnId, admitted });
+        try {
+          const commit = context.commit([
+            { type: 'user_message', message: { id: crypto.randomUUID(), sender: 'user', text } },
+            {
+              type: 'session_admitted',
+              version: 1,
+              clientRequestId: requestId,
+              normalizedBodyHash: hash,
+              turnId,
+              disposition: 'started',
+              createdAt,
+              expiresAt,
+            },
+            { type: 'session_turn_started', version: 1, turnId, clientRequestId: requestId },
+          ]);
+          commit.then(resolveAdmitted, rejectAdmitted);
+          await commit;
+        } catch (error) {
+          pendingAdmissions.delete(requestId);
+          throw error;
+        }
+        pendingAdmissions.delete(requestId);
+        return driver.submit(requestId, items);
+      },
+      decide: (decision: SessionDecision) => driver.decide(decision),
+      cancel: () => driver.cancel(),
+      retry: () => driver.retry(),
+      compact: () => driver.compact(),
+      setModel: (model) => driver.setModel(model),
+      subscribe: (...args) => driver.subscribe(...args),
+      close: () => log.dispose(),
+      closeLog: async (
+        closedAt = new Date().toISOString(),
+        retentionEligibleAt = new Date(Date.parse(closedAt) + 30 * 86400000).toISOString(),
+      ) => {
+        if (current.status === 'closed') return;
+        await context.commit([{ type: 'session_closed', version: 1, closedAt, retentionEligibleAt }]);
+      },
+    };
   }
 }
 
-class LocalSession implements Session {
-  readonly id: SessionId;
-  readonly #log: SessionLog;
-  readonly #options: LocalStoreOptions;
-  readonly #entries: LogEntry[];
-  readonly #listeners = new Set<(update: SessionUpdate) => void>();
-  readonly #seenRequests = new Map<ClientRequestId, TurnId>();
-  #state: SessionState;
-  #run: TurnRun | null = null;
+function sameBinding(actual: SessionBinding | undefined, expected: SessionBinding): boolean {
+  return (
+    !!actual &&
+    actual.ownerUserId === expected.ownerUserId &&
+    actual.workspaceId === expected.workspaceId &&
+    actual.grantVersion === expected.grantVersion &&
+    actual.fingerprint === expected.fingerprint
+  );
+}
 
-  constructor(id: SessionId, log: SessionLog, entries: LogEntry[], options: LocalStoreOptions) {
-    this.id = id;
-    this.#log = log;
-    this.#options = options;
-    this.#entries = [...entries];
-    this.#state = entries.reduce(project, initialState(id));
-    for (const entry of entries) {
-      if (entry.fact.type === 'turn_started' && entry.fact.requestId) {
-        this.#seenRequests.set(entry.fact.requestId, entry.fact.turnId);
-      }
-    }
-  }
+function isRetentionEligible(
+  entries: readonly import('./adopted/conversation-log.js').SessionLogEntry[],
+  now: number,
+): boolean {
+  const close = [...entries].reverse().find((entry) => entry.fact.type === 'session_closed')?.fact;
+  return close?.type === 'session_closed' && Date.parse(close.retentionEligibleAt) <= now;
+}
 
-  state(): SessionState {
-    return this.#state;
-  }
-
-  async submit(requestId: ClientRequestId, items: readonly Item[]): Promise<Admission> {
-    const seen = this.#seenRequests.get(requestId);
-    if (seen) return { kind: 'duplicate', turnId: seen };
-    if (this.#state.status === 'closed') return { kind: 'rejected', reason: 'closed' };
-    // The tracer has no queue: a busy session refuses instead of queueing.
-    if (this.#state.status === 'running' || this.#state.status === 'awaiting_interaction') {
-      return { kind: 'rejected', reason: 'queue_full' };
-    }
-    const turnId = newId<TurnId>('turn');
-    this.#seenRequests.set(requestId, turnId);
-    await this.commit([
-      { type: 'turn_started', turnId, requestId },
-      ...items.map((item): SessionFact => ({ type: 'item_committed', turnId, item })),
-    ]);
-    this.#startTurn(turnId);
-    return { kind: 'started', turnId };
-  }
-
-  async decide(
-    interactionId: InteractionId,
-    decisions: readonly { readonly callId: ToolCallId; readonly decision: ApprovalDecision }[],
-  ): Promise<void> {
-    const pending = this.#state.pendingInteraction;
-    const checkpoint = this.#state.lastCheckpoint;
-    if (!pending || pending.interactionId !== interactionId || !checkpoint) throw new Error('stale interaction');
-    await this.commit([{ type: 'interaction_resolved', interactionId, decisions }]);
-    this.#drive(this.#options.engine.resume(checkpoint, new Map(decisions.map((d) => [d.callId, d.decision]))));
-  }
-
-  async cancel(): Promise<void> {
-    this.#run?.cancel();
-  }
-
-  async retry(): Promise<Admission> {
-    if (!this.#state.canRetry) return { kind: 'rejected', reason: 'closed' };
-    const turnId = newId<TurnId>('turn');
-    await this.commit([{ type: 'turn_started', turnId, requestId: null }]);
-    this.#startTurn(turnId);
-    return { kind: 'started', turnId };
-  }
-
-  async compact(): Promise<void> {
-    throw new Error('compaction is not part of the tracer');
-  }
-
-  async setModel(model: ModelRef): Promise<void> {
-    await this.commit([{ type: 'model_changed', model }]);
-  }
-
-  subscribe(fromSeq: number, listener: (update: SessionUpdate) => void): () => void {
-    for (const entry of this.#entries) if (entry.seq > fromSeq) listener({ kind: 'fact', entry });
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
-  }
-
-  async close(): Promise<void> {
-    this.#run?.cancel();
-    this.#listeners.clear();
-  }
-
-  /** Called once on open: resume a crashed turn when that is safe, otherwise mark it interrupted. */
-  async reconcile(): Promise<void> {
-    const { status, activeTurnId, lastCheckpoint } = this.#state;
-    if (status !== 'running' || !activeTurnId) return;
-    if (lastCheckpoint && this.#safeToResume(lastCheckpoint)) {
-      this.#drive(this.#options.engine.resume(lastCheckpoint, new Map()));
-      return;
-    }
-    await this.commit([
-      { type: 'turn_interrupted', turnId: activeTurnId, reason: 'process stopped during a step that cannot be re-run' },
-    ]);
-  }
-
-  async commit(facts: readonly SessionFact[]): Promise<void> {
-    const seqs = await this.#log.append(facts);
-    const at = new Date().toISOString();
-    facts.forEach((fact, index) => {
-      const entry: LogEntry = { seq: seqs[index]!, at, fact };
-      this.#entries.push(entry);
-      this.#state = project(this.#state, entry);
-      this.#emit({ kind: 'fact', entry });
-    });
-  }
-
-  #safeToResume(checkpoint: TurnCheckpoint): boolean {
-    return checkpoint.pendingCalls.every((call) => this.#options.tools.get(call.toolName)?.idempotent === true);
-  }
-
-  #startTurn(turnId: TurnId): void {
-    this.#drive(
-      this.#options.engine.start({
-        turnId,
-        history: this.#state.history,
-        newItems: [],
-        instructions: this.#options.instructions,
-        model: this.#state.model,
-        toolNames: this.#options.tools
-          .available({ workspace: this.#state.workspace, settings: this.#options.settings })
-          .map((tool) => tool.spec.name),
-        workspace: this.#state.workspace,
-        budget: this.#options.budget,
-      }),
-    );
-  }
-
-  /** Runs a turn to its end, turning each step boundary into one atomic append. */
-  #drive(run: TurnRun): void {
-    this.#run = run;
-    void (async () => {
-      let items: SessionFact[] = [];
-      for await (const event of run.events) {
-        switch (event.type) {
-          case 'item':
-            items.push({ type: 'item_committed', turnId: run.turnId, item: event.item });
-            break;
-          case 'checkpoint':
-            await this.commit([...items, { type: 'checkpoint_saved', checkpoint: event.checkpoint }]);
-            items = [];
-            break;
-          case 'turn_ended': {
-            const outcome = event.outcome;
-            if (outcome.kind === 'suspended') {
-              await this.commit([
-                ...items,
-                { type: 'checkpoint_saved', checkpoint: outcome.checkpoint },
-                {
-                  type: 'interaction_opened',
-                  turnId: run.turnId,
-                  interactionId: newId<InteractionId>('int'),
-                  approvals: outcome.approvals,
-                },
-              ]);
-            } else {
-              const ended = outcome.kind === 'completed' ? 'completed' : outcome.kind;
-              await this.commit([...items, { type: 'turn_ended', turnId: run.turnId, outcome: ended }]);
-            }
-            items = [];
-            break;
-          }
-          default:
-            this.#emit({ kind: 'live', turnId: run.turnId, event });
-        }
-      }
-      if (this.#run === run) this.#run = null;
-    })();
-  }
-
-  #emit(update: SessionUpdate): void {
-    for (const listener of this.#listeners) listener(update);
-  }
+function replayState(
+  id: SessionId,
+  log: Pick<CanonicalLog, 'entries'>,
+  options: SessionStoreOptions,
+  explicitRoot?: string,
+): SessionState {
+  const entries = log.entries();
+  const binding = entries.find((entry) => entry.fact.type === 'session_bound')?.fact;
+  const init = entries.find((entry) => entry.fact.type === 'session_init')?.fact;
+  const workspace =
+    binding?.type === 'session_bound'
+      ? binding.workspace
+      : {
+          ...options.defaultWorkspace,
+          ...(init?.type === 'session_init' && init.projectPath ? { root: init.projectPath } : {}),
+        };
+  const model =
+    binding?.type === 'session_bound'
+      ? binding.model
+      : {
+          ...options.defaultModel,
+          ...(init?.type === 'session_init' && init.model ? { model: init.model } : {}),
+          ...(init?.type === 'session_init' && init.provider ? { provider: init.provider } : {}),
+        };
+  let state = initialState(id, workspace, model);
+  for (const entry of entries) state = projectLifecycle(state, entry);
+  const root = explicitRoot ?? (log as CanonicalLog).root;
+  const restored = loadCanonicalConversation(id, root);
+  state = withTranscript(
+    state,
+    { history: restored.history, messages: restored.messages },
+    restored.history as unknown as import('../model/index.js').Item[],
+  );
+  const audit = auditCanonicalConversation(id, explicitRoot ?? (log as CanonicalLog).root);
+  const hasLifecycleTurn = entries.some(
+    (entry) => entry.fact.type === 'session_turn_started' || entry.fact.type === 'session_interrupted',
+  );
+  if (!hasLifecycleTurn) state = statusFromLegacyAudit(state, audit.outcome);
+  return { ...state, lastSeq: entries.at(-1)?.seq ?? 0 };
 }

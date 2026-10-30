@@ -154,6 +154,7 @@
   "components/prompt/ApprovalPrompt.tsx -> services/approval/session-read-grant-target.ts (clients -> session)",
   "components/prompt/ApprovalPrompt.tsx -> tools/tool-names.ts (clients -> tools)",
   "components/prompt/QueuePausedPrompt.tsx -> services/queue/queue-controller.ts (clients -> session)",
+  "contracts/conversation.ts -> services/agent-runtime/run-budget.ts (shared -> engine)",
   "contracts/streamed-model-turn.ts -> services/retry/retry-recovery-budget.ts (shared -> engine)",
   "gateway/gateway.ts -> providers/codex-auth.ts (host -> model)",
   "gateway/gateway.ts -> providers/grok-auth.ts (host -> model)",

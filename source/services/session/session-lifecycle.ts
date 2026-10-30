@@ -200,15 +200,17 @@ export class SessionLifecycle {
   }
 
   /** Discard the latest attempt, retaining the exact original provider input. */
-  retryLastUserTurn(): boolean {
+  retryLastUserTurn(options?: { logUndo?: boolean }): boolean {
     const retry = this.#record.retryLastUserTurn();
     if (!retry) return false;
     this.#afterUndo();
-    this.#conversationLogger.log({
-      type: 'undo',
-      removedUserTurns: 1,
-      snapshot: { ...this.getCurrentSnapshot(), ...retry.discardedSnapshot },
-    });
+    if (options?.logUndo !== false) {
+      this.#conversationLogger.log({
+        type: 'undo',
+        removedUserTurns: 1,
+        snapshot: { ...this.getCurrentSnapshot(), ...retry.discardedSnapshot },
+      });
+    }
     return true;
   }
 

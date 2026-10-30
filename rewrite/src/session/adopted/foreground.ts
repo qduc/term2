@@ -7,6 +7,8 @@ import type { SessionRuntimeInternals } from '../../../../source/services/sessio
 import { parseToolCallArguments } from '../../../../source/services/tool-call-arguments.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../../../../source/services/interruption-info.js';
 import { isRunBudgetInteraction } from '../../../../source/services/agent-runtime/run-budget.js';
+import { rewindRemovedUserCount } from '../../../../source/services/conversation/conversation-replay.js';
+import { ConversationStore } from '../../../../source/services/conversation/conversation-store.js';
 import { injectSkillIntoTurn } from '../../../../source/types/user-turn.js';
 import { decideInteraction, projectPendingInteraction } from '../../../../source/gateway/interaction-protocol.js';
 import type { PendingInteractionDto } from '../../../../source/gateway/interaction-protocol.js';
@@ -17,12 +19,16 @@ import type { ApprovalDecision, TurnCheckpoint, TurnInput } from '../../engine/i
 import type { ToolCallId } from '../../model/index.js';
 import type { SessionDriver } from '../local-store.js';
 import type { Admission, SessionFact, SessionUpdate } from '../index.js';
+import { loadCanonicalRetryTarget } from './conversation-log.js';
 import {
   captureAdoptedInput,
   type AdoptedAdmissionContext,
+  type AdoptedAdmissionReceipt,
   type AdoptedSubmissionInput,
   type AdoptedSubmissionOptions,
   type AdoptedInteractionCommand,
+  type AdoptedRetryTarget,
+  type AdoptedRetryResult,
 } from './submission.js';
 
 /**
@@ -42,7 +48,7 @@ export function createAdoptedForeground(options: {
     toolLedger?: Parameters<SessionRuntimeInternals['state']['importState']>[0]['toolLedger'];
   };
   onSourceEvent?: (update: {
-    requestId: string;
+    requestId?: string;
     turnId: string;
     generation: number;
     event: ConversationEvent;
@@ -128,6 +134,7 @@ export function createAdoptedForeground(options: {
       runtime.generationGuard.invalidate();
       if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
       active?.cancel();
+      await serial;
       await completion;
     },
     subscribe(_fromSeq, listener) {
@@ -189,6 +196,19 @@ export function createAdoptedForeground(options: {
       ]);
       throw new Error('Activation cancelled');
     }
+    return launch(receipt, token, signal, false, inputSurgeApproval);
+  };
+  const launch = async (
+    receipt: Omit<AdoptedAdmissionReceipt, 'requestId' | 'userMessageRef'> & {
+      requestId?: AdoptedAdmissionReceipt['requestId'];
+      userMessageRef?: AdoptedAdmissionReceipt['userMessageRef'];
+    },
+    token: number,
+    signal: AbortSignal,
+    retryOrigin: boolean,
+    inputSurgeApproval?: AdoptedSubmissionOptions['inputSurgeApproval'],
+  ): Promise<Admission> => {
+    const isCurrent = () => !signal.aborted && runtime.generationGuard.isCurrent(token);
     const sourceEvents: ConversationEvent[] = [];
     let control: AdoptedTurnControl;
     let nextView: ((run: AdoptedTurnRun) => void) | undefined;
@@ -238,7 +258,7 @@ export function createAdoptedForeground(options: {
       if (!isCurrent() || update.event.type === 'approval_required') return;
       try {
         const result: unknown = options.onSourceEvent?.({
-          requestId: receipt.requestId,
+          ...(receipt.requestId ? { requestId: receipt.requestId } : {}),
           turnId: receipt.turnId,
           generation: token,
           ...update,
@@ -431,7 +451,7 @@ export function createAdoptedForeground(options: {
       };
     };
     const bound = runtime.turnAdapter.beginAdoptedTurn(
-      injectSkillIntoTurn(receipt.input),
+      retryOrigin ? receipt.input : injectSkillIntoTurn(receipt.input),
       (event) => {
         sourceEvents.push(event);
         if (
@@ -449,6 +469,7 @@ export function createAdoptedForeground(options: {
         token,
         signal,
         ...(inputSurgeApproval ? { inputSurgeApproval } : {}),
+        ...(retryOrigin ? { skipUserMessage: true, replayFromHistory: true } : {}),
       },
       requestDecision,
     );
@@ -668,14 +689,14 @@ export function createAdoptedForeground(options: {
           ...bound.session,
           async prepare(s) {
             const ready = await bound.session.prepare(s);
-            if (!ready || accepted) return ready;
+            if (!ready || accepted || retryOrigin) return ready;
             if (!isCurrent()) throw new Error('Turn became stale before acceptance');
             const entries = await commit([
               {
                 type: 'user_input_accepted',
                 version: 1,
                 turnId: receipt.turnId,
-                userMessageRef: receipt.userMessageRef,
+                userMessageRef: receipt.userMessageRef!,
                 snapshot: runtime.state.getCurrentSnapshot(),
               },
             ]);
@@ -721,13 +742,17 @@ export function createAdoptedForeground(options: {
       bound.finish();
       await commit([
         { type: 'session_turn_ended', version: 1, turnId: receipt.turnId, outcome: 'failed' },
-        {
-          type: 'session_admission_settled',
-          version: 1,
-          clientRequestId: receipt.requestId,
-          turnId: receipt.turnId,
-          result: 'failed',
-        },
+        ...(receipt.requestId
+          ? [
+              {
+                type: 'session_admission_settled',
+                version: 1 as const,
+                clientRequestId: receipt.requestId,
+                turnId: receipt.turnId,
+                result: 'failed' as const,
+              } as const,
+            ]
+          : []),
       ]);
       throw error;
     }
@@ -786,6 +811,8 @@ export function createAdoptedForeground(options: {
           });
         }
         if (dropped) {
+          if (!receipt.userMessageRef)
+            throw new FatalPersistenceError(new Error('Dropped input has no canonical user reference'));
           facts.push({
             type: 'events_retracted',
             version: 1,
@@ -799,13 +826,14 @@ export function createAdoptedForeground(options: {
           turnId: receipt.turnId,
           outcome: result === 'accepted' ? 'completed' : result === 'aborted' ? 'cancelled' : 'failed',
         });
-        facts.push({
-          type: 'session_admission_settled',
-          version: 1,
-          clientRequestId: receipt.requestId,
-          turnId: receipt.turnId,
-          result,
-        });
+        if (receipt.requestId)
+          facts.push({
+            type: 'session_admission_settled',
+            version: 1,
+            clientRequestId: receipt.requestId,
+            turnId: receipt.turnId,
+            result,
+          });
         await commit(facts);
         if (isCurrent()) {
           for (const event of sourceEvents) {
@@ -837,6 +865,88 @@ export function createAdoptedForeground(options: {
   return {
     driver,
     submission: {
+      retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult> {
+        if (target !== 'turn' && target !== 'tool') return Promise.reject(new Error('Invalid retry target'));
+        if (closing || context.state().status === 'closed')
+          return Promise.resolve({ kind: 'rejected', reason: 'closed' });
+        if (poisoned !== undefined) return Promise.reject(poisoned);
+        if (!context.state().retryEligibility[target]) return Promise.resolve({ kind: 'ineligible', target });
+        const hasToolResult = () => {
+          const preview = new ConversationStore();
+          for (const item of runtime.record.getHistory()) preview.addImportedItem(item);
+          return preview.peekLastToolOutput() !== null;
+        };
+        if (target === 'tool' && !hasToolResult()) return Promise.resolve({ kind: 'ineligible', target });
+        cancellation.abort();
+        cancellation = new AbortController();
+        const signal = cancellation.signal;
+        runtime.generationGuard.invalidate();
+        if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
+        active?.cancel();
+        const operation = serial.then(async (): Promise<AdoptedRetryResult> => {
+          if (poisoned !== undefined) throw poisoned;
+          await decisionTail;
+          await completion;
+          if (active) await active.waitForSettlement(signal);
+          await engine.waitForAdmission(signal);
+          signal.throwIfAborted();
+          runtime.pendingInteraction.clear();
+          if (closing) return { kind: 'rejected', reason: 'closed' };
+          if (!context.state().retryEligibility[target]) return { kind: 'ineligible', target };
+          if (target === 'tool' && !hasToolResult()) return { kind: 'ineligible', target };
+          const original = loadCanonicalRetryTarget(context.id, context.root);
+          if (target === 'turn' && !original) return { kind: 'ineligible', target };
+          if (target === 'tool' && !runtime.state.peekLastToolOutput()) {
+            poisoned = new Error('Canonical retry eligibility disagrees with source state');
+            throw poisoned;
+          }
+          const before = structuredClone(runtime.record.getHistory());
+          const rewound =
+            target === 'turn'
+              ? runtime.state.retryLastUserTurn({ logUndo: false })
+              : runtime.state.retryLastToolOutput();
+          if (!rewound) {
+            poisoned = new Error('Canonical retry eligibility disagrees with source state');
+            throw poisoned;
+          }
+          const turnId = crypto.randomUUID() as TurnInput['turnId'];
+          const token = runtime.generationGuard.capture();
+          const snapshot = runtime.state.getCurrentSnapshot();
+          try {
+            rewindRemovedUserCount(before, snapshot.history);
+          } catch (error) {
+            poisoned = error;
+            throw error;
+          }
+          const fact: SessionFact =
+            target === 'turn'
+              ? { type: 'user_turn_retried', version: 1, userMessageRef: original!.userMessageRef, snapshot }
+              : { type: 'tool_output_rewound', version: 1, snapshot };
+          await commit([fact, { type: 'session_turn_started', version: 1, turnId, clientRequestId: null }]);
+          if (signal.aborted || closing || !runtime.generationGuard.isCurrent(token)) {
+            await commit([{ type: 'session_turn_ended', version: 1, turnId, outcome: 'cancelled' }]);
+            throw new Error('Retry became stale');
+          }
+          const retainedUser = target === 'tool' ? loadCanonicalRetryTarget(context.id, context.root) : original;
+          const admitted = await launch(
+            {
+              turnId,
+              input: retainedUser?.submittedTurn ?? { text: '' },
+              ...(retainedUser ? { userMessageRef: retainedUser.userMessageRef } : {}),
+            },
+            token,
+            signal,
+            true,
+          );
+          if (admitted.kind !== 'started') throw new Error('Retry did not start');
+          return admitted;
+        });
+        serial = operation.then(
+          () => undefined,
+          () => undefined,
+        );
+        return operation;
+      },
       decide(command: AdoptedInteractionCommand): Promise<void> {
         const owned = structuredClone(command);
         const operation = decisionTail

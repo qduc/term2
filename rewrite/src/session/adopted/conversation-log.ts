@@ -28,6 +28,10 @@ import {
   readConversationLogEnvelopesFromDirectory,
   type RestoredState,
 } from '../../../../source/services/conversation/conversation-persistence.js';
+import {
+  replayEvents,
+  replayEventsWithRetryTarget,
+} from '../../../../source/services/conversation/conversation-replay.js';
 import { auditSessionLog } from '../../../../source/services/conversation/session-audit.js';
 import {
   decodeLogEnvelope,
@@ -516,13 +520,29 @@ function validatePendingRevisionSequence(facts: readonly StoredSessionFact[]): v
 }
 
 /** Source's existing decoder/replay path, including provider-native item preservation. */
-export function loadCanonicalConversation(id: string, root: string): RestoredState {
+export function loadCanonicalConversation(
+  id: string,
+  root: string,
+  finalization: 'live' | 'reopened' = 'reopened',
+): RestoredState {
+  if (finalization === 'live') {
+    const envelopes = readConversationLogEnvelopesFromDirectory(id, root);
+    if (!envelopes) throw new Error(`conversation ${id} could not be replayed`);
+    return replayEvents(envelopes, { finalization });
+  }
   const result = loadConversationUnscopedForIndex(id, root);
   if (result.status === 'loaded' || result.status === 'project_mismatch') return result.conversation;
   if (result.status === 'unreadable') {
     throw new Error(`conversation ${id} could not be replayed: ${String(result.error)}`);
   }
   throw new Error(`conversation ${id} is unavailable (${result.status})`);
+}
+
+/** Identity is derived by the same canonical replay that validates retry references. */
+export function loadCanonicalRetryTarget(id: string, root: string, finalization: 'live' | 'reopened' = 'live') {
+  const envelopes = readConversationLogEnvelopesFromDirectory(id, root);
+  if (!envelopes) throw new Error(`conversation ${id} could not be replayed`);
+  return replayEventsWithRetryTarget(envelopes, { finalization }).retryTarget;
 }
 
 /** Source's established interrupted-turn audit; it is observational and never resumes work. */

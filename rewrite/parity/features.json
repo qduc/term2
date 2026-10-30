@@ -609,6 +609,12 @@
       "parity": [],
       "consumedByNewCode": true
     },
+    "log-event:tool_output_rewound": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
     "log-event:tool_result": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
@@ -634,6 +640,12 @@
       "consumedByNewCode": true
     },
     "log-event:user_message": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:user_turn_retried": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],

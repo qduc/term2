@@ -327,8 +327,11 @@ function sanitizeLogFact<T extends { readonly type: string }>(fact: T): T {
       return sanitized as unknown as T;
     }
   }
-  if (fact.type === 'user_input_accepted') {
-    const event = structuredClone(fact) as unknown as Extract<LogEvent, { type: 'user_input_accepted' }>;
+  if (fact.type === 'user_input_accepted' || fact.type === 'tool_output_rewound' || fact.type === 'user_turn_retried') {
+    const event = structuredClone(fact) as unknown as Extract<
+      LogEvent,
+      { type: 'user_input_accepted' | 'tool_output_rewound' | 'user_turn_retried' }
+    >;
     const scrubItem = (item: unknown) => (isToolResultHistoryItem(item) ? sanitizeSubagentResult(item) : item);
     event.snapshot.history = event.snapshot.history.map(scrubItem) as typeof event.snapshot.history;
     event.snapshot.toolLedger = event.snapshot.toolLedger.map((entry) => ({

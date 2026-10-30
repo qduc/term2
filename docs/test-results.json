@@ -26677,6 +26677,39 @@
       "failures": [],
       "evidence": [],
       "notes": "Tracer 14/14; layer guard passed with 480 allowlisted source edges; inventory passed; old CLI parity 6/6. Before commit, temporary probes produced: rewrite/src/tools/adopted/g1-probe.ts (tools/) directly imports source/gateway/gateway.ts (host/); rewrite/src/tools/g1-probe.ts imports source/tools/types.ts outside adopted/. Both probes removed. Initial tracer attempts in default sandbox failed at scenario 2 with child did not report a session, empty stdout and SIGKILL. A minimal Node spawnSync child that writes hello then kills itself returned error EPERM, signal SIGKILL and empty stdout in that sandbox; with network-enabled additional permissions it returned hello and SIGKILL without error. The successful tracer was run under the latter permissions. Full integration/e2e suites not run locally."
+    },
+    {
+      "id": "2026-10-30-port-guard-followup",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T12:59:00Z",
+      "commit": null,
+      "tree": null,
+      "revision_kind": "pre-commit working tree, equivalent to source commit except explanatory comment",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-guard-followup"
+      ],
+      "suite": "adopted source edge traversal and rewrite gates",
+      "command": "python /tmp/term2-g1-independent/probes.py rewrite/scripts/check-layers.mjs; temporary real A1/A2 adapter copies and G1 negative probes; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/scripts/build.mjs; node rewrite/dist/rewrite/src/app/tracer.js; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Worktree-local frozen install; network-enabled additional sandbox permissions for child processes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "14/14 isolated guard fixtures; actual A1 settings and A2 model adapters passed when copied temporarily together and removed; required tools/adopted -> gateway and non-adopted -> source/tools/types probes rejected. Rewrite tracer 14/14, inventory and old CLI parity 6/6 passed; guard reports 490 allowlisted edges. Twelve additions are existing source imports newly exposed by ownership mapping or shared context; two former ask-user-constants edges removed after shared remapping. No integration/e2e suites run. Independent review pending. Source commit debc7493521d68fab8075e023565af02c67ccb0c."
     }
   ]
 }

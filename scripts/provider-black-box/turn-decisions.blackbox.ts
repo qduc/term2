@@ -2,6 +2,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
+import { readHarnessApprovalReady } from '../../source/lib/harness-input-idle.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
 it('resumes repeated questions once per decision and settles cancellation before the next turn', async () => {
@@ -78,20 +79,39 @@ it('resumes repeated questions once per decision and settles cancellation before
     (requests[index]!.input as Record<string, unknown>[]).filter(
       (item) => item.type === 'function_call_output' && item.call_id === callId,
     );
+  const ready = async (callId: string, after: number) => {
+    try {
+      await child.waitForState(() => {
+        const current = readHarnessApprovalReady(lease.paths.idlePath);
+        return current?.callId === callId && current.revision > after;
+      });
+    } catch (error) {
+      throw new Error(
+        `Approval readiness failed for ${callId} after revision ${after}; current ${JSON.stringify(
+          readHarnessApprovalReady(lease.paths.idlePath),
+        )}.`,
+        { cause: error },
+      );
+    }
+  };
   try {
     await child.waitForIdleInput();
     const firstIdle = child.readIdleGeneration();
     await writePtyTextAndSubmit(child, 'ANSWER_A_QUESTION');
     await child.waitForState(() => requests.length === 1);
+    const offset0 = readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
     complete(0, [question('answered-question', 'SELECT_ONE_COLOR')]);
     await child.waitForVisibleOutput('SELECT_ONE_COLOR');
+    await ready('answered-question', offset0);
     await child.write('2');
     await child.waitForState(() => requests.length === 2);
     expect(outputs(1, 'answered-question')).toHaveLength(1);
     expect(String(outputs(1, 'answered-question')[0]!.output)).toContain('Violet');
     expect(requests[1]!.previous_response_id).toBe('question-response-0');
+    const offset1 = readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
     complete(1, [question('second-answered-question', 'SELECT_A_SECOND_COLOR')]);
     await child.waitForVisibleOutput('SELECT_A_SECOND_COLOR');
+    await ready('second-answered-question', offset1);
     await child.write('1');
     await child.waitForState(() => requests.length === 3);
     expect(outputs(2, 'second-answered-question')).toHaveLength(1);
@@ -105,8 +125,10 @@ it('resumes repeated questions once per decision and settles cancellation before
     const beforeCancel = child.readIdleGeneration();
     await writePtyTextAndSubmit(child, 'CANCEL_A_QUESTION');
     await child.waitForState(() => requests.length === 4);
+    const offset3 = readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
     complete(3, [question('cancelled-question', 'CANCEL_THIS_QUESTION')]);
     await child.waitForVisibleOutput('CANCEL_THIS_QUESTION');
+    await ready('cancelled-question', offset3);
     await child.write('\u001b');
     await child.waitForIdleInput({ after: beforeCancel });
     expect(requests).toHaveLength(4);

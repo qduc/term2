@@ -26992,6 +26992,44 @@
         "https://github.com/qduc/term2/actions/runs/41062406745/job/124085585618"
       ],
       "notes": "Final hosted run after the temporary golden probe was reverted and the branch was rebased onto main 47190949fed9244632512a9f55175670892f1a96. The golden tree matches main; no golden-change label was applied. Expected negative failure evidence is preserved separately in 2026-10-30-port-g2-golden-negative-ci. Final independent review is pending."
+    },
+    {
+      "id": "2026-10-30-port-g3-batch-parity",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:04:15Z",
+      "commit": "082a3a9df8c0df4cbd610eacf64b4431c065828b",
+      "tree": null,
+      "revision_kind": "source commit; verification recorded separately",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": ["2026-10-30-port-g3-batch-parity"],
+      "suite": "rewrite G3 inventory and old CLI parity with batch scenarios",
+      "command": "pnpm build; node rewrite/parity/run.mjs record --cli dist/cli.js settings-batch; node rewrite/parity/run.mjs record --cli dist/cli.js tools-batch; node rewrite/parity/run.mjs record --cli dist/cli.js subagent-batch; node rewrite/parity/run.mjs check --cli dist/cli.js (twice); node rewrite/parity/inventory.mjs; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/build.mjs; node rewrite/scripts/check-layers.mjs; pnpm exec prettier --check <changed parity files>",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated .worktrees/port-g3 with per-worktree pnpm install; network-enabled additional sandbox permissions for Node child processes and loopback fake-provider tests. Old CLI built from unchanged source/."
+      },
+      "result": {
+        "passed": true,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "Final complete old-CLI parity check: 9/9 scenarios matched; repeated immediately and matched 9/9 again.",
+        "New settings-batch, tools-batch, and subagent-batch each passed focused parity checks; only the three new golden files were added.",
+        "Settings golden exposes mock-alpha, high reasoning, temperature 0.2, max_tokens 1234, Profile: pair, and the reduced tool schema set from five disabled tool groups.",
+        "tools-batch nested call results include read_file, grep, shell, search_replace; workspace ends with notes.txt=needle found and shell.txt=shell-ok.",
+        "subagent-batch executes background run_subagent through completion; randomized codename run IDs normalize as <RUN_ID>.",
+        "Inventory check passed; rewrite typecheck and build passed; layer check passed with 480 allowlisted source edges."
+      ],
+      "notes": "One G3 implementation cycle; five incorrect fixture iterations were corrected before final acceptance: direct read_file/grep were unknown provider tools; nested apply_patch was unavailable (nested API provides search_replace/create_file); run_subagent foreground was schema-rejected (background required); the first background response script lacked a completion reply. Final parity checks had no failures. Initial pre-commit run in default sandbox failed at scripts/check-no-unit-tests.mjs with spawnSync git EPERM; same commit succeeded with network-enabled subprocess permission. ESLint invocation exited 0 but ignored both .mjs files by repository config; no lint claim. Full CLI integration/e2e suites were not run. Sol review and any owner-controlled golden-change PR label remain pending."
     }
   ]
 }

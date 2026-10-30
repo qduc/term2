@@ -58,6 +58,7 @@ export function createScopedSandboxNetworkAccess(options: {
     controller = undefined;
   };
   const request = async (request: SandboxNetworkAccessRequest): Promise<boolean> => {
+    if (!request || typeof request !== 'object') return false;
     const { host, port } = request;
     if (
       closed ||

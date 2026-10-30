@@ -73,6 +73,32 @@ describe('scoped sandbox helpers', () => {
     expect(await b).toBe('allow-once');
     coordinator.dispose();
   });
+  it('rejects malformed helper responses and invalidates the graph', async () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'term2-helper-test-'));
+    const helper = join(fixture, 'helper.mjs');
+    writeFileSync(
+      helper,
+      `process.on('message', x => process.send({version:1,type:'result',id:x.id,result:{type:'available',unexpected:true}}));`,
+    );
+    let lost = false;
+    const scope = createScopedSandboxNetworkAccess({ workspaceRoot: fixture, requestApproval: async () => false });
+    const runner = new ScopedSandboxRunner(
+      scope,
+      () => {
+        lost = true;
+      },
+      async () => {},
+      pathToFileURL(helper),
+    );
+    try {
+      await expect(runner.availability()).rejects.toThrow('Sandbox helper lost');
+      expect(lost).toBe(true);
+      expect(await scope.request({ host: 'blocked.example' })).toBe(false);
+    } finally {
+      await runner.dispose();
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  }, 10_000);
   it('terminates an unresponsive helper during graph disposal', async () => {
     const fixture = mkdtempSync(join(tmpdir(), 'term2-helper-test-'));
     const marker = join(fixture, 'temp-path');

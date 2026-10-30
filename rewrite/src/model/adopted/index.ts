@@ -15,6 +15,7 @@ import type {
 import type { ProviderDefinition, ProviderRegistry } from '../../../../source/providers/registry.js';
 import type { ProviderRequestCapture } from '../../../../source/providers/provider-request-capture.js';
 import type { ProviderRetryInfo } from '../../../../source/providers/retrying-model.js';
+import { waitForAbortableRead } from '../../../../source/contracts/abort-aware-wait.js';
 import { createProviderRegistry, getProvider } from '../../../../source/providers/index.js';
 import { getModelContextWindow } from '../../../../source/providers/model-catalog/catalog.js';
 import { MODEL_CATALOG } from '../../../../source/providers/model-catalog/catalog.generated.js';
@@ -49,6 +50,7 @@ export interface AdoptedModelBinding {
 }
 
 export interface AdoptedModelRegistry extends ModelRegistry {
+  waitForReadSettlement(signal: AbortSignal): Promise<void>;
   readonly settingsService: ISettingsService;
   hasUnsettledReads(): boolean;
   trackDetachedRead(operation: Promise<unknown>): void;
@@ -498,6 +500,7 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
   const closedIdentities = new WeakSet<StreamedModelTurn>();
   const pendingCloses = new Set<Promise<unknown>>();
   let disposalRequested = false;
+  const disposalController = new AbortController();
   const assertActive = () => {
     if (disposalRequested) throw new Error('Model registry is disposed');
   };
@@ -635,6 +638,19 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
 
   return {
     settingsService: options.settingsService,
+    async waitForReadSettlement(signal) {
+      assertActive();
+      const combined = AbortSignal.any([signal, disposalController.signal]);
+      combined.throwIfAborted();
+      while (unsettledReads.size) {
+        await waitForAbortableRead(
+          Promise.allSettled([...unsettledReads]).then(() => undefined),
+          combined,
+        );
+        assertActive();
+      }
+      combined.throwIfAborted();
+    },
     hasUnsettledReads: () => unsettledReads.size > 0,
     trackDetachedRead(operation) {
       if (unsettledReads.has(operation)) return;
@@ -705,6 +721,7 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
       ),
     async dispose() {
       disposalRequested = true;
+      disposalController.abort();
       bindings.clear();
       reconcileOwnership();
       await Promise.allSettled([...pendingCloses]);

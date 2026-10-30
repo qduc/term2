@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { AgentClient } from '../../../../source/lib/agent-client.js';
 import { isHarnessInvariantError } from '../../../../source/lib/harness-invariant-error.js';
+import { waitForAbortableRead } from '../../../../source/contracts/abort-aware-wait.js';
 import {
   ApplicationRunLoop,
   normalizeApplicationInput,
@@ -70,7 +71,13 @@ export interface AdoptedTurnControl {
     readonly validate: (decisions: ReadonlyMap<ToolCallId, ApprovalDecision>) => void;
   }): Promise<ReadonlyMap<ToolCallId, ApprovalDecision>>;
 }
+export interface AdoptedTurnRun extends TurnRun {
+  waitForSettlement(signal?: AbortSignal): Promise<void>;
+}
 export interface AdoptedEngine extends Engine {
+  start(input: TurnInput): AdoptedTurnRun;
+  resume(checkpoint: TurnCheckpoint, decisions: ReadonlyMap<ToolCallId, ApprovalDecision>): AdoptedTurnRun;
+  waitForAdmission(signal: AbortSignal): Promise<void>;
   registerTurnBridge(
     turnId: TurnId,
     authority: { readonly generation: number; readonly isCurrent: () => boolean },
@@ -294,6 +301,7 @@ export function createAdoptedEngine(options: {
       logical.compactions.push({ checkpoint: evidence.checkpoint, replaced: evidence.replaced, index: evidence.index });
   });
   let disposed = false;
+  const disposalController = new AbortController();
   const cancel = (logical: Logical) => {
     if (logical.controller.signal.aborted || active.get(logical.input.turnId) !== logical) return;
     logical.controller.abort();
@@ -309,18 +317,39 @@ export function createAdoptedEngine(options: {
     new Queue(() => {
       if (!logical.suspended && !logical.finished) cancel(logical);
     });
-  const view = (logical: Logical): TurnRun => ({
+  const view = (logical: Logical): AdoptedTurnRun => ({
     turnId: logical.input.turnId,
     events: logical.queue,
     cancel: () => cancel(logical),
+    waitForSettlement: (signal) => (signal ? waitForAbortableRead(logical.settled, signal) : logical.settled),
   });
-  const invalid = (turnId: TurnId, message: string): TurnRun => {
+  const invalid = (turnId: TurnId, message: string): AdoptedTurnRun => {
     const q = new Queue(() => {});
     q.push(failure(message));
     q.end();
-    return { turnId, events: q, cancel() {} };
+    return {
+      turnId,
+      events: q,
+      cancel() {},
+      waitForSettlement: (signal) => (signal?.aborted ? Promise.reject(aborted()) : Promise.resolve()),
+    };
   };
   return {
+    async waitForAdmission(signal) {
+      const combined = AbortSignal.any([signal, disposalController.signal]);
+      while (true) {
+        combined.throwIfAborted();
+        const runs = [...active.values()];
+        if (runs.length)
+          await waitForAbortableRead(
+            Promise.allSettled(runs.map((run) => run.settled)).then(() => undefined),
+            combined,
+          );
+        await deps.models.waitForReadSettlement(combined);
+        combined.throwIfAborted();
+        if (!active.size && !deps.models.hasUnsettledReads()) return;
+      }
+    },
     registerTurnBridge(turnId, authority, create) {
       if (disposed || bridges.has(turnId) || active.has(turnId))
         throw new Error('Turn bridge already registered or engine disposed');
@@ -811,6 +840,7 @@ export function createAdoptedEngine(options: {
     },
     async dispose() {
       disposed = true;
+      disposalController.abort();
       const runs = [...active.values()];
       for (const run of runs) cancel(run);
       await Promise.allSettled(runs.map((run) => run.settled));

@@ -28815,6 +28815,72 @@
         "exit_code": 0
       },
       "notes": "Sol accepted no findings; selected 1/1 in 3.07s, one --lite --profile full launch. Missing criteria rejection, achieved proposed, non-Git verification-blocked notice, five requests and same sole persisted active goal+criteria. No successful achievement, changed-goal or verifier PASS claim."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "commit": "f9f2d174cefaf2edbab09a021ac1fb6482ea5540",
+      "tree": "7949f630104186a12162a94a0ac35e1036dba3e0",
+      "base_commit": "3c6022c19903bd6099a6ac69b7ca768fa9495655",
+      "task_ids": [
+        "2026-10-30-c3a-goal-stale"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Real old CLI PTY, isolated Git workspace and controlled Responses model."
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-goal-stale",
+      "run_at": "2026-10-30T17:13:33Z",
+      "revision_kind": "clean source before documentation",
+      "suite": "old CLI stale and inconclusive verification",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-goal-stale-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-stale.blackbox.ts scripts/provider-black-box/goal-verification.blackbox.ts scripts/provider-black-box/goal-stop.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "notes": "Selected goal cases 4/4, nine old goldens, rewrite tsc, 520 guard, inventory and source hooks passed. Real probe read then tracked file changed before scripted PASS is rejected as stale; unchanged workspace INCONCLUSIVE is separately blocked. Both retain sole active goal. No changed-goal, FAIL repair, late/cancel or new Session claim."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "commit": "f9f2d174cefaf2edbab09a021ac1fb6482ea5540",
+      "tree": "7949f630104186a12162a94a0ac35e1036dba3e0",
+      "base_commit": "3c6022c19903bd6099a6ac69b7ca768fa9495655",
+      "task_ids": [
+        "2026-10-30-c3a-goal-stale"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Real old CLI PTY, isolated Git workspace and controlled Responses model."
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-goal-stale-independent",
+      "run_at": "2026-10-30T17:13:33Z",
+      "revision_kind": "clean source independently reviewed",
+      "suite": "independent stale and inconclusive goal verification",
+      "command": "TERM2_TEST_CLI=<independent marker wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-stale.blackbox.ts --maxWorkers=1",
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "notes": "Sol accepted no findings; selected 2/2 in 7.47s, two --lite --profile full launches. Actual probe before tracked change then scripted PASS is stale-blocked; unchanged workspace INCONCLUSIVE blocked. Four requests per case and sole active goal_changed. No changed-goal/FAIL repair/lateness/cancellation claim."
     }
   ]
 }

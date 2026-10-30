@@ -438,6 +438,7 @@ export class LocalSessionStore implements SessionStore {
           restored.history as unknown as Item[],
         );
         if (!constructing) enqueue(entries.map((entry) => ({ kind: 'fact', entry })));
+        if (mutationFailure !== undefined) throw mutationFailure;
         return entries;
       },
     };

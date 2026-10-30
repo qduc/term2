@@ -6,13 +6,33 @@ import { validateSessionFact, type SessionLogEntry } from './conversation-log.js
 export type GoalRevision = SessionEventReference | null;
 export type GoalMutationResult = 'applied' | 'stale';
 
-/** Manual goal commands; the revision is the canonical event that set the current goal. */
+/**
+ * Manual goal commands. A revision is the canonical event that set the current
+ * goal, or null while no goal has been set.
+ */
 export interface SessionGoalControl {
+  /**
+   * The goal as of the last completed write. A subscriber told about a new
+   * `goal_changed` fact may still read the previous goal here, because the
+   * fact is published before its commit resolves.
+   */
   get(): { readonly goal: DurableGoal | undefined; readonly revision: GoalRevision };
+  /**
+   * Replaces the goal if `expected` is still the current revision. Losing that
+   * race resolves 'stale' and writes nothing; invalid input, a closed session
+   * or a failed write rejects.
+   */
   set(goal: DurableGoal, expected: GoalRevision): Promise<GoalMutationResult>;
 }
 
 type Commit = (facts: readonly SessionFact[]) => Promise<readonly SessionLogEntry[]>;
+type Binding = {
+  /** The foreground's ordered writer, which flushes buffered turn facts first. */
+  readonly commit: Commit;
+  /** Replayed provider history, used to find an earlier proposal. */
+  readonly history: readonly unknown[];
+  readonly isClosed: () => boolean;
+};
 
 /**
  * The session goal is the last canonical `goal_changed` fact, and this is the
@@ -27,19 +47,21 @@ export function createGoalAuthority(entries: readonly SessionLogEntry[]) {
   for (const entry of entries)
     if (entry.fact.type === 'goal_changed') current = { goal: { ...entry.fact.goal }, revision: entry.ref };
   let proposalAttempted = false;
-  let commit: Commit | undefined;
+  let binding: Binding | undefined;
   let queue: Promise<unknown> = Promise.resolve();
 
   /**
    * Inside the goal queue, append `goal` only if `expected` still holds.
    * Resolves false, without writing, when it no longer does.
    */
-  const write = (goal: DurableGoal, source: 'goal_check' | undefined, expected: () => boolean): Promise<boolean> => {
+  const write = (goal: DurableGoal, expected: () => boolean, source?: 'goal_check'): Promise<boolean> => {
     const operation = queue.then(async () => {
-      if (!commit) throw new Error('Goal writer is not bound');
+      if (!binding) throw new Error('Goal writer is not bound');
+      if (binding.isClosed()) throw new Error('Session handle is closed');
       if (!expected()) return false;
       const owned = { ...goal };
-      const [entry] = await commit([{ type: 'goal_changed', version: 1, goal: owned, ...(source ? { source } : {}) }]);
+      const fact: SessionFact = { type: 'goal_changed', version: 1, goal: owned, ...(source ? { source } : {}) };
+      const [entry] = await binding.commit([fact]);
       current = { goal: owned, revision: entry!.ref };
       return true;
     });
@@ -61,7 +83,7 @@ export function createGoalAuthority(entries: readonly SessionLogEntry[]) {
       } catch (error) {
         return Promise.reject(error);
       }
-      return write(owned, undefined, () => sameRevision(current.revision, expectedRef)).then((applied) =>
+      return write(owned, () => sameRevision(current.revision, expectedRef)).then((applied) =>
         applied ? 'applied' : 'stale',
       );
     },
@@ -70,13 +92,14 @@ export function createGoalAuthority(entries: readonly SessionLogEntry[]) {
   return {
     control,
     /**
-     * Late-bound so the foreground's writer flushes buffered turn facts first.
-     * A proposal already in the replayed history, approved or rejected, uses up
-     * the once-per-session proposal, as in the old CLI.
+     * Late-bound because the foreground that owns the writer is built after the
+     * client that needs these callbacks. A proposal already in the replayed
+     * history, approved or rejected, uses up the once-per-session proposal, as
+     * in the old CLI.
      */
-    bind(writer: Commit, history: readonly unknown[]): void {
-      commit = writer;
-      proposalAttempted = history.some(
+    bind(next: Binding): void {
+      binding = next;
+      proposalAttempted = next.history.some(
         (item) =>
           (item as { type?: unknown }).type === 'function_call' && (item as { name?: unknown }).name === 'propose_goal',
       );
@@ -86,14 +109,17 @@ export function createGoalAuthority(entries: readonly SessionLogEntry[]) {
       getGoal: () => current.goal && { ...current.goal },
       /** The stop seam read an active goal; close exactly that goal or report failure. */
       async onGoalAchieved(achieved: DurableGoal): Promise<void> {
+        // The policy passes the goal it judged with only its status flipped, so
+        // flipping the current goal the same way and comparing finds out
+        // whether a manual set replaced it in the meantime.
         const stillJudged = () =>
           current.goal?.status === 'active' && isDeepStrictEqual({ ...current.goal, status: 'achieved' }, achieved);
-        if (!(await write(achieved, 'goal_check', stillJudged)))
+        if (!(await write(achieved, stillJudged, 'goal_check')))
           throw new Error('The goal changed before completion was recorded.');
       },
       proposeGoal: {
         async appendGoal(goal: DurableGoal): Promise<void> {
-          if (!(await write(goal, undefined, () => current.goal === undefined)))
+          if (!(await write(goal, () => current.goal === undefined)))
             throw new Error('A durable goal was set while the proposal waited.');
           proposalAttempted = true;
         },
@@ -103,11 +129,12 @@ export function createGoalAuthority(entries: readonly SessionLogEntry[]) {
   };
 }
 
+/** Checks a caller's goal with the log's own `goal_changed` validator, which owns the goal schema. */
 function parseGoal(value: unknown): DurableGoal {
-  const fact = { type: 'goal_changed', version: 1, goal: value };
-  validateSessionFact(fact);
+  validateSessionFact({ type: 'goal_changed', version: 1, goal: value });
   const goal = value as DurableGoal;
-  const keys = ['id', 'outcome', 'successCriteria', 'status'];
+  // The validator allows extra keys; a manual command must not persist them.
+  const keys: readonly string[] = ['id', 'outcome', 'successCriteria', 'status'] satisfies (keyof DurableGoal)[];
   if (Object.keys(goal).some((key) => !keys.includes(key))) throw new Error('Invalid goal');
   return { ...goal };
 }

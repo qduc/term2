@@ -217,12 +217,19 @@ try {
     await first.session.close();
     const reopened = await open(id);
     assert.deepEqual(reopened.submission.goal!.get(), final, 'cold open restores the exact goal and ref');
+    await reopened.session.closeLog();
+    await assert.rejects(reopened.submission.goal!.set(goal('late'), final.revision), /Session handle is closed/);
+    const closedTypes = CanonicalSessionLog.readOnly(sessionsRoot, id).map((entry: any) => entry.fact.type);
+    assert.equal(closedTypes.at(-1), 'session_closed', 'no goal is appended after the log closes');
     await reopened.session.close();
-    console.log('PASS set: null/exact/stale/same-value/invalid/concurrent/reopen');
+    console.log('PASS set: null/exact/stale/same-value/invalid/concurrent/reopen/closed');
   } else if (mode === 'fsync') {
     const first = await open();
     failGoalFsync = true;
-    await assert.rejects(first.submission.goal!.set(goal('g1'), null), /injected|Persistence/);
+    await assert.rejects(
+      first.submission.goal!.set(goal('g1'), null),
+      (error: any) => error.code === 'fatal_persistence' && /injected goal fsync/.test(String(error.cause)),
+    );
     assert.deepEqual(first.submission.goal!.get(), { goal: undefined, revision: null }, 'no read before fsync');
     failGoalFsync = false;
     await assert.rejects(first.submission.goal!.set(goal('g2'), null), 'goal writer stays poisoned');
@@ -246,9 +253,11 @@ try {
       source: 'goal_check',
     });
     const types = CanonicalSessionLog.readOnly(sessionsRoot, first.session.id).map((entry: any) => entry.fact.type);
+    const achievedAt = types.lastIndexOf('goal_changed');
+    assert.ok(achievedAt < types.lastIndexOf('session_turn_ended'), 'achievement is ordered inside the turn');
     assert.ok(
-      types.lastIndexOf('goal_changed') < types.lastIndexOf('session_turn_ended'),
-      'achievement is ordered inside the turn, after its buffered facts',
+      types.slice(types.lastIndexOf('session_turn_started'), achievedAt).includes('assistant_journal_item'),
+      `buffered turn facts are flushed before the achievement: ${types.join(',')}`,
     );
     assert.equal(first.submission.goal!.get().goal!.status, 'achieved');
     await first.session.close();
@@ -269,7 +278,9 @@ try {
     if (mode === 'propose-race') {
       assert.equal(written.length, 1, 'the manual goal wins; the proposal adds nothing');
       assert.equal(written[0].fact.goal.id, 'manual');
-      assert.match(lastToolOutput(), /propose_goal refused|was set while the proposal waited/);
+      // The tool's own execute-time check refuses first. The authority's
+      // compare-and-append guard behind it is not reachable from a bench.
+      assert.match(lastToolOutput(), /propose_goal refused because a durable goal is already set/);
       assert.doesNotMatch(lastToolOutput(), /Goal proposed and persisted/);
       console.log('PASS propose-race: a manual goal set while the proposal waits wins, with no success text');
     } else {

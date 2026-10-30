@@ -111,6 +111,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
               registerPauseController: scope.registerPauseController,
               childRegistry: scopedChildren,
             },
+            // Last: the session's goal authority replaces any host goal callbacks.
             ...goals.clientDeps,
           },
         },
@@ -219,7 +220,11 @@ export function createAppAdoptedSessionHandleFactory(options: {
         },
       });
       foregroundForNetwork = foreground;
-      goals.bind(foreground.commit, restored.history);
+      goals.bind({
+        commit: foreground.commit,
+        history: restored.history,
+        isClosed: () => context.state().status === 'closed',
+      });
       let closing: Promise<void> | undefined;
       let networkClosing: Promise<void> | undefined;
       const closeNetwork = () => {

@@ -33,7 +33,10 @@ export interface Connection {
 }
 
 export interface Host {
-  listSessions(principal: Principal, cursor?: string): Promise<{
+  listSessions(
+    principal: Principal,
+    cursor?: string,
+  ): Promise<{
     readonly sessions: readonly { readonly id: string; readonly title: string | null; readonly updatedAt: string }[];
     readonly nextCursor: string | null;
   }>;
@@ -51,7 +54,11 @@ export type InProcessHostFactory = (deps: HostDeps) => Host;
 
 export type ServerHostOptions = {
   readonly listen: { readonly host: string; readonly port: number };
-  readonly allowedWorkspaces: readonly { readonly id: string; readonly root: string; readonly access: 'read' | 'read_write' }[];
+  readonly allowedWorkspaces: readonly {
+    readonly id: string;
+    readonly root: string;
+    readonly access: 'read' | 'read_write';
+  }[];
 };
 
 export interface ServerHost extends Host {

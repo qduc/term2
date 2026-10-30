@@ -70,7 +70,12 @@ export type WireSnapshot = {
 };
 
 export type WireCommand =
-  | { readonly type: 'submit'; readonly requestId: string; readonly text: string; readonly attachments?: readonly unknown[] }
+  | {
+      readonly type: 'submit';
+      readonly requestId: string;
+      readonly text: string;
+      readonly attachments?: readonly unknown[];
+    }
   | {
       readonly type: 'decide';
       readonly interactionId: string;

@@ -55,9 +55,7 @@ export type ApprovalRequest = {
   readonly agentId?: AgentId;
 };
 
-export type ApprovalDecision =
-  | { readonly kind: 'approve' }
-  | { readonly kind: 'reject'; readonly reason?: string };
+export type ApprovalDecision = { readonly kind: 'approve' } | { readonly kind: 'reject'; readonly reason?: string };
 
 export type TurnOutcome =
   | { readonly kind: 'completed' }

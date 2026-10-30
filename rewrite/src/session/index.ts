@@ -34,9 +34,16 @@ export type SessionFact =
   | {
       readonly type: 'interaction_resolved';
       readonly interactionId: InteractionId;
-      readonly decisions: readonly { readonly callId: ApprovalRequest['callId']; readonly decision: ApprovalDecision }[];
+      readonly decisions: readonly {
+        readonly callId: ApprovalRequest['callId'];
+        readonly decision: ApprovalDecision;
+      }[];
     }
-  | { readonly type: 'turn_ended'; readonly turnId: TurnId; readonly outcome: 'completed' | 'cancelled' | 'failed' | 'budget_exhausted' }
+  | {
+      readonly type: 'turn_ended';
+      readonly turnId: TurnId;
+      readonly outcome: 'completed' | 'cancelled' | 'failed' | 'budget_exhausted';
+    }
   /** Written on recovery when a turn cannot be resumed safely. */
   | { readonly type: 'turn_interrupted'; readonly turnId: TurnId; readonly reason: string }
   | { readonly type: 'history_compacted'; readonly history: readonly Item[] }

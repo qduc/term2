@@ -8,7 +8,13 @@
 
 export type SettingKey = string & { readonly __brand: 'SettingKey' };
 
-export type SettingValue = string | number | boolean | null | readonly SettingValue[] | { readonly [key: string]: SettingValue };
+export type SettingValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly SettingValue[]
+  | { readonly [key: string]: SettingValue };
 
 export type SettingsChange = {
   readonly key: SettingKey;

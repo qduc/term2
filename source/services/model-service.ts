@@ -3,6 +3,7 @@ import path from 'node:path';
 import envPaths from 'env-paths';
 import { BOUNDARY_REGEX, scoreSubsequence } from '../utils/subsequence-filter.js';
 import { getProvider } from '../providers/index.js';
+import type { ProviderDefinition } from '../providers/registry.js';
 import { getModelContextWindow } from '../providers/model-catalog/catalog.js';
 import type { ILoggingService, ISettingsService } from './service-interfaces.js';
 
@@ -33,6 +34,7 @@ export type FetchModelsDeps = {
   cacheDir?: string;
   now?: () => number;
   ttlMs?: number;
+  discovery?: ScopedModelDiscovery;
 };
 
 type FetchFn = typeof fetch;
@@ -40,6 +42,12 @@ type FetchFn = typeof fetch;
 type MemoryCacheEntry = {
   models: ModelInfo[];
   timestamp: number;
+};
+
+/** Registry-owned discovery state; it never uses the legacy provider-only disk cache. */
+export type ScopedModelDiscovery = {
+  readonly providerDefinition: (providerId: string) => ProviderDefinition;
+  readonly cache: Map<string, MemoryCacheEntry>;
 };
 
 const cache = new Map<string, MemoryCacheEntry>();
@@ -221,30 +229,38 @@ export async function fetchModels(
   const cacheKey = provider;
   const now = deps.now ?? testClock ?? Date.now;
   const ttlMs = deps.ttlMs ?? MODEL_CACHE_TTL_MS;
+  const memory = deps.discovery?.cache ?? cache;
+  if (deps.discovery) deps.signal?.throwIfAborted();
 
   // 1. In-memory cache hit
-  const memCached = cache.get(cacheKey);
+  const memCached = memory.get(cacheKey);
   if (memCached) {
     const age = now() - memCached.timestamp;
     if (age >= 0 && age < ttlMs && memCached.models.length > 0) {
       return memCached.models;
     }
-    cache.delete(cacheKey);
+    memory.delete(cacheKey);
   }
 
   // 2. Disk cache hit
-  const diskCached = readDiskCache(provider, deps.cacheDir, deps.now, deps.ttlMs, loggingService);
+  const diskCached = deps.discovery
+    ? null
+    : readDiskCache(provider, deps.cacheDir, deps.now, deps.ttlMs, loggingService);
   if (diskCached && diskCached.length > 0) {
-    cache.set(cacheKey, { models: diskCached, timestamp: now() });
+    memory.set(cacheKey, { models: diskCached, timestamp: now() });
     return diskCached;
   }
 
   // 3. Cache miss: read previous disk cache within fallback grace period as last-known-good
-  const previous = readDiskCache(provider, deps.cacheDir, deps.now, MODEL_CACHE_STALE_GRACE_MS, loggingService);
+  const previous = deps.discovery
+    ? memCached && now() - memCached.timestamp >= 0 && now() - memCached.timestamp < MODEL_CACHE_STALE_GRACE_MS
+      ? memCached.models
+      : null
+    : readDiskCache(provider, deps.cacheDir, deps.now, MODEL_CACHE_STALE_GRACE_MS, loggingService);
 
   const startTime = now();
   try {
-    const providerDef = getProvider(provider);
+    const providerDef = deps.discovery ? deps.discovery.providerDefinition(provider) : getProvider(provider);
     if (!providerDef) {
       throw new Error(`Provider '${provider}' is not registered`);
     }
@@ -253,6 +269,7 @@ export async function fetchModels(
       { settingsService, loggingService, signal: deps.signal },
       fetchImpl,
     );
+    if (deps.discovery) deps.signal?.throwIfAborted();
     let models: ModelInfo[] = rawModels.map((m) => ({
       ...m,
       provider,
@@ -272,6 +289,7 @@ export async function fetchModels(
           { settingsService, loggingService, signal: deps.signal },
           fetchImpl,
         );
+        if (deps.discovery) deps.signal?.throwIfAborted();
         const retryModels: ModelInfo[] = retryRaw.map((m) => ({
           ...m,
           provider,
@@ -293,6 +311,7 @@ export async function fetchModels(
       }
     }
 
+    if (deps.discovery) deps.signal?.throwIfAborted();
     if (isDegraded && previous && previous.length > 0) {
       loggingService.warn('Provider returned degraded model list; preserving last-known-good catalog', {
         provider,
@@ -301,13 +320,13 @@ export async function fetchModels(
       });
       // Do not write degraded models to disk cache.
       // Retain expired disk cache file so subsequent sessions retry upstream.
-      cache.set(cacheKey, { models: previous, timestamp: now() });
+      memory.set(cacheKey, { models: previous, timestamp: now() });
       return previous;
     }
 
     if (models.length > 0) {
-      cache.set(cacheKey, { models, timestamp: now() });
-      writeDiskCache(provider, models, deps.cacheDir, deps.now, loggingService);
+      memory.set(cacheKey, { models, timestamp: now() });
+      if (!deps.discovery) writeDiskCache(provider, models, deps.cacheDir, deps.now, loggingService);
     } else {
       loggingService.warn('Provider returned empty model catalog; skipping disk cache write', { provider });
     }
@@ -380,17 +399,25 @@ export function clearModelCache(provider?: string, opts?: { cacheDir?: string })
   }
 }
 
-export function getModelDefaultReasoningLevel(provider: string, modelId: string): string | undefined {
-  if (!getProvider(provider)?.useModelReasoningDefault) return undefined;
-  const entry = cache.get(provider);
+export function getModelDefaultReasoningLevel(
+  provider: string,
+  modelId: string,
+  discovery?: ScopedModelDiscovery,
+): string | undefined {
+  if (!(discovery ? discovery.providerDefinition(provider) : getProvider(provider))?.useModelReasoningDefault)
+    return undefined;
+  const entry = (discovery?.cache ?? cache).get(provider);
   if (!entry) return undefined;
   const model = entry.models.find((m) => m.id === modelId);
   return model?.default_reasoning_level;
 }
 
 /** Provider-owned fallback for APIs that do not advertise per-model reasoning defaults. */
-export function getProviderDefaultReasoningLevel(provider: string): string | undefined {
-  return getProvider(provider)?.defaultReasoningLevel;
+export function getProviderDefaultReasoningLevel(
+  provider: string,
+  discovery?: ScopedModelDiscovery,
+): string | undefined {
+  return (discovery ? discovery.providerDefinition(provider) : getProvider(provider))?.defaultReasoningLevel;
 }
 
 export type ModelMatchRank = {

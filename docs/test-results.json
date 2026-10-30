@@ -29117,6 +29117,204 @@
         "exit_code": 0
       },
       "notes": "Integrated selected goal 5/5, nine goldens 9/9, rewrite tsc, 520 guard, inventory passed. Sol accepted integrated merge by byte comparison; no independent integrated process rerun. Remaining D01/new Session unproven."
+    },
+    {
+      "id": "2026-10-30-c1-adopted-candidate",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T17:38:58Z",
+      "commit": "58666b54c241610cf64cede5a70934c23b037107",
+      "tree": "f6ed4c3d697af04d9fda77574c3655b11e235a7b",
+      "revision_kind": "candidate source",
+      "base_commit": "62f68b80ddb86e7e023a16d91837c2c55f694646",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "adopted engine source verification",
+      "command": "pnpm exec tsc --noEmit; pnpm exec tsc --noEmit -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm exec tsx rewrite/bench/c1-adopted-approval.mts; pnpm exec tsx rewrite/bench/c1-adopted-kill.mts; pnpm exec tsx /tmp/term2-c1-real-duplicate-batch.mts; pnpm exec tsx /tmp/c1-independent-compact-approval.mts; pnpm exec tsx /tmp/c1-independent-compact-recovery.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, local fixture providers; temporary probes are not retained repository fixtures."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Root/rewrite typechecks, guard 527, inventory, retained approval/C2 and actual SIGKILL benches, duplicate ID and real compaction approval/recovery probes passed on this SHA. Source pre-commit hooks passed. Independent review and remaining matrix are pending. Earlier 6/7 restart e2e had /proc ENOENT; same failure reproduced on clean base 62f68b80. Earlier parity 9/9 and native tracer passed before final source corrections; no final-SHA rerun claimed here."
+    },
+    {
+      "id": "2026-10-30-c1-independent-review-and-parity",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T17:41:00Z",
+      "commit": "58666b54c241610cf64cede5a70934c23b037107",
+      "tree": "f6ed4c3d697af04d9fda77574c3655b11e235a7b",
+      "revision_kind": "independently reviewed candidate",
+      "base_commit": "62f68b80ddb86e7e023a16d91837c2c55f694646",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "independent source review and CLI parity",
+      "command": "SKIP_BUILD_BACKUP=1 pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; independent source and lifecycle reviews",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; independent Sol reviews and local fixtures."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Existing immutable CLI parity 9/9 on exact SHA. Independent Sol source and lifecycle reviews passed exact SHA with scoped real-source probes; remaining acceptance cases remain open as listed in candidate task record."
+    },
+    {
+      "id": "2026-10-30-c1-settlement-candidate",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:10:25Z",
+      "commit": "485712c85d05821afd4a22384dc567e766cc595b",
+      "tree": "a4e622377ef52ca76b46eaec70b01b2ab714a9f6",
+      "revision_kind": "candidate source",
+      "base_commit": "62f68b80ddb86e7e023a16d91837c2c55f694646",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "adopted engine settlement candidate verification",
+      "command": "pnpm exec tsc --noEmit; pnpm exec tsc --noEmit -p rewrite/tsconfig.json; pnpm exec tsc --noEmit -p rewrite/tsconfig.native-tracer.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm check:no-unit-tests; pnpm exec tsx rewrite/bench/c1-adopted-approval.mts; pnpm exec tsx rewrite/bench/c1-adopted-kill.mts; SKIP_BUILD_BACKUP=1 pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; strict temporary duplicate batch, compact approval/recovery and real read grant probes; source grant choice probe",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; local fixtures and temporary probes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Typechecks, guard 527, inventory, no-unit guard, retained real approval and SIGKILL benches, build and immutable parity 9/9 passed. Temporary real duplicate call ID, compaction approval/recovery, real read-folder grant (including stale, fsync and cancel negatives), and 13 accepted/50 rejected source grant choices passed. Expected injected fsync failure was observed. Actual edit, Docker and sandbox denied-read grant effects are not claimed. Settlement delta independent review pending. Earlier restart PTY 6/7 had /proc children ENOENT, reproduced on clean base 62f68b80."
+    },
+    {
+      "id": "2026-10-30-c1-integrated-verification",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:12:03Z",
+      "commit": "15a9d0294e7348770c5d4ab105ff4c0ebb025148",
+      "tree": "88d89823832cb0f70acc315217e7298ce86f85ea",
+      "revision_kind": "integrated source",
+      "base_commit": "86d2e5f4cd8da34d32efa0d492c0537521554ce5",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "integrated adopted engine verification",
+      "command": "pnpm exec tsc --noEmit; pnpm exec tsc --noEmit -p rewrite/tsconfig.json; pnpm exec tsc --noEmit -p rewrite/tsconfig.native-tracer.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm check:no-unit-tests; pnpm exec tsx rewrite/bench/c1-adopted-approval.mts; pnpm exec tsx rewrite/bench/c1-adopted-kill.mts; SKIP_BUILD_BACKUP=1 pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; local fixture providers."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Integrated production source matches 485712c8. Typechecks, guard 527, inventory, no-unit guard, retained real approval and SIGKILL benches, build and immutable parity 9/9 passed. Independent delta review pending. Previous native restart PTY 6/7 failure /proc children ENOENT also reproduced on clean base 62f68b80; no final rerun claimed."
+    },
+    {
+      "id": "2026-10-30-c1-final-composition",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:19:39Z",
+      "commit": "1d7224186ba370798cd10f561fe2ca4d86416e3e",
+      "tree": "6b903d9229a6e68349ade51a4c2e8aad4678033d",
+      "revision_kind": "integrated candidate",
+      "base_commit": "86d2e5f4cd8da34d32efa0d492c0537521554ce5",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "adopted engine composition and hosted CI",
+      "command": "temporary mixed-policy-manual, root-goal-stop, paid-compaction and child-goal-separation probes; hosted CI 41105352334",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, local fake provider; hosted CI has its own environment."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Four real-source composition probes passed: mixed policy/manual decision staging without early effect; root goal normal stop; paid compaction budget accounting; and child goal separation using public adopted nested helper in a source parent loop. The last is not an adopted engine parent composition claim. Hosted CI 41105352334 passed all five jobs. Local native restart PTY 6/7 /proc children ENOENT reproduced on clean base; hosted e2e passed. Independent settlement review pending."
+    },
+    {
+      "id": "2026-10-30-c1-final-independent-review",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:21:40Z",
+      "commit": "1d7224186ba370798cd10f561fe2ca4d86416e3e",
+      "tree": "6b903d9229a6e68349ade51a4c2e8aad4678033d",
+      "revision_kind": "independently reviewed integrated candidate",
+      "base_commit": "86d2e5f4cd8da34d32efa0d492c0537521554ce5",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "independent settlement and composition review",
+      "command": "Independent Sol source/lifecycle review and strict settlement, disposal, registry, root, child and parallel source-loop probes; independent strict reruns of four composition probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Local fixture providers; independent review and temporary probes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Independent Sol PASS, no actionable findings. Five seam probes pass integrated source; parallel actual read_file group proves held already-started sibling prevents settlement/admission after injected second dispatch-gate failure and cancel. This probe does not inject C2 fsync; separately reviewed real C2 fsync-failure probe covers that boundary. Four composition probes independently rerun strict and pass. Representative actual folder grant plus 63 source grant choices do not claim all platform grant effects or complete Session orchestration. Prior local restart PTY /proc ENOENT reproduced on base; hosted CI e2e passed."
     }
   ]
 }

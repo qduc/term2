@@ -1,4 +1,8 @@
-import type { ApplicationAgent, NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
+import type {
+  ApplicationAgent,
+  NestedRunDriverFactory,
+  NestedModelBinding,
+} from '../../contracts/nested-run-driver.js';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { getProvider } from '../../providers/index.js';
@@ -13,6 +17,7 @@ export interface HealingResult {
 
 type HealingDeps = {
   driverFactory?: NestedRunDriverFactory;
+  modelBinding?: NestedModelBinding;
   settingsService?: ISettingsService;
   loggingService?: ILoggingService;
   providerId?: string;
@@ -158,10 +163,10 @@ export async function runHealingPrompt(
   model: string,
   apiKey: string,
   deps: Required<Pick<HealingDeps, 'settingsService' | 'loggingService' | 'providerId' | 'timeoutMs'>> &
-    Pick<HealingDeps, 'driverFactory'>,
+    Pick<HealingDeps, 'driverFactory' | 'modelBinding'>,
 ): Promise<string> {
   const { settingsService, loggingService, providerId, timeoutMs } = deps;
-  const providerDef = getProvider(providerId);
+  const providerDef = deps.modelBinding ? deps.modelBinding.providerDefinition(providerId) : getProvider(providerId);
   if (!providerDef?.createStreamedModel) {
     const label = providerDef?.label || providerId;
     throw new Error(`${label} is configured but could not be initialized. Check credentials.`);
@@ -195,10 +200,13 @@ export async function runHealingPrompt(
   if (!deps.driverFactory) throw new Error('Missing nested run driver');
   const loop = deps.driverFactory({
     resolveModel: async () => {
-      const streamedModel = await providerDef.createStreamedModel!(model, {
+      const modelDeps = {
         settingsService,
         loggingService,
-      });
+      };
+      const streamedModel = await (deps.modelBinding
+        ? deps.modelBinding.scopedModel({ provider: providerId, model }, modelDeps)
+        : providerDef.createStreamedModel!(model, modelDeps));
       if (!streamedModel)
         throw new Error(`${providerDef.label || providerId} is configured but could not be initialized.`);
       return streamedModel;
@@ -272,6 +280,7 @@ export async function healSearchReplaceParams(
     } else if (deps.settingsService && deps.loggingService) {
       modelOutput = await runHealingPrompt(prompt, instructions, model, apiKey, {
         driverFactory: deps.driverFactory,
+        modelBinding: deps.modelBinding,
         settingsService: deps.settingsService,
         loggingService: deps.loggingService,
         providerId,

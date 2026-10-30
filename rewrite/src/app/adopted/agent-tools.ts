@@ -32,3 +32,23 @@ export function createAppToolRegistry(
     turnPrompt: () => turnPrompt(agentBuild.agent),
   };
 }
+
+/** Assemble each normal source generation once and publish its exact tools to a stable facade. */
+export function createAppAgentAssembler(
+  registry: AdoptedToolRegistry,
+  adapterOptions: AdoptedToolRegistryOptions = {},
+): typeof buildAgent & { current(): AppAgentToolAssembly } {
+  let current: AppAgentToolAssembly | undefined;
+  const assemble: typeof buildAgent = (buildOptions, deps) => {
+    const assembly = createAppToolRegistry(buildOptions, deps, adapterOptions);
+    registry.replaceGeneration(assembly.agentBuild.agent.tools as readonly AnyToolDefinition[]);
+    current = assembly;
+    return assembly.agentBuild;
+  };
+  return Object.assign(assemble, {
+    current: () => {
+      if (!current) throw new Error('Agent assembly is not initialized');
+      return current;
+    },
+  });
+}

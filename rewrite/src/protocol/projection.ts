@@ -189,6 +189,10 @@ export const projection: Projection = {
       case 'subagent':
         return { ...base, type: 'subagent', payload: { agentId: event.agentId, role: event.role } };
       case 'item':
+      case 'segment_started':
+      case 'segment_committed':
+      case 'tool_dispatched':
+      case 'model_attempt_rollback':
       case 'checkpoint':
       case 'turn_ended':
         return null;

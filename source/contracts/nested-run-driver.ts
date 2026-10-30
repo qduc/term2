@@ -5,6 +5,46 @@ import type { StreamedModelTurn } from './streamed-model-turn.js';
 import type { ContinuationHandle } from './continuation-handle.js';
 import type { ApplicationRunEvent } from './application-stream.js';
 import type { RunTerminationCause } from './run-termination.js';
+import type { ProviderDefinition } from '../providers/registry.js';
+import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
+import type { ModelInfo } from '../services/model-service.js';
+
+/** Optional source composition binding for child provider metadata and scoped transports. */
+export interface NestedModelBinding {
+  hasUnsettledReads(): boolean;
+  trackDetachedRead(operation: Promise<unknown>): void;
+  acquireHelper(
+    ref: { readonly provider: string; readonly model: string },
+    deps: {
+      readonly settingsService: ISettingsService;
+      readonly loggingService: ILoggingService;
+      readonly sessionContextService?: ISessionContextService;
+    },
+  ): { readonly original: StreamedModelTurn | Promise<StreamedModelTurn>; release(): Promise<void> };
+  providerDefinition(providerId: string): ProviderDefinition;
+  scopedModel(
+    ref: { readonly provider: string; readonly model: string },
+    deps: {
+      readonly settingsService: ISettingsService;
+      readonly loggingService: ILoggingService;
+      readonly sessionContextService?: ISessionContextService;
+    },
+  ): StreamedModelTurn | Promise<StreamedModelTurn>;
+  fetchModels(
+    providerId: string,
+    deps: {
+      readonly settingsService: ISettingsService;
+      readonly loggingService: ILoggingService;
+      readonly signal?: AbortSignal;
+    },
+  ): Promise<readonly ModelInfo[]>;
+  modelDefaultReasoningLevel(
+    providerId: string,
+    modelId: string,
+    settingsService: ISettingsService,
+  ): string | undefined;
+  providerDefaultReasoningLevel(providerId: string): string | undefined;
+}
 
 export interface AgentModelSettings {
   temperature?: number;

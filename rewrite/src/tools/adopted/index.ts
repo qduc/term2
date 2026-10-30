@@ -32,6 +32,7 @@ export type AdoptedToolRegistry = ToolRegistry & {
   original(name: string): AdoptedOriginalToolDefinition | undefined;
   /** Resolve configured offered names in their supplied offering order. */
   originals(names: readonly string[]): readonly AdoptedOriginalToolDefinition[];
+  replaceGeneration(definitions: AdoptedSourceToolRegistry): void;
 };
 
 export type AdoptedToolRegistryOptions = {
@@ -265,19 +266,26 @@ export function createAdoptedToolRegistry(
   definitions: AdoptedSourceToolRegistry,
   options: AdoptedToolRegistryOptions = {},
 ): AdoptedToolRegistry {
-  const originals = new Map<string, AdoptedOriginalToolDefinition>();
-  const adapted = new Map<string, Tool>();
-
-  for (const definition of definitions) {
-    if (originals.has(definition.name)) throw new Error(`Duplicate assembled tool name: ${definition.name}`);
-    originals.set(definition.name, definition);
-    adapted.set(definition.name, adaptTool(definition, options));
-  }
+  let originals = new Map<string, AdoptedOriginalToolDefinition>();
+  let adapted = new Map<string, Tool>();
+  const replaceGeneration = (next: AdoptedSourceToolRegistry) => {
+    const nextOriginals = new Map<string, AdoptedOriginalToolDefinition>();
+    const nextAdapted = new Map<string, Tool>();
+    for (const definition of next) {
+      if (nextOriginals.has(definition.name)) throw new Error(`Duplicate assembled tool name: ${definition.name}`);
+      nextOriginals.set(definition.name, definition);
+      nextAdapted.set(definition.name, adaptTool(definition, options));
+    }
+    originals = nextOriginals;
+    adapted = nextAdapted;
+  };
+  replaceGeneration(definitions);
 
   return {
     get: (name) => adapted.get(name),
     available: () => [...adapted.values()],
     original: (name) => originals.get(name),
+    replaceGeneration,
     originals: (names) =>
       names.map((name) => {
         const definition = originals.get(name);

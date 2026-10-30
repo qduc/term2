@@ -18,16 +18,14 @@ import type {
   ToolCallId,
   Usage,
 } from '../model/index.js';
-import type { ApprovalRequirement, ToolRegistry, ToolResult, Workspace } from '../tools/index.js';
+import type { ApprovalRequirement, NestedRunBudget, ToolRegistry, ToolResult, Workspace } from '../tools/index.js';
 import type { SettingsReader } from '../config/index.js';
 
 export type TurnId = string & { readonly __brand: 'TurnId' };
 export type AgentId = string & { readonly __brand: 'AgentId' };
+export type CheckpointId = string & { readonly __brand: 'CheckpointId' };
 
-export type TurnBudget = {
-  readonly maxModelCalls: number;
-  readonly maxToolCalls: number;
-};
+export type TurnBudget = NestedRunBudget;
 
 export type TurnInput = {
   readonly turnId: TurnId;
@@ -44,11 +42,12 @@ export type TurnInput = {
 };
 
 /**
- * Everything needed to pick a turn back up: after an approval, or after a
- * crash at a tool-call boundary. Plain data so `session/` can persist it.
+ * Plain audit data. Adopted checkpoints release only a live parked turn;
+ * they do not provide crash recovery.
  */
 export type TurnCheckpoint = {
   readonly turnId: TurnId;
+  readonly checkpointId?: CheckpointId;
   readonly input: TurnInput;
   /** Items the turn has produced so far. */
   readonly produced: readonly Item[];
@@ -66,7 +65,22 @@ export type ApprovalRequest = {
   readonly agentId?: AgentId;
 };
 
-export type ApprovalDecision = { readonly kind: 'approve' } | { readonly kind: 'reject'; readonly reason?: string };
+export type ApprovalGrant =
+  | 'allow-once'
+  | 'allow-remember'
+  | 'unsandboxed-once'
+  | 'allow-folder-session'
+  | 'allow-edit-file-session'
+  | 'allow-edit-folder-session'
+  | 'docker-allow-once'
+  | 'docker-allow-session'
+  | 'docker-allow-project';
+export type ApprovalDecision = (
+  | { readonly kind: 'approve' }
+  | { readonly kind: 'reject'; readonly reason?: string }
+  | { readonly kind: 'answer'; readonly answer: string }
+  | { readonly kind: 'grant'; readonly grant: ApprovalGrant }
+) & { readonly stopAfterApprovalResolution?: boolean };
 
 export type TurnOutcome =
   | { readonly kind: 'completed' }
@@ -76,6 +90,10 @@ export type TurnOutcome =
   | { readonly kind: 'failed'; readonly error: ModelError };
 
 export type EngineEvent =
+  | { readonly type: 'segment_started'; readonly segmentId: string }
+  | { readonly type: 'segment_committed'; readonly segmentId: string; readonly history: readonly Item[] }
+  | { readonly type: 'tool_dispatched'; readonly callId: ToolCallId }
+  | { readonly type: 'model_attempt_rollback'; readonly reasoningCharacters: number }
   | { readonly type: 'text_delta'; readonly delta: string }
   | { readonly type: 'reasoning_delta'; readonly delta: string }
   /** A finished history item. The session log stores these; deltas are transient. */
@@ -83,7 +101,7 @@ export type EngineEvent =
   | { readonly type: 'tool_started'; readonly callId: ToolCallId; readonly toolName: string; readonly input: unknown }
   | { readonly type: 'tool_progress'; readonly callId: ToolCallId; readonly chunk: string }
   | { readonly type: 'tool_finished'; readonly callId: ToolCallId; readonly result: ToolResult }
-  /** Emitted at each tool-call boundary. Persisting the latest one makes the turn resumable. */
+  /** Audit evidence at a turn boundary; persistence does not guarantee resumption. */
   | { readonly type: 'checkpoint'; readonly checkpoint: TurnCheckpoint }
   | { readonly type: 'usage'; readonly usage: Usage }
   | { readonly type: 'retrying'; readonly attempt: number; readonly delayMs: number; readonly error: ModelError }
@@ -91,7 +109,7 @@ export type EngineEvent =
   | { readonly type: 'subagent'; readonly agentId: AgentId; readonly role: string; readonly event: EngineEvent }
   | { readonly type: 'turn_ended'; readonly outcome: TurnOutcome };
 
-/** A running turn. Iterate `events`; the last event is always `turn_ended`. */
+/** A view of a turn. Its last event is `turn_ended`; suspended views retain cancellation authority. */
 export interface TurnRun {
   readonly turnId: TurnId;
   readonly events: AsyncIterable<EngineEvent>;
@@ -100,8 +118,9 @@ export interface TurnRun {
 
 export interface Engine {
   start(input: TurnInput): TurnRun;
-  /** Continue a suspended or crashed turn. Decisions are keyed by tool call. */
+  /** Continue a suspended turn. Adopted runs require the original live parked turn. */
   resume(checkpoint: TurnCheckpoint, decisions: ReadonlyMap<ToolCallId, ApprovalDecision>): TurnRun;
+  dispose(): Promise<void>;
 }
 
 /** Live dependencies are injected once, so turn inputs and checkpoints stay serializable. */

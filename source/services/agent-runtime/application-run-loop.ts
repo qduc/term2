@@ -1,4 +1,5 @@
 import type { NestedApprovalLedger } from '../../contracts/nested-run-driver.js';
+import { waitForAbortableRead } from '../../contracts/abort-aware-wait.js';
 import { isOpenAICompaction, projectModelRequestHistory } from '../conversation/conversation-state-projector.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from './model-context-policy.js';
@@ -207,6 +208,10 @@ export interface ApplicationRunLoopOptions {
 
 /** Bounded session operations. Only runTurn decides when execution advances. */
 export interface ApplicationTurnSession {
+  readonly approvalBatch?: true;
+  readonly abortPendingModelReads?: true;
+  readonly recordBudgetStopCause?: true;
+  onDetachedModelRead?(operation: Promise<unknown>): void;
   prepare(signal: AbortSignal): Promise<
     | {
         agent: ApplicationAgent;
@@ -219,6 +224,9 @@ export interface ApplicationTurnSession {
   beginSegment(stream: AgentStream): void;
   acceptEvent(event: ApplicationRunEvent): void;
   acceptToolDispatch(callId: string): void;
+  onModelDispatch?(input: { readonly requestId: string; readonly providerId?: string; readonly model: string }): void;
+  beforeToolDispatch?(callId: string): Promise<void>;
+  isFatalError?(error: unknown): boolean;
   acceptSegment(stream: AgentStream): void;
   consume(stream: AgentStream): Promise<void>;
   interrupted(stream: AgentStream): Promise<ApplicationRunLoopOptions>;
@@ -258,6 +266,9 @@ export class MaxTurnsExceededError extends Error {
 
 export interface ApplicationRunLoopDeps {
   readonly resolveModel: (model: string) => StreamedModelTurn | Promise<StreamedModelTurn>;
+  readonly abortPendingModelReads?: true;
+  readonly recordBudgetStopCause?: true;
+  readonly onDetachedModelRead?: (operation: Promise<unknown>) => void;
   /** Root-only optional observation. It returns no policy; the run loop never awaits a Decisions response. */
   readonly decisionShadowObserver?: DecisionShadowObserver;
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
@@ -321,6 +332,9 @@ type RunState = {
   approvalDecisionCallId?: string;
   /** The interruption object the decision answered; binds it to that exact pending call. */
   approvalDecisionInterruption?: unknown;
+  approvalQueue?: Array<
+    Readonly<{ callId: string | undefined; interruption: unknown; decision: 'approved' | 'rejected'; message?: string }>
+  >;
   approvalMessage?: string;
   /** Snapshot of the latest provider request built; the calls its response plans keep it. */
   requestSnapshot?: RequestSnapshot;
@@ -696,6 +710,12 @@ export class ApplicationRunLoop {
         state.runBudgetInteractionDecision = this.#takeRunBudgetGrant(state) ? 'continue' : 'stop';
         return;
       }
+      if (state.approvalQueue) {
+        state.approvalQueue.push(
+          Object.freeze({ callId: getInterruptionCallId(interruption), interruption, decision: 'approved' }),
+        );
+        return;
+      }
       state.approvalDecision = 'approved';
       state.approvalDecisionCallId = getInterruptionCallId(interruption);
       state.approvalDecisionInterruption = interruption;
@@ -703,6 +723,17 @@ export class ApplicationRunLoop {
     state.reject = (interruption, approvalOptions) => {
       if (isRunBudgetInteraction(interruption)) {
         state.runBudgetInteractionDecision = 'stop';
+        return;
+      }
+      if (state.approvalQueue) {
+        state.approvalQueue.push(
+          Object.freeze({
+            callId: getInterruptionCallId(interruption),
+            interruption,
+            decision: 'rejected',
+            message: approvalOptions?.message,
+          }),
+        );
         return;
       }
       state.approvalDecision = 'rejected';
@@ -965,6 +996,8 @@ export class ApplicationRunLoop {
     const { state } = context;
     while (state.pendingRunBudgetInteraction) {
       if (state.runBudgetInteractionDecision === 'stop') {
+        if ((context.session?.recordBudgetStopCause || this.#deps.recordBudgetStopCause) && !state.terminalCause)
+          state.terminalCause = 'budget_exhausted';
         state.pendingRunBudgetInteraction = undefined;
         state.runBudgetInteractionDecision = undefined;
         return true;
@@ -1011,6 +1044,7 @@ export class ApplicationRunLoop {
           if (!start) return;
           const options = { ...start.options, signal: turnSignal };
           const state = this.#createState(start.agent, start.input, options);
+          if (session!.approvalBatch) state.approvalQueue = [];
           this.#refreshContinuation(state, options);
           context = this.#createView(state, options, (event) => session!.acceptEvent(event));
           context.session = session;
@@ -1043,6 +1077,7 @@ export class ApplicationRunLoop {
           this.#settleSegment(context, undefined, error);
           await context.observation?.catch(() => undefined);
         }
+        if (session.isFatalError?.(error)) throw error;
         turnSignal?.throwIfAborted();
         if (!(await session.recover(error))) return;
         context = undefined;
@@ -1198,7 +1233,15 @@ export class ApplicationRunLoop {
   /** Own streaming and safe request attempts; never dispatch tools here. */
   async #askModel(context: RunContext): Promise<ModelExchange> {
     const { state, stream, queue, options, requestAbortController } = context;
-    const model = await this.#deps.resolveModel(state.agent.model);
+    const resolution = Promise.resolve(this.#deps.resolveModel(state.agent.model));
+    const model =
+      (context.session?.abortPendingModelReads || this.#deps.abortPendingModelReads) && options.signal
+        ? await waitForAbortableRead(
+            resolution,
+            options.signal,
+            context.session?.onDetachedModelRead ?? this.#deps.onDetachedModelRead,
+          )
+        : await resolution;
     const maxRetries = state.agent.modelSettings?.retry?.maxRetries ?? 0;
     let attempt = 0;
     let streamedToolCalls: Array<Extract<StreamedModelTurnEvent, { type: 'tool_call' }>> = [];
@@ -1316,9 +1359,19 @@ export class ApplicationRunLoop {
         let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
         let iteratorFinished = false;
         try {
+          options.signal?.throwIfAborted();
+          context.session?.onModelDispatch?.({
+            requestId,
+            providerId: state.currentProviderId,
+            model: state.agent.model,
+          });
           iterator = model.stream(request)[Symbol.asyncIterator]();
           while (true) {
-            const nextOperation = iterator.next();
+            const read = iterator.next();
+            const abortReads = context.session?.abortPendingModelReads || this.#deps.abortPendingModelReads;
+            const detached = context.session?.onDetachedModelRead ?? this.#deps.onDetachedModelRead;
+            const nextOperation =
+              abortReads && options.signal ? waitForAbortableRead(read, options.signal, detached) : read;
             const next = await deadline.wait(
               toolArgumentRunaway ? toolArgumentRunaway.wait(nextOperation) : nextOperation,
             );
@@ -1396,7 +1449,21 @@ export class ApplicationRunLoop {
         } finally {
           deadline.dispose();
           toolArgumentRunaway?.dispose();
-          if (iterator && !iteratorFinished) void iterator.return?.().catch(() => undefined);
+          if (iterator && !iteratorFinished) {
+            if (context.session?.abortPendingModelReads || this.#deps.abortPendingModelReads) {
+              try {
+                const returned = iterator.return?.();
+                if (returned) {
+                  const operation = Promise.resolve(returned);
+                  if (options.signal?.aborted)
+                    (context.session?.onDetachedModelRead ?? this.#deps.onDetachedModelRead)?.(operation);
+                  void operation.catch(() => undefined);
+                }
+              } catch {
+                /* Best-effort late iterator cleanup. */
+              }
+            } else void iterator.return?.().catch(() => undefined);
+          }
         }
       };
       const dispatch = async (): Promise<void> => {
@@ -1774,7 +1841,18 @@ export class ApplicationRunLoop {
         stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
         await this.#waitForDecision(context);
         ({ state, stream, queue, options, toolContext } = context);
-        if (state.approvalDecision) {
+        if (state.approvalQueue?.length) {
+          state.toolExecution.validateApprovalBatch(state.approvalQueue);
+          const batch = state.approvalQueue.splice(0);
+          for (const decision of batch)
+            state.toolExecution.resolveApproval(
+              { callId: decision.callId, interruption: decision.interruption },
+              decision.decision,
+              decision.message,
+              state.approvals,
+            );
+          answeredApproval = true;
+        } else if (state.approvalDecision) {
           state.toolExecution.resolveApproval(
             { callId: state.approvalDecisionCallId, interruption: state.approvalDecisionInterruption },
             state.approvalDecision,
@@ -1873,6 +1951,14 @@ export class ApplicationRunLoop {
         outputPush(stream, queue, { type: 'item', item: callItem });
       },
       onExecutionStarted: (callId: string) => state.live?.session?.acceptToolDispatch(callId),
+      ...(state.live?.session?.beforeToolDispatch
+        ? {
+            beforeToolDispatch: async (callId: string) => {
+              await state.live?.session?.beforeToolDispatch?.(callId);
+              state.live?.options.signal?.throwIfAborted();
+            },
+          }
+        : {}),
       onDispatch: (entry: ToolPlanEntry) => {
         outputPush(stream, queue, {
           type: 'tool_call_dispatched',

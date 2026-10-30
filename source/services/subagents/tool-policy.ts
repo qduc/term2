@@ -1,5 +1,5 @@
 import { healPatchOperation } from '../../tools/file/patch-healing.js';
-import type { NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../contracts/nested-run-driver.js';
 import { healSearchReplaceParams } from '../../tools/file/edit-healing.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -1047,6 +1047,7 @@ export class SubagentToolPolicy {
 
 export class SubagentToolFactory {
   #driverFactory?: NestedRunDriverFactory;
+  #modelBinding?: NestedModelBinding;
   #settings: ISettingsService;
   #logger: ILoggingService;
   #executionContext?: ExecutionContext;
@@ -1061,6 +1062,7 @@ export class SubagentToolFactory {
 
   constructor(deps: {
     driverFactory?: NestedRunDriverFactory;
+    modelBinding?: NestedModelBinding;
     settings: ISettingsService;
     logger: ILoggingService;
     executionContext?: ExecutionContext;
@@ -1073,6 +1075,7 @@ export class SubagentToolFactory {
     sessionBrowser?: SessionBrowser;
   }) {
     this.#driverFactory = deps.driverFactory;
+    this.#modelBinding = deps.modelBinding;
     this.#settings = deps.settings;
     this.#logger = deps.logger;
     this.#executionContext = deps.executionContext;
@@ -1261,6 +1264,7 @@ export class SubagentToolFactory {
                   healPatchOperation(path, diff, content, diagnosis, model, key, {
                     ...healingDeps,
                     driverFactory: this.#driverFactory,
+                    modelBinding: this.#modelBinding,
                   }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
@@ -1285,6 +1289,7 @@ export class SubagentToolFactory {
                   healSearchReplaceParams(params, content, model, key, {
                     ...healingDeps,
                     driverFactory: this.#driverFactory,
+                    modelBinding: this.#modelBinding,
                   }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
@@ -1369,7 +1374,9 @@ export class SubagentToolFactory {
       onToolComplete?: (toolName: string, result: unknown, context?: unknown, details?: unknown) => void;
     },
   ): ToolRegistry {
-    const providerDef = getProvider(options.providerId);
+    const providerDef = this.#modelBinding
+      ? this.#modelBinding.providerDefinition(options.providerId)
+      : getProvider(options.providerId);
     const capabilities = {
       supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
       usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,

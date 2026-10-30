@@ -23,17 +23,36 @@ const itemId = (): ItemId => `item_${Date.now().toString(36)}_e${(nextId++).toSt
  * the run as `suspended`; `resume` picks up from that checkpoint with the
  * decisions. Nothing here calls into a UI or writes storage.
  */
-export const createEngine: CreateEngine = (deps) => ({
-  start: (input) =>
-    run(deps, { turnId: input.turnId, input, produced: [], pendingCalls: [], modelCalls: 0 }, new Map()),
-  resume: (checkpoint, decisions) => run(deps, checkpoint, decisions),
-});
+export const createEngine: CreateEngine = (deps) => {
+  const controllers = new Set<AbortController>();
+  return {
+    start: (input) =>
+      run(deps, { turnId: input.turnId, input, produced: [], pendingCalls: [], modelCalls: 0 }, new Map(), controllers),
+    resume: (checkpoint, decisions) => run(deps, checkpoint, decisions, controllers),
+    dispose: async () => {
+      for (const controller of controllers) controller.abort();
+      controllers.clear();
+    },
+  };
+};
 
-function run(deps: EngineDeps, from: TurnCheckpoint, decisions: ReadonlyMap<ToolCallId, ApprovalDecision>): TurnRun {
+function run(
+  deps: EngineDeps,
+  from: TurnCheckpoint,
+  decisions: ReadonlyMap<ToolCallId, ApprovalDecision>,
+  controllers: Set<AbortController>,
+): TurnRun {
   const controller = new AbortController();
+  controllers.add(controller);
   return {
     turnId: from.turnId,
-    events: loop(deps, from, decisions, controller.signal),
+    events: (async function* () {
+      try {
+        yield* loop(deps, from, decisions, controller.signal);
+      } finally {
+        controllers.delete(controller);
+      }
+    })(),
     cancel: () => controller.abort(),
   };
 }
@@ -45,6 +64,16 @@ async function* loop(
   signal: AbortSignal,
 ): AsyncGenerator<EngineEvent> {
   const { input } = from;
+  if (input.budget.kind === 'adopted') {
+    yield {
+      type: 'turn_ended',
+      outcome: {
+        kind: 'failed',
+        error: { kind: 'invalid_request', message: 'Adopted budget requires the adopted engine', retryable: false },
+      },
+    };
+    return;
+  }
   const produced: Item[] = [...from.produced];
   let pending: PendingCall[] = [...from.pendingCalls];
   let modelCalls = from.modelCalls;

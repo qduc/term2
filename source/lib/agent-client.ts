@@ -1,4 +1,5 @@
-import type { NestedRunDriverFactory } from '../contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../contracts/nested-run-driver.js';
+import { waitForAbortableRead } from '../contracts/abort-aware-wait.js';
 import { createLegacyNestedRunDriver } from '../services/agent-runtime/legacy-nested-driver.js';
 import type { ApplicationRunLoopOptions } from '../services/agent-runtime/application-run-loop.js';
 import type { ConversationTurnSession } from '../services/conversation-agent-client.js';
@@ -47,6 +48,7 @@ import type { AgentStream } from '../services/agent-stream.js';
 import type { ProviderInput, ProviderInputItem } from '../contracts/provider-input.js';
 import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
 import { getProvider, type ProviderRegistry } from '../providers/index.js';
+import type { ProviderDefinition } from '../providers/registry.js';
 import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 import { createGoalStopPolicy } from '../services/conversation/durable-goal-stop-check.js';
 import { createVerifiedGoalStopPolicy } from '../services/completion-verification/goal-stop-policy.js';
@@ -148,6 +150,14 @@ function createScopedToolLifecycle(
 /**
  * Conversation client over the application-owned provider/run-loop boundary.
  */
+type LocalCheckpointEvidence = {
+  history: readonly ProviderInputItem[];
+  hotTail: readonly ProviderInputItem[];
+  checkpoint: ProviderInputItem;
+  replaced: number;
+  index: number;
+};
+
 export class AgentClient {
   #agentConfig: AgentConfiguration;
   #shellChildRegistry = new ShellChildRegistry();
@@ -169,15 +179,20 @@ export class AgentClient {
   #sessionContextService: ISessionContextService;
   #requestCapture?: ProviderRequestCapture;
   #providerRegistry?: ProviderRegistry;
+  #modelBinding?: NestedModelBinding;
+  #adoptedProviderBinding?: {
+    provider(id: string): ProviderDefinition | undefined;
+    model(provider: string, model: string): StreamedModelTurn | Promise<StreamedModelTurn>;
+    independentModel(provider: string, model: string): StreamedModelTurn | Promise<StreamedModelTurn>;
+  };
+  #selectApplicationAgent?: (agent: ApplicationAgent) => ApplicationAgent;
+  #validateApplicationAgent?: (agent: ApplicationAgent, providerId: string) => void;
   #subagentBridge: SubagentBridge | null = null;
   #askUserAnswerStore: AskUserAnswerStore;
   #isDisposed = false;
   #toolLifecycle?: ToolExecutionLifecyclePort;
-  #localCheckpointSink?: (input: {
-    history: readonly ProviderInputItem[];
-    hotTail: readonly ProviderInputItem[];
-    checkpoint: ProviderInputItem;
-  }) => void;
+  #localCheckpointSink?: (input: LocalCheckpointEvidence) => void;
+  #localCheckpointObservers = new Set<(input: LocalCheckpointEvidence) => void>();
   #hookScope: Term2HookScope = 'root';
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
@@ -215,6 +230,7 @@ export class AgentClient {
 
   #resolveStreamedModel(selectedModel: string): StreamedModelTurn | Promise<StreamedModelTurn> {
     const providerId = this.#agentConfig.getProvider();
+    if (this.#adoptedProviderBinding) return this.#adoptedProviderBinding.model(providerId, selectedModel);
     const provider = getProvider(providerId, this.#providerRegistry);
     if (!provider?.createStreamedModel) {
       throw new Error(`Provider '${providerId}' does not expose an application streamed model.`);
@@ -441,7 +457,8 @@ export class AgentClient {
         const model = this.#agentConfig.getModel();
         const catalog = getCatalogModel(provider, model);
         const openaiInlineNative =
-          getProvider(provider)?.capabilities?.supportsContextCompaction === true &&
+          (this.#adoptedProviderBinding ? this.#adoptedProviderBinding.provider(provider) : getProvider(provider))
+            ?.capabilities?.supportsContextCompaction === true &&
           supportsContextCompactionModel(model) &&
           !this.#contextCompactionSessionState.disabled;
         if (provider === 'codex' && mode !== 'local') {
@@ -599,11 +616,15 @@ export class AgentClient {
           return message?.role === 'user' && !message.isSynthetic;
         }).length;
         const preservedUsers = hotUsers === 0 ? genuineUsers : genuineUsers.slice(0, -hotUsers);
-        this.#localCheckpointSink?.({
+        const checkpointEvidence = {
           history,
           hotTail: outcome.hotTail,
           checkpoint: outcome.checkpoint,
-        });
+          replaced: history.length - outcome.hotTail.length - preservedUsers.length,
+          index: preservedUsers.length,
+        };
+        this.#localCheckpointSink?.(checkpointEvidence);
+        for (const observer of this.#localCheckpointObservers) observer(checkpointEvidence);
         return {
           kind: 'compacted' as const,
           history: [...preservedUsers, outcome.checkpoint, ...outcome.hotTail],
@@ -747,6 +768,11 @@ export class AgentClient {
 
   constructor({
     driverFactory = createLegacyNestedRunDriver,
+    modelBinding,
+    adoptedProviderBinding,
+    assembleAgent,
+    selectApplicationAgent,
+    validateApplicationAgent,
     selection,
     reasoningEffort,
     maxTurns,
@@ -769,6 +795,15 @@ export class AgentClient {
     continuationProjectionMode: _continuationProjectionMode = 'legacy',
   }: {
     driverFactory?: NestedRunDriverFactory;
+    modelBinding?: NestedModelBinding;
+    assembleAgent?: ConstructorParameters<typeof AgentConfiguration>[1]['assembleAgent'];
+    selectApplicationAgent?: (agent: ApplicationAgent) => ApplicationAgent;
+    validateApplicationAgent?: (agent: ApplicationAgent, providerId: string) => void;
+    adoptedProviderBinding?: {
+      provider(id: string): ProviderDefinition | undefined;
+      model(provider: string, model: string): StreamedModelTurn | Promise<StreamedModelTurn>;
+      independentModel(provider: string, model: string): StreamedModelTurn | Promise<StreamedModelTurn>;
+    };
     selection?: ModelSelection;
     reasoningEffort?: ReasoningEffortSetting | null;
     maxTurns?: number;
@@ -831,6 +866,10 @@ export class AgentClient {
     continuationProjectionMode?: ContinuationProjectionMode;
   }) {
     this.#logger = deps.logger;
+    this.#adoptedProviderBinding = adoptedProviderBinding;
+    this.#modelBinding = modelBinding;
+    this.#selectApplicationAgent = selectApplicationAgent;
+    this.#validateApplicationAgent = validateApplicationAgent;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
     this.#onGoalAchieved = deps.onGoalAchieved;
@@ -844,6 +883,8 @@ export class AgentClient {
         model: () => this.#agentConfig.getModel(),
         // Do not reuse the worker's cached transport or session context.
         resolveModel: (model) => {
+          if (this.#adoptedProviderBinding)
+            return this.#adoptedProviderBinding.independentModel(this.#agentConfig.getProvider(), model);
           const provider = getProvider(this.#agentConfig.getProvider());
           if (!provider?.createStreamedModel) throw new Error('Independent verification provider unavailable');
           return provider.createStreamedModel(model, { settingsService: deps.settings, loggingService: deps.logger });
@@ -863,6 +904,11 @@ export class AgentClient {
       { selection, reasoningEffort, agentOverride, approvalPolicyRegistry },
       {
         driverFactory,
+        modelBinding,
+        ...(assembleAgent ? { assembleAgent } : {}),
+        ...(adoptedProviderBinding
+          ? { providerCapabilities: (providerId: string) => adoptedProviderBinding.provider(providerId)?.capabilities }
+          : {}),
         logger: deps.logger,
         settings: deps.settings,
         ...(deps.getGoal ? { getGoal: deps.getGoal } : {}),
@@ -937,6 +983,7 @@ export class AgentClient {
       settings: deps.settings,
       logger: deps.logger,
       sessionContextService: this.#sessionContextService,
+      ...(modelBinding ? { modelBinding } : {}),
     });
 
     if (subagentBridge) {
@@ -944,6 +991,7 @@ export class AgentClient {
     } else if (!agentOverride) {
       this.#subagentBridge = new SubagentBridge({
         driverFactory,
+        modelBinding,
         logger: deps.logger,
         settings: deps.settings,
         executionContext: deps.executionContext,
@@ -973,6 +1021,23 @@ export class AgentClient {
         }) =>
           new AgentClient({
             driverFactory,
+            modelBinding,
+            ...(adoptedProviderBinding && modelBinding
+              ? {
+                  adoptedProviderBinding: {
+                    ...adoptedProviderBinding,
+                    model: (provider: string, model: string) =>
+                      modelBinding.scopedModel(
+                        { provider, model },
+                        {
+                          settingsService: deps.settings,
+                          loggingService: deps.logger,
+                          sessionContextService: this.#sessionContextService,
+                        },
+                      ),
+                  },
+                }
+              : {}),
             selection: { model: agent.model, provider },
             maxTurns,
             retryAttempts,
@@ -1022,16 +1087,13 @@ export class AgentClient {
    * the tracker so mid-tool stream recovery can settle as `unknown`.
    */
 
-  setLocalCheckpointSink(
-    sink:
-      | ((input: {
-          history: readonly ProviderInputItem[];
-          hotTail: readonly ProviderInputItem[];
-          checkpoint: ProviderInputItem;
-        }) => void)
-      | undefined,
-  ): void {
+  setLocalCheckpointSink(sink: ((input: LocalCheckpointEvidence) => void) | undefined): void {
     this.#localCheckpointSink = sink;
+  }
+
+  addLocalCheckpointObserver(observer: (input: LocalCheckpointEvidence) => void): () => void {
+    this.#localCheckpointObservers.add(observer);
+    return () => this.#localCheckpointObservers.delete(observer);
   }
 
   setModelSelection(selection: ModelSelection): void {
@@ -1059,8 +1121,10 @@ export class AgentClient {
 
   supportsConversationChaining(): boolean {
     return (
-      getProvider(this.#agentConfig.getProvider(), this.#providerRegistry)?.capabilities
-        ?.supportsConversationChaining ?? false
+      (this.#adoptedProviderBinding
+        ? this.#adoptedProviderBinding.provider(this.#agentConfig.getProvider())
+        : getProvider(this.#agentConfig.getProvider(), this.#providerRegistry)
+      )?.capabilities?.supportsConversationChaining ?? false
     );
   }
 
@@ -1352,7 +1416,10 @@ export class AgentClient {
     this.#applicationRunLoop.abort();
     this.#blockedCompactionRearmAtEstimatedTokens = undefined;
     this.#blockedCompactionUserTurnCount = undefined;
-    getProvider(this.#agentConfig.getProvider())?.clearConversations?.();
+    (this.#adoptedProviderBinding
+      ? this.#adoptedProviderBinding.provider(this.#agentConfig.getProvider())
+      : getProvider(this.#agentConfig.getProvider())
+    )?.clearConversations?.();
     this.#agentConfig.refreshAgent();
     this.#logger.debug('Conversation and agent refreshed');
   }
@@ -1411,15 +1478,30 @@ export class AgentClient {
     }
   }
 
-  async #prepareStart(userInput: ProviderInput, options: ChainedRunOptions, signal: AbortSignal): Promise<void> {
+  async #prepareStart(
+    userInput: ProviderInput,
+    options: ChainedRunOptions,
+    signal: AbortSignal,
+    abortPendingModelReads = false,
+    onDetachedModelRead?: (operation: Promise<unknown>) => void,
+  ): Promise<void> {
     let agentRefreshed = false;
     if (this.#agentConfig.getProvider() === 'codex' && this.#settings.get('agent.reasoningEffort') === 'default') {
       try {
-        await fetchModels({ settingsService: this.#settings, loggingService: this.#logger, signal }, 'codex');
+        const discovery = this.#modelBinding
+          ? this.#modelBinding.fetchModels('codex', {
+              settingsService: this.#settings,
+              loggingService: this.#logger,
+              signal,
+            })
+          : fetchModels({ settingsService: this.#settings, loggingService: this.#logger, signal }, 'codex');
+        if (abortPendingModelReads) await waitForAbortableRead(discovery, signal, onDetachedModelRead);
+        else await discovery;
         if (signal.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
         this.#agentConfig.refreshAgent({ configurationChanged: false });
         agentRefreshed = true;
       } catch {
+        if (signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError');
         // Model discovery is best effort; the provider can still resolve its default.
       }
     }
@@ -1581,6 +1663,8 @@ export class AgentClient {
   async #prepareApplicationTurn(
     userInput: ProviderInput,
     options: ChainedRunOptions = {},
+    abortPendingModelReads = false,
+    onDetachedModelRead?: (operation: Promise<unknown>) => void,
   ): Promise<{ agent: ApplicationAgent; input: ProviderInput; options: ApplicationRunLoopOptions }> {
     this.#subagentBridge?.resetAbortController();
     // Stop whatever is streaming without judging the turn's fate: a retry
@@ -1596,12 +1680,18 @@ export class AgentClient {
     if (options.sessionId) this.#lastLogicalSessionId = options.sessionId;
     if (options.sessionId) this.#lastPromptCacheKey = options.promptCacheKey ?? options.sessionId;
     try {
-      await this.#prepareStart(userInput, options, startController.signal);
+      this.#validateApplicationAgent?.(
+        this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey),
+        this.#agentConfig.getProvider(),
+      );
+      await this.#prepareStart(userInput, options, startController.signal, abortPendingModelReads, onDetachedModelRead);
       if (startController.signal.aborted) {
         throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
       }
       this.#agentConfig.beginTurn();
-      const agent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
+      const assembledAgent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
+      this.#validateApplicationAgent?.(assembledAgent, this.#agentConfig.getProvider());
+      const agent = this.#selectApplicationAgent?.(assembledAgent) ?? assembledAgent;
       this.#activeStartController = null;
       return { agent, input: userInput, options: this.#applicationOptions(options) };
     } catch (error) {
@@ -1611,7 +1701,12 @@ export class AgentClient {
   }
 
   async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
-    const start = await this.#prepareApplicationTurn(userInput, options);
+    const start = await this.#prepareApplicationTurn(
+      userInput,
+      options,
+      Boolean(this.#modelBinding),
+      this.#modelBinding?.trackDetachedRead,
+    );
     const stream = this.#applicationRunLoop.startStream(start.agent, start.input, start.options);
     this.#observeCompletion(stream, userInput, this.#agentConfig.getProvider(), this.#agentConfig.getModel());
     return stream;
@@ -1619,15 +1714,37 @@ export class AgentClient {
 
   async runTurn(session: ConversationTurnSession): Promise<void> {
     await this.#applicationRunLoop.runTurn({
+      ...(session.approvalBatch ? { approvalBatch: true as const } : {}),
+      ...(session.abortPendingModelReads ? { abortPendingModelReads: true as const } : {}),
+      ...(session.recordBudgetStopCause ? { recordBudgetStopCause: true as const } : {}),
+      ...(session.onDetachedModelRead ? { onDetachedModelRead: session.onDetachedModelRead } : {}),
       prepare: async (signal) => {
-        const start = await session.prepare(signal);
+        const preparation = session.prepare(signal);
+        const start = session.abortPendingModelReads
+          ? await waitForAbortableRead(preparation, signal, session.onDetachedModelRead)
+          : await preparation;
+        if (session.abortPendingModelReads) signal.throwIfAborted();
         if (!start) return undefined;
-        const prepared = await this.#prepareApplicationTurn(start.input, start.options);
+        const operation = this.#prepareApplicationTurn(
+          start.input,
+          start.options,
+          session.abortPendingModelReads,
+          session.onDetachedModelRead,
+        );
+        const prepared = session.abortPendingModelReads
+          ? await waitForAbortableRead(operation, signal, session.onDetachedModelRead)
+          : await operation;
+        if (session.abortPendingModelReads) signal.throwIfAborted();
         return prepared;
       },
       beginSegment: (stream) => session.beginSegment(stream),
       acceptEvent: (event) => session.acceptEvent(event),
       acceptToolDispatch: (callId) => session.acceptToolDispatch(callId),
+      ...(session.onModelDispatch ? { onModelDispatch: (input) => session.onModelDispatch!(input) } : {}),
+      ...(session.beforeToolDispatch
+        ? { beforeToolDispatch: (callId: string) => session.beforeToolDispatch!(callId) }
+        : {}),
+      ...(session.isFatalError ? { isFatalError: (error) => session.isFatalError!(error) } : {}),
       acceptSegment: (stream) => session.acceptSegment(stream),
       completed: (stream) => session.completed(stream),
       consume: async (stream) => {

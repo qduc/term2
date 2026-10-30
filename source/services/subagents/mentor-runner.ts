@@ -1,4 +1,8 @@
-import type { NestedRunDriverFactory, ApplicationAgent } from '../../contracts/nested-run-driver.js';
+import type {
+  NestedRunDriverFactory,
+  ApplicationAgent,
+  NestedModelBinding,
+} from '../../contracts/nested-run-driver.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
@@ -36,6 +40,7 @@ const mentorLabel = (index: number): string => `Mentor ${String.fromCharCode(65 
 
 export class MentorRunner {
   #driverFactory?: NestedRunDriverFactory;
+  #modelBinding?: NestedModelBinding;
   #logger: ILoggingService;
   #settings: ISettingsService;
   #sessionContextService: ISessionContextService;
@@ -45,6 +50,7 @@ export class MentorRunner {
 
   constructor(deps: {
     driverFactory?: NestedRunDriverFactory;
+    modelBinding?: NestedModelBinding;
     logger: ILoggingService;
     settings: ISettingsService;
     sessionContextService: ISessionContextService;
@@ -53,6 +59,7 @@ export class MentorRunner {
     session?: SubagentSession;
   }) {
     this.#driverFactory = deps.driverFactory;
+    this.#modelBinding = deps.modelBinding;
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
@@ -273,7 +280,9 @@ export class MentorRunner {
 
     mentorSession.switchProvider(mentorProvider);
 
-    const providerDef = getProvider(mentorProvider);
+    const providerDef = this.#modelBinding
+      ? this.#modelBinding.providerDefinition(mentorProvider)
+      : getProvider(mentorProvider);
     if (!providerDef?.createStreamedModel) {
       const providerLabel = providerDef?.label || mentorProvider;
       throw new Error(
@@ -281,15 +290,30 @@ export class MentorRunner {
           `Please check that all required credentials and provider settings are set.`,
       );
     }
-    const streamedModel = await mentorSession.ensureModel(mentorProvider, (providerId) => {
-      const definition = getProvider(providerId);
-      if (!definition?.createStreamedModel) throw new Error(`${providerId} has no streamed model`);
-      return definition.createStreamedModel(mentorModelName, {
-        settingsService: this.#settings,
-        loggingService: this.#logger,
-        sessionContextService: this.#sessionContextService,
-      });
-    });
+    const streamedModel = await mentorSession.ensureModel(
+      mentorProvider,
+      (providerId) => {
+        const definition = this.#modelBinding
+          ? this.#modelBinding.providerDefinition(providerId)
+          : getProvider(providerId);
+        if (!definition?.createStreamedModel) throw new Error(`${providerId} has no streamed model`);
+        if (this.#modelBinding)
+          return this.#modelBinding.scopedModel(
+            { provider: providerId, model: mentorModelName },
+            {
+              settingsService: this.#settings,
+              loggingService: this.#logger,
+              sessionContextService: this.#sessionContextService,
+            },
+          );
+        return definition.createStreamedModel(mentorModelName, {
+          settingsService: this.#settings,
+          loggingService: this.#logger,
+          sessionContextService: this.#sessionContextService,
+        });
+      },
+      this.#modelBinding && signal ? { signal, onDetached: this.#modelBinding.trackDetachedRead } : undefined,
+    );
     if (!streamedModel)
       throw new Error(`${providerDef.label || mentorProvider} is configured but could not be initialized.`);
 

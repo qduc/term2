@@ -23887,7 +23887,9 @@
       "run_at": "2026-10-29T08:19:19Z",
       "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "revision_kind": "historical hosted run observation",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "hosted CI lane test",
       "command": "pnpm exec node scripts/run-ci-lane.mjs test",
       "environment": {
@@ -23905,7 +23907,11 @@
         "files_skipped": 0,
         "exit_code": 1
       },
-      "failures": [{ "summary": "Bare flag/config scenario2110 expected3tools; received extra run_subagent." }],
+      "failures": [
+        {
+          "summary": "Bare flag/config scenario2110 expected3tools; received extra run_subagent."
+        }
+      ],
       "notes": "Run40841284146 at requested main revision. Provider-black-box job succeeded; its counts were not fetched and are not inferred. All three failing jobs built successfully.",
       "evidence": [
         "https://github.com/qduc/term2/actions/runs/40841284146",
@@ -23918,7 +23924,9 @@
       "run_at": "2026-10-29T08:19:19Z",
       "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "revision_kind": "historical hosted run observation",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "hosted CI lane integration",
       "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
       "environment": {
@@ -23937,7 +23945,9 @@
         "exit_code": 1
       },
       "failures": [
-        { "summary": "Repair deadline fixture797 expected repair; received blocked before run loop start." }
+        {
+          "summary": "Repair deadline fixture797 expected repair; received blocked before run loop start."
+        }
       ],
       "notes": "Run40841284146 at requested main revision. Provider-black-box job succeeded; its counts were not fetched and are not inferred. All three failing jobs built successfully.",
       "evidence": [
@@ -23951,7 +23961,9 @@
       "run_at": "2026-10-29T08:19:19Z",
       "commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "revision_kind": "historical hosted run observation",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "hosted CI lane e2e",
       "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
       "environment": {
@@ -23988,7 +24000,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": null,
       "revision_kind": "clean base source",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "SKIP_BUILD_BACKUP=1 pnpm build",
       "environment": {
@@ -24008,7 +24022,9 @@
       },
       "failures": [],
       "notes": "Build succeeded in isolated checkout; implementation edits change tests only, not shipped CLI.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/build.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/build.log"
+      ]
     },
     {
       "id": "2026-10-29-ci-failure-baseline-bare",
@@ -24018,7 +24034,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": null,
       "revision_kind": "clean base source; built CLI from same source",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "TERM2_CI_PREBUILT_CLI=1 pnpm test:integration source/cli-headless.integration.test.ts -t 'bare profile'",
       "environment": {
@@ -24042,7 +24060,9 @@
         }
       ],
       "notes": "2failed/31skipped; both flag/config cases expect3tools but receive run_subagent as fourth at scenario2110.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/bare-red.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/bare-red.log"
+      ]
     },
     {
       "id": "2026-10-29-ci-failure-baseline-deadline",
@@ -24052,7 +24072,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": null,
       "revision_kind": "clean base source; built CLI from same source",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm test:integration source/services/completion-verification/completion-verification.integration.test.ts -t 'repair deadline stops'",
       "environment": {
@@ -24072,7 +24094,9 @@
       },
       "failures": [],
       "notes": "1passed/38skipped on faster local host; not evidence against a150ms setup race.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/deadline-baseline.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/deadline-baseline.log"
+      ]
     },
     {
       "id": "2026-10-29-ci-failure-baseline-restart",
@@ -24082,7 +24106,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": null,
       "revision_kind": "clean base source; built CLI from same source",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm test:e2e scripts/restart-work.e2e.test.ts -t 'real background ownership'",
       "environment": {
@@ -24102,7 +24128,9 @@
       },
       "failures": [],
       "notes": "1passed/3skipped while local sandbox dependencies exist; CI dependency conditions differ.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/restart-red.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/restart-red.log"
+      ]
     },
     {
       "id": "2026-10-29-ci-failure-deadline-delay-red",
@@ -24112,7 +24140,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": null,
       "revision_kind": "temporary dirty probe; not a clean-commit run",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "See probes.py and log preamble; temporary controlled fixture intervention",
       "environment": {
@@ -24136,7 +24166,9 @@
         }
       ],
       "notes": "Temporary200ms currentRevision delay on original150ms wall-clock test reproduces blocked-vs-repair failure before model start.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/deadline-delayed-red.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/deadline-delayed-red.log"
+      ]
     },
     {
       "id": "2026-10-29-ci-failure-restart-missing-deps-red",
@@ -24146,7 +24178,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": null,
       "revision_kind": "temporary dirty probe; not a clean-commit run",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "See probes.py and log preamble; temporary controlled fixture intervention",
       "environment": {
@@ -24170,7 +24204,9 @@
         }
       ],
       "notes": "Original test plus child-only which shim hides bwrap/socat: same40000ms PTY wait and Allow this action UI as hosted. Other dependency lookup delegates to /usr/bin/which.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/restart-no-deps-red.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/restart-no-deps-red.log"
+      ]
     },
     {
       "id": "2026-10-29-ci-failure-restart-missing-deps-green",
@@ -24180,7 +24216,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": null,
       "revision_kind": "temporary dirty probe; not a clean-commit run",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "See probes.py and log preamble; temporary controlled fixture intervention",
       "environment": {
@@ -24200,7 +24238,9 @@
       },
       "failures": [],
       "notes": "Same child-only missing-dependency condition with saved always/disabled fixture settings passes1test/3skipped.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/restart-no-deps-green.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/restart-no-deps-green.log"
+      ]
     },
     {
       "id": "2026-10-29-ci-failure-deadline-delay-green",
@@ -24210,7 +24250,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": null,
       "revision_kind": "temporary dirty probe; not a clean-commit run",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "See probes.py and log preamble; temporary controlled fixture intervention",
       "environment": {
@@ -24230,7 +24272,9 @@
       },
       "failures": [],
       "notes": "Final fake task clock plus same200ms real snapshot delay passes1test/38skipped; real Git/SQLite remain exercised.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/deadline-delayed-green.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/deadline-delayed-green.log"
+      ]
     },
     {
       "id": "2026-10-29-ci-failure-typecheck",
@@ -24240,7 +24284,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm typecheck",
       "environment": {
@@ -24260,7 +24306,9 @@
       },
       "failures": [],
       "notes": "Final source tree static check.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/typecheck.log"],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/typecheck.log"
+      ],
       "elapsed_seconds": 3.02
     },
     {
@@ -24271,7 +24319,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm lint",
       "environment": {
@@ -24295,7 +24345,9 @@
         }
       ],
       "notes": "ESLint0errors/31warnings; Prettier fails only pre-existing docs/test-results.json. Same HEAD ledger fails Prettier via stdin (base-ledger-format.log); changed source files pass focused checks. No unrelated wholesale ledger formatting.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lint.log"],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/lint.log"
+      ],
       "elapsed_seconds": 39.91
     },
     {
@@ -24306,7 +24358,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm check:no-unit-tests",
       "environment": {
@@ -24326,7 +24380,9 @@
       },
       "failures": [],
       "notes": "Final source tree static check.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/no-unit-tests.log"],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/no-unit-tests.log"
+      ],
       "elapsed_seconds": 0.87
     },
     {
@@ -24337,7 +24393,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "git diff --cached --check",
       "environment": {
@@ -24357,7 +24415,9 @@
       },
       "failures": [],
       "notes": "Final source tree static check.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/diff-check.log"],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/diff-check.log"
+      ],
       "elapsed_seconds": 0.01
     },
     {
@@ -24368,7 +24428,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm exec node scripts/run-ci-lane.mjs test",
       "environment": {
@@ -24388,7 +24450,9 @@
       },
       "failures": [],
       "notes": "Exact CI lane inventory and maxWorkers=3; all discovered files assigned by repository lane runner.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lane-test.log"],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/lane-test.log"
+      ],
       "elapsed_seconds": 41.42
     },
     {
@@ -24399,7 +24463,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm exec node scripts/run-ci-lane.mjs integration",
       "environment": {
@@ -24419,7 +24485,9 @@
       },
       "failures": [],
       "notes": "Exact CI lane inventory and maxWorkers=3; all discovered files assigned by repository lane runner.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lane-integration.log"],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/lane-integration.log"
+      ],
       "elapsed_seconds": 79.6
     },
     {
@@ -24430,7 +24498,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm exec node scripts/run-ci-lane.mjs e2e",
       "environment": {
@@ -24450,7 +24520,9 @@
       },
       "failures": [],
       "notes": "Exact CI lane inventory and maxWorkers=3; all discovered files assigned by repository lane runner.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lane-e2e.log"],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/lane-e2e.log"
+      ],
       "elapsed_seconds": 83.96
     },
     {
@@ -24461,7 +24533,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm exec node scripts/run-ci-lane.mjs provider-black-box",
       "environment": {
@@ -24481,7 +24555,9 @@
       },
       "failures": [],
       "notes": "Exact CI lane inventory and maxWorkers=3; all discovered files assigned by repository lane runner.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/lane-provider-black-box.log"],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/lane-provider-black-box.log"
+      ],
       "elapsed_seconds": 43.71
     },
     {
@@ -24492,7 +24568,9 @@
       "base_commit": "e359a9e8bfd5b2038bb4f0b8c20fdfa4fcb2c088",
       "tree": "70b3d72e2d8f78d4e29b5a5f7ef0bebffa5bcea8",
       "revision_kind": "pre-commit staged source tree; source hash recorded afterward",
-      "task_ids": ["2026-10-29-ci-failure"],
+      "task_ids": [
+        "2026-10-29-ci-failure"
+      ],
       "suite": "CI failure investigation",
       "command": "pnpm exec eslint <3changedfiles>; pnpm exec prettier --check <3changedfiles>",
       "environment": {
@@ -24512,7 +24590,9 @@
       },
       "failures": [],
       "notes": "Both commands exit0; ESLint ignores scripts/restart-work.e2e.test.ts under existing repository configuration (one warning). Prettier checks all3; typecheck covers project. See focused-eslint.log and base-ledger-format.log too.",
-      "evidence": ["/home/qduc/coord/term2/tasks/ci-failure/focused-prettier.log"]
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/ci-failure/focused-prettier.log"
+      ]
     },
     {
       "recorded_on": "2026-10-29",
@@ -26679,6 +26759,76 @@
       "notes": "Tracer 14/14; layer guard passed with 480 allowlisted source edges; inventory passed; old CLI parity 6/6. Before commit, temporary probes produced: rewrite/src/tools/adopted/g1-probe.ts (tools/) directly imports source/gateway/gateway.ts (host/); rewrite/src/tools/g1-probe.ts imports source/tools/types.ts outside adopted/. Both probes removed. Initial tracer attempts in default sandbox failed at scenario 2 with child did not report a session, empty stdout and SIGKILL. A minimal Node spawnSync child that writes hello then kills itself returned error EPERM, signal SIGKILL and empty stdout in that sandbox; with network-enabled additional permissions it returned hello and SIGKILL without error. The successful tracer was run under the latter permissions. Full integration/e2e suites not run locally."
     },
     {
+      "id": "2026-10-30-port-g1-hosted-acceptance",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T12:41:02Z",
+      "commit": "7e2b7ee00f577a7129c2d605f21eda433277cb1b",
+      "tree": null,
+      "revision_kind": "G1 PR commit; merged as cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "base_commit": "a99172d151189ffdc631a6b9e4c070dff5ba63da",
+      "task_ids": [
+        "2026-10-30-port-g1-build-guard"
+      ],
+      "suite": "G1 hosted CI acceptance and independent review",
+      "command": "GitHub Actions CI run 41057187634; independent review of PR #89",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub Actions; ubuntu-22.04 and ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": null,
+        "notes": "All four existing CI jobs succeeded on tested PR commit 7e2b7ee0; source commit 2525064bf0c2bf7674cfef000af05331e40030f3 received independent review."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/41057187634",
+        "/tmp/term2-g1-independent/review.md",
+        "https://github.com/qduc/term2/commit/7e2b7ee00f577a7129c2d605f21eda433277cb1b"
+      ],
+      "notes": "GitHub Actions CI run 41057187634 tested PR commit 7e2b7ee00f577a7129c2d605f21eda433277cb1b; all four jobs succeeded. G1 source commit 2525064bf0c2bf7674cfef000af05331e40030f3 was merged as PR #89 at cf6015a2a30871ecb7295f03f738c2f0810342a7. Independent review evidence is retained at /tmp/term2-g1-independent/review.md. This hosted acceptance is appended separately; the original local G1 verification row remains unchanged."
+    },
+    {
+      "id": "2026-10-30-port-g2-ci-gates-local",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T12:51:49Z",
+      "commit": "6eae4f660f440b0b4cf50bf4bad6fee496a8311",
+      "tree": null,
+      "revision_kind": "clean source commit; dist built locally from this commit",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 rewrite CI gates local validation",
+      "command": "pnpm build; node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; pnpm exec prettier --check .github/workflows/ci.yml",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Per-worktree dependencies installed with a worktree-local package store; additional sandbox permissions enabled for child processes and network access."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Root CLI build passed; inventory passed; old CLI parity matched 6/6 goldens; rewrite typecheck passed; layer guard passed with 480 allowlisted source edges; workflow formatting passed. Hosted CI, independent review and the required throwaway golden-change probe remain pending."
+    },
+    {
       "id": "2026-10-30-port-guard-followup",
       "recorded_on": "2026-10-30",
       "run_at": "2026-10-30T12:59:00Z",
@@ -26743,6 +26893,582 @@
       "failures": [],
       "evidence": [],
       "notes": "Seven exact/sibling fixtures passed: exact gateway and tools shared contracts accepted, .tsx siblings rejected in host and tools layers; model-service and service-interfaces exact rows accepted, unmapped model-service.tsx listed. All 14 earlier guard fixtures passed; combined actual A1/A2 adapters passed; layer guard 490 and typecheck passed. This addresses independent review of debc7493; full tracer and parity evidence for that earlier source is in 2026-10-30-port-guard-followup."
+    },
+    {
+      "id": "2026-10-30-port-g2-label-lifecycle-ci",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:04:13Z",
+      "commit": "55b85850cc7baf37cf6af0ae1221c98cb286ab69",
+      "tree": null,
+      "revision_kind": "clean G2 label-lifecycle fix commit; later followed by throwaway probe and revert",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 label lifecycle hosted CI acceptance",
+      "command": "GitHub Actions CI run 41060182154 on PR #90",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub Actions; ubuntu-22.04 and ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": null,
+        "notes": "All five CI jobs, including port, passed on label-lifecycle fix commit 55b85850cc7baf37cf6af0ae1221c98cb286ab69."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/41060182154"
+      ],
+      "notes": "Hosted positive run for the label lifecycle fix. The branch was at this commit before adding the temporary negative golden probe."
+    },
+    {
+      "id": "2026-10-30-port-g2-golden-negative-ci",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:07:53Z",
+      "commit": "cbefa2069a67aac39fa0f2b6be7bda457714ae4d",
+      "tree": null,
+      "revision_kind": "throwaway golden probe commit; reverted by c9d8cf8d671281f66a31eb44168d9d676176e21f",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 golden-change negative CI acceptance",
+      "command": "GitHub Actions CI run 41060682959 on PR #90",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub Actions; ubuntu-22.04 and ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": null,
+        "notes": "No golden-change label was present. Four existing CI jobs passed; the port job failed at the intended golden guard."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        "port / Reject unapproved golden changes: Golden changes require the golden-change label: rewrite/parity/goldens/headless-plain-answer.json. Parity and rewrite typecheck/layer steps were skipped after the guard failure."
+      ],
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/41060682959",
+        "https://github.com/qduc/term2/actions/runs/41060682959/job/124079896540"
+      ],
+      "notes": "The single-file stdout whitespace probe in rewrite/parity/goldens/headless-plain-answer.json was temporary. The gate detected it and exited 1 as required. The throwaway commit was reverted in c9d8cf8d671281f66a31eb44168d9d676176e21f; no golden-change label was applied."
+    },
+    {
+      "id": "2026-10-30-port-g2-probe-revert-local",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:12:22Z",
+      "commit": "c9d8cf8d671281f66a31eb44168d9d676176e21f",
+      "tree": null,
+      "revision_kind": "clean revert commit; hosted CI for this exact restored head pending",
+      "base_commit": "cbefa2069a67aac39fa0f2b6be7bda457714ae4d",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 restored golden, old CLI parity, inventory and static gates",
+      "command": "pnpm build; node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; git diff --quiet cf6015a2a30871ecb7295f03f738c2f0810342a7 -- rewrite/parity/goldens/headless-plain-answer.json",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Per-worktree dependencies; network-enabled additional sandbox permissions for child processes."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/commit/c9d8cf8d671281f66a31eb44168d9d676176e21f"
+      ],
+      "notes": "Build, inventory, rewrite typecheck and layer guard passed; old CLI parity matched 6/6 goldens. The probed golden was byte-identical to the G1 base after revert. Workflow Prettier and diff checks passed. The restored commit has not yet been pushed, so its hosted CI remains pending."
+    },
+    {
+      "id": "2026-10-30-port-g2-rebased-final-local",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:17:57Z",
+      "commit": "dfe03a0fe0de0b54f73daf702379c2c8df7d03b9",
+      "tree": null,
+      "revision_kind": "clean rebased G2 source and evidence commits; hosted CI pending",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 rebased combined-state build, inventory, parity and static gates",
+      "command": "pnpm build; node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; pnpm exec prettier --check .github/workflows/ci.yml; git diff --quiet origin/main...HEAD -- rewrite/parity/goldens/",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Rebased worktree dependencies; additional sandbox permissions for child processes."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/commit/dfe03a0fe0de0b54f73daf702379c2c8df7d03b9"
+      ],
+      "notes": "On the combined G2/G3 state, root CLI build, inventory, old CLI parity 6/6, rewrite typecheck, workflow formatting and exact no-golden-diff check passed. Layer guard passed with 490 allowlisted source edges. No golden files differ from rebased main 47190949fed9244632512a9f55175670892f1a96. Hosted CI and final independent review on the rebased head remain pending."
+    },
+    {
+      "id": "2026-10-30-port-g2-rebased-hosted-final",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:20:22Z",
+      "commit": "821225aaf3036932448ed2713a55492f98c2d427",
+      "tree": null,
+      "revision_kind": "clean rebased PR head; hosted CI run on exact commit",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 hosted final acceptance after golden-probe revert and rebase",
+      "command": "GitHub Actions CI run 41062406745 on PR #90",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub Actions; ubuntu-22.04 and ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": null,
+        "notes": "All five jobs passed on rebased final head 821225aaf3036932448ed2713a55492f98c2d427; port also passed inventory, old CLI parity, rewrite typecheck and layer guard after artifact download."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/41062406745",
+        "https://github.com/qduc/term2/actions/runs/41062406745/job/124085585618"
+      ],
+      "notes": "Final hosted run after the temporary golden probe was reverted and the branch was rebased onto main 47190949fed9244632512a9f55175670892f1a96. The golden tree matches main; no golden-change label was applied. Expected negative failure evidence is preserved separately in 2026-10-30-port-g2-golden-negative-ci. Final independent review is pending."
+    },
+    {
+      "id": "2026-10-30-port-g3-batch-parity",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:04:15Z",
+      "commit": "082a3a9df8c0df4cbd610eacf64b4431c065828b",
+      "tree": null,
+      "revision_kind": "source commit; verification recorded separately",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-g3-batch-parity"
+      ],
+      "suite": "rewrite G3 inventory and old CLI parity with batch scenarios",
+      "command": "pnpm build; node rewrite/parity/run.mjs record --cli dist/cli.js settings-batch; node rewrite/parity/run.mjs record --cli dist/cli.js tools-batch; node rewrite/parity/run.mjs record --cli dist/cli.js subagent-batch; node rewrite/parity/run.mjs check --cli dist/cli.js (twice); node rewrite/parity/inventory.mjs; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/build.mjs; node rewrite/scripts/check-layers.mjs; pnpm exec prettier --check <changed parity files>",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated .worktrees/port-g3 with per-worktree pnpm install; network-enabled additional sandbox permissions for Node child processes and loopback fake-provider tests. Old CLI built from unchanged source/."
+      },
+      "result": {
+        "passed": true,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "Final complete old-CLI parity check: 9/9 scenarios matched; repeated immediately and matched 9/9 again.",
+        "New settings-batch, tools-batch, and subagent-batch each passed focused parity checks; only the three new golden files were added.",
+        "Settings golden exposes mock-alpha, high reasoning, temperature 0.2, max_tokens 1234, Profile: pair, and the reduced tool schema set from five disabled tool groups.",
+        "tools-batch nested call results include read_file, grep, shell, search_replace; workspace ends with notes.txt=needle found and shell.txt=shell-ok.",
+        "subagent-batch executes background run_subagent through completion; randomized codename run IDs normalize as <RUN_ID>.",
+        "Inventory check passed; rewrite typecheck and build passed; layer check passed with 480 allowlisted source edges."
+      ],
+      "notes": "One G3 implementation cycle; five incorrect fixture iterations were corrected before final acceptance: direct read_file/grep were unknown provider tools; nested apply_patch was unavailable (nested API provides search_replace/create_file); run_subagent foreground was schema-rejected (background required); the first background response script lacked a completion reply. Final parity checks had no failures. Initial pre-commit run in default sandbox failed at scripts/check-no-unit-tests.mjs with spawnSync git EPERM; same commit succeeded with network-enabled subprocess permission. ESLint invocation exited 0 but ignored both .mjs files by repository config; no lint claim. Full CLI integration/e2e suites were not run. Sol review and any owner-controlled golden-change PR label remain pending."
+    },
+    {
+      "id": "2026-10-30-port-g3-settings-observability-fix",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:23:46Z",
+      "commit": "5d099cb4eb40d8d82ad23e1d9c62031f2f61ac11",
+      "tree": null,
+      "revision_kind": "clean source commit; evidence appended separately",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-g3-batch-parity"
+      ],
+      "suite": "G3 settings observability correction and rebased parity verification",
+      "command": "node rewrite/parity/run.mjs check --cli dist/cli.js (twice); isolated OLD CLI ablation of each settings-batch setting; node rewrite/parity/inventory.mjs; node rewrite/scripts/check-layers.mjs; pnpm exec prettier --check rewrite/parity/features.json rewrite/parity/scenarios/settings-batch.json rewrite/parity/goldens/settings-batch.json; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/build.mjs; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated .worktrees/port-g3; network-enabled additional sandbox permissions for child processes and loopback fake provider; per-worktree dependencies."
+      },
+      "result": {
+        "passed": true,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "Corrected agent.modelSelection to explicit mock-beta/mockprov, distinct from the parity runner's mock-alpha/mockprov defaults; only the new settings-batch golden was rerecorded from unchanged OLD CLI dist/cli.js. Existing six goldens are unchanged.",
+        "Independent one-key-at-a-time ablations each changed the OLD CLI observable: agent.modelSelection, agent.reasoningEffort, agent.temperature, agent.maxOutputTokens, app.activeProfileId, tools.shell.enabled, tools.web.enabled, tools.memory.enabled, tools.fileWrite.enabled, tools.subagents.enabled.",
+        "Full parity matched 9/9 scenarios twice consecutively.",
+        "Inventory passed with 10/10 setting feature rows covered and 6/43 tools covered; layer guard passed with 490 allowlisted source edges.",
+        "Prettier, rewrite TypeScript check, rewrite build, and diff whitespace check passed.",
+        "run_subagent coverage remains limited to the supported background-only invocation; the fake provider observes the background tool request and completion notification."
+      ],
+      "notes": "Review correction for redundant mock-alpha model selection. The earlier historical run remains unchanged and records the rejected baseline; this resolving run establishes per-key observability of the corrected settings golden. Full CLI integration/e2e suites were not run locally."
+    },
+    {
+      "id": "2026-10-30-port-a1-config-settings-adapter",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "commit": "fed84efbbac36c373bd81d36854c9b86d3e34249",
+      "tree": "b63158f8764379520544c38991c1587025d912c9",
+      "revision_kind": "clean committed source",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-a1-config-settings-adapter"
+      ],
+      "suite": "A1 settings adapter probes, rewrite build/tracer, typecheck, inventory, old CLI parity and layer guard",
+      "command": "Individual commands: pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/build.mjs && node rewrite/dist/rewrite/src/app/tracer.js; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; node rewrite/scripts/check-layers.mjs; node --import tsx /tmp/term2-a1-settings-probe.mts; node --import tsx /tmp/term2-a1-failure-probe.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Worktree dependencies installed directly with pnpm store/cache/state in /tmp. Native install scripts encountered read-only /home/agent/.npm access (EROFS) and used their build fallback; no home writes occurred. Child-process checks used network-enabled additional sandbox permissions."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": null
+      },
+      "failures": [
+        "node rewrite/scripts/check-layers.mjs: source/services/model-service.ts and source/services/service-interfaces.ts are missing from the source-layer map; adopted SettingsService reaches model providers through services/model-service.ts and also reaches session/engine through lib/chained-input-filter.ts -> services/conversation/run-item-normalizer.ts, services/logging/provider-traffic.ts -> services/retry/provider-failure-classification.ts, utils/error-helpers.ts -> services/retry/retry-error-classification.ts, and contracts/streamed-model-turn.ts -> services/retry/retry-recovery-budget.ts."
+      ],
+      "evidence": [
+        "/tmp/term2-a1-settings-probe.mts",
+        "/tmp/term2-a1-failure-probe.mts"
+      ],
+      "notes": "Rewrite typecheck, rewrite build, tracer (14/14), inventory, old CLI build and parity (6/6), and real XDG settings probes passed. The real settings probe verified persisted model/tool reads, a persistent set and previous/next watch event, per-session override isolation including caller-map mutation and masked host events, no override disk writes, sibling-session isolation, unsubscription, and runtime-mode memory-only writes. The read-only-directory probe confirmed persistent set rejects when durable persistence fails. Layer guard remains blocked pending the shared G1 transitive-edge correction and independent review; no A1 guard/allowlist exceptions were added. Full CLI integration/e2e suites were not run."
+    },
+    {
+      "id": "2026-10-30-port-a1-guard-rebase-verification",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:16:12Z",
+      "commit": "1892bcdb4edbfccd3dd9496cf38dcc5f9df449aa",
+      "tree": null,
+      "revision_kind": "rebased A1 source commit on origin/main 47190949fed9244632512a9f55175670892f1a96",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-a1-config-settings-adapter"
+      ],
+      "suite": "A1 post-rebase acceptance checks",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js; node --import tsx /tmp/term2-a1-settings-probe.mts; node --import tsx /tmp/term2-a1-failure-probe.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Existing worktree dependencies and temporary XDG test roots; child-process checks used network-enabled additional sandbox permissions."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/tmp/term2-a1-settings-probe.mts",
+        "/tmp/term2-a1-failure-probe.mts"
+      ],
+      "notes": "Rebased A1 source commit 1892bcdb4edbfccd3dd9496cf38dcc5f9df449aa has byte-identical adapter files to Sol-approved source commit fed84efbbac36c373bd81d36854c9b86d3e34249. Independent review approved the original source commit (see /tmp/term2-a1-independent-review.md). Rewrite typecheck passed; corrected layer guard passed with 490 allowlisted edges; inventory passed (136 settings tracked); old CLI parity passed 6/6. Focused real XDG settings probes passed, including durable set/watch, per-session override isolation/no disk writes, runtime-only writes, and rejection on failed persistent write. No source changes were made by the shared guard fix. Full CLI integration/e2e suites not run."
+    },
+    {
+      "id": "2026-10-30-port-a1-g2-rebase-verification",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:30:06Z",
+      "commit": "df7ff1f4bd505f0fb74c67e05c09b9bc2f4105bd",
+      "tree": null,
+      "revision_kind": "A1 source rebased onto origin/main 5fdbb10c00c83f4c05d507c0da771c80edd52513",
+      "base_commit": "5fdbb10c00c83f4c05d507c0da771c80edd52513",
+      "task_ids": [
+        "2026-10-30-port-a1-config-settings-adapter"
+      ],
+      "suite": "A1 final rebase typecheck, guard, inventory and focused settings checks",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; node --import tsx /tmp/term2-a1-settings-probe.mts; node --import tsx /tmp/term2-a1-failure-probe.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Existing worktree dependencies; focused probes used isolated temporary XDG roots and network-enabled additional sandbox permissions."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/tmp/term2-a1-settings-probe.mts",
+        "/tmp/term2-a1-failure-probe.mts"
+      ],
+      "notes": "On G2 merge base 5fdbb10c00c83f4c05d507c0da771c80edd52513, rewrite typecheck passed; layer guard passed with 490 allowlisted source edges; inventory passed (136 settings tracked); durable settings/session/runtime and failed-persistence probes passed. Source commit df7ff1f4bd505f0fb74c67e05c09b9bc2f4105bd has byte-identical adapter files to Sol-approved source fed84efbbac36c373bd81d36854c9b86d3e34249. No additional parity or tracer rerun was needed because the adapter files are unchanged. Full CLI integration/e2e suites not run."
+    },
+    {
+      "id": "2026-10-30-port-a1-g3-rebase-verification",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:38:22Z",
+      "commit": "60806d36e99896716fe7695caa5cad13596087ba",
+      "tree": null,
+      "revision_kind": "A1 source rebased onto G3 merge origin/main 990edb4e6350b7a4b6914171ec0c730e2591fa2e",
+      "base_commit": "990edb4e6350b7a4b6914171ec0c730e2591fa2e",
+      "task_ids": [
+        "2026-10-30-port-a1-config-settings-adapter"
+      ],
+      "suite": "A1 final G3-rebase typecheck, layer guard, inventory, old CLI build and parity",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Existing worktree dependencies; child-process checks used network-enabled additional sandbox permissions."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "After rebase onto G3, rewrite typecheck passed; corrected layer guard passed with 490 allowlisted source edges; inventory passed (136 settings, 10 covered); old CLI build passed and parity passed 9/9 scenarios. Adapter files remain byte-identical to Sol-approved source fed84efbbac36c373bd81d36854c9b86d3e34249. Focused durable settings, watch, session isolation, runtime mode, and failed-persistence probes passed on the prior G2 rebased source; no adapter file changed in this ledger-only rebase. Full CLI integration/e2e suites not run."
+    },
+    {
+      "id": "2026-10-30-port-a2-adapter",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:04:11Z",
+      "commit": "1f4ce346f0271e1110dfa5f918e802dda79e381f",
+      "tree": null,
+      "revision_kind": "committed feature; layer guard correction pending",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-a2-adapter"
+      ],
+      "suite": "A2 provider adapter fake-server tracer, typecheck, inventory, layer guard, old CLI build and parity",
+      "command": "XDG_STATE_HOME=/tmp/term2-a2-xdg pnpm exec tsx /tmp/term2-a2-tracer.mts; pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/parity/inventory.mjs; node rewrite/scripts/check-layers.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Installed in the isolated worktree with pnpm store/cache under /tmp. Fake OpenAI-compatible server bound to loopback; network-enabled additional sandbox permissions were needed for subprocesses. The old CLI was built from this worktree. Temporary tracer script/output are machine-local."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "file": "rewrite/scripts/check-layers.mjs",
+          "test": "A2 adopted source dependency traversal",
+          "actual": "Unmapped source/services/service-interfaces.ts; model adapter reaches session via source/lib/chained-input-filter.ts -> source/services/conversation/run-item-normalizer.ts; engine via source/utils/error-helpers.ts -> source/services/retry/retry-error-classification.ts and source/contracts/streamed-model-turn.ts -> source/services/retry/retry-recovery-budget.ts; config via source/services/service-interfaces.ts -> source/services/settings/settings-schema.ts. Root is coordinating a shared guard correction; A2 did not modify guard or allowlist."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-tracer.mts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-evidence.json"
+        }
+      ],
+      "notes": "Typecheck, inventory and own-worktree old CLI parity passed (6/6). Fake-server request matched headless-plain-answer after removing only system instructions and tools. Five lossless input round trips, previousResponseId/disableChaining, text partId/reasoning metadata deltas, binding identity, async factory rejection eviction, and owned/borrowed disposal assertions passed. Old CLI integration/e2e attempts were not completed: they started before this worktree old CLI build; e2e failures include missing local dist/cli.js and built worker files, and integration output showed denied /home/agent state path. These incomplete attempts are not adapter failures and are not claimed as passing. Independent Sol review and the common guard correction remain pending."
+    },
+    {
+      "id": "2026-10-30-port-a2-final-toolcall-reconcile",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:10:32Z",
+      "commit": "897464124749d0d89eef233a5ee9dc0905f3f930",
+      "tree": null,
+      "revision_kind": "committed correction; Sol independent review approved; layer guard correction pending",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-a2-adapter"
+      ],
+      "suite": "A2 final typecheck and fake-provider tracer after tool-call reconciliation correction",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; XDG_STATE_HOME=/tmp/term2-a2-xdg pnpm exec tsx /tmp/term2-a2-tracer.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Clean committed source worktree; worktree pnpm dependencies; fake OpenAI-compatible provider/server on loopback; network-enabled additional sandbox permissions for subprocesses."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-evidence.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-independent-review.md"
+        }
+      ],
+      "notes": "Tracer comparison matched headless-plain-answer after removing system instructions and tools. It asserts six lossless input cases, explicit previousResponseId/disableChaining, partId/reasoning metadata, completion-only tool signature and final raw arguments, one emission for matching streamed/final tool call, stream-only fallback, cache identity, async rejection eviction, and owned/borrowed disposal. Sol independently reproduced the completion-only signature probe, reran the full tracer, and approved source commit 897464124749d0d89eef233a5ee9dc0905f3f930; review report at /tmp/term2-a2-independent-review.md. The separate common layer guard correction remains pending; its exact earlier failure is recorded in 2026-10-30-port-a2-adapter."
+    },
+    {
+      "id": "2026-10-30-port-a2-postguard-rebase",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:16:25Z",
+      "commit": "3d654ce60cf525fbab70ee0eef97a3d4becb5c20",
+      "tree": null,
+      "revision_kind": "clean source commit after rebase onto merged guard correction",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-a2-adapter"
+      ],
+      "suite": "A2 final post-rebase typecheck, layer guard, inventory and fake-provider tracer",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; XDG_STATE_HOME=/tmp/term2-a2-xdg pnpm exec tsx /tmp/term2-a2-tracer.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Clean source commit in the isolated worktree rebased onto origin/main PR91 merge; local fake OpenAI-compatible HTTP server; network-enabled additional sandbox permissions for subprocesses."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-evidence-postguard.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-independent-review.md"
+        }
+      ],
+      "notes": "Layer guard passed with 490 allowlisted source edges. Typecheck and inventory passed. Fake-server first request matched immutable headless-plain-answer after excluding only instructions and tools. Tracer also verified six lossless input cases, explicit previousResponseId/disableChaining, completion-only tool signature/final arguments emitted once, stream-only fallback, metadata/IDs, binding cache identity, failed-factory eviction, and owned/borrowed disposal. Sol approved source commit 897464124749d0d89eef233a5ee9dc0905f3f930 before the rebase; adapter code is unchanged by the guard rebase. Old CLI parity 6/6 was recorded before rebase. No full CLI integration/e2e or hosted CI run was performed locally; PR CI remains pending."
+    },
+    {
+      "id": "2026-10-30-port-a2-final-rebase",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:49:28Z",
+      "commit": "4bd14054",
+      "tree": null,
+      "revision_kind": "final A2 source after rebase onto A1 PR93 merge; source unchanged from Sol-approved adapter",
+      "base_commit": "54d71fc27dbef778e798781c0f1093e734871797",
+      "task_ids": [
+        "2026-10-30-port-a2-adapter"
+      ],
+      "suite": "A2 final rebase typecheck, guard, inventory, fake-provider tracer, worktree build and old CLI parity",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; XDG_STATE_HOME=/tmp/term2-a2-xdg pnpm exec tsx /tmp/term2-a2-tracer.mts; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated A2 worktree. Fake OpenAI-compatible provider over loopback. Network-enabled additional sandbox permissions allowed subprocess IPC after default sandbox denied tsx pipe setup."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-tracer.mts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-independent-review.md"
+        }
+      ],
+      "notes": "Typecheck passed. Layer guard passed with 490 allowlisted source edges; inventory passed. Fake-provider request matched headless-plain-answer excluding instructions/tools; six lossless round-trips, previousResponseId/disableChaining, completion-only tool metadata/final-argument reconciliation and stream-only fallback passed. Worktree CLI built and parity passed 9/9. Sol independently approved unchanged adapter patch based on commit 897464124749d0d89eef233a5ee9dc0905f3f930. No full CLI integration/e2e or hosted CI run claimed."
     }
   ]
 }

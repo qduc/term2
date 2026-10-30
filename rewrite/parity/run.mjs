@@ -254,12 +254,16 @@ function normalizer({ root, home, workspace, baseUrl }) {
   const text = (value) => {
     let out = stripVTControlCharacters(String(value));
     for (const [from, to] of replacements) out = out.replaceAll(from, to);
-    return out
-      .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '<UUID>')
-      .replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g, '<TIMESTAMP>')
-      .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '<DATE>')
-      .replace(/\b\d+(?:\.\d+)?\s?(?:ms|s)\b/g, '<DURATION>')
-      .replace(/\bpid[ =:]\d+\b/gi, 'pid <PID>');
+    return (
+      out
+        .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '<UUID>')
+        // Background subagent run IDs are random adjective-noun-number codenames.
+        .replace(/(runId["']?:\s*["']?)[a-z]+-[a-z]+-\d+/g, '$1<RUN_ID>')
+        .replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g, '<TIMESTAMP>')
+        .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '<DATE>')
+        .replace(/\b\d+(?:\.\d+)?\s?(?:ms|s)\b/g, '<DURATION>')
+        .replace(/\bpid[ =:]\d+\b/gi, 'pid <PID>')
+    );
   };
   const content = (value) =>
     typeof value === 'string' ? text(value) : Array.isArray(value) ? value.map((part) => deepText(part)) : value;

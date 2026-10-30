@@ -105,7 +105,7 @@ function loadManifest() {
   return fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : { features: {} };
 }
 
-const STATUSES = new Set(['todo', 'in_progress', 'ported', 'dropped']);
+const STATUSES = new Set(['todo', 'in_progress', 'adopted', 'ported', 'dropped']);
 const scenarioIds = () =>
   fs.existsSync(scenariosDir)
     ? new Set(
@@ -139,8 +139,8 @@ function main() {
       problems.push(`${id}: tracked but no longer in source/; mark it "dropped" with a note, or "manual"`);
     }
     if (entry.status === 'dropped' && !entry.note) problems.push(`${id}: dropped needs a note saying why`);
-    if (entry.status === 'ported' && (entry.parity ?? []).length === 0) {
-      problems.push(`${id}: ported but no parity scenario proves it`);
+    if (['adopted', 'ported'].includes(entry.status) && (entry.parity ?? []).length === 0) {
+      problems.push(`${id}: ${entry.status} but no parity scenario proves it`);
     }
     for (const scenario of entry.parity ?? []) {
       if (!scenarios.has(scenario)) problems.push(`${id}: parity scenario "${scenario}" does not exist`);
@@ -155,19 +155,20 @@ function main() {
   const byCategory = {};
   for (const [id, entry] of Object.entries(features)) {
     const category = id.slice(0, id.indexOf(':'));
-    byCategory[category] ??= { total: 0, ported: 0, dropped: 0, covered: 0 };
+    byCategory[category] ??= { total: 0, adopted: 0, ported: 0, dropped: 0, covered: 0 };
     const row = byCategory[category];
     row.total += 1;
+    if (entry.status === 'adopted') row.adopted += 1;
     if (entry.status === 'ported') row.ported += 1;
     if (entry.status === 'dropped') row.dropped += 1;
     if ((entry.parity ?? []).length > 0) row.covered += 1;
   }
-  console.log('category          total  covered  ported  dropped');
+  console.log('category          total  covered adopted  ported  dropped');
   for (const [category, row] of Object.entries(byCategory).sort()) {
     console.log(
       `${category.padEnd(16)} ${String(row.total).padStart(6)} ${String(row.covered).padStart(8)} ${String(
-        row.ported,
-      ).padStart(7)} ${String(row.dropped).padStart(8)}`,
+        row.adopted,
+      ).padStart(7)} ${String(row.ported).padStart(7)} ${String(row.dropped).padStart(8)}`,
     );
   }
 

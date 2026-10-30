@@ -1,0 +1,28 @@
+{
+  "id": "tools-batch",
+  "description": "One headless turn reads, searches, runs an auto-approved shell command, and edits a file.",
+  "runs": [
+    {
+      "args": ["--auto-approve", "read notes.txt, search for needle, create shell.txt, and edit notes.txt"]
+    }
+  ],
+  "seed": {
+    "notes.txt": "needle in a haystack\n"
+  },
+  "provider": [
+    {
+      "toolCalls": [
+        {
+          "name": "run_code",
+          "arguments": {
+            "code": "const read = await tools.read_file({ path: 'notes.txt' });\nconst search = await tools.grep({ pattern: 'needle', path: '.', fixed_strings: true });\nconst shell = await tools.shell({ command: \"printf 'shell-ok\\\\n' > shell.txt\", description: 'Create shell.txt' });\nconst edit = await tools.search_replace({ path: 'notes.txt', replacements: [{ search_content: 'needle in a haystack', replace_content: 'needle found' }] });\nreturn { read, search, shell, edit };",
+            "description": "Read, search, create, and edit workspace files."
+          }
+        }
+      ]
+    },
+    {
+      "text": "Read and searched notes.txt, created shell.txt, and edited notes.txt."
+    }
+  ]
+}

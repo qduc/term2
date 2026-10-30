@@ -111,6 +111,7 @@ jobs:
           pnpm exec tsx rewrite/bench/c3a-foreground.mts
           for mode in normal fault partial unsupported; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-settings.mts; done
           node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-settings-legacy.mts
+          for mode in basic held fsync; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-history-commands.mts; done
           for mode in plain image skill disabled error retry approval failure cancel; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-memory.mts; done
           pnpm exec tsx rewrite/bench/c3a-owned-handle.mts
           node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-capture.mts

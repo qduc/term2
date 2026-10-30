@@ -8,6 +8,73 @@ import type { Message } from '../../types/message.js';
 
 export type PersistedLogEnvelope = LogEnvelope<PersistedLogEvent>;
 
+/** A logical event recorded inside one crash-atomic physical JSONL record. */
+export type SessionFactBatch = {
+  readonly type: 'session_fact_batch';
+  readonly version: 1;
+  readonly entries: readonly unknown[];
+};
+
+/**
+ * Expands the new session writer's single-line atomic container into the
+ * ordinary logical envelopes consumed by replay, browsing and the index.
+ * Legacy envelopes are returned unchanged. A malformed recognized batch is
+ * an integrity error; silently skipping its members could hide half a state
+ * transition while leaving the physical record apparently valid.
+ */
+export function expandSessionFactBatchEnvelope(value: unknown): PersistedLogEnvelope[] | null {
+  const outer = decodeLogEnvelope(value);
+  if (!outer || outer.event.type !== 'session_fact_batch') return null;
+
+  const event = outer.event as unknown as Record<string, unknown>;
+  const invalid = (reason: string): never => {
+    throw new Error(`invalid session_fact_batch: ${reason}`);
+  };
+  if (event['version'] !== 1) invalid('unsupported version');
+  const rawEntries = event['entries'];
+  if (!Array.isArray(rawEntries)) invalid('entries must be an array');
+  const batchEntries = rawEntries as unknown[];
+  if (batchEntries.length === 0) invalid('entries must be non-empty');
+
+  const entries: PersistedLogEnvelope[] = [];
+  const eventIds = new Set<string>();
+  let previousSeq = -1;
+  for (let index = 0; index < batchEntries.length; index += 1) {
+    const raw: unknown = batchEntries[index];
+    if (typeof raw !== 'object' || raw === null) invalid(`entry ${index + 1} is not an envelope`);
+    const candidate = raw as Record<string, unknown>;
+    if (
+      !Number.isSafeInteger(candidate['v']) ||
+      !Number.isSafeInteger(candidate['seq']) ||
+      Number(candidate['seq']) < 0 ||
+      typeof candidate['ts'] !== 'string' ||
+      typeof candidate['logId'] !== 'string' ||
+      candidate['logId'].length === 0 ||
+      typeof candidate['eventId'] !== 'string' ||
+      candidate['eventId'].length === 0
+    )
+      invalid(`entry ${index + 1} has invalid envelope fields`);
+    const entry = decodeLogEnvelope(candidate);
+    if (entry === null) throw new Error(`invalid session_fact_batch: entry ${index + 1} has an invalid event`);
+    if ((entry.event as { type: string }).type === 'session_fact_batch') invalid(`entry ${index + 1} is nested`);
+    if (entry.seq <= previousSeq) invalid(`entry ${index + 1} is out of order`);
+    if (eventIds.has(entry.eventId!)) invalid(`entry ${index + 1} repeats an eventId`);
+    previousSeq = entry.seq;
+    eventIds.add(entry.eventId!);
+    entries.push(entry);
+  }
+
+  const final = entries.at(-1)!;
+  if (
+    outer.seq !== final.seq ||
+    outer.ts !== final.ts ||
+    outer.logId !== final.logId ||
+    outer.eventId !== final.eventId
+  )
+    invalid('outer envelope does not match final entry');
+  return entries;
+}
+
 /** Materialize stable references without collapsing distinct legacy records. */
 export function resolveEnvelopeIdentities(
   envelopes: readonly PersistedLogEnvelope[],

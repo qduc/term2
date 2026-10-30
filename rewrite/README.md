@@ -1,8 +1,9 @@
 # term2 rewrite skeleton
 
-This folder holds the interfaces for a restructured term2, plus a tracer
-bullet: the thinnest implementation of each layer, wired end to end to prove
-the structure holds. It is separate from `source/`, and nothing in `source/`
+This folder holds the interfaces for a restructured term2 and its production
+composition. The earlier native-engine example lives in a separate fixture
+directory so its toy facts and restart behavior cannot define canonical
+session persistence. It is separate from `source/`, and nothing in `source/`
 imports it.
 
 ## Layers
@@ -31,28 +32,20 @@ the layers listed after its name, so dependencies always point down.
   once. The TUI uses the same protocol as the web client, through the
   in-process host, so no client keeps its own event translator.
 - **The engine suspends instead of calling up.** An approval ends the turn run
-  with a serializable `TurnCheckpoint`; `Engine.resume` continues it. The same
-  checkpoint, saved at each tool-call boundary, lets `SessionStore.open`
-  resume a turn after a crash when the pending tools are idempotent.
+  with a serializable `TurnCheckpoint`. The native tracer fixture may inspect
+  that value, but canonical sessions never resume native checkpoints after a
+  process restart.
 - **Names are jobs.** No layer is called service, adapter or orchestrator.
 
-## Tracer bullet
+## Native tracer fixture
 
-Each layer has one thin implementation: a scripted model (`model/scripted.ts`),
-two note tools (`tools/notes.ts`, one read-only and idempotent, one write that
-asks first), the turn loop (`engine/loop.ts`), a JSONL-backed session
-(`session/local-store.ts`), the projection both ways (`protocol/`), an
-in-process host and a headless client. `app/tracer.ts` drives three scenarios
-through all of them:
-
-1. **An approval survives a restart.** The session is dropped while waiting
-   for approval, reopened from its log, approved, and the turn completes.
-2. **A crash during an idempotent tool resumes.** A child process is
-   `SIGKILL`ed inside `read_note`. Reopening resumes from the last checkpoint,
-   re-runs the read, and commits its result once.
-3. **A crash during an approved write is interrupted.** A child is killed
-   inside `write_note`. Reopening marks the turn interrupted and offers a
-   retry instead of replaying the write.
+The pre-C2 native engine example is isolated under `bench/native-tracer/` with
+fixture-local session facts. It calls the fixture Session API directly and is
+not evidence for the canonical conversation log or C2 acceptance. It verifies
+that approval and in-flight tool work reopen as interrupted, stale decisions
+fail, reopening adds no duplicate facts, and opening does not resume the model
+or execute a tool. Compile it separately with
+`rewrite/tsconfig.native-tracer.json`.
 
 What building it changed in the interfaces:
 
@@ -111,9 +104,10 @@ paths beneath `rewrite/dist/`; adopted imports therefore resolve to the emitted
 `source/` tree beside `rewrite/`.
 
 ```sh
-pnpm exec tsc -p rewrite/tsconfig.json                 # typecheck
-node rewrite/scripts/check-layers.mjs                  # dependency direction
-node rewrite/scripts/build.mjs && node rewrite/dist/rewrite/src/app/tracer.js
+pnpm exec tsc -p rewrite/tsconfig.json                 # production typecheck
+node rewrite/scripts/check-layers.mjs                  # production dependency direction
+node rewrite/scripts/build.mjs                         # production build
+pnpm exec tsc -p rewrite/tsconfig.native-tracer.json && node rewrite/bench-dist/rewrite/bench/native-tracer/tracer.js
 ```
 
 The build script emits the TypeScript tree and copies the runtime assets just as

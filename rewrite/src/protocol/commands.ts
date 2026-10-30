@@ -17,17 +17,23 @@ export async function applyCommand(session: Session, command: WireCommand): Prom
         const admission = await session.submit(command.requestId as ClientRequestId, [item]);
         return admissionResult(admission);
       }
-      case 'decide':
-        await session.decide(
-          command.interactionId as InteractionId,
-          command.decisions.map((decision) => ({
+      case 'decide': {
+        const pending = session.state().pendingInteraction;
+        if (!pending || pending.interaction.interactionId !== command.interactionId)
+          throw new Error('stale interaction');
+        await session.decide({
+          turnId: pending.turnId,
+          interactionId: command.interactionId as InteractionId,
+          revision: pending.interaction.revision,
+          generation: pending.generation,
+          decisions: command.decisions.map((decision) => ({
             callId: decision.callId as ToolCallId,
-            decision: decision.approve
-              ? { kind: 'approve' }
-              : { kind: 'reject', ...(decision.reason ? { reason: decision.reason } : {}) },
+            approve: decision.approve,
+            ...(decision.reason ? { reason: decision.reason } : {}),
           })),
-        );
+        });
         return { ok: true };
+      }
       case 'cancel':
         await session.cancel();
         return { ok: true };

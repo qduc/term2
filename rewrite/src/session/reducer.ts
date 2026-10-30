@@ -1,70 +1,154 @@
-import type { LogEntry, Project, SessionId, SessionState } from './index.js';
+import type { Item, ModelRef } from '../model/index.js';
+import type { Workspace } from '../tools/index.js';
+import type { AdmissionRecord, LogEntry, Project, SessionId, SessionState } from './index.js';
 
-export function initialState(id: SessionId): SessionState {
+export function initialState(id: SessionId, workspace: Workspace, model: ModelRef): SessionState {
   return {
     id,
     status: 'idle',
-    workspace: { root: '', access: 'read', target: 'local' },
-    model: { provider: '', model: '' },
+    workspace,
+    model,
     history: [],
+    providerHistory: [],
+    messages: [],
     activeTurnId: null,
     pendingInteraction: null,
     queue: [],
+    admissions: {},
     canRetry: false,
-    lastCheckpoint: null,
+    binding: null,
+    closedAt: null,
     lastSeq: 0,
   };
 }
 
-export const project: Project = (state, entry: LogEntry) => {
-  const next = { ...state, lastSeq: entry.seq };
+/** Applies only fact-owned lifecycle projection; transcript replay remains adopted from source. */
+export const projectLifecycle: Project = (state, entry: LogEntry) => {
   const fact = entry.fact;
+  const next = { ...state, lastSeq: entry.seq };
+  if (state.status === 'closed' && fact.type !== 'session_closed') return next;
+
   switch (fact.type) {
-    case 'session_created':
-      return { ...next, workspace: fact.workspace, model: fact.model };
-    case 'input_queued':
-      return { ...next, queue: [...state.queue, { requestId: fact.requestId, items: fact.items }] };
-    case 'turn_started':
+    case 'session_bound':
+      return { ...next, workspace: fact.workspace, model: fact.model, binding: fact.binding ?? null };
+    case 'session_admitted': {
+      const record: AdmissionRecord = {
+        clientRequestId: fact.clientRequestId as never,
+        normalizedBodyHash: fact.normalizedBodyHash,
+        turnId: fact.turnId as never,
+        disposition: fact.disposition,
+        createdAt: fact.createdAt,
+        expiresAt: fact.expiresAt,
+      };
+      const admissions = { ...state.admissions, [fact.clientRequestId]: record };
+      return {
+        ...next,
+        admissions,
+        queue:
+          fact.disposition === 'queued'
+            ? [...state.queue.filter((item) => item.clientRequestId !== record.clientRequestId), record]
+            : state.queue,
+      };
+    }
+    case 'session_admission_settled': {
+      const prior = state.admissions[fact.clientRequestId];
+      if (!prior || prior.turnId !== fact.turnId) return next;
+      const record = { ...prior, result: fact.result };
+      return {
+        ...next,
+        admissions: { ...state.admissions, [fact.clientRequestId]: record },
+        queue: state.queue.filter((item) => item.clientRequestId !== record.clientRequestId),
+      };
+    }
+    case 'session_turn_started': {
+      const queue =
+        fact.clientRequestId === null
+          ? state.queue
+          : state.queue.filter((item) => item.clientRequestId !== fact.clientRequestId);
       return {
         ...next,
         status: 'running',
-        activeTurnId: fact.turnId,
+        activeTurnId: fact.turnId as never,
+        pendingInteraction: null,
+        queue,
         canRetry: false,
-        lastCheckpoint: null,
-        queue: state.queue.filter((queued) => queued.requestId !== fact.requestId),
       };
-    case 'item_committed':
-      return { ...next, history: [...state.history, fact.item] };
-    case 'checkpoint_saved':
-      return { ...next, lastCheckpoint: fact.checkpoint };
-    case 'interaction_opened':
+    }
+    case 'session_interaction_pending':
+      if (state.activeTurnId && state.activeTurnId !== fact.turnId) return next;
       return {
         ...next,
         status: 'awaiting_interaction',
-        pendingInteraction: { interactionId: fact.interactionId, turnId: fact.turnId, approvals: fact.approvals },
+        activeTurnId: fact.turnId as never,
+        pendingInteraction: {
+          turnId: fact.turnId as never,
+          interaction: fact.interaction,
+          generation: fact.generation,
+        },
       };
-    case 'interaction_resolved':
-      return { ...next, status: 'running', pendingInteraction: null };
-    case 'turn_ended':
+    case 'session_interaction_resolved': {
+      const pending = state.pendingInteraction;
+      if (
+        !pending ||
+        pending.turnId !== fact.turnId ||
+        pending.interaction.interactionId !== fact.interactionId ||
+        pending.interaction.revision !== fact.revision ||
+        pending.generation !== fact.generation
+      )
+        return next;
       return {
         ...next,
-        status: 'idle',
-        activeTurnId: null,
-        lastCheckpoint: null,
-        canRetry: fact.outcome === 'failed',
+        status: fact.outcome === 'answered' && state.activeTurnId === fact.turnId ? 'running' : state.status,
+        pendingInteraction: null,
       };
-    case 'turn_interrupted':
+    }
+    case 'session_turn_ended':
+      if (state.activeTurnId !== fact.turnId) return next;
+      return { ...next, status: 'idle', activeTurnId: null, pendingInteraction: null, canRetry: false };
+    case 'session_interrupted':
+      if (fact.turnId !== null && state.activeTurnId !== fact.turnId) return next;
+      return { ...next, status: 'interrupted', activeTurnId: null, pendingInteraction: null, canRetry: false };
+    case 'session_closed':
       return {
         ...next,
-        status: 'interrupted',
+        status: 'closed',
         activeTurnId: null,
         pendingInteraction: null,
-        lastCheckpoint: null,
-        canRetry: true,
+        queue: [],
+        closedAt: fact.closedAt,
       };
-    case 'history_compacted':
-      return { ...next, history: fact.history };
-    case 'model_changed':
-      return { ...next, model: fact.model };
+    default:
+      return next;
   }
 };
+
+export function withTranscript(
+  state: SessionState,
+  transcript: { readonly history: readonly unknown[]; readonly messages: readonly unknown[] },
+  compatibilityItems: readonly Item[],
+): SessionState {
+  return {
+    ...state,
+    history: compatibilityItems,
+    providerHistory: transcript.history,
+    messages: transcript.messages,
+  };
+}
+
+export function newestAdmission(state: SessionState, requestId: string, now: number): AdmissionRecord | null {
+  const record = state.admissions[requestId];
+  return record && Date.parse(record.expiresAt) > now ? record : null;
+}
+
+/** Old CLI logs use source replay's actual unsettled-turn audit. */
+export function statusFromLegacyAudit(
+  state: SessionState,
+  outcome: 'empty' | 'settled' | 'awaiting_approval' | 'interrupted_mid_tool' | 'interrupted_mid_turn',
+): SessionState {
+  if (state.lastSeq === 0 || state.activeTurnId || state.status === 'closed') return state;
+  return {
+    ...state,
+    status: outcome === 'empty' || outcome === 'settled' ? 'idle' : 'interrupted',
+    canRetry: false,
+  };
+}

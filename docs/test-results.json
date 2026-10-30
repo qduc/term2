@@ -29508,6 +29508,38 @@
       "failures": [],
       "evidence": [],
       "notes": "Real Session+Engine verifies fact/live ordering, reentrant capture, throwing and unsubscribing listeners, retained state, and new generation on reopen. Adapted existing accepted-input fsync injection verifies failed append is not published and capture position does not advance. Historical private-sequence gaps, adversarial reentrant producer publication, and complete C4 semantic state remain unproven. Independent review pending; this is not full C4 acceptance."
+    },
+    {
+      "id": "2026-10-30-c3a-capture-p1-final",
+      "timestamp": "2026-10-30T20:47:26Z",
+      "commit": "6640eca5e590aa147f695f8867c8704314575525",
+      "tree": "9537e30fdfb873724b764bc62399bb550f00aaf6",
+      "revision_kind": "source commit",
+      "base_commit": "61794a0ba3cadff6ded89c98b1f4c6d0b16412ca",
+      "task_ids": [
+        "2026-10-30-c3a-capture-p1"
+      ],
+      "suite": "C3a P1 capture final verification",
+      "command": "root and rewrite tsc; rewrite inventory and layer guard; strict retained c3a-capture bench; independent capture review and probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree with network-enabled local provider."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Root/rewrite typechecks, inventory, 527-edge guard and actual Session+Engine retained bench pass. Private admission position/sequence ordering and fresh generation verified; independent Sol review /tmp/term2-c3a-stage5-capture-independent-review.md verifies reentrant producer, accepted-input fsync failure and live/historical subscriber mutation isolation. Earlier source 0866 allowed legacy subscriber mutation; negative control reproduced, 76cf fixed live and 6640 fixed historical. P2 semantic projection, legacy sidecar sequence gaps and full C4 acceptance remain open."
     }
   ]
 }

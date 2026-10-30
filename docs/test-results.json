@@ -28251,6 +28251,39 @@
         }
       ],
       "notes": "Selected PTY 2/2 before exact comparison; focused image 1/1 after comparison passed. Nine old parity goldens, rewrite tsc, guard 520, inventory and source hooks passed. Cancelled no-answer log observed after released request observed, not proof of ordering or fsync. A02/A04/A08, surge and full matrix/new Session remain unproven. Independent final review pending."
+    },
+    {
+      "id": "2026-10-30-c3a-multimodal-decisions-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T16:09:20Z",
+      "commit": "d5603d18bd5a319d90d061dc27fcb181b73d4f42",
+      "tree": "e33aea9c02823894f566940c1ce236b23acc3e5e",
+      "revision_kind": "clean source independently reviewed",
+      "base_commit": "c85342bfc18a116114d8cb1ec6ad06a781b52b45",
+      "task_ids": [
+        "2026-10-30-c3a-multimodal-decisions"
+      ],
+      "suite": "independent multimodal and cancellation evidence",
+      "command": "TERM2_TEST_CLI=<independent wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/input-notice.blackbox.ts --maxWorkers=1; earlier selected wrapper run of both files at 16:08:43 UTC",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Sol independent review; selected CLI wrapper."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Sol accepted final source no findings. Frozen image case 1/1 in 2.90s, one selected launch. Earlier 16:08:43 run passed 2/2 in 5.42s; image source changed during run, so dirty snapshot; cancellation file was unchanged in final source. No strict log-before-dispatch or fsync claim."
     }
   ]
 }

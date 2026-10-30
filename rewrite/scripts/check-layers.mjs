@@ -15,6 +15,8 @@ const ALLOWED = {
   protocol: ['session', 'engine', 'model', 'tools', 'config'],
   host: ['protocol', 'session', 'config'],
   clients: ['host', 'protocol'],
+  // Composition root: the only place that wires concrete layers together.
+  app: ['clients', 'host', 'protocol', 'session', 'engine', 'tools', 'model', 'config'],
 };
 
 const IMPORT = /from\s+['"](\.\.?\/[^'"]+)['"]|import\(\s*['"](\.\.?\/[^'"]+)['"]\s*\)/g;

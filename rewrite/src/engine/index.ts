@@ -8,8 +8,18 @@
  * Depends on: model, tools, config.
  */
 
-import type { Item, ItemId, ModelError, ModelRef, ReasoningEffort, ToolCallId, Usage } from '../model/index.js';
-import type { ApprovalRequirement, Tool, ToolContext, ToolResult } from '../tools/index.js';
+import type {
+  Item,
+  ItemId,
+  ModelError,
+  ModelRef,
+  ModelRegistry,
+  ReasoningEffort,
+  ToolCallId,
+  Usage,
+} from '../model/index.js';
+import type { ApprovalRequirement, ToolRegistry, ToolResult, Workspace } from '../tools/index.js';
+import type { SettingsReader } from '../config/index.js';
 
 export type TurnId = string & { readonly __brand: 'TurnId' };
 export type AgentId = string & { readonly __brand: 'AgentId' };
@@ -27,8 +37,9 @@ export type TurnInput = {
   readonly instructions: string;
   readonly model: ModelRef;
   readonly reasoning?: ReasoningEffort;
-  readonly tools: readonly Tool[];
-  readonly toolContext: Omit<ToolContext, 'signal' | 'progress'>;
+  /** Names, not live tools: a checkpoint embeds this input and must stay plain data. */
+  readonly toolNames: readonly string[];
+  readonly workspace: Workspace;
   readonly budget: TurnBudget;
 };
 
@@ -92,6 +103,15 @@ export interface Engine {
   /** Continue a suspended or crashed turn. Decisions are keyed by tool call. */
   resume(checkpoint: TurnCheckpoint, decisions: ReadonlyMap<ToolCallId, ApprovalDecision>): TurnRun;
 }
+
+/** Live dependencies are injected once, so turn inputs and checkpoints stay serializable. */
+export type EngineDeps = {
+  readonly models: ModelRegistry;
+  readonly tools: ToolRegistry;
+  readonly settings: SettingsReader;
+};
+
+export type CreateEngine = (deps: EngineDeps) => Engine;
 
 export interface Compactor {
   /** Returns a shorter history with `summary` items standing in for older spans. */

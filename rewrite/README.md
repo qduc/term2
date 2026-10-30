@@ -1,7 +1,8 @@
 # term2 rewrite skeleton
 
-This folder holds the interfaces for a restructured term2, with no
-implementations yet. It is separate from `source/`, and nothing in `source/`
+This folder holds the interfaces for a restructured term2, plus a tracer
+bullet: the thinnest implementation of each layer, wired end to end to prove
+the structure holds. It is separate from `source/`, and nothing in `source/`
 imports it.
 
 ## Layers
@@ -19,6 +20,7 @@ the layers listed after its name, so dependencies always point down.
 | `tools/`    | Schema, approval policy and execute function per tool       | model, config                  |
 | `model/`    | Providers behind one streaming interface, item format       | nothing                        |
 | `config/`   | Settings, scoped per session                                | nothing                        |
+| `app/`      | Composition root: the only place concrete layers are wired  | everything                     |
 
 ## Rules that make it different from `source/`
 
@@ -34,9 +36,47 @@ the layers listed after its name, so dependencies always point down.
   resume a turn after a crash when the pending tools are idempotent.
 - **Names are jobs.** No layer is called service, adapter or orchestrator.
 
+## Tracer bullet
+
+Each layer has one thin implementation: a scripted model (`model/scripted.ts`),
+two note tools (`tools/notes.ts`, one read-only and idempotent, one write that
+asks first), the turn loop (`engine/loop.ts`), a JSONL-backed session
+(`session/local-store.ts`), the projection both ways (`protocol/`), an
+in-process host and a headless client. `app/tracer.ts` drives three scenarios
+through all of them:
+
+1. **An approval survives a restart.** The session is dropped while waiting
+   for approval, reopened from its log, approved, and the turn completes.
+2. **A crash during an idempotent tool resumes.** A child process is
+   `SIGKILL`ed inside `read_note`. Reopening resumes from the last checkpoint,
+   re-runs the read, and commits its result once.
+3. **A crash during an approved write is interrupted.** A child is killed
+   inside `write_note`. Reopening marks the turn interrupted and offers a
+   retry instead of replaying the write.
+
+What building it changed in the interfaces:
+
+- `TurnInput` held live `Tool` objects and a settings reader, so a
+  `TurnCheckpoint` could not be persisted. It now carries tool names and the
+  workspace, and live dependencies go in once through `EngineDeps`.
+- The host built user `Item`s from wire commands, which the layer check
+  rejected (`host/` may not import `model/`). Inbound command handling moved
+  to `protocol/commands.ts`, so the protocol owns both directions.
+- `HostDeps` gained `resolveWorkspace` and `defaultModel`; creating a session
+  needs both and the host had neither.
+
+Known gaps, left out on purpose: no input queue (a busy session refuses), no
+compaction, progress events are buffered until a tool returns, an idempotent
+tool that needs approval is asked again after a crash, and each checkpoint
+stores the full turn input.
+
 ## Checks
 
+These use the root `node_modules` (for `@types/node` and `tsc`), so run
+`pnpm install` at the repository root first.
+
 ```sh
-tsc -p rewrite/tsconfig.json         # typecheck
-node rewrite/scripts/check-layers.mjs   # dependency direction
+pnpm exec tsc -p rewrite/tsconfig.json                 # typecheck
+node rewrite/scripts/check-layers.mjs                  # dependency direction
+pnpm exec tsc -p rewrite/tsconfig.build.json && node rewrite/dist/app/tracer.js
 ```

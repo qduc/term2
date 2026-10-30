@@ -48,6 +48,9 @@ export interface Host {
 export type HostDeps = {
   readonly sessions: SessionStore;
   readonly settings: SettingsSource;
+  /** Maps a granted workspace id to its root; this is where admission checks belong. */
+  resolveWorkspace(grant: WorkspaceGrant): string;
+  readonly defaultModel: Parameters<SessionStore['create']>[1];
 };
 
 export type InProcessHostFactory = (deps: HostDeps) => Host;

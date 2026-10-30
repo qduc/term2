@@ -28143,6 +28143,72 @@
       "failures": [],
       "evidence": [],
       "notes": "Sol accepted integrated source and docs with no findings. Both source files match separately approved versions exactly. Selected scenarios passed 3/3 in 14.70s with five marker launches. Legacy reopen and unclassified second-image observation remain diagnostic only; remaining matrix and new Session unproven."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "commit": "acdf00ed2315ce12d82a77f469660bcffc5686eb",
+      "tree": "0994f200488fe34581c191c650fa7e5a8a128500",
+      "base_commit": "93bf46c98c83c9b46372521e7b01bb9a01fd1640",
+      "task_ids": [
+        "2026-10-30-c3a-input-guards"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated local provider PTY, xclip fixture for large text; selected old CLI."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-input-guards",
+      "run_at": "2026-10-30T15:48:31Z",
+      "revision_kind": "clean source before documentation",
+      "suite": "old CLI skill retry and large uncached confirmation",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-guards-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/input-cache-guard.blackbox.ts scripts/provider-black-box/input-skill.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "notes": "Selected PTY 2/2 on final source; nine old goldens 9/9, rewrite tsc, 520 guard and inventory passed on earlier source tree with equivalent runtime. Source commit hooks passed. Exploratory large model output was rejected by text limit; large text pasted via real clipboard path instead. Covers large uncached warning, not duplicate-pair surge. No new Session claim."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "commit": "acdf00ed2315ce12d82a77f469660bcffc5686eb",
+      "tree": "0994f200488fe34581c191c650fa7e5a8a128500",
+      "base_commit": "93bf46c98c83c9b46372521e7b01bb9a01fd1640",
+      "task_ids": [
+        "2026-10-30-c3a-input-guards"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated local provider PTY, xclip fixture for large text; selected old CLI."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-input-guards-independent",
+      "run_at": "2026-10-30T15:48:24Z",
+      "revision_kind": "clean source independently reviewed",
+      "suite": "independent skill retry and large uncached confirmation",
+      "command": "TERM2_TEST_CLI=<independent marker wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/input-cache-guard.blackbox.ts scripts/provider-black-box/input-skill.blackbox.ts --maxWorkers=1",
+      "notes": "Sol accepted with no findings; final frozen source 2/2 in 8.55s, two selected launches. Retry request contains original user and skill once with no previous response id; next chained request excludes skill. Preview and decline make no provider dispatch, exact 270k draft restored and retained once with pending plan notice once after approval. No surge, multimodal retry or new Session claim."
     }
   ]
 }

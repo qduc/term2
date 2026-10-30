@@ -531,9 +531,14 @@ export class LocalSessionStore implements SessionStore {
     const ensureOpen = () => {
       if (handleClosed) throw new Error('Session handle is closed');
     };
-    const unsubscribeDriver = driver.subscribe(current.lastSeq, (update) => {
-      if (update.kind === 'live') enqueue([update]);
-    });
+    // Recovery-only drivers can intentionally omit live capabilities. Their
+    // canonical facts still flow through the session-owned publication queue.
+    const unsubscribeDriver =
+      typeof driver.subscribe === 'function'
+        ? driver.subscribe(current.lastSeq, (update) => {
+            if (update.kind === 'live') enqueue([update]);
+          })
+        : () => {};
     const subscribeCombined: Session['subscribe'] = (fromSeq, listener) => {
       ensureOpen();
       let stopped = false;

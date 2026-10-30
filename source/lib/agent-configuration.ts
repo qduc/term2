@@ -46,7 +46,7 @@ export interface AgentConfigurationDeps {
   settings: ISettingsService;
   getGoal?: () => DurableGoal | undefined;
   /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
-  proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
+  proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
   sessionContextService: ISessionContextService;
   executionContext?: ExecutionContext;
   toolInterceptorRegistry: ToolInterceptorRegistry;
@@ -107,7 +107,7 @@ export class AgentConfiguration implements AgentSource {
   #logger: ILoggingService;
   #settings: ISettingsService;
   #getGoal?: () => DurableGoal | undefined;
-  #proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
+  #proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
   #executionContext?: ExecutionContext;
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #askUserAnswerStore: AskUserAnswerStore;

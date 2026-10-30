@@ -14,6 +14,7 @@ import { ScopedSandboxRunner } from '../../../../source/utils/shell/sandbox/scop
 import { createSessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
 import type { SessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
 import { createAdoptedForeground } from '../../session/adopted/foreground.js';
+import { createGoalAuthority } from '../../session/adopted/goal-authority.js';
 import { loadCanonicalConversation } from '../../session/adopted/conversation-log.js';
 import type { AdoptedAdmissionContext } from '../../session/adopted/submission.js';
 import type { AdoptedSessionHandle } from '../../session/local-store.js';
@@ -83,8 +84,10 @@ export function createAppAdoptedSessionHandleFactory(options: {
       const hostSettings = engineOptions.clientOptions.deps.settings;
       const reason = engineOptions.clientOptions.reasoningEffort ?? hostSettings.get('agent.reasoningEffort');
       const temp = hostSettings.get('agent.temperature');
-      const facts = [];
-      for await (const entry of context.log.read()) facts.push(entry.fact);
+      const entries = [];
+      for await (const entry of context.log.read()) entries.push(entry);
+      const facts = entries.map((entry) => entry.fact);
+      const goals = createGoalAuthority(entries);
       const initial = projectRuntimeSettings(facts, {
         selection: context.state().model,
         reasoningEffort: isReasoningSetting(reason) ? reason : 'default',
@@ -100,7 +103,16 @@ export function createAppAdoptedSessionHandleFactory(options: {
           ...engineOptions.clientOptions,
           selection: initial.snapshot.selection,
           reasoningEffort: initial.snapshot.reasoningEffort,
-          deps: { ...engineOptions.clientOptions.deps, settings: binding.service, scopedSandbox: { runner, registerPauseController: scope.registerPauseController, childRegistry: scopedChildren } },
+          deps: {
+            ...engineOptions.clientOptions.deps,
+            settings: binding.service,
+            scopedSandbox: {
+              runner,
+              registerPauseController: scope.registerPauseController,
+              childRegistry: scopedChildren,
+            },
+            ...goals.clientDeps,
+          },
         },
         bindSessionClient(boundClient) {
           ownedClient = boundClient;
@@ -171,11 +183,12 @@ export function createAppAdoptedSessionHandleFactory(options: {
       };
       graph.rollover = (id, startedAt) => graph.prepareRollover(id, startedAt)();
       const owned = assembly;
+      const restored = loadCanonicalConversation(context.id, context.root);
       const foreground = createAdoptedForeground({
         context,
         engine: owned.engine,
         runtime: graph,
-        restored: loadCanonicalConversation(context.id, context.root),
+        restored,
         onSourceEvent: options.onSourceEvent,
         publishFacts: false,
         cancelBackground,
@@ -206,6 +219,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
         },
       });
       foregroundForNetwork = foreground;
+      goals.bind(foreground.commit, restored.history);
       let closing: Promise<void> | undefined;
       let networkClosing: Promise<void> | undefined;
       const closeNetwork = () => {
@@ -242,7 +256,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
       };
       return {
         driver: foreground.driver,
-        submission: { ...foreground.submission, networkApproval: network },
+        submission: { ...foreground.submission, networkApproval: network, goal: goals.control },
         closeNetwork,
         shutdown() {
           closing ??= (async () => {

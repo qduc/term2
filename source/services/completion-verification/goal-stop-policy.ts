@@ -7,7 +7,7 @@ import type { CompletionVerdict } from './contracts.js';
 export function createVerifiedGoalStopPolicy(deps: {
   getGoal(): DurableGoal | undefined;
   unattended?: boolean;
-  onGoalAchieved?: (goal: DurableGoal) => void;
+  onGoalAchieved?: (goal: DurableGoal) => void | Promise<void>;
   verify(goal: DurableGoal, history: readonly ProviderInputItem[], signal?: AbortSignal): Promise<CompletionVerdict>;
 }) {
   const ordinary = createGoalStopPolicy(deps.getGoal, deps.onGoalAchieved);
@@ -63,7 +63,7 @@ export function createVerifiedGoalStopPolicy(deps: {
           diagnostics: { guard: 'completion_verification', outcome: 'repair', attemptId: verdict.record.attemptId },
         };
       if (!deps.onGoalAchieved) return blocked('No authoritative goal persistence callback');
-      deps.onGoalAchieved({ ...goal, status: 'achieved' });
+      await deps.onGoalAchieved({ ...goal, status: 'achieved' });
       return {
         action: 'stop',
         diagnostics: {

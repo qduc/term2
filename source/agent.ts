@@ -273,7 +273,7 @@ export const getAgentDefinition = (
     runResolvedSubagentAsync?: (params: ResolvedSubagentLaunch) => Promise<SubagentRunHandle>;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
-    proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
+    proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
     postExecuteDeniedRead?: boolean;

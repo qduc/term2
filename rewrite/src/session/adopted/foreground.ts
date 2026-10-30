@@ -910,6 +910,8 @@ export function createAdoptedForeground(options: {
   const retry = createRetryCommand(commandDeps, launch);
   return {
     driver,
+    /** The ordered canonical writer; it flushes buffered source facts before the given ones. */
+    commit,
     submission: {
       ...history,
       ...interrupt,

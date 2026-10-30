@@ -57,7 +57,7 @@ export interface AgentFactoryDeps {
   /** Reads the latest successfully persisted session goal at request time. */
   getGoal?: () => DurableGoal | undefined;
   /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
-  proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
+  proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
   executionContext?: ExecutionContext;
   editor: ReturnType<typeof createEditorImpl>;
   providerId: string;

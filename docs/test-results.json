@@ -29934,6 +29934,70 @@
       "failures": [],
       "evidence": [],
       "notes": "Nothing reads Tool.idempotent, so tsc proves the removal is unobserved. A fresh reader limited to the README and layer index files answered the message-path, approval, fact-type and web-client questions correctly (rating medium); its smaller findings were fixed in this commit and not re-read. PR #126 ran all five CI jobs green on the earlier branch."
+    },
+    {
+      "id": "2026-10-30-c3a-goal-parity",
+      "timestamp": "2026-10-30T23:05:00Z",
+      "commit": "8016de0090fc9c25ee843df7a61bc8eb69580bf3",
+      "tree": "e6ab322c6209aa522b11e84902d2a90d38584101",
+      "revision_kind": "clean commit",
+      "base_commit": "835ba64d656c8e13ce0e425d4ae50df374652246",
+      "task_ids": [
+        "2026-10-30-c3a-goal-parity"
+      ],
+      "suite": "C3a session goal at old-CLI parity",
+      "command": "Full local port-job suite (60 lines) plus PROBE_MODE=set|fsync|achieve|propose-approve|propose-race|propose-reject rewrite/bench/c3a-goal.mts and root tsc (67 lines)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree .worktrees/c3a-goal, local fake provider."
+      },
+      "result": {
+        "passed": 67,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "An earlier 67/67 run on the pre-rebase tree with the five-argument goal write helper also passed. Hops stays at 29 hops through 7 files. Ceilings raised with reasons: foreground.ts 1005 to 1007 (commit export), local-store.ts 827 to 834 (goal forward in the submission wrapper)."
+    },
+    {
+      "id": "2026-10-30-c3a-goal-parity-review-fixes",
+      "timestamp": "2026-10-30T23:25:00Z",
+      "commit": "7aafc7778ee853c7bb244d4ec5291757e8d81808",
+      "tree": "d2bf3e1c3c6a098f71125312b8d70a550a41ea23",
+      "revision_kind": "clean commit",
+      "base_commit": "835ba64d656c8e13ce0e425d4ae50df374652246",
+      "task_ids": [
+        "2026-10-30-c3a-goal-parity"
+      ],
+      "suite": "C3a session goal at old-CLI parity, after independent review fixes",
+      "command": "Full local port-job suite (60 lines) plus PROBE_MODE=set|fsync|achieve|propose-approve|propose-race|propose-reject rewrite/bench/c3a-goal.mts and root tsc (67 lines)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree .worktrees/c3a-goal, local fake provider, clean tree."
+      },
+      "result": {
+        "passed": 67,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Adds the closed-session rejection and tighter bench assertions: set rejects after closeLog with no goal after session_closed; achieve asserts the turn's assistant_journal_item precedes goal_changed; fsync asserts fatal_persistence caused by the injected error; propose-race names the execute-time refusal it hits."
     }
   ]
 }

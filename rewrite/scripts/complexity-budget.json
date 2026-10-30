@@ -3,7 +3,7 @@
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/session/adopted/foreground.ts": {
-      "lines": 1005,
+      "lines": 1007,
       "reason": "Turn driving and interaction handling still share one closure; a second split separates them."
     },
     "rewrite/src/engine/adopted/index.ts": {
@@ -11,8 +11,8 @@
       "reason": "Not yet reviewed for a job seam."
     },
     "rewrite/src/session/local-store.ts": {
-      "lines": 827,
-      "reason": "Not yet reviewed for a job seam."
+      "lines": 834,
+      "reason": "Not yet reviewed for a job seam; its submission wrapper grows by one forward per session command."
     },
     "rewrite/src/model/adopted/index.ts": {
       "lines": 748,

@@ -173,7 +173,7 @@ export class AgentClient {
   #chatService: AgentChatService;
   #logger: ILoggingService;
   #settings: ISettingsService;
-  #onGoalAchieved?: (goal: DurableGoal) => void;
+  #onGoalAchieved?: (goal: DurableGoal) => void | Promise<void>;
   #completionBoundary?: RootCompletionBoundary;
   #unattended = false;
   #sessionContextService: ISessionContextService;
@@ -823,9 +823,9 @@ export class AgentClient {
        * seam. Root clients only: transient clients have no goal source, so no
        * stop policy and no write.
        */
-      onGoalAchieved?: (goal: DurableGoal) => void;
+      onGoalAchieved?: (goal: DurableGoal) => void | Promise<void>;
       /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
-      proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
+      proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
       executionContext?: ExecutionContext;
       sessionContextService: ISessionContextService;
       skillsService?: SkillsService;

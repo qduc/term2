@@ -76,6 +76,8 @@ export interface AdoptedSubmissionPort {
   setRuntimeSettings(
     command: RuntimeSettingMutation,
   ): Promise<{ kind: 'applied'; settings: RuntimeSettingsSnapshot } | { kind: 'unsupported' }>;
+  /** Present on app-composed handles: the session goal and its manual commands. */
+  readonly goal?: import('./goal-authority.js').SessionGoalControl;
   readonly networkApproval?: Pick<
     ReturnType<typeof import('./network-authority.js').createNetworkAuthority>,
     'getSnapshot' | 'subscribe' | 'decide'

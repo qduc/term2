@@ -372,7 +372,7 @@ export class LocalSessionStore implements SessionStore {
       commit: async (facts) => {
         const entries = await log.append(facts);
         for (const entry of entries) current = projectLifecycle(current, entry);
-        const restored = loadCanonicalConversation(id, log.root);
+        const restored = loadCanonicalConversation(id, log.root, 'live');
         current = withTranscript(
           current,
           { history: restored.history, messages: restored.messages },
@@ -480,6 +480,8 @@ export class LocalSessionStore implements SessionStore {
         if (handleClosed) return Promise.reject(new Error('Session handle is closed'));
         return rawSubmission.decide(command);
       },
+      retry: (target) =>
+        handleClosed ? Promise.resolve({ kind: 'rejected', reason: 'closed' }) : rawSubmission.retry(target),
     };
     let closePromise: Promise<void> | undefined;
     const ensureOpen = () => {

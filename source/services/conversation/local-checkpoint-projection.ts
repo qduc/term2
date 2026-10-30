@@ -27,6 +27,13 @@ export function deriveLocalCheckpointRequestHistory(
   envelopes: readonly PersistedLogEnvelope[],
   replayedHistory: readonly ProviderInputItem[],
 ): ProjectionResult {
+  if (
+    envelopes.some(
+      ({ event }) =>
+        !isTruncatedLogEvent(event) && (event.type === 'tool_output_rewound' || event.type === 'user_turn_retried'),
+    )
+  )
+    return { status: 'refused' };
   let checkpointIndex = -1;
   for (let index = envelopes.length - 1; index >= 0; index -= 1) {
     const envelope = envelopes[index]!;

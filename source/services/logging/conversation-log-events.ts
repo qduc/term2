@@ -130,6 +130,19 @@ export interface UserInputAcceptedEvent {
   snapshot: StateSnapshot;
 }
 
+export interface ToolOutputRewoundEvent {
+  type: 'tool_output_rewound';
+  version: 1;
+  snapshot: StateSnapshot;
+}
+
+export interface UserTurnRetriedEvent {
+  type: 'user_turn_retried';
+  version: 1;
+  userMessageRef: EventReference;
+  snapshot: StateSnapshot;
+}
+
 export interface UserMessageEvent {
   type: 'user_message';
   message: UserMessage;
@@ -411,6 +424,8 @@ export type LogEvent =
   | ContextCheckpointCreatedEvent
   | UserMessageEvent
   | UserInputAcceptedEvent
+  | ToolOutputRewoundEvent
+  | UserTurnRetriedEvent
   | ToolStartedLogEvent
   | ToolResultLogEvent
   | CommandMessageLogEvent

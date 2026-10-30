@@ -261,11 +261,12 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
         (event['message']['submittedTurn'] === undefined || isSubmittedTurn(event['message']['submittedTurn']))
       );
     case 'user_input_accepted':
+    case 'user_turn_retried':
+    case 'tool_output_rewound':
       return (
         event['version'] === 1 &&
-        hasString(event, 'turnId') &&
-        !!event['turnId'] &&
-        isEventReferences([event['userMessageRef']]) &&
+        (event.type !== 'user_input_accepted' || (hasString(event, 'turnId') && !!event['turnId'])) &&
+        (event.type === 'tool_output_rewound' || isEventReferences([event['userMessageRef']])) &&
         isSnapshot(event['snapshot']) &&
         isObject(event['snapshot']) &&
         Array.isArray(event['snapshot']['history']) &&

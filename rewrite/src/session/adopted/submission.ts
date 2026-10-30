@@ -39,9 +39,15 @@ export type AdoptedInteractionCommand = AdoptedInteractionIdentity &
       }
     | { readonly kind: 'navigate'; readonly direction: 'previous' | 'next' }
   );
+export type AdoptedRetryTarget = 'turn' | 'tool';
+export type AdoptedRetryResult =
+  | { readonly kind: 'started'; readonly turnId: TurnId }
+  | { readonly kind: 'ineligible'; readonly target: AdoptedRetryTarget }
+  | { readonly kind: 'rejected'; readonly reason: 'closed' };
 export interface AdoptedSubmissionPort {
   submit(input: AdoptedSubmissionInput, options?: AdoptedSubmissionOptions): Promise<Admission>;
   decide(command: AdoptedInteractionCommand): Promise<void>;
+  retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult>;
 }
 export interface AdoptedAdmissionContext extends SessionDriverContext {
   admit(

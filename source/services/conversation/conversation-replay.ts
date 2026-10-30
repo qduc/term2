@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { pairToolOccurrences, toolOccurrenceKey, toolOccurrenceMetadata } from './tool-occurrence.js';
 import { buildToolLedgerFromAssistantTurnItems } from './journal-to-ledger.js';
 import { alignHistoryToolOccurrences, normalizeToolLedgerOccurrences } from '../tool-execution-ledger.js';
@@ -34,6 +35,7 @@ import {
   isToolCallHistoryItem,
   isToolResultHistoryItem,
 } from '../tool-execution-ledger.js';
+import { projectConversationMessage } from './conversation-message-projection.js';
 import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 import {
   legacyModeFromProfileId,
@@ -64,6 +66,11 @@ export interface RestoredState {
   rolloverFrom?: string;
   goal?: import('../logging/conversation-log-events.js').DurableGoal;
 }
+
+const isRetrySourceUser = (message: { sender: string; text?: string; consumedForAbort?: boolean }): boolean =>
+  message.sender === 'user' &&
+  !message.consumedForAbort &&
+  !projectConversationMessage({ type: 'message', role: 'user', content: message.text ?? '' })?.isSynthetic;
 
 const INTERRUPTED_SYSTEM_MESSAGE = 'Previous turn was interrupted — send a message to continue.';
 
@@ -349,8 +356,10 @@ function replayAssistantTurn(
   turnId: string,
   usage?: NormalizedUsage,
   displayUsage?: NormalizedUsage,
+  matchLatestOccurrence = false,
 ): SavedMessage[] {
   const messages: SavedMessage[] = [];
+  const occurrenceRows = new Map<string, CommandMessage>();
   let index = 0;
   let lastAssistantMessage: BotMessage | null = null;
   for (const item of turn.items) {
@@ -399,7 +408,7 @@ function replayAssistantTurn(
           ? parsedArgs
           : '';
 
-      messages.push({
+      const row: CommandMessage = {
         id: `command-${item.callId}`,
         sender: 'command',
         status: 'running',
@@ -408,7 +417,9 @@ function replayAssistantTurn(
         toolName: item.toolName,
         toolArgs: parsedArgs,
         callId: item.callId,
-      });
+      };
+      messages.push(row);
+      if (matchLatestOccurrence && item.occurrence !== undefined) occurrenceRows.set(toolOccurrenceKey(item), row);
     } else if (item.type === 'tool_result') {
       // Persisted outputs can be JSON strings (e.g. apply_patch returns
       // JSON.stringify({ output: [...] }), create_file returns
@@ -432,7 +443,16 @@ function replayAssistantTurn(
           ? parsedOutput
           : JSON.stringify(parsedOutput);
 
-      const existing = messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === item.callId);
+      const explicit =
+        matchLatestOccurrence && item.occurrence !== undefined
+          ? occurrenceRows.get(toolOccurrenceKey(item))
+          : undefined;
+      const existing =
+        explicit ??
+        (matchLatestOccurrence ? [...messages].reverse() : messages).find(
+          (m): m is CommandMessage =>
+            m.sender === 'command' && m.callId === item.callId && (!matchLatestOccurrence || m.status === 'running'),
+        );
       if (existing) {
         existing.status = item.status;
         existing.output = outputText;
@@ -542,7 +562,9 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       });
       return;
     }
-    case 'user_input_accepted': {
+    case 'user_input_accepted':
+    case 'tool_output_rewound':
+    case 'user_turn_retried': {
       const snap = cloneSnapshot(event.snapshot);
       state.history = snap.history;
       state.previousResponseId = snap.previousResponseId;
@@ -962,7 +984,7 @@ function appendReplayedBackgroundShellJobs(state: ReplayState): void {
  *   result for the same callId are dropped in favor of the richer persisted
  *   shape.
  */
-function applyInterruptedTurnJournals(state: ReplayState): void {
+function applyInterruptedTurnJournals(state: ReplayState, finalization: 'live' | 'reopened'): void {
   if (state.pendingJournals.size === 0) {
     return;
   }
@@ -975,7 +997,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
     }
 
     const turnId = `journal-${journal.turnId ?? journalKey}-${journal.startedAt}`;
-    const newMessages = buildMessagesFromJournal(journal, turnId);
+    const newMessages = buildMessagesFromJournal(journal, turnId, finalization);
     const hasProviderOpaqueItem = journal.items.some((item) => item.type === 'provider_opaque');
     if (newMessages.length === 0 && !hasProviderOpaqueItem) {
       continue;
@@ -1155,7 +1177,11 @@ const markLegacyInFlightCallsAborted = (state: ReplayState, legacyInFlightCalls:
  * Builds the SavedMessage list for a single journal turn. Mirrors the
  * rendering used by `replayAssistantTurn` so the UI sees the same shapes.
  */
-function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMessage[] {
+function buildMessagesFromJournal(
+  journal: TurnJournal,
+  turnId: string,
+  finalization: 'live' | 'reopened',
+): SavedMessage[] {
   const messages: SavedMessage[] = [];
   let index = 0;
   const items = journal.items;
@@ -1213,10 +1239,10 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
       messages.push({
         id: `command-${item.callId}`,
         sender: 'command',
-        status: 'unknown',
+        status: finalization === 'live' ? 'running' : 'unknown',
         command: command || item.toolName,
-        output: RESTART_UNOBSERVED_TOOL_RESULT,
-        failureReason: 'Session ended unexpectedly',
+        output: finalization === 'live' ? '' : RESTART_UNOBSERVED_TOOL_RESULT,
+        ...(finalization === 'reopened' ? { failureReason: 'Session ended unexpectedly' } : {}),
         toolName: item.toolName,
         toolArgs: parsedArgs,
         callId: item.callId,
@@ -1272,7 +1298,72 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
   return messages;
 }
 
-export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
+/** Verify source's rewind retained an exact native prefix and count real user turns removed. */
+export function rewindRemovedUserCount(
+  before: readonly ProviderInputItem[],
+  after: readonly ProviderInputItem[],
+): number {
+  const equivalent = (left: ProviderInputItem, right: ProviderInputItem): boolean => {
+    if (isDeepStrictEqual(left, right)) return true;
+    if (
+      !(isToolCallHistoryItem(left) || isToolResultHistoryItem(left)) ||
+      !(isToolCallHistoryItem(right) || isToolResultHistoryItem(right))
+    )
+      return false;
+    const a = { ...left };
+    const b = { ...right };
+    // Shared replay may add occurrence metadata to legacy provider items.
+    // Preserve it whenever both sides carry it; never strip native fields.
+    for (const key of ['turnId', 'occurrence']) {
+      if (a[key] === undefined || b[key] === undefined) {
+        delete a[key];
+        delete b[key];
+      }
+    }
+    return isDeepStrictEqual(a, b);
+  };
+  if (after.length > before.length || !after.every((item, index) => equivalent(item, before[index]!)))
+    throw new Error('Tool rewind native history is not an exact prefix');
+  return before.slice(after.length).filter((item) => {
+    const message = projectConversationMessage(item);
+    return message?.role === 'user' && !message.isSynthetic;
+  }).length;
+}
+
+export function replayEvents(
+  envelopes: PersistedLogEnvelope[],
+  options: { finalization?: 'live' | 'reopened' } = {},
+): RestoredState {
+  return replayEventsWithRetryTarget(envelopes, options).conversation;
+}
+
+type ReplayWithRetryTarget = {
+  conversation: RestoredState;
+  retryTarget: {
+    userMessageRef: { logId: string; eventId: string };
+    submittedTurn?: import('../../types/user-turn.js').UserTurn;
+  } | null;
+};
+
+/** Replay and identity are computed together from the same resolved envelopes. */
+export function replayEventsWithRetryTarget(
+  envelopes: PersistedLogEnvelope[],
+  options: { finalization?: 'live' | 'reopened' } = {},
+): ReplayWithRetryTarget {
+  return replayWithRetryCache(envelopes, new Map(), options.finalization ?? 'reopened');
+}
+
+function replayWithRetryCache(
+  envelopes: PersistedLogEnvelope[],
+  cache: Map<string, ReplayWithRetryTarget>,
+  finalization: 'live' | 'reopened',
+): ReplayWithRetryTarget {
+  const cacheKey = JSON.stringify([
+    finalization,
+    envelopes.map((envelope) => [envelope.logId, envelope.eventId, envelope.seq]),
+  ]);
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
   const usage = createUsageAccumulator();
   const subagentUsage = createUsageAccumulator();
   const allCostRecords: ModelRequestCost[] = [];
@@ -1299,23 +1390,76 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
   const keyOf = (ref: { logId: string; eventId: string }) => JSON.stringify([ref.logId, ref.eventId]);
   const retracted = new Set<string>();
   const acceptedRefs = new Map<PersistedLogEnvelope, string>();
+  const retryRefs = new Map<PersistedLogEnvelope, string>();
+  const userEnvelopes = new Map<string, PersistedLogEnvelope>();
+  const historicalEligibility = new Map<string, boolean>();
+  const activeEligibility = new Map<string, boolean>();
+  const trimRemovedUsers = (stack: string[], removed: number, eligibility: Map<string, boolean>) => {
+    while (removed > 0 && stack.length) {
+      const ref = stack.pop()!;
+      if (eligibility.get(ref)) removed--;
+    }
+  };
+  const acceptedEligible = (history: readonly ProviderInputItem[]) => {
+    for (let index = history.length - 1; index >= 0; index--) {
+      const message = projectConversationMessage(history[index]);
+      if (message?.role === 'user') return !message.isSynthetic;
+    }
+    throw new Error('Accepted input has no native user');
+  };
+  const userStack: string[] = [];
+  const activeUserStack: string[] = [];
+  const messageRefs = new WeakMap<SavedMessage, string>();
+  let retrySnapshotBoundary = false;
   let currentUser: string | null = null;
   let activeTurn: string | null = null;
   const seenUsers = new Set<string>();
-  for (const envelope of envelopes) {
+  for (let envelopeIndex = 0; envelopeIndex < envelopes.length; envelopeIndex++) {
+    const envelope = envelopes[envelopeIndex]!;
     if (!envelope || !envelope.event || isTruncatedLogEvent(envelope.event)) continue;
     const event = envelope.event;
     if (event.type === 'user_message') {
       currentUser =
         envelope.logId && envelope.eventId ? keyOf({ logId: envelope.logId, eventId: envelope.eventId }) : null;
-      if (currentUser) seenUsers.add(currentUser);
+      if (currentUser) {
+        seenUsers.add(currentUser);
+        userEnvelopes.set(currentUser, envelope);
+        historicalEligibility.set(currentUser, isRetrySourceUser(event.message));
+        activeEligibility.set(currentUser, isRetrySourceUser(event.message));
+        if (!event.message.consumedForAbort) userStack.push(currentUser);
+      }
+    } else if (event.type === 'tool_output_rewound') {
+      const before = replayWithRetryCache(envelopes.slice(0, envelopeIndex), cache, finalization).conversation.history;
+      const removed = rewindRemovedUserCount(before, event.snapshot.history);
+      if (removed) trimRemovedUsers(userStack, removed, historicalEligibility);
+      currentUser = null;
+      activeTurn = null;
+    } else if (event.type === 'user_turn_retried') {
+      const ref = keyOf(event.userMessageRef);
+      if (
+        !seenUsers.has(ref) ||
+        retracted.has(ref) ||
+        userStack.filter((key) => !retracted.has(key) && historicalEligibility.get(key)).at(-1) !== ref
+      )
+        throw new Error('Invalid user_turn_retried reference');
+      retryRefs.set(envelope, ref);
+    } else if (event.type === 'undo') {
+      if (userStack.some((ref) => !historicalEligibility.get(ref))) {
+        const before = replayWithRetryCache(envelopes.slice(0, envelopeIndex), cache, finalization).conversation
+          .history;
+        trimRemovedUsers(userStack, rewindRemovedUserCount(before, event.snapshot.history), historicalEligibility);
+      } else userStack.splice(Math.max(0, userStack.length - Math.max(event.removedUserTurns, 1)));
+      currentUser = null;
+      activeTurn = null;
+    } else if (event.type === 'session_cleared') {
+      userStack.length = 0;
+      currentUser = null;
+      activeTurn = null;
     } else if ((event.type as string) === 'session_turn_started') {
       const turnId = (event as unknown as { turnId?: unknown }).turnId;
       activeTurn = typeof turnId === 'string' ? turnId : null;
     } else if (
       event.type === 'assistant_turn' ||
-      event.type === 'undo' ||
-      event.type === 'session_cleared' ||
       (event.type as string) === 'session_turn_ended' ||
       (event.type as string) === 'session_admission_settled' ||
       (event.type as string) === 'session_interrupted' ||
@@ -1326,20 +1470,122 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     } else if (event.type === 'events_retracted') {
       for (const ref of event.refs) retracted.add(keyOf(ref));
       if (currentUser && retracted.has(currentUser)) currentUser = null;
+      // Retraction can deactivate an earlier rewind; recompute the effective
+      // chronological prefix before validating a later retry edge.
+      const rebuilt: string[] = [];
+      for (const prior of envelopes.slice(0, envelopeIndex)) {
+        if (!prior || !prior.event || isTruncatedLogEvent(prior.event)) continue;
+        const priorKey = prior.logId && prior.eventId ? keyOf({ logId: prior.logId, eventId: prior.eventId }) : null;
+        const previous = prior.event;
+        if (priorKey && retracted.has(priorKey) && previous.type !== 'user_message') continue;
+        if (previous.type === 'user_message' && priorKey && !previous.message.consumedForAbort) rebuilt.push(priorKey);
+        else if (previous.type === 'undo') {
+          if (rebuilt.some((ref) => !historicalEligibility.get(ref))) {
+            const prefix = envelopes.slice(0, envelopes.indexOf(prior));
+            trimRemovedUsers(
+              rebuilt,
+              rewindRemovedUserCount(
+                replayWithRetryCache(prefix, cache, finalization).conversation.history,
+                previous.snapshot.history,
+              ),
+              historicalEligibility,
+            );
+          } else rebuilt.splice(Math.max(0, rebuilt.length - Math.max(previous.removedUserTurns, 1)));
+        } else if (previous.type === 'session_cleared') rebuilt.length = 0;
+        else if (previous.type === 'tool_output_rewound') {
+          const index = envelopes.indexOf(prior);
+          const prefix = envelopes.slice(0, index);
+          const removed = rewindRemovedUserCount(
+            replayWithRetryCache(prefix, cache, finalization).conversation.history,
+            previous.snapshot.history,
+          );
+          if (removed) trimRemovedUsers(rebuilt, removed, historicalEligibility);
+        }
+      }
+      userStack.splice(0, userStack.length, ...rebuilt);
     } else if (event.type === 'user_input_accepted') {
       const ref = keyOf(event.userMessageRef);
       if (!seenUsers.has(ref) || currentUser !== ref || retracted.has(ref) || activeTurn !== event.turnId)
         throw new Error('Invalid user_input_accepted reference');
       acceptedRefs.set(envelope, ref);
+      historicalEligibility.set(ref, acceptedEligible(event.snapshot.history));
     }
   }
 
   for (const envelope of envelopes) {
     if (!envelope || envelope.event == null) continue;
     const acceptedUser = acceptedRefs.get(envelope);
+    const retryUser = retryRefs.get(envelope);
     const envelopeKey =
       envelope.logId && envelope.eventId ? keyOf({ logId: envelope.logId, eventId: envelope.eventId }) : null;
     if (acceptedUser && (retracted.has(acceptedUser) || (envelopeKey && retracted.has(envelopeKey)))) continue;
+    if (retryUser && (retracted.has(retryUser) || (envelopeKey && retracted.has(envelopeKey)))) continue;
+    if (envelopeKey && retracted.has(envelopeKey) && envelope.event.type === 'tool_output_rewound') continue;
+    if (!isTruncatedLogEvent(envelope.event)) {
+      if (envelope.event.type === 'user_message' && envelopeKey && !envelope.event.message.consumedForAbort)
+        activeUserStack.push(envelopeKey);
+      else if (envelope.event.type === 'user_input_accepted' && acceptedUser)
+        activeEligibility.set(acceptedUser, acceptedEligible(envelope.event.snapshot.history));
+      else if (envelope.event.type === 'undo') {
+        if (activeUserStack.some((ref) => !activeEligibility.get(ref))) {
+          applyInterruptedTurnJournals(state, finalization);
+          trimRemovedUsers(
+            activeUserStack,
+            rewindRemovedUserCount(state.history, envelope.event.snapshot.history),
+            activeEligibility,
+          );
+        } else
+          activeUserStack.splice(Math.max(0, activeUserStack.length - Math.max(envelope.event.removedUserTurns, 1)));
+      } else if (envelope.event.type === 'session_cleared') activeUserStack.length = 0;
+      else if (envelope.event.type === 'tool_output_rewound') {
+        applyInterruptedTurnJournals(state, finalization);
+        const removed = rewindRemovedUserCount(state.history, envelope.event.snapshot.history);
+        if (removed) trimRemovedUsers(activeUserStack, removed, activeEligibility);
+      }
+    }
+    if (!isTruncatedLogEvent(envelope.event) && envelope.event.type === 'user_turn_retried') {
+      const user = state.messages.map((message) => messageRefs.get(message)).lastIndexOf(retryUser);
+      if (user < 0) throw new Error('Retry user is not present');
+      state.messages = state.messages.slice(0, user + 1);
+    }
+    if (!isTruncatedLogEvent(envelope.event) && envelope.event.type === 'tool_output_rewound') {
+      const history = envelope.event.snapshot.history;
+      let lastResult = history.length - 1;
+      while (lastResult >= 0 && !isToolResultHistoryItem(history[lastResult])) lastResult--;
+      if (lastResult < 0) throw new Error('Tool rewind has no retained result');
+      let nativeUser = lastResult;
+      while (nativeUser >= 0) {
+        const message = projectConversationMessage(history[nativeUser]);
+        if (message?.role === 'user' && !message.isSynthetic) break;
+        nativeUser--;
+      }
+      const retainedUsers = activeUserStack.filter((key) => !retracted.has(key) && activeEligibility.get(key)).length;
+      const userIndexes = state.messages.flatMap((message, index) => {
+        const ref = messageRefs.get(message);
+        return ref && !retracted.has(ref) && activeEligibility.get(ref) ? [index] : [];
+      });
+      const lastUser = userIndexes[retainedUsers - 1] ?? -1;
+      const items = normalizeRunItems(history.slice(nativeUser + 1, lastResult + 1));
+      state.messages = [
+        ...state.messages.slice(0, lastUser + 1),
+        ...replayAssistantTurn({ items }, `rewind-${envelope.seq}`, undefined, undefined, true),
+      ];
+    }
+    if (envelope.event.type === 'tool_output_rewound' || envelope.event.type === 'user_turn_retried') {
+      state.pendingJournals.clear();
+      state.pendingCommandMessages = [];
+      state.inFlightToolCalls.clear();
+      state.activeTurnStartIndex = state.messages.length;
+      state.trailingUserMessage = envelope.event.type === 'user_turn_retried';
+      retrySnapshotBoundary = true;
+    } else if (
+      envelope.event.type === 'assistant_journal_item' ||
+      envelope.event.type === 'assistant_journal_delta' ||
+      envelope.event.type === 'assistant_turn' ||
+      envelope.event.type === 'tool_started'
+    ) {
+      retrySnapshotBoundary = false;
+    }
     if (isTruncatedLogEvent(envelope.event)) {
       // Truncated events carry no usage to accumulate; applyEvent records the
       // truncation warning and returns.
@@ -1365,28 +1611,88 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
       allCostRecords.push(...envelope.event.costRecords);
     }
     applyEvent(state, envelope.event, envelope.ts);
+    if ((envelope.event.type as string) === 'session_interrupted') {
+      // A prior open already imported restart settlement. Materialize that
+      // durable recovery delimiter before applying the current live tail.
+      applyInterruptedTurnJournals(state, 'reopened');
+      const journalCalls = journalBackedToolCallIds(state);
+      settleInterruptedToolEntries(state);
+      const legacy = [...state.inFlightToolCalls.values()].filter((call) => !journalCalls.has(call.callId));
+      if (state.trailingUserMessage || legacy.length > 0) {
+        if (legacy.length) markLegacyInFlightCallsAborted(state, legacy);
+        if (
+          !retrySnapshotBoundary &&
+          state.toolLedger.some((entry) => entry.status !== 'started' && entry.status !== 'approval_required')
+        )
+          state.history = projectProviderHistory({ history: state.history, toolLedger: state.toolLedger }).history;
+        if (state.trailingUserMessage) {
+          state.warnings.push('Previous turn was interrupted.');
+          state.messages.push({
+            id: `system-interrupted-${state.messages.length}`,
+            sender: 'system',
+            text: INTERRUPTED_SYSTEM_MESSAGE,
+          });
+        }
+        state.previousResponseId = null;
+      }
+      state.pendingJournals.clear();
+      state.pendingCommandMessages = [];
+      state.inFlightToolCalls.clear();
+      state.trailingUserMessage = false;
+      retrySnapshotBoundary = false;
+    }
+    if (envelope.event.type === 'user_message' && envelopeKey) {
+      const message = state.messages.at(-1);
+      if (message) messageRefs.set(message, envelopeKey);
+    }
     state.lastEventTs = envelope.ts;
+  }
+
+  // Retractions may follow a historically valid retry. Remove its original
+  // user only if the ordinary rollback did not already remove that row.
+  for (let index = state.messages.length - 1; index >= 0; index--) {
+    const message = state.messages[index]!;
+    const ref = messageRefs.get(message);
+    if (!ref || !retracted.has(ref)) continue;
+    const ordinal = state.messages
+      .slice(0, index)
+      .filter((item) => item.sender === 'user' && !item.consumedForAbort).length;
+    const userIndexes = state.history.flatMap((item, i) =>
+      projectConversationMessage(item)?.role === 'user' ? [i] : [],
+    );
+    const start = userIndexes[ordinal];
+    if (start !== undefined) state.history.splice(start, (userIndexes[ordinal + 1] ?? state.history.length) - start);
+    let end = index + 1;
+    while (end < state.messages.length && state.messages[end]?.sender !== 'user') end++;
+    state.messages.splice(index, end - index);
+    state.pendingJournals.clear();
+    state.pendingCommandMessages = [];
+    state.inFlightToolCalls.clear();
+    state.trailingUserMessage = false;
   }
 
   // Reconstruct transcript / ledger for any turn that did not produce a
   // finalized `assistant_turn` event. This covers the crash-after-streaming
   // and crash-after-partial-text cases called out in the plan.
-  applyInterruptedTurnJournals(state);
+  applyInterruptedTurnJournals(state, finalization);
 
   // Mid-turn crash handling. Settling is class-wide, not journal-gated: the
   // same blind-repeat hazard applies whether the interrupted call's evidence
   // came from a provider-backed journal item or from a bare tool_started
   // marker in a legacy log.
   const journalBackedCallIds = journalBackedToolCallIds(state);
-  settleInterruptedToolEntries(state);
+  if (finalization === 'reopened') settleInterruptedToolEntries(state);
   const legacyInFlightCalls = [...state.inFlightToolCalls.values()].filter(
     (tc) => !journalBackedCallIds.has(tc.callId),
   );
-  if (state.trailingUserMessage || legacyInFlightCalls.length > 0) {
+  if (finalization === 'reopened' && (state.trailingUserMessage || legacyInFlightCalls.length > 0)) {
     if (legacyInFlightCalls.length > 0) {
       markLegacyInFlightCallsAborted(state, legacyInFlightCalls);
     }
-    if (state.toolLedger.some((entry) => entry.status !== 'started' && entry.status !== 'approval_required')) {
+    if (
+      !retrySnapshotBoundary &&
+      state.toolLedger.some((entry) => entry.status !== 'started' && entry.status !== 'approval_required')
+    ) {
       state.history = projectProviderHistory({ history: state.history, toolLedger: state.toolLedger }).history;
     }
     if (state.trailingUserMessage) {
@@ -1404,9 +1710,13 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
   }
 
   // Defensive idempotent final repair pass
-  state.toolLedger = normalizeToolLedgerOccurrences(state.toolLedger);
-  state.history = alignHistoryToolOccurrences(state.history, state.toolLedger) as ProviderInputItem[];
-  const repair = repairConversationHistory(state.history);
+  if (!retrySnapshotBoundary) {
+    state.toolLedger = normalizeToolLedgerOccurrences(state.toolLedger);
+    state.history = alignHistoryToolOccurrences(state.history, state.toolLedger) as ProviderInputItem[];
+  }
+  const repair = retrySnapshotBoundary
+    ? { repaired: false, removedItems: 0, history: state.history }
+    : repairConversationHistory(state.history);
   if (repair.repaired && repair.removedItems > 0) {
     state.history = repair.history as ProviderInputItem[];
     state.warnings.push(
@@ -1433,7 +1743,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     state.previousResponseId = null;
   }
 
-  appendReplayedBackgroundShellJobs(state);
+  if (finalization === 'reopened') appendReplayedBackgroundShellJobs(state);
 
   const accumulatedUsage = usage.get();
   const accumulatedSubagentUsage = subagentUsage.get();
@@ -1456,26 +1766,47 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     ];
   }
 
-  return {
-    id: state.id,
-    createdAt: state.createdAt,
-    projectPath: state.projectPath,
-    sshHost: state.sshHost,
-    activeProfileId: state.activeProfileId,
-    appMode: state.appMode,
-    model: state.model,
-    provider: state.provider,
-    reasoningEffort: state.reasoningEffort,
-    previousResponseId: state.previousResponseId,
-    messages: state.messages,
-    history: state.history,
-    toolLedger: state.toolLedger,
-    usage: Object.keys(accumulatedUsage).length > 0 ? accumulatedUsage : undefined,
-    subagentUsage: Object.keys(accumulatedSubagentUsage).length > 0 ? accumulatedSubagentUsage : undefined,
-    costRecords,
-    replayWarnings: state.warnings,
-    forkedFrom: state.forkedFrom,
-    rolloverFrom: state.rolloverFrom,
-    goal: state.goal,
+  const targetKey = activeUserStack.filter((key) => !retracted.has(key) && activeEligibility.get(key)).at(-1);
+  const targetEnvelope = targetKey ? userEnvelopes.get(targetKey) : undefined;
+  const targetEvent = targetEnvelope?.event;
+  const retryTarget =
+    targetEnvelope?.logId &&
+    targetEnvelope.eventId &&
+    targetEvent &&
+    !isTruncatedLogEvent(targetEvent) &&
+    targetEvent.type === 'user_message'
+      ? {
+          userMessageRef: { logId: targetEnvelope.logId, eventId: targetEnvelope.eventId },
+          ...(targetEvent.message.submittedTurn
+            ? { submittedTurn: cloneValue(targetEvent.message.submittedTurn) }
+            : {}),
+        }
+      : null;
+  const result: ReplayWithRetryTarget = {
+    retryTarget,
+    conversation: {
+      id: state.id,
+      createdAt: state.createdAt,
+      projectPath: state.projectPath,
+      sshHost: state.sshHost,
+      activeProfileId: state.activeProfileId,
+      appMode: state.appMode,
+      model: state.model,
+      provider: state.provider,
+      reasoningEffort: state.reasoningEffort,
+      previousResponseId: state.previousResponseId,
+      messages: state.messages,
+      history: state.history,
+      toolLedger: state.toolLedger,
+      usage: Object.keys(accumulatedUsage).length > 0 ? accumulatedUsage : undefined,
+      subagentUsage: Object.keys(accumulatedSubagentUsage).length > 0 ? accumulatedSubagentUsage : undefined,
+      costRecords,
+      replayWarnings: state.warnings,
+      forkedFrom: state.forkedFrom,
+      rolloverFrom: state.rolloverFrom,
+      goal: state.goal,
+    },
   };
+  cache.set(cacheKey, result);
+  return result;
 }

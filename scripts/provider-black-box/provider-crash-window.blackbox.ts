@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SettingsService } from '../../source/services/settings/settings-service.js';
 import {
@@ -195,7 +195,7 @@ describe('crash after tool effect but before the tool result', () => {
         cwd: lease.root,
         command: process.execPath,
         args: [
-          join(process.cwd(), 'dist/cli.js'),
+          process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
           '--lite',
           '-p',
           'crash-window-fixture',
@@ -250,11 +250,23 @@ describe('crash after tool effect but before the tool result', () => {
     await exitInteractive(resumed);
 
     expect(requests).toHaveLength(2);
-    const resumedBody = requests[1]!.body as { messages?: Array<{ role: string; content: string }> };
+    const resumedBody = requests[1]!.body as {
+      messages?: Array<{ role: string; content: string; tool_call_id?: string; tool_calls?: Array<{ id: string }> }>;
+    };
     const resumedSerialized = JSON.stringify(resumedBody);
     // The executed-but-unsettled call must survive recovery; the original
     // released build omitted it from the next request entirely.
     expect(resumedSerialized).toContain(TOOL_CALL_ID);
+    expect(
+      resumedBody.messages?.filter((message) => message.tool_calls?.some((call) => call.id === TOOL_CALL_ID)),
+    ).toHaveLength(1);
+    const recoveredResults = resumedBody.messages?.filter(
+      (message) => message.role === 'tool' && message.tool_call_id === TOOL_CALL_ID,
+    );
+    expect(recoveredResults).toHaveLength(1);
+    expect(recoveredResults?.[0]?.content).toBe(
+      "Outcome unobserved: the session restarted before this operation's result was recorded. Its effect may or may not have occurred. Verify the current state before any retry, and do not re-run non-idempotent operations blindly.",
+    );
     expect(resumedSerialized).toContain('may or may not have occurred');
     expect(resumedSerialized).toContain('do not re-run non-idempotent operations blindly');
     // No automatic redispatch: the resumed turn's new user message is

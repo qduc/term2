@@ -28546,6 +28546,143 @@
       "failures": [],
       "evidence": [],
       "notes": "Sol accepted no findings; focused 1/1 in 3.58s, one --lite marker launch. No-result has zero dispatch; exact call and result retained, original user once, later answer and prior response id absent; effect x before/after retry. No broader retry failure or concurrent cancellation claim."
+    },
+    {
+      "id": "2026-10-30-c3a-retry-cancel",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T16:36:57Z",
+      "commit": "235b80cd376e9d278b54b6466b5a16af1e0b747c",
+      "tree": "a1467fcd2a4b37397d628ae6567a6cea125083ac",
+      "revision_kind": "clean source before documentation; tested identical precommit files",
+      "base_commit": "dc8847b96ebd424a181b2559a4f8fab019afa94b",
+      "task_ids": [
+        "2026-10-30-c3a-retry-cancel"
+      ],
+      "suite": "old CLI failed retry and streaming cancellation",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-retry-cancel-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/retry-cancel.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated real old CLI PTY/local Responses provider; selected marker wrapper."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-retry-cancel-cli.mjs"
+        }
+      ],
+      "notes": "Focused selected CLI 1/1, nine old goldens 9/9, rewrite tsc, 520 guard, inventory and source hooks passed. Earlier immediate socket destroyed assertion failed once after idle; final test waits for actual closure explicitly before attempted late write. This does not prove admission gating on closure or filtering already-delivered events. Initial response.created then response.failed yields visible error; retry user once and chain reset; partial text cancellation and successor observed. Independent review pending."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "task_ids": [
+        "2026-10-30-c3a-retry-cancel"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Selected old CLI local provider PTY."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-retry-cancel-independent",
+      "run_at": "2026-10-30T16:37:45Z",
+      "commit": "235b80cd376e9d278b54b6466b5a16af1e0b747c",
+      "tree": "a1467fcd2a4b37397d628ae6567a6cea125083ac",
+      "revision_kind": "clean source independently reviewed",
+      "base_commit": "dc8847b96ebd424a181b2559a4f8fab019afa94b",
+      "suite": "independent old CLI failed retry and cancellation",
+      "command": "TERM2_TEST_CLI=<independent wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/retry-cancel.blackbox.ts --maxWorkers=1",
+      "notes": "Sol accepted no findings; 1/1 in 3.29s, one marker launch. No already-delivered late-event filter, terminal uniqueness, tool safety or backoff claim."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "task_ids": [
+        "2026-10-30-c3a-retry-cancel"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Selected old CLI local provider PTY."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-retry-cancel-integrated",
+      "run_at": "2026-10-30T16:38:29Z",
+      "commit": "68a625bffb78576a4833a7758d2ca09031317302",
+      "tree": "e68e1a15db44ecdb2b9d5417c2c5776130cc5067",
+      "revision_kind": "integrated clean source before documentation",
+      "base_commit": "ed6ab8f7d5baa53076e999f1f54dc2ef2df373fc",
+      "suite": "integrated old CLI failed retry and cancellation",
+      "command": "TERM2_TEST_CLI=/tmp/c3a-retry-cancel-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/retry-cancel.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "notes": "Integrated focused 1/1, old nine parity 9/9, rewrite tsc, guard 520, inventory. Test source identical to independently reviewed 235b80cd. Awaiting integrated review."
+    },
+    {
+      "id": "2026-10-30-c3a-retry-cancel-integrated-review",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T16:39:00Z",
+      "commit": "68a625bffb78576a4833a7758d2ca09031317302",
+      "tree": "e68e1a15db44ecdb2b9d5417c2c5776130cc5067",
+      "revision_kind": "integrated source independently reviewed",
+      "base_commit": "ed6ab8f7d5baa53076e999f1f54dc2ef2df373fc",
+      "task_ids": [
+        "2026-10-30-c3a-retry-cancel"
+      ],
+      "suite": "independent integrated source review",
+      "command": "git diff 235b80cd 68a625bf -- scripts/provider-black-box/retry-cancel.blackbox.ts; git diff --check",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol read-only review."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Sol accepted integrated source: test byte-identical reviewed 235b80cd; merge contains only PR105 changes. Prior independent 1/1 applies to identical test, author integrated 1/1. No independent integrated process rerun claimed."
     }
   ]
 }

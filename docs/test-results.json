@@ -29412,6 +29412,38 @@
       "failures": [],
       "evidence": [],
       "notes": "At source 08f root/rewrite/native typechecks, 527-edge guard, inventory, no-unit guard, C1 approval/kill, retained interaction modes and old CLI parity 9/9 pass; unchanged goldens. Exact 08f runtime 11/11 and policy 7/7 controlled processes pass; independent Sol 13/13 and source review pass. Bench-only b058 adds controlled postexecute held gate with success and pending/resolution fsync failures, 3/3 author and independently 3/3 strict process pass; actual gate decision approve on success and reject on failures, physical settlement/effect once/no continuation. Initial success fixture hung because temporary default repeat requested a second call; corrected default to single postexecute mode, all three reran. Native OS sandbox detection and executeAgain are not established by controlled denied-read descriptor/resolver. Explicit source network approval ownership remains stage 5/C4; unexpected network DTO fails closed. Cancel after durable decision write can leave truthful answered audit followed by cancelled run, while command rejects and no release/effect occurs. See /tmp/term2-c3a-stage2-independent-review.md, /tmp/term2-c3a-stage2-runtime-evidence.md and /tmp/term2-c3a-stage2-policy-evidence.md. Stages 3–5 and full #76 remain open."
+    },
+    {
+      "id": "2026-10-30-c3a-stage3-retry",
+      "timestamp": "2026-10-30T20:11:42.698695+00:00",
+      "commit": "c70642005790e5398b0a43344d2480c0f773e581",
+      "tree": "7cad47761f225ab600c81320b7b7c07c3315f0d9",
+      "revision_kind": "source commit",
+      "base_commit": "10877d8c195957b4835e9501411459986e148fd9",
+      "task_ids": [
+        "2026-10-30-c3a-stage3-retry"
+      ],
+      "suite": "C3a stage 3 retry, recovery and canonical replay",
+      "command": "root, rewrite and native tracer tsc; layer guard; inventory; no-unit; explicit lint-staged; old CLI build and parity; retained C1/stage2/retry, fsync and process-kill benches; independent driver, persistence, recovery and budget probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree and controlled local providers; network-enabled sandbox. Install ignored scripts, automatic Husky hook absent; explicit equivalent lint and no-unit commands ran."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Exact c706 root/rewrite/native typechecks, 527-edge guard, 33 log-event inventory, no-unit, old CLI parity 9/9 with unchanged goldens and retained C1/stage2/retry benches pass. Independent driver 18/18, persistence 14/14, app recovery 15/15, budget 3/3; process retry kills after durable boundary reopen both targets without auto execution. Exact original skill, images and pending notice retained; compaction, temporal retraction, duplicate tool occurrences and live/cold projection covered by scoped probes. R04 real completed/open cancellation waits held PID death; source allSettled barrier means this is not provider failure concurrent with running sibling. Tier fallback handler retained but unchanged classifier has no default producer (#6532275657). Provider errors and clock are controlled synthetic stimuli, not proof of real upstream availability/timing. Initial inventory reported missing new retry facts; both records added and rerun passed. See /tmp/term2-c3a-stage3-driver-independent-review.md, /tmp/term2-c3a-stage3-persistence-review.md, /tmp/term2-c3a-stage3-runtime-evidence.md, /tmp/term2-c3a-stage3-budget-evidence.md. Stages 4–5, stage5/C4 network owner and full #76 remain open."
     }
   ]
 }

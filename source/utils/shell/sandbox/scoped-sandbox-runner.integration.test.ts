@@ -8,10 +8,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { createScopedSandboxNetworkAccess } from './scoped-sandbox-network-access.js';
 import { ScopedSandboxRunner } from './scoped-sandbox-runner.js';
 import { SandboxNetworkApprovalCoordinator } from './sandbox-network-approval-coordinator.js';
+import { executeShellCommand } from '../execute-shell.js';
+import { InvalidatableShellChildRegistry } from '../shell-child-registry.js';
 
 // The CI integration lane builds dist before running this test. The real helper
 // must be the shipped JavaScript entry, not a test-only TypeScript loader.
 describe('scoped sandbox helpers', () => {
+  it('does not spawn when the sandbox capability was invalidated before execution', async () => {
+    const children = new InvalidatableShellChildRegistry();
+    children.invalidate();
+    const execImpl = vi.fn(() => {
+      throw new Error('must not spawn');
+    });
+    await executeShellCommand('printf forbidden', { childRegistry: children, execImpl });
+    expect(execImpl).not.toHaveBeenCalled();
+  });
   it('keeps the leased child paused until all graph approvals settle', async () => {
     const answers: Array<(answer: 'allow-once' | 'deny') => void> = [];
     const completions: Array<Promise<import('./scoped-sandbox-network-access.js').SandboxNetworkCompletion>> = [];

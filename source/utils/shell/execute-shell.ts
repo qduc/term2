@@ -494,6 +494,7 @@ async function executeShellCommandUnleased(
         clearCommandTimeout();
       };
 
+      childRegistry.assertAvailable();
       const child = execImpl(
         command,
         {

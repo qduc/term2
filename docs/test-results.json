@@ -28363,6 +28363,114 @@
       "failures": [],
       "evidence": [],
       "notes": "Sol accepted no findings; two tests passed in 4.53s, exactly two marker launches. A02 exact reason and call-id, denied effect absent, independent followup; A08 n/p and partial zero dispatch and exact aggregate answer. A04 legacy overwrite excluded; malformed/custom/stale/race and new Session remain unproven."
+    },
+    {
+      "id": "2026-10-30-c3a-recovery-evidence",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T16:26:19Z",
+      "commit": "0a89975ea50870c5125ac5edaa48fcefb63e8590",
+      "tree": "126d3e68c0ae6e0d9ab8d5d56b8afcfc4aa27750",
+      "revision_kind": "clean source before documentation",
+      "base_commit": "26b5e96a142c91dd43d0a97a71abed6f145c4f61",
+      "task_ids": [
+        "2026-10-30-c3a-recovery-evidence"
+      ],
+      "suite": "old CLI crash recovery, continuity and cancellation evidence",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-recovery-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-crash-window.blackbox.ts scripts/provider-black-box/conversation-loop.blackbox.ts --maxWorkers=1; TERM2_TEST_CLI=/tmp/c3a-recovery-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts -t \"settles an interrupted approval-pending|orphan-chain-recovery\" --maxWorkers=1; pnpm exec vitest run --config vitest.integration.config.ts source/lib/zero-frame-timeout.integration.test.ts -t \"settled effect -> chained interruption\" --maxWorkers=1; focused crash rerun after occurrence assertion; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated local provider PTY and filesystem; selected CLI wrapper. Zero-frame integration uses synthetic transport and fake clock."
+      },
+      "result": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 21,
+        "files_passed": 4,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-recovery-cli.mjs"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-crash-recovered-request.json"
+        }
+      ],
+      "notes": "Integrated selected crash and loop PTY 2/2; resilience interrupted/orphan 4/4 (5 filtered), source zero-frame integration 1/1 (16 filtered), final strengthened crash 1/1. Nine old goldens, rewrite tsc, guard 520, inventory and source hooks passed. Crash evidence is post-effect before result with fork/reopen, not live completed-tool replay. Zero-frame test exercises real service/tool/file and adapter with synthetic transport, not selected CLI. Partial-reasoning rollback, backoff cancellation, full recovery matrix and new Session remain unproven. Independent final review pending."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "base_commit": "26b5e96a142c91dd43d0a97a71abed6f145c4f61",
+      "task_ids": [
+        "2026-10-30-c3a-recovery-evidence"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol selected marker wrapper."
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-recovery-independent-integrated",
+      "run_at": "2026-10-30T16:25:06Z",
+      "commit": "9dcc13e584782ae824aa9d72d748f536ca8c397a",
+      "tree": "694a3efc346e61e66a3defab1e83e386c4268412",
+      "revision_kind": "integrated source independently reviewed before final occurrence assertion",
+      "suite": "independent selected recovery and cancellation cases",
+      "command": "TERM2_TEST_CLI=<independent wrapper> pnpm exec vitest run selected crash-window, conversation-loop and interrupted/orphan continuity scenarios",
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 5,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "notes": "Six selected cases passed in 18.20s, nine marker launches; loop and continuity files unchanged in final source."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "base_commit": "26b5e96a142c91dd43d0a97a71abed6f145c4f61",
+      "task_ids": [
+        "2026-10-30-c3a-recovery-evidence"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol selected marker wrapper."
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-recovery-independent-final",
+      "run_at": "2026-10-30T16:26:25Z",
+      "commit": "0a89975ea50870c5125ac5edaa48fcefb63e8590",
+      "tree": "126d3e68c0ae6e0d9ab8d5d56b8afcfc4aa27750",
+      "revision_kind": "clean final source independently reviewed",
+      "suite": "independent selected crash-window case",
+      "command": "TERM2_TEST_CLI=<independent wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-crash-window.blackbox.ts --maxWorkers=1",
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "notes": "Sol accepted final source no findings; 1/1 in 5.53s, two selected launches. One recovered call and result, exact unobserved outcome and one real fsynced effect. No in-process retry/budget claim."
     }
   ]
 }

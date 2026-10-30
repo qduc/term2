@@ -86,6 +86,7 @@ export async function createProofPersistence(input: ProofContext, options: Proof
   let disposed = false;
   let currentTurnId: string | null = null;
   let currentRequestId: string | null = null;
+  let admittedUserRef: { readonly logId: string; readonly eventId: string } | null = null;
   let pendingObservation: { answer: string; rejectionReason?: string } | null = null;
   const assertHealthy = () => {
     if (poison !== undefined) throw poison;
@@ -113,14 +114,17 @@ export async function createProofPersistence(input: ProofContext, options: Proof
     const all = [...buffered, ...facts];
     if (all.length) {
       try {
-        await driverContext!.commit(all);
+        const entries = await driverContext!.commit(all);
+        buffered.splice(0, all.length - facts.length);
+        assertHealthy();
+        return entries.slice(all.length - facts.length);
       } catch (error) {
         poison ??= error;
         throw poison;
       }
-      buffered.splice(0, all.length - facts.length);
     }
     assertHealthy();
+    return [];
   };
   const state = (): SessionState => selectedSession!.state();
   const port = {
@@ -134,7 +138,7 @@ export async function createProofPersistence(input: ProofContext, options: Proof
       const expiresAt = new Date(Date.now() + 60_000).toISOString();
       currentTurnId = turnId;
       currentRequestId = requestId;
-      await commit([
+      const admitted = await commit([
         { type: 'user_message', message: { id: userMessageId, sender: 'user', text: prompt } },
         {
           type: 'session_admitted',
@@ -148,6 +152,7 @@ export async function createProofPersistence(input: ProofContext, options: Proof
         },
         { type: 'session_turn_started', version: 1, turnId, clientRequestId: requestId },
       ]);
+      admittedUserRef = admitted[0]!.ref;
     },
     beforeDecision: async ({
       answer,
@@ -216,6 +221,15 @@ export async function createProofPersistence(input: ProofContext, options: Proof
         facts.push({ type: 'session_interaction_pending', version: 1, turnId: currentTurnId, interaction, generation });
       } else if (event.type === 'final' || event.type === 'error') {
         if (currentTurnId && currentRequestId) {
+          if (event.type === 'error' && event.droppedUserMessage) {
+            if (!admittedUserRef) throw new Error('blocked input lacks its admitted event reference');
+            facts.push({ type: 'events_retracted', version: 1, refs: [admittedUserRef] });
+            facts.push({
+              type: 'undo',
+              removedUserTurns: 1,
+              snapshot: runtime.state.exportState() as Extract<LogEvent, { type: 'undo' }>['snapshot'],
+            });
+          }
           const outcome =
             event.type === 'error'
               ? 'failed'

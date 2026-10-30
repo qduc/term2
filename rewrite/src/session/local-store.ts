@@ -34,7 +34,7 @@ export type SessionDriverContext = {
   readonly log: SessionLog;
   state(): SessionState;
   /** Replace state only after the caller has durably appended the supplied facts. */
-  commit(facts: readonly SessionFact[]): Promise<void>;
+  commit(facts: readonly SessionFact[]): Promise<readonly import('./index.js').LogEntry[]>;
 };
 export type SessionStoreOptions = {
   readonly root: string;
@@ -300,6 +300,7 @@ export class LocalSessionStore implements SessionStore {
           { history: restored.history, messages: restored.messages },
           restored.history as unknown as Item[],
         );
+        return entries;
       },
     };
     const driver = this.#options.driverFactory(context);

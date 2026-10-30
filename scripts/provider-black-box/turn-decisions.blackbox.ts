@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
@@ -42,7 +42,12 @@ it('resumes repeated questions once per decision and settles cancellation before
     // ask_user needs a Profile with user interaction; Bare (what --lite now
     // selects) has none. --lite still bypasses the home-directory start guard
     // (cwd is HOME here), and --profile full overrides the Profile it selects.
-    args: [join(process.cwd(), 'dist/cli.js'), '--lite', '--profile', 'full'],
+    args: [
+      process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
+      '--lite',
+      '--profile',
+      'full',
+    ],
     cwd: lease.root,
     cols: 120,
     rows: 40,
@@ -109,6 +114,11 @@ it('resumes repeated questions once per decision and settles cancellation before
     await writePtyTextAndSubmit(child, 'AFTER_CANCELLED_QUESTION');
     await child.waitForState(() => requests.length === 5);
     expect(JSON.stringify(requests[4]!.input)).toContain('AFTER_CANCELLED_QUESTION');
+    // The old CLI sends only the successor input here; the settled answer
+    // is verified in its conversation log below, not assumed to be in the request.
+    expect(requests[4]!.input).toEqual([
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'AFTER_CANCELLED_QUESTION' }] },
+    ]);
     complete(4, [message('QUESTION_SUCCESSOR_DONE')]);
     await child.waitForVisibleOutput('QUESTION_SUCCESSOR_DONE');
     await child.waitForIdleInput({ after: beforeCancel + 1 });

@@ -437,8 +437,10 @@ export function createAdoptedEngine(options: {
           if (
             new Set(request.approvals.map((approval) => approval.callId)).size !== request.approvals.length ||
             request.approvals.some((approval) => {
-              const call = request.pendingCalls.find((candidate) => candidate.callId === approval.callId);
-              if (!call || call.toolName !== approval.toolName) return true;
+              const call = request.pendingCalls.find(
+                (candidate) => candidate.callId === approval.callId && candidate.toolName === approval.toolName,
+              );
+              if (!call) return true;
               return !approval.agentId && !logical.calls.some((observed) => same(observed, call));
             })
           )

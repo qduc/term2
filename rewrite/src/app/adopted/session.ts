@@ -30,10 +30,12 @@ export function createAppAdoptedSessionHandleFactory(options: {
     let runtime: SessionRuntimeInternals | undefined;
     let assembly: ReturnType<typeof createAppAdoptedEngine> | undefined;
     let cancelBackground: (() => void) | undefined;
+    let grantHumanRunBudgetExtension: (() => { granted: boolean; extensionsGranted: number }) | undefined;
     try {
       assembly = createAppAdoptedEngine({
         ...synchronous(options.engine(context), 'engine options'),
         bindSessionClient(client) {
+          grantHumanRunBudgetExtension = () => client.grantRunBudgetExtension();
           cancelBackground = () => {
             let failure: unknown;
             let failed = false;
@@ -69,6 +71,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
         onSourceEvent: options.onSourceEvent,
         publishFacts: false,
         cancelBackground,
+        grantHumanRunBudgetExtension,
         makeInput(turnId) {
           const state = context.state();
           const prompt = owned.turnPrompt();

@@ -29668,6 +29668,38 @@
       "failures": [],
       "evidence": [],
       "notes": "Combined 3a957 root/rewrite typechecks, guard527, inventory, no-unit, rebuilt old CLI parity 9/9; retained history basic/held/fsync 3/3, P1 capture, C1 approval and held-tool PASS. Corrected P1 source 0b7f exact C1 actual kill/cold-reader, capture, history 3/3, rewrite tsc and guard527 PASS. Sol independent 5 actual probes plus retained 3/3 on 3a957 cover stale initial pure no-op, held actual source tool and callback mutation fence, close with no mutation, source image content/cold replay, equivalent property-order concurrent counts joining once, append/fsync failure poisoning and capture interop; exact 0b7f C1 kill and U/capture interop independently rerun PASS, U source unchanged. Source image undo preserves data/MIME/size but reconstructs UI ID/display; no original UI-ID claim. Fsync failure injected; held provider and physical tool proofs distinct. See /tmp/term2-c3a-stage5-u-author-evidence.md and /tmp/term2-c3a-stage5-history-independent-review.md. Remaining stage5 settings/lifecycle/goals/network/read and C3b/C4/K2 and full #76 remain open."
+    },
+    {
+      "id": "2026-10-30-c3a-stage5-slice-b",
+      "timestamp": "2026-10-30T20:56:37Z",
+      "commit": "37558d4d89868abeceef2984c82b0e32166b6891",
+      "tree": "2e387d8bc886f28bb381b110fe9c8216467d3270",
+      "revision_kind": "source commit",
+      "base_commit": "5f329234f914622c5bb7a63456a7fa19fd689213",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-slice-b"
+      ],
+      "suite": "C3a stage 5 Slice B human run-budget decisions and DTO validation",
+      "command": "root and rewrite tsc; layer guard; inventory; no-unit; explicit source lint; equivalent old CLI build and parity; retained budget human/refusal/fault; temporary real app cancellation and DTO controls; independent exact-source human/fault/negative/cancel-gate/refusal probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; controlled local provider; network-enabled sandbox for process spawning. Dependencies installed ignoring scripts; no automatic source hooks were available, explicit checks ran."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Bounded human path and source DTO correction only. Author actual app human 3 requests/3 prompts with 2 continues then stop; refusal overrides exact client and leaves prompt; fsync failure denies resume and cold open interrupts; post-publication cancellation leaves 1 truthful resolution and no resume. Independent 5/5 processes passed: two real human grants with parent cap zero, duplicate/stale rejection, real writer fault, canonical LF and signed headroom controls, held fsynced resolution cancellation and fresh run, and simulated refusal. Root/rewrite types, 527-edge layer guard, inventory, no-unit, source lint and old parity 9/9 passed. Build wrapper failed nested pnpm default store access; equivalent tsc/write-build-info/copy/embed build succeeded. Independent report /tmp/term2-c3a-stage5-budget-independent-review.md. Real no-active-budget refusal, unattended parent-cap and legacy no-budget max-turn remain open for K1/C3b host; no blanket D02/stage5/#76 claim."
     }
   ]
 }

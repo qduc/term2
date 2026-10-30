@@ -227,16 +227,14 @@ export class AgentChatService {
     };
   }
 
-  async chatDetailed(message: string, options: AgentClientChatOptions = {}): Promise<AgentClientChatResult> {
+  chatDetailed(message: string, options: AgentClientChatOptions = {}): Promise<AgentClientChatResult> {
     if (!this.#deps.modelBinding) return this.#chatDetailed(message, options);
     const controller = new AbortController();
     this.#activePreparations.add(controller);
     const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
-    try {
-      return await this.#chatDetailed(message, { ...options, signal });
-    } finally {
-      this.#activePreparations.delete(controller);
-    }
+    return this.#chatDetailed(message, { ...options, signal }).finally(() =>
+      this.#activePreparations.delete(controller),
+    );
   }
 
   async #chatDetailed(message: string, options: AgentClientChatOptions): Promise<AgentClientChatResult> {
@@ -348,7 +346,7 @@ export class AgentChatService {
     }
   }
 
-  async chatJson(
+  chatJson(
     message: string,
     options: {
       model?: string;
@@ -363,11 +361,7 @@ export class AgentChatService {
     const controller = new AbortController();
     this.#activePreparations.add(controller);
     const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
-    try {
-      return await this.#chatJson(message, { ...options, signal });
-    } finally {
-      this.#activePreparations.delete(controller);
-    }
+    return this.#chatJson(message, { ...options, signal }).finally(() => this.#activePreparations.delete(controller));
   }
 
   async #chatJson(

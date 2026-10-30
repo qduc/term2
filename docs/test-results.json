@@ -28471,6 +28471,48 @@
         "exit_code": 0
       },
       "notes": "Sol accepted final source no findings; 1/1 in 5.53s, two selected launches. One recovered call and result, exact unobserved outcome and one real fsynced effect. No in-process retry/budget claim."
+    },
+    {
+      "id": "2026-10-30-c3a-retry-tool",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T16:31:07Z",
+      "commit": "577180ecd11a4a6f860a6366457a9d7c75416a05",
+      "tree": "f04fb6a4d2251c87b25e88ee459d8e8bc97fe56d",
+      "revision_kind": "clean source before documentation; test run on identical precommit files",
+      "base_commit": "dc8847b96ebd424a181b2559a4f8fab019afa94b",
+      "task_ids": [
+        "2026-10-30-c3a-retry-tool"
+      ],
+      "suite": "old CLI retry tool boundary",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-retry-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/retry-tool.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated real old CLI PTY, local provider and file effect; selected marker wrapper."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-retry-cli.mjs"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-retry-tool-request.json"
+        }
+      ],
+      "notes": "Focused selected CLI 1/1; nine old goldens 9/9, rewrite tsc, 520 guard, inventory and source hooks passed. No-result command makes no request. Completed effect remains once; retry request carries one user/call/exact original result, no later answer or prior response id. Does not prove retry while live, failed-turn eligibility, or new Session. Independent review pending."
     }
   ]
 }

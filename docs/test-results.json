@@ -28284,6 +28284,52 @@
       "failures": [],
       "evidence": [],
       "notes": "Sol accepted final source no findings. Frozen image case 1/1 in 2.90s, one selected launch. Earlier 16:08:43 run passed 2/2 in 5.42s; image source changed during run, so dirty snapshot; cancellation file was unchanged in final source. No strict log-before-dispatch or fsync claim."
+    },
+    {
+      "id": "2026-10-30-c3a-approval-answers",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T16:18:42Z",
+      "commit": "1dd4ac4fde4a4d09fb1cc1376666d698059bc6c4",
+      "tree": "85ad89dbbb55b2d6ef6cd4b135593f60e66c327f",
+      "revision_kind": "clean source before documentation; tests run on identical precommit files",
+      "base_commit": "ebc61a33c4473eb31044f6ab465b0206d993bc2b",
+      "task_ids": [
+        "2026-10-30-c3a-approval-answers"
+      ],
+      "suite": "old CLI rejection and multi-question evidence",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-approval-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/multi-question.blackbox.ts scripts/provider-black-box/rejection-reason.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated local provider PTY; selected marker wrapper imports current old CLI."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-approval-cli.mjs"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-mixed-approval-diagnostic.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-approval-output.json"
+        }
+      ],
+      "notes": "Focused 2/2, two marker launches; nine old goldens 9/9; rewrite tsc, 520 guard, inventory and source hooks passed. Exploratory simultaneous denied-call/allowed-call required first denial again after second approval; final outputs carried exact denial reason and allowed output, denied file absent and allowed file x. Sol source audit traces scalar approvalDecision overwrite when sibling prompts stage before runtime resolves first; legacy defect diagnostic only, not required parity. A04 remains unproven. Independent final review pending."
     }
   ]
 }

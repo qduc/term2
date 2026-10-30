@@ -26716,6 +26716,39 @@
       "notes": "GitHub Actions CI run 41057187634 tested PR commit 7e2b7ee00f577a7129c2d605f21eda433277cb1b; all four jobs succeeded. G1 source commit 2525064bf0c2bf7674cfef000af05331e40030f3 was merged as PR #89 at cf6015a2a30871ecb7295f03f738c2f0810342a7. Independent review evidence is retained at /tmp/term2-g1-independent/review.md. This hosted acceptance is appended separately; the original local G1 verification row remains unchanged."
     },
     {
+      "id": "2026-10-30-port-g2-ci-gates-local",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T12:51:49Z",
+      "commit": "6eae4f660f440b0b4cf50bf4bad6fee496a8311",
+      "tree": null,
+      "revision_kind": "clean source commit; dist built locally from this commit",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 rewrite CI gates local validation",
+      "command": "pnpm build; node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; pnpm exec prettier --check .github/workflows/ci.yml",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Per-worktree dependencies installed with a worktree-local package store; additional sandbox permissions enabled for child processes and network access."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Root CLI build passed; inventory passed; old CLI parity matched 6/6 goldens; rewrite typecheck passed; layer guard passed with 480 allowlisted source edges; workflow formatting passed. Hosted CI, independent review and the required throwaway golden-change probe remain pending."
+    },
+    {
       "id": "2026-10-30-port-guard-followup",
       "recorded_on": "2026-10-30",
       "run_at": "2026-10-30T12:59:00Z",

@@ -29315,6 +29315,39 @@
       "failures": [],
       "evidence": [],
       "notes": "Independent Sol PASS, no actionable findings. Five seam probes pass integrated source; parallel actual read_file group proves held already-started sibling prevents settlement/admission after injected second dispatch-gate failure and cancel. This probe does not inject C2 fsync; separately reviewed real C2 fsync-failure probe covers that boundary. Four composition probes independently rerun strict and pass. Representative actual folder grant plus 63 source grant choices do not claim all platform grant effects or complete Session orchestration. Prior local restart PTY /proc ENOENT reproduced on base; hosted CI e2e passed."
+    },
+    {
+      "id": "2026-10-30-pty-approval-readiness",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:35:39Z",
+      "commit": "88ec1a93dc31c0513aa9542808144db515692742",
+      "tree": "ebdc025da81333961e9bc69e56033be85dd7599e",
+      "revision_kind": "source commit and identical pre-commit source snapshot",
+      "base_commit": "56de2fbc4229cf709422f141a4a0c70dffbc231f",
+      "task_ids": [
+        "2026-10-30-pty-approval-readiness"
+      ],
+      "suite": "approval PTY readiness and source checks",
+      "command": "pnpm build; focused turn-decisions provider-black-box; tsc root, rewrite and native tracer; check-layers; inventory; check-no-unit-tests; rewrite/parity/run.mjs check --cli dist/cli.js; lint-staged --diff HEAD^; temporary negative readiness probe",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; local fake provider; frozen install --ignore-scripts after native build lacked Node headers. Dependency install scripts did not complete; build and scoped checks completed."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Focused repeated-question PTY 1/1 after source commit and immutable old CLI parity 9/9 passed; typechecks, 527-edge guard, inventory, no-unit guard and build passed on source-equivalent pre-commit tree. Independent Sol exact-source review and focused PTY 1/1 passed; wrong call ID and impossible newer baseline each timed out as expected before answer, and built-channel unset/malformed checks passed. Source hook commands lint-staged --diff HEAD^ and check-no-unit-tests passed; automatic hooks unavailable because dependency install skipped scripts. Temporary negative probe rejected wrong ID and stale revision, accepted fresh target, and showed no writes with harness env unset. Artificial delayed-listener experiment reproduced CI signature but does not establish exact CI cause; see /tmp/term2-pty-repeated-question-diagnosis.md."
     }
   ]
 }

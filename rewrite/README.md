@@ -91,8 +91,9 @@ checkpoint stores the full turn input.
 
 **Where an approval waits.** When a tool needs approval, the engine ends the
 turn run as suspended with a `TurnCheckpoint`, and the old run loop stays
-parked in memory. The foreground appends `session_interaction_pending`, and
-the session status becomes `awaiting_interaction`. The client answers with a
+parked in memory. The turn's interaction owner
+(`session/adopted/turn-interaction.ts`) appends `session_interaction_pending`,
+and the session status becomes `awaiting_interaction`. The client answers with a
 `decide` command. `applyCommand` adds the pending interaction's revision and
 generation from session state and calls `Session.decide`, which resumes the
 parked loop. If the process dies while it waits, reopening the session ends

@@ -3,8 +3,8 @@
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/session/adopted/foreground.ts": {
-      "lines": 1007,
-      "reason": "Turn driving and interaction handling still share one closure; a second split separates them."
+      "lines": 585,
+      "reason": "Turn launch and its completion facts share one closure; completion is the next seam if it grows."
     },
     "rewrite/src/engine/adopted/index.ts": {
       "lines": 877,

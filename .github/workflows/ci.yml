@@ -109,6 +109,7 @@ jobs:
           pnpm exec tsx rewrite/bench/c1-adopted-approval.mts
           pnpm exec tsx rewrite/bench/c1-adopted-kill.mts
           pnpm exec tsx rewrite/bench/c3a-foreground.mts
+          for mode in plain image skill disabled error retry approval failure cancel; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-memory.mts; done
           pnpm exec tsx rewrite/bench/c3a-owned-handle.mts
           node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-capture.mts
           for mode in repeat batch reject ask-nav ask-cancel; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-interactions.mts; done

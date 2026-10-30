@@ -52,6 +52,8 @@ import { GenerationGuard } from '../generation-guard.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import { SessionTurnAdapter } from './session-turn-adapter.js';
+import { SessionTurnDomain } from './session-turn-domain.js';
+import { AutomaticMemoryFinalizer } from './automatic-memory-finalizer.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import { TurnAttemptFactory } from './turn-attempt-factory.js';
 import { InitialInputPreparer } from './initial-input-preparer.js';
@@ -173,6 +175,8 @@ export type SessionRuntimeInternals = {
   retryEventPresenter: RetryEventPresenter;
   turnAccumulator: TurnItemAccumulator;
   turnAdapter: SessionTurnAdapter;
+  createTurnDomain(): SessionTurnDomain;
+  automaticMemoryFinalizer: AutomaticMemoryFinalizer;
   freshStartRetriesAllowed: boolean;
   /** @internal Resolved ask-user-answer sink (derived from option or agent client). */
   resolvedAskUserAnswerSink: AskUserAnswerSink | null;
@@ -891,7 +895,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     provider: agentClient?.getProvider?.(),
   });
 
-  const turnAdapter = new SessionTurnAdapter({
+  const turnDomainDeps = {
     agentClient,
     logger,
     sessionId: identity,
@@ -916,24 +920,32 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolCallMarkers,
     hookLifecycle,
     hookEvents,
-  });
-
-  const turnCoordinator = new TurnCoordinator({
-    statusMachine: appState.statusMachine,
-    turnAdapter,
-    approvalFlow,
-    providerContinuity,
-    shellAutoApproval,
+  };
+  const createTurnDomain = () => new SessionTurnDomain(turnDomainDeps);
+  const automaticMemoryFinalizer = new AutomaticMemoryFinalizer({
     sessionId: identity,
     automaticMemory,
     automaticMemoryAllowed: () =>
       !!settingsService?.get('memory.enabled') &&
       sessionAccess?.isReadOnly !== true &&
       !resolveActiveEnforcement(settingsService).denials.has('filesystem-mutation'),
-    hookLifecycle,
-    hookEvents,
   });
-  terminateActiveTurn = () => turnCoordinator.terminate();
+  let compatibilityAdapter: SessionTurnAdapter | undefined;
+  let compatibilityCoordinator: TurnCoordinator | undefined;
+  const getTurnAdapter = () => (compatibilityAdapter ??= new SessionTurnAdapter(turnDomainDeps));
+  const getTurnCoordinator = () =>
+    (compatibilityCoordinator ??= new TurnCoordinator({
+      statusMachine: appState.statusMachine,
+      turnAdapter: getTurnAdapter(),
+      approvalFlow,
+      providerContinuity,
+      shellAutoApproval,
+      sessionId: identity,
+      automaticMemoryFinalizer,
+      hookLifecycle,
+      hookEvents,
+    }));
+  terminateActiveTurn = () => compatibilityCoordinator?.terminate();
 
   const stateFacade = state;
 
@@ -979,7 +991,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     disposed = true;
     backgroundCheckInScheduler.dispose();
     getMethod<[scheduler: undefined], void>(agentClient, 'setBackgroundCheckInScheduler')?.call(agentClient, undefined);
-    turnAdapter.abortLiveRun();
+    compatibilityAdapter?.abortLiveRun();
     postExecutePending.close();
     generationGuard.invalidate();
     // Abort any active SDK work only if a turn is currently running.
@@ -1228,7 +1240,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     conversationLogger,
     streamProcessor,
     appState,
-    turnCoordinator,
+    get turnCoordinator() {
+      return getTurnCoordinator();
+    },
     stateFacade,
     runtimeController,
     dispose,
@@ -1245,7 +1259,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retryClassifier,
     retryEventPresenter,
     turnAccumulator: resolvedTurnAccumulator,
-    turnAdapter,
+    get turnAdapter() {
+      return getTurnAdapter();
+    },
+    createTurnDomain,
+    automaticMemoryFinalizer,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost: resolvedSubagentEventSinkHost

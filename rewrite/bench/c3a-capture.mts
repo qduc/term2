@@ -216,6 +216,26 @@ assert.equal(requests.length, 2);
 assert.ok(JSON.stringify(requests[1].input).includes('Hello from adopted session'));
 assert.ok(JSON.stringify(requests[1].input).includes('Bench complete'));
 await reopened.close();
+// A recovery-only reader may have no live driver. Capture still sees canonical writes.
+const recoveryStore = new LocalSessionStore({
+  root: path.join(root, 'sessions'),
+  logger,
+  defaultWorkspace: workspaceConfig,
+  defaultModel: modelRef,
+  driverFactory: () => ({} as any),
+});
+const recovered = await recoveryStore.open(id);
+const recoveryUpdates: any[] = [];
+const recoveryCapture = recovered.capture((update) => recoveryUpdates.push(update));
+const recoverySeq = recoveryCapture.state.lastSeq;
+await recovered.closeLog();
+assert.equal(recoveryUpdates.length, 1);
+assert.equal(recoveryUpdates[0].update.kind, 'fact');
+assert.equal(recoveryUpdates[0].update.entry.fact.type, 'session_closed');
+assert.ok(recoveryUpdates[0].update.entry.seq > recoverySeq);
+assert.equal(recoveryUpdates[0].position.position, recoveryCapture.position.position + 1);
+recoveryCapture.unsubscribe();
+await recovered.close();
 await models.dispose();
 server.close();
 fs.rmSync(root, { recursive: true, force: true });

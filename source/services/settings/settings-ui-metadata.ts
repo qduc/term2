@@ -318,7 +318,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
     'Reasoning effort for risky shell auto-approval reviews (none|minimal|low|medium|high|xhigh)',
   [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode: read-only research and implementation planning (true|false)',
   [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Delegate tool-backed work through subagents (true|false)',
-  [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile identifier (builtin:standard, builtin:plan, etc.)',
+  [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile identifier (builtin:bare, builtin:plan, etc.)',
   [SETTING_KEYS.APP_MENTOR_MODE]: 'Legacy mentor mode flag (mapped to active profile)',
   [SETTING_KEYS.APP_LITE_MODE]: 'Legacy lite mode flag (selects the Bare profile)',
   [SETTING_KEYS.APP_SHELL_PATH]: 'Path to shell executable',

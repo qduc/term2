@@ -250,8 +250,9 @@ describe('project personal context through filesystem and normal prompt assembly
     ).toBeUndefined();
   });
 
-  it('normal agent request assembly refreshes and bare/tool-disabled profiles exclude it', async () => {
+  it('explicit full-context agent assembly refreshes and bare/tool-disabled profiles exclude it', async () => {
     const s = await setup();
+    s.settings.set('app.activeProfileId', 'builtin:pair');
     await s.create();
     const build = () =>
       getAgentDefinition(

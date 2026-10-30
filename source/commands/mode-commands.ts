@@ -24,32 +24,26 @@ export function useModeHelpers({
   messages = [],
   requestModeSwitchConfirm,
 }: ModeHelpersDeps) {
-  const togglePlanMode = useCallback(() => {
-    const isPlan = resolveActiveProfile(settingsService).identity.id === 'builtin:plan';
-    transitionService.activate(isPlan ? 'builtin:standard' : 'builtin:plan');
-    addSystemMessage(`Plan mode ${isPlan ? 'disabled' : 'enabled - read-only research/planning mode'}`);
-  }, [settingsService, transitionService, addSystemMessage]);
-
   const cycleAppModes = useCallback(() => {
     const isPlan = resolveActiveProfile(settingsService).identity.id === 'builtin:plan';
     const currentProfileId = resolveActiveProfile(settingsService).identity.id;
-    const targetProfileId = isPlan ? 'builtin:standard' : 'builtin:plan';
+    const targetProfileId = isPlan ? 'builtin:bare' : 'builtin:plan';
     const hasHistory = messages.some((message) => message.sender !== 'system');
-    if (currentProfileId === BARE_PROFILE_ID && hasHistory) {
+    if ((currentProfileId === BARE_PROFILE_ID || targetProfileId === BARE_PROFILE_ID) && hasHistory) {
       if (requestModeSwitchConfirm) {
-        requestModeSwitchConfirm({ targetProfileId, modeLabel: 'Plan', targetValue: true });
+        requestModeSwitchConfirm({ targetProfileId, modeLabel: isPlan ? 'Bare' : 'Plan', targetValue: true });
       } else {
         addSystemMessage('Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first.');
       }
       return;
     }
-    transitionService.activate(isPlan ? 'builtin:standard' : 'builtin:plan');
+    transitionService.activate(isPlan ? 'builtin:bare' : 'builtin:plan');
     addSystemMessage(
-      `Switched to ${isPlan ? 'Standard' : 'Plan'} mode${isPlan ? '' : ' - read-only research/planning mode'}`,
+      `Switched to ${isPlan ? 'Bare' : 'Plan'} mode${isPlan ? '' : ' - read-only research/planning mode'}`,
     );
   }, [settingsService, transitionService, addSystemMessage, messages, requestModeSwitchConfirm]);
 
-  return { togglePlanMode, cycleAppModes };
+  return { togglePlanMode: cycleAppModes, cycleAppModes };
 }
 
 export interface PendingModeSwitch {
@@ -69,7 +63,7 @@ export interface CreateModeToggleCommandDeps {
 
 /**
  * Create a slash command for toggling an exclusive mode (bare, mentor, orchestrator).
- * Bare changes are confirmed or blocked when `messages` contains session history.
+ * Changes to or from Bare are confirmed or blocked when `messages` contains session history.
  */
 export function createModeToggleCommand(
   profileId: 'bare' | 'mentor' | 'orchestrator',
@@ -84,13 +78,17 @@ export function createModeToggleCommand(
     action: () => {
       const modeLabel = profileId.charAt(0).toUpperCase() + profileId.slice(1);
       const current = resolveActiveProfile(deps.settingsService);
-      const targetProfileId =
-        current.identity.id === `builtin:${profileId}` ? 'builtin:standard' : `builtin:${profileId}`;
+      // Bare is the default, not a toggle back to the retired Standard.
+      if (profileId === 'bare' && current.identity.id === BARE_PROFILE_ID) {
+        deps.addSystemMessage('Bare mode is already active');
+        return true;
+      }
+      const targetProfileId = current.identity.id === `builtin:${profileId}` ? 'builtin:bare' : `builtin:${profileId}`;
       const targetValue = targetProfileId === `builtin:${profileId}`;
 
       // Bare changes the prompt/tool shape and must be confirmed when history exists.
       const hasHistory = deps.messages ? deps.messages.some((msg) => msg.sender !== 'system') : false;
-      if (profileId === 'bare' && hasHistory) {
+      if ((current.identity.id === BARE_PROFILE_ID || targetProfileId === BARE_PROFILE_ID) && hasHistory) {
         if (deps.requestModeSwitchConfirm) {
           deps.requestModeSwitchConfirm({
             targetProfileId,

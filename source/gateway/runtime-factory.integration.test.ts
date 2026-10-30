@@ -207,6 +207,8 @@ describe('production gateway runtime factory', () => {
     const workspace = tempRoot('f1-workspace-');
     let revivedReadOnlyFromAccess: boolean | undefined;
     let captureRevivedAccess = false;
+    // Exercise editors through an explicit full-context workflow, not the Bare default.
+    settings.set('app.activeProfileId', 'builtin:pair', { persist: false });
     const factory = createProductionRuntimeFactory({
       settingsAuthority: settings,
       tmpDir: tempRoot('f1-data-'),
@@ -297,6 +299,8 @@ describe('production gateway runtime factory', () => {
     settings.set('agent.modelSelection', { model: 'm1-attempt-model', provider: providerId }, { persist: false });
     const workspace = tempRoot('f1-attempt-workspace-');
     let composedReadOnly: boolean | undefined;
+    // Exercise editors through an explicit full-context workflow, not the Bare default.
+    settings.set('app.activeProfileId', 'builtin:pair', { persist: false });
     const factory = createProductionRuntimeFactory({
       settingsAuthority: settings,
       tmpDir: tempRoot('f1-attempt-data-'),

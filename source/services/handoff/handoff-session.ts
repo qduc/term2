@@ -141,8 +141,8 @@ export class HandoffSession {
   async confirmStandardMode(): Promise<boolean> {
     const state = this.#state;
     if (!state) return false;
-    this.#transitionService.activate('builtin:standard');
-    this.#deps.addSystemMessage('Plan mode disabled - switched to Standard mode');
+    this.#transitionService.activate('builtin:bare');
+    this.#deps.addSystemMessage('Plan mode disabled - switched to Bare mode');
     return this.#sendAndFinish(state);
   }
 

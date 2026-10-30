@@ -4,6 +4,7 @@ import { useSelection } from './use-selection.js';
 import { builtinProfiles } from '../services/profiles/registry.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { resolveActiveProfile } from '../services/profiles/active-profile.js';
+import { canonicalProfileId } from '../services/profiles/legacy-adapter.js';
 
 export { PROFILE_TRIGGER } from '../components/input/triggers.js';
 
@@ -17,8 +18,7 @@ export type ProfileOption = {
 };
 
 const PROFILE_DETAILS: Record<string, string> = {
-  standard: 'Default full-context mode',
-  bare: 'Shell-only, short prompt; other tools via run_code',
+  bare: 'Default: shell-only, short prompt; other tools via run_code',
   plan: 'Read-only research/planning mode',
   pair: 'Human-led coding, one approved step at a time',
   mentor: 'Collaborative mode with mentor model',
@@ -39,6 +39,10 @@ export const PROFILE_OPTIONS: readonly ProfileOption[] = builtinProfiles.map((pr
 export const filterProfiles = (profiles: readonly ProfileOption[], query: string): ProfileOption[] => {
   if (!query) return [...profiles];
   const lowerQuery = query.toLowerCase();
+  // Typed retired names select Bare without putting retired entries in the picker.
+  const requestedId = lowerQuery.includes(':') ? lowerQuery : `builtin:${lowerQuery}`;
+  const canonicalId = canonicalProfileId(requestedId);
+  if (canonicalId !== requestedId) return profiles.filter((p) => p.id === canonicalId);
   return profiles.filter(
     (p) => p.shortId.toLowerCase().includes(lowerQuery) || p.displayName.toLowerCase().includes(lowerQuery),
   );

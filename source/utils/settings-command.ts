@@ -453,7 +453,7 @@ export function createSettingsCommand({
         const keyToReset = parts.slice(1).join(' ');
         const resetCanonical =
           keyToReset === 'app.activeProfileId'
-            ? { key: keyToReset, value: 'builtin:standard' }
+            ? { key: keyToReset, value: 'builtin:bare' }
             : canonicalProfileSetting(settingsService, keyToReset, false);
         const profileTransitionBeforeReset =
           applyRuntimeSetting &&

@@ -234,7 +234,7 @@ const StatusBar: FC<StatusBarProps> = ({
   const liveColumns = useTerminalColumns();
   const columns = testColumns ?? liveColumns;
 
-  const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
+  const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:bare';
   const mentorMode = activeProfileId === 'builtin:mentor';
   const selection = useSetting(settingsService, 'agent.modelSelection');
   const model = selection.model;
@@ -346,9 +346,7 @@ const StatusBar: FC<StatusBarProps> = ({
   })();
 
   const profileLabel = getProfileLabel(activeProfileId);
-  // The unlabeled state *is* Standard: absence of a mode word is the signal,
-  // so the common case never spends columns restating the default.
-  const modeLabel = profileLabel === 'standard' ? '' : profileLabel[0].toUpperCase() + profileLabel.slice(1);
+  const modeLabel = profileLabel[0].toUpperCase() + profileLabel.slice(1);
   // 'always' (YOLO) overrides the sandbox label so YOLO mode is always visible,
   // rendered in red below. When the sandbox is on it still confines commands,
   // but every approval is auto-granted, so the mode must not hide behind

@@ -171,8 +171,7 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
                     {selectedEntry.messageCount !== undefined &&
                       ` • ${selectedEntry.messageCount} msg${selectedEntry.messageCount === 1 ? '' : 's'}`}
                     {selectedEntry.model && ` • ${selectedEntry.model}`}
-                    {getActiveMode(selectedEntry.activeProfileId, selectedEntry.appMode) !== 'standard' &&
-                      ` • mode: ${getActiveMode(selectedEntry.activeProfileId, selectedEntry.appMode)}`}
+                    {` • mode: ${getActiveMode(selectedEntry.activeProfileId, selectedEntry.appMode)}`}
                   </Text>
                 </Box>
                 {selectedEntry.firstUserMessage && (

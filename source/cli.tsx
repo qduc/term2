@@ -217,7 +217,7 @@ const cli = meow(
       -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
           --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
           --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
-          --profile <name>                 Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)
+          --profile <name>                 Select a profile (bare [default], plan, pair, mentor, orchestrator; standard/full/lite = bare)
       -l, --lite                           Start in the Bare profile (alias kept from Lite)
           --auto-approve                   Allow tool execution for a non-interactive prompt
       -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
@@ -869,44 +869,29 @@ if (modelFlag) {
   }
 }
 
-// Fresh sessions honor --lite/non-interactive defaults. Resumed sessions keep
-// the saved mode profile so prompt/tool behavior matches the conversation.
-// IMPORTANT: only apply the implicit lite default when no other exclusive mode
-// is already active (orchestrator or mentor take precedence).
+// CLI overrides are session-only. Saved selections (including retired aliases)
+// resolve canonically; otherwise honor the configured profile, defaulting to Bare.
 {
   let profileId: string;
   if (cli.flags.profile) {
-    const name = cli.flags.profile === 'full' ? 'standard' : cli.flags.profile;
+    const name = cli.flags.profile;
     profileId = canonicalProfileId(name.includes(':') ? name : `builtin:${name}`);
     // Validate before building providers or starting a session.
     resolveProfile(profileId);
   } else if (resumedConversation) {
     profileId = cli.flags.lite
       ? BARE_PROFILE_ID
-      : canonicalProfileId(
-          resumedConversation.activeProfileId ??
-            (resumedConversation.appMode
-              ? profileIdFromLegacyMode(resumedConversation.appMode)
-              : String(settings.get('app.activeProfileId'))),
-        );
+      : canonicalProfileId(resumedConversation.activeProfileId ?? profileIdFromLegacyMode(resumedConversation.appMode));
   } else if (cli.flags.lite) {
     profileId = BARE_PROFILE_ID;
   } else {
-    const implicitLite = Boolean(hasPositionalPrompt && !cli.flags.autoApprove);
-    const persistedProfileId = String(settings.get('app.activeProfileId'));
-    // Implicit lite must not override a higher-precedence mode already persisted.
-    profileId =
-      implicitLite && !['builtin:orchestrator', 'builtin:mentor'].includes(persistedProfileId)
-        ? BARE_PROFILE_ID
-        : persistedProfileId;
+    profileId = String(settings.get('app.activeProfileId'));
   }
   settings.set('app.activeProfileId', profileId, { persist: false });
 }
 
 const activeProfileId = settings.get('app.activeProfileId');
-process.stderr.write(
-  `Profile: ${activeProfileId === 'builtin:standard' ? 'full' : activeProfileId.replace(/^builtin:/, '')}\n`,
-);
+process.stderr.write(`Profile: ${activeProfileId.replace(/^builtin:/, '')}\n`);
 logger.info('Session profile selected', { eventType: 'session.profile', activeProfileId });
 
 // SSH Handling

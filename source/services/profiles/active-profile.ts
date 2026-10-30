@@ -3,12 +3,12 @@ import { resolveProfile } from './resolver.js';
 import { ProfileResolutionError } from './types.js';
 import type { ResolveOptions, ResolvedEnforcementPolicy, ResolvedProfile } from './types.js';
 
-const STANDARD_PROFILE_ID = 'builtin:standard';
+const DEFAULT_PROFILE_ID = 'builtin:bare';
 const enforcementCache = new WeakMap<ISettingsService, { profileId: string; enforcement: ResolvedEnforcementPolicy }>();
 
 const readActiveProfileId = (settingsService: ISettingsService): string => {
   const value = settingsService.get('app.activeProfileId');
-  return typeof value === 'string' && value.trim().length > 0 ? value : STANDARD_PROFILE_ID;
+  return typeof value === 'string' && value.trim().length > 0 ? value : DEFAULT_PROFILE_ID;
 };
 
 export function resolveActiveProfile(settingsService: ISettingsService, options?: ResolveOptions): ResolvedProfile {

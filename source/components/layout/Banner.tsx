@@ -36,7 +36,7 @@ interface BannerProps {
 
 const Banner: FC<BannerProps> = ({ settingsService }) => {
   const { Banner: SkinBanner } = useSkin();
-  const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
+  const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:bare';
   const selection = useSetting(settingsService, 'agent.modelSelection');
   const model = selection.model;
   const smartPool = useSetting(settingsService, 'agent.smartModel');
@@ -50,7 +50,7 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
-  // Mentor keeps the Standard base badge and adds its own badge/model.
+  // Mentor adds its own badge/model; the legacy base badge is hidden by skins.
   const mentor = activeProfileId === 'builtin:mentor';
   const baseMode = (mentor ? 'STANDARD' : getProfileLabel(activeProfileId).toUpperCase()) as ModeBadge;
 

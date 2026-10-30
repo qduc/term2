@@ -29379,7 +29379,7 @@
       },
       "failures": [],
       "evidence": [],
-      "notes": "Exact 1da root/rewrite/native typechecks pass; inventory and 527-edge guard pass on f25 (formatter-only differences); old CLI parity 9/9 on f25, unchanged nine goldens. Runtime f25 16/16 controlled processes; C1 approval/kill and retained benches on 9a, followed by f25 subscription correction and focused reruns. Independent Sol review: /tmp/term2-c3a-stage1-independent-review.md; runtime details: /tmp/term2-c3a-stage1-runtime-evidence.md. Initial 9a inventory failed on missing user_input_accepted record; corrected in dd. Initial parity lacked dist; build script encountered missing tsc/PATH and pnpm self-install path; direct local tsc plus post-build assets succeeded and parity passed. Initial sandbox no-unit command spawn EPERM passed with network-enabled sandbox. This is bounded stage 1, not issue #76 completion; interactions, retry, cancellation breadth and facade remain stages 2–5."
+      "notes": "Exact 1da root/rewrite/native typechecks pass; inventory and 527-edge guard pass on f25 (formatter-only differences); old CLI parity 9/9 on f25, unchanged nine goldens. Runtime f25 16/16 controlled processes; C1 approval/kill and retained benches on 9a, followed by f25 subscription correction and focused reruns. Independent Sol review: /tmp/term2-c3a-stage1-independent-review.md; runtime details: /tmp/term2-c3a-stage1-runtime-evidence.md. Initial 9a inventory failed on missing user_input_accepted record; corrected in dd. Initial parity lacked dist; build script encountered missing tsc/PATH and pnpm self-install path; direct local tsc plus post-build assets succeeded and parity passed. Initial sandbox no-unit command spawn EPERM passed with network-enabled sandbox. This is bounded stage 1, not issue #76 completion; interactions, retry, cancellation breadth and facade remain stages 2\u20135."
     },
     {
       "id": "2026-10-30-c3a-stage2-interactions",
@@ -29411,7 +29411,7 @@
       },
       "failures": [],
       "evidence": [],
-      "notes": "At source 08f root/rewrite/native typechecks, 527-edge guard, inventory, no-unit guard, C1 approval/kill, retained interaction modes and old CLI parity 9/9 pass; unchanged goldens. Exact 08f runtime 11/11 and policy 7/7 controlled processes pass; independent Sol 13/13 and source review pass. Bench-only b058 adds controlled postexecute held gate with success and pending/resolution fsync failures, 3/3 author and independently 3/3 strict process pass; actual gate decision approve on success and reject on failures, physical settlement/effect once/no continuation. Initial success fixture hung because temporary default repeat requested a second call; corrected default to single postexecute mode, all three reran. Native OS sandbox detection and executeAgain are not established by controlled denied-read descriptor/resolver. Explicit source network approval ownership remains stage 5/C4; unexpected network DTO fails closed. Cancel after durable decision write can leave truthful answered audit followed by cancelled run, while command rejects and no release/effect occurs. See /tmp/term2-c3a-stage2-independent-review.md, /tmp/term2-c3a-stage2-runtime-evidence.md and /tmp/term2-c3a-stage2-policy-evidence.md. Stages 3–5 and full #76 remain open."
+      "notes": "At source 08f root/rewrite/native typechecks, 527-edge guard, inventory, no-unit guard, C1 approval/kill, retained interaction modes and old CLI parity 9/9 pass; unchanged goldens. Exact 08f runtime 11/11 and policy 7/7 controlled processes pass; independent Sol 13/13 and source review pass. Bench-only b058 adds controlled postexecute held gate with success and pending/resolution fsync failures, 3/3 author and independently 3/3 strict process pass; actual gate decision approve on success and reject on failures, physical settlement/effect once/no continuation. Initial success fixture hung because temporary default repeat requested a second call; corrected default to single postexecute mode, all three reran. Native OS sandbox detection and executeAgain are not established by controlled denied-read descriptor/resolver. Explicit source network approval ownership remains stage 5/C4; unexpected network DTO fails closed. Cancel after durable decision write can leave truthful answered audit followed by cancelled run, while command rejects and no release/effect occurs. See /tmp/term2-c3a-stage2-independent-review.md, /tmp/term2-c3a-stage2-runtime-evidence.md and /tmp/term2-c3a-stage2-policy-evidence.md. Stages 3\u20135 and full #76 remain open."
     },
     {
       "id": "2026-10-30-c3a-stage3-retry",
@@ -29443,7 +29443,7 @@
       },
       "failures": [],
       "evidence": [],
-      "notes": "Exact c706 root/rewrite/native typechecks, 527-edge guard, 33 log-event inventory, no-unit, old CLI parity 9/9 with unchanged goldens and retained C1/stage2/retry benches pass. Independent driver 18/18, persistence 14/14, app recovery 15/15, budget 3/3; process retry kills after durable boundary reopen both targets without auto execution. Exact original skill, images and pending notice retained; compaction, temporal retraction, duplicate tool occurrences and live/cold projection covered by scoped probes. R04 real completed/open cancellation waits held PID death; source allSettled barrier means this is not provider failure concurrent with running sibling. Tier fallback handler retained but unchanged classifier has no default producer (#6532275657). Provider errors and clock are controlled synthetic stimuli, not proof of real upstream availability/timing. Initial inventory reported missing new retry facts; both records added and rerun passed. See /tmp/term2-c3a-stage3-driver-independent-review.md, /tmp/term2-c3a-stage3-persistence-review.md, /tmp/term2-c3a-stage3-runtime-evidence.md, /tmp/term2-c3a-stage3-budget-evidence.md. Stages 4–5, stage5/C4 network owner and full #76 remain open."
+      "notes": "Exact c706 root/rewrite/native typechecks, 527-edge guard, 33 log-event inventory, no-unit, old CLI parity 9/9 with unchanged goldens and retained C1/stage2/retry benches pass. Independent driver 18/18, persistence 14/14, app recovery 15/15, budget 3/3; process retry kills after durable boundary reopen both targets without auto execution. Exact original skill, images and pending notice retained; compaction, temporal retraction, duplicate tool occurrences and live/cold projection covered by scoped probes. R04 real completed/open cancellation waits held PID death; source allSettled barrier means this is not provider failure concurrent with running sibling. Tier fallback handler retained but unchanged classifier has no default producer (#6532275657). Provider errors and clock are controlled synthetic stimuli, not proof of real upstream availability/timing. Initial inventory reported missing new retry facts; both records added and rerun passed. See /tmp/term2-c3a-stage3-driver-independent-review.md, /tmp/term2-c3a-stage3-persistence-review.md, /tmp/term2-c3a-stage3-runtime-evidence.md, /tmp/term2-c3a-stage3-budget-evidence.md. Stages 4\u20135, stage5/C4 network owner and full #76 remain open."
     },
     {
       "id": "2026-10-30-c3a-stage4-interruption",
@@ -29604,6 +29604,43 @@
       "failures": [],
       "evidence": [],
       "notes": "Merged main 5f329 with both append-only verification histories preserved. Capture production files and bench identical to previously independently reviewed source. Rewrite typecheck, 527-edge layer check, inventory and real Session/Engine capture bench pass. P2 semantic projection and full C4 acceptance remain open."
+    },
+    {
+      "id": "2026-10-30-c3a-network-provisional",
+      "timestamp": "2026-10-30T21:05:23Z",
+      "commit": "a24257c83f694962965fedf9c3db64b392fa89d7",
+      "tree": "926d5d17d0094291498ae8f0a44ba2127580da4f",
+      "revision_kind": "source commit; provisional",
+      "base_commit": "c765f36d442db9a1f1f6f9f9d2218786d8a7b578",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-network-provisional"
+      ],
+      "suite": "C3a network draft scoped verification",
+      "command": "source and rewrite tsc; rewrite layer guard; default guards; old CLI parity; actual Session dual-graph and idle-background controlled-runner benches; focused sandbox integration; independent source/C2 and actual app probes",
+      "command_complete": false,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; socat task-scoped; network enabled for loopback. Native better-sqlite3 rebuilt and checked."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": null
+      },
+      "failures": [
+        {
+          "test": "real wrapped sandbox test",
+          "message": "bwrap: setting up uid map: Read-only file system"
+        }
+      ],
+      "evidence": [],
+      "notes": "Provisional evidence includes pre-commit snapshots and source-equivalent focused reruns: guard tier 7 files/28 tests; old CLI parity 9/9 after full dist resources (initial tsc-only run lacked resources); source/rewrite tsc and 527-edge layer check; controlled-runner app dual/idle background and capture benches; 4 focused scoped integration tests passed, real sandbox case deselected for focused run; independent actual Session/C2 failure, close, nested process and late-spawn probes. Local real-sandbox attempt failed at host uid map. CI unfiltered real sandbox test and final review/integration are required; do not treat as acceptance."
     }
   ]
 }

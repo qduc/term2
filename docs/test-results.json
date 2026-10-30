@@ -28749,6 +28749,72 @@
       "suite": "independent old CLI durable goal stop outcomes",
       "command": "TERM2_TEST_CLI=<independent marker wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-stop.blackbox.ts --maxWorkers=1",
       "notes": "Sol accepted no findings; 1/1 in 3.93s, one --lite --profile full launch. Exact two consecutive reminder counters, visible unresolved, blocked/deferred results tied to sole persisted active goal. Same scope limits."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "commit": "7ced688d90d65cf375503ec35ff0ea5e4ea9e44b",
+      "tree": "dce2c6dbb0bb9b08ce7c3e5ec6fc1866976b8728",
+      "base_commit": "b45a2a490300969d7b2765bc40a70052c6261262",
+      "task_ids": [
+        "2026-10-30-c3a-goal-verification"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated non-Git workspace, real old CLI PTY and controlled local Responses provider."
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-goal-verification",
+      "run_at": "2026-10-30T16:54:59Z",
+      "revision_kind": "clean source before documentation",
+      "suite": "old CLI goal criteria and unavailable verification",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-goal-verify-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-stop.blackbox.ts scripts/provider-black-box/goal-verification.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "notes": "Selected combined goals 2/2, old nine parity 9/9, rewrite tsc, 520 guard, inventory and source hooks passed. Exact missing criteriaEvidence result; achieved proposed with criteria leads actual RootCompletionBoundary unsupported non-Git preflight and active persisted goal. Independent verifier worker does not run on that preflight; no successful achievement, changed-goal, PASS or new Session claim."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "commit": "7ced688d90d65cf375503ec35ff0ea5e4ea9e44b",
+      "tree": "dce2c6dbb0bb9b08ce7c3e5ec6fc1866976b8728",
+      "base_commit": "b45a2a490300969d7b2765bc40a70052c6261262",
+      "task_ids": [
+        "2026-10-30-c3a-goal-verification"
+      ],
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated non-Git workspace, real old CLI PTY and controlled local Responses provider."
+      },
+      "failures": [],
+      "evidence": [],
+      "id": "2026-10-30-c3a-goal-verification-independent",
+      "run_at": "2026-10-30T16:55:04Z",
+      "revision_kind": "clean source independently reviewed",
+      "suite": "independent old CLI goal verification preflight",
+      "command": "TERM2_TEST_CLI=<independent marker wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-verification.blackbox.ts --maxWorkers=1",
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "notes": "Sol accepted no findings; selected 1/1 in 3.07s, one --lite --profile full launch. Missing criteria rejection, achieved proposed, non-Git verification-blocked notice, five requests and same sole persisted active goal+criteria. No successful achievement, changed-goal or verifier PASS claim."
     }
   ]
 }

@@ -28815,6 +28815,77 @@
         "exit_code": 0
       },
       "notes": "Sol accepted no findings; selected 1/1 in 3.07s, one --lite --profile full launch. Missing criteria rejection, achieved proposed, non-Git verification-blocked notice, five requests and same sole persisted active goal+criteria. No successful achievement, changed-goal or verifier PASS claim."
+    },
+    {
+      "id": "2026-10-30-c3a-goal-success",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T17:07:07Z",
+      "commit": "73a2d55980a32b9df810292091d7df3aa9dff157",
+      "tree": "3e3c8ca87b03d819d56cf1f84261404694ffe5e5",
+      "revision_kind": "clean source before documentation; tested identical precommit logic",
+      "base_commit": "3c6022c19903bd6099a6ac69b7ca768fa9495655",
+      "task_ids": [
+        "2026-10-30-c3a-goal-success"
+      ],
+      "suite": "old CLI verified goal completion",
+      "command": "pnpm build; TERM2_TEST_CLI=/tmp/c3a-goal-success-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-success.blackbox.ts scripts/provider-black-box/goal-verification.blackbox.ts scripts/provider-black-box/goal-stop.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated real Git repository, controlled model via local Responses server, old CLI PTY. Only runtime fixture dirs ignored."
+      },
+      "result": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/c3a-goal-success-cli.mjs"
+        }
+      ],
+      "notes": "Selected goal PTYs 3/3, old nine goldens 9/9, rewrite tsc, 520 guard, inventory and source hooks passed. Real gate and verifier driver invoked with fresh request and only verification_probe, actual read_file result observed; scripted verifier PASS then source validation and goal_changed achieved persisted. Scripted model does not prove autonomous evaluation quality. Exploratory broad runtime workspace inclusion caused stale revision, resolved by narrowly ignoring fixture runtime directories. Changed goal, verification FAIL/repair and full matrix/new Session unproven. Independent review pending."
+    },
+    {
+      "id": "2026-10-30-c3a-goal-success-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T17:07:44Z",
+      "commit": "73a2d55980a32b9df810292091d7df3aa9dff157",
+      "tree": "3e3c8ca87b03d819d56cf1f84261404694ffe5e5",
+      "revision_kind": "clean source independently reviewed",
+      "base_commit": "3c6022c19903bd6099a6ac69b7ca768fa9495655",
+      "task_ids": [
+        "2026-10-30-c3a-goal-success"
+      ],
+      "suite": "independent real probe and goal completion",
+      "command": "TERM2_TEST_CLI=<independent marker wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-success.blackbox.ts --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol selected CLI; real Git/actual probe; scripted verifier model."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Sol accepted no findings; 1/1 in 3.31s, one marker launch. Fresh verifier request contains only verification_probe without worker history or chain; actual read_file bytes observed; scripted PASS accepted by real completion boundary; goal_changed active to achieved same ID/source, four provider requests. Does not prove autonomous verifier evaluation or changed-goal race."
     }
   ]
 }

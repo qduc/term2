@@ -26507,6 +26507,39 @@
         "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
       ],
       "notes": "Post-acceptance website release entry moved into published releases;27 pages/internal links pass. Pages40898190846 success https://github.com/qduc/term2/actions/runs/40898190846; matching CI40898190880 success attempt2 https://github.com/qduc/term2/actions/runs/40898190880 (initial same restart timeout retained); live published heading verified, pending heading absent, compatibility/live-validation caveats retained.\n ; website-build.log and pages-live.html. No separate frontend deployment."
+    },
+    {
+      "id": "2026-10-30-rewrite-skeleton-typecheck",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T10:25:00Z",
+      "commit": "805b0125fdbcbe22b47d757a13f6096e7abfa30e",
+      "tree": "e3d3f061fbe6c577c7528e7436d74ea4174f6e74",
+      "revision_kind": "clean committed source",
+      "base_commit": "a36c369",
+      "task_ids": [
+        "2026-10-30-rewrite-interface-skeleton"
+      ],
+      "suite": "rewrite/ typecheck and layer-direction guard",
+      "command": "tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.44-fc-v185",
+        "node_version": "v22.22.0",
+        "pnpm_version": "10.28.0",
+        "notes": "Cloud container, global tsc 6.0.2; repository node_modules not installed. Root typecheck/lint/test tiers not run: rewrite/ is outside root tsconfig include and imports nothing from source/."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Guard negative check: a temporary clients/ -> session/ import made check-layers exit 1 with 'clients/ may not import session/'; reverted before commit."
     }
   ]
 }

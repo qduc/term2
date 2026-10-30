@@ -346,7 +346,13 @@ async function main() {
   const cli = path.resolve(cliIndex >= 0 ? rest[cliIndex + 1] : path.join(repo, 'dist', 'cli.js'));
   const firstCli = firstIndex >= 0 ? path.resolve(rest[firstIndex + 1]) : cli;
   const resumedCli = resumedIndex >= 0 ? path.resolve(rest[resumedIndex + 1]) : cli;
-  const excluded = new Set([cliIndex, cliIndex + 1, firstIndex, firstIndex + 1, resumedIndex, resumedIndex + 1]);
+  const excluded = new Set();
+  for (const optionIndex of [cliIndex, firstIndex, resumedIndex]) {
+    if (optionIndex >= 0) {
+      excluded.add(optionIndex);
+      excluded.add(optionIndex + 1);
+    }
+  }
   const ids = rest.filter((_, index) => !excluded.has(index));
   const scenarios = fs
     .readdirSync(scenariosDir)

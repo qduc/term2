@@ -114,7 +114,7 @@ function spawnCli(cli, args, env, cwd) {
   });
 }
 
-async function runScenario(cli, scenario) {
+async function runScenario(cli, scenario, cliForRun = []) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-parity-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'workspace');
@@ -168,7 +168,11 @@ async function runScenario(cli, scenario) {
       // {{LAST_CONVERSATION}} = the id of the most recently saved conversation, for --resume runs.
       const last = latestConversation(env.TERM2_CONVERSATIONS_DIR);
       const args = run.args.map((arg) => substitute(arg).replaceAll('{{LAST_CONVERSATION}}', last ?? '<none>'));
-      const result = await spawnCli(cli, args, env, workspace);
+      const selectedCli = cliForRun[runs.length] ?? cli;
+      const result = await spawnCli(selectedCli, args, env, workspace);
+      if (selectedCli.endsWith('c2-proof-cli.js')) {
+        assertC2ProofRun(root, env.TERM2_CONVERSATIONS_DIR, last ?? latestConversation(env.TERM2_CONVERSATIONS_DIR));
+      }
       runs.push({ ...result, requests: provider.requests.slice(before) });
     }
     const normalize = normalizer({ root, home, workspace, baseUrl: provider.baseUrl });
@@ -185,6 +189,25 @@ async function runScenario(cli, scenario) {
   } finally {
     await provider.close();
     fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function assertC2ProofRun(root, conversationsDir, id) {
+  if (!id) throw new Error('C2 proof CLI did not create or resume a canonical conversation');
+  const file = path.join(conversationsDir, `${id}.jsonl`);
+  if (!fs.existsSync(file)) throw new Error(`C2 proof session log is missing: ${id}`);
+  const envelopes = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const batches = envelopes.filter((envelope) => envelope.event?.type === 'session_fact_batch');
+  const nested = batches.flatMap((batch) => batch.event.entries.map((entry) => entry.event));
+  if (!nested.some((event) => event.type === 'session_admitted') || !nested.some((event) => event.type === 'session_turn_started')) {
+    throw new Error('C2 proof resumed append did not persist admission/start lifecycle batches');
+  }
+  if (!nested.some((event) => event.type === 'assistant_turn') || !nested.some((event) => event.type === 'session_turn_ended')) {
+    throw new Error('C2 proof resumed append did not persist the source terminal transcript and lifecycle fact');
+  }
+  const files = Object.keys(readTree(root));
+  if (files.some((name) => /(?:gateway.*(?:db|journal|checkpoint)|(?:admission|interaction-checkpoint).*(?:db|journal|jsonl))/i.test(name))) {
+    throw new Error('C2 proof created a gateway journal, checkpoint or admission database');
   }
 }
 
@@ -318,23 +341,36 @@ function differences(expected, actual, at = '$', out = []) {
 async function main() {
   const [mode, ...rest] = process.argv.slice(2);
   if (mode !== 'record' && mode !== 'check') {
-    console.error('usage: run.mjs record|check [--cli <path>] [scenario-id...]');
+    console.error('usage: run.mjs record|check [--cli <path>] [--first-cli <path>] [--resumed-cli <path>] [scenario-id...]');
     process.exit(2);
   }
   const cliIndex = rest.indexOf('--cli');
+  const firstIndex = rest.indexOf('--first-cli');
+  const resumedIndex = rest.indexOf('--resumed-cli');
   const cli = path.resolve(cliIndex >= 0 ? rest[cliIndex + 1] : path.join(repo, 'dist', 'cli.js'));
-  const ids = rest.filter((_, index) => cliIndex < 0 || (index !== cliIndex && index !== cliIndex + 1));
+  const firstCli = firstIndex >= 0 ? path.resolve(rest[firstIndex + 1]) : cli;
+  const resumedCli = resumedIndex >= 0 ? path.resolve(rest[resumedIndex + 1]) : cli;
+  const excluded = new Set();
+  for (const optionIndex of [cliIndex, firstIndex, resumedIndex]) {
+    if (optionIndex >= 0) {
+      excluded.add(optionIndex);
+      excluded.add(optionIndex + 1);
+    }
+  }
+  const ids = rest.filter((_, index) => !excluded.has(index));
   const scenarios = fs
     .readdirSync(scenariosDir)
     .filter((name) => name.endsWith('.json'))
     .map((name) => JSON.parse(fs.readFileSync(path.join(scenariosDir, name), 'utf8')))
     .filter((scenario) => ids.length === 0 || ids.includes(scenario.id));
-  if (!fs.existsSync(cli)) throw new Error(`no CLI at ${cli}; build it first`);
+  for (const selected of new Set([cli, firstCli, resumedCli])) {
+    if (!fs.existsSync(selected)) throw new Error(`no CLI at ${selected}; build it first`);
+  }
   fs.mkdirSync(goldensDir, { recursive: true });
 
   let failed = 0;
   for (const scenario of scenarios) {
-    const observed = await runScenario(cli, scenario);
+    const observed = await runScenario(cli, scenario, [firstCli, resumedCli]);
     const goldenPath = path.join(goldensDir, `${scenario.id}.json`);
     if (mode === 'record') {
       fs.writeFileSync(goldenPath, JSON.stringify(observed, null, 2) + '\n');

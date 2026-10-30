@@ -1,11 +1,11 @@
 import fs from 'node:fs';
-import type { LogEntry, SessionFact, SessionLog } from './index.js';
+import type { TracerFact, TracerLogEntry, TracerSessionLog } from './session-types.js';
 
 /**
  * Append-only JSONL file. One `append` call is one write plus fsync, so a
  * step's facts land together; a torn final line from a crash is ignored on read.
  */
-export class JsonlSessionLog implements SessionLog {
+export class JsonlSessionLog implements TracerSessionLog {
   readonly #path: string;
   #lastSeq: number;
 
@@ -21,9 +21,9 @@ export class JsonlSessionLog implements SessionLog {
     return this.#lastSeq;
   }
 
-  async append(facts: readonly SessionFact[]): Promise<readonly number[]> {
+  async append(facts: readonly TracerFact[]): Promise<readonly number[]> {
     const at = new Date().toISOString();
-    const entries = facts.map((fact, index): LogEntry => ({ seq: this.#lastSeq + index + 1, at, fact }));
+    const entries = facts.map((fact, index): TracerLogEntry => ({ seq: this.#lastSeq + index + 1, at, fact }));
     const fd = fs.openSync(this.#path, 'a');
     try {
       fs.writeSync(fd, entries.map((entry) => JSON.stringify(entry) + '\n').join(''));
@@ -35,21 +35,21 @@ export class JsonlSessionLog implements SessionLog {
     return entries.map((entry) => entry.seq);
   }
 
-  async *read(fromSeq = 0): AsyncIterable<LogEntry> {
+  async *read(fromSeq = 0): AsyncIterable<TracerLogEntry> {
     for (const entry of readEntries(this.#path).entries) if (entry.seq > fromSeq) yield entry;
   }
 }
 
-function readEntries(path: string): { entries: LogEntry[]; validBytes: number } {
+function readEntries(path: string): { entries: TracerLogEntry[]; validBytes: number } {
   if (!fs.existsSync(path)) return { entries: [], validBytes: 0 };
   const text = fs.readFileSync(path, 'utf8');
-  const entries: LogEntry[] = [];
+  const entries: TracerLogEntry[] = [];
   let validBytes = 0;
   for (const line of text.split('\n')) {
     const end = validBytes + Buffer.byteLength(line) + 1;
     if (end > Buffer.byteLength(text)) break; // last line has no newline: torn
     try {
-      if (line) entries.push(JSON.parse(line) as LogEntry);
+      if (line) entries.push(JSON.parse(line) as TracerLogEntry);
     } catch {
       break; // torn tail from a crash mid-write
     }

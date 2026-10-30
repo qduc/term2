@@ -1,11 +1,11 @@
 import type { Item } from '../model/index.js';
 import type { LogEntry, SessionState, SessionUpdate } from '../session/index.js';
-import { PROTOCOL_VERSION, type Projection, type WireEvent, type WireMessage } from './index.js';
+import { PROTOCOL_VERSION, type Projection, type WireEvent, type WireInteraction, type WireMessage } from './index.js';
 
 const MAX_TEXT = 8_192;
 const bounded = (text: string): string => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text);
 
-function toMessage(item: Item): WireMessage | null {
+function toCompatibilityMessage(item: Item): WireMessage | null {
   switch (item.type) {
     case 'user_message':
     case 'assistant_message':
@@ -21,51 +21,142 @@ function toMessage(item: Item): WireMessage | null {
   }
 }
 
+function toSavedMessage(value: unknown): WireMessage | null {
+  if (!value || typeof value !== 'object') return null;
+  const message = value as { id?: unknown; sender?: unknown; text?: unknown };
+  if (typeof message.id !== 'string' || typeof message.text !== 'string') return null;
+  if (message.sender === 'user') return { id: message.id, role: 'user', text: bounded(message.text) };
+  if (message.sender === 'bot') return { id: message.id, role: 'assistant', text: bounded(message.text) };
+  return null;
+}
+
+function pendingAsLegacyWire(pending: NonNullable<SessionState['pendingInteraction']>): WireInteraction | null {
+  const dto = pending.interaction;
+  if (dto.kind !== 'tool_approval') return null;
+  const label = dto.choices
+    .map((choice) => choice.label)
+    .filter(Boolean)
+    .join(' / ');
+  const summary = label || dto.descriptor.display?.warning || dto.descriptor.toolName;
+  return {
+    interactionId: dto.interactionId,
+    approvals: [
+      {
+        callId: dto.descriptor.callId ?? dto.interactionId,
+        toolName: dto.descriptor.toolName,
+        summary: bounded(summary),
+        risk: 'medium',
+      },
+    ],
+  };
+}
+
 function factEvent(sessionId: string, entry: LogEntry): WireEvent | null {
   const base = { sessionId, seq: entry.seq };
   const fact = entry.fact;
   switch (fact.type) {
-    case 'turn_started':
+    case 'session_turn_started':
       return { ...base, turnId: fact.turnId, type: 'turn_started', payload: {} };
-    case 'item_committed': {
-      const message = toMessage(fact.item);
-      return message ? { ...base, turnId: fact.turnId, type: 'message', payload: { message } } : null;
+    case 'session_interaction_pending': {
+      const pending = pendingAsLegacyWire({
+        turnId: fact.turnId as never,
+        interaction: fact.interaction,
+        generation: fact.generation,
+      });
+      return pending
+        ? { ...base, turnId: fact.turnId, type: 'interaction_opened', payload: { interaction: pending } }
+        : null;
     }
-    case 'interaction_opened':
+    case 'session_interaction_resolved':
       return {
         ...base,
         turnId: fact.turnId,
-        type: 'interaction_opened',
+        type: 'interaction_resolved',
+        payload: { interactionId: fact.interactionId },
+      };
+    case 'session_turn_ended':
+      return { ...base, turnId: fact.turnId, type: 'turn_ended', payload: { outcome: fact.outcome } };
+    case 'session_interrupted':
+      return { ...base, turnId: fact.turnId, type: 'turn_ended', payload: { outcome: 'interrupted' } };
+    case 'user_message':
+      return {
+        ...base,
+        turnId: null,
+        type: 'message',
+        payload: { message: { id: fact.message.id, role: 'user', text: bounded(fact.message.text) } },
+      };
+    case 'assistant_turn': {
+      const text = fact.turn.items
+        .filter((item) => item.type === 'assistant_text')
+        .map((item) => item.text)
+        .join('');
+      return text
+        ? {
+            ...base,
+            turnId: null,
+            type: 'message',
+            payload: { message: { id: entry.ref.eventId, role: 'assistant', text: bounded(text) } },
+          }
+        : null;
+    }
+    case 'tool_started':
+      return {
+        ...base,
+        turnId: fact.turnId ?? null,
+        type: 'tool_started',
+        payload: { callId: fact.toolCallId, toolName: fact.toolName },
+      };
+    case 'tool_result':
+      return {
+        ...base,
+        turnId: fact.turnId ?? null,
+        type: 'tool_finished',
         payload: {
-          interaction: {
-            interactionId: fact.interactionId,
-            approvals: fact.approvals.map((approval) => ({
-              callId: approval.callId,
-              toolName: approval.toolName,
-              summary: bounded(approval.requirement.summary),
-              ...(approval.requirement.risk ? { risk: approval.requirement.risk } : {}),
-              ...(approval.agentId ? { agentId: approval.agentId } : {}),
-            })),
-          },
+          callId: fact.callId,
+          output: bounded(typeof fact.output === 'string' ? fact.output : JSON.stringify(fact.output ?? '') ?? ''),
+          isError: fact.status !== 'completed',
         },
       };
-    case 'interaction_resolved':
-      return { ...base, turnId: null, type: 'interaction_resolved', payload: { interactionId: fact.interactionId } };
-    case 'turn_ended':
-      return { ...base, turnId: fact.turnId, type: 'turn_ended', payload: { outcome: fact.outcome } };
-    case 'turn_interrupted':
-      return { ...base, turnId: fact.turnId, type: 'turn_ended', payload: { outcome: 'interrupted' } };
-    // Internal facts: checkpoints carry history and provider state, which clients never see.
-    case 'session_created':
-    case 'input_queued':
-    case 'checkpoint_saved':
-    case 'history_compacted':
-    case 'model_changed':
+    case 'session_bound':
+    case 'session_admitted':
+    case 'session_admission_settled':
+    case 'session_interaction_recovered':
+    case 'session_closed':
+    case 'session_init':
+    case 'settings_changed':
+    case 'goal_changed':
+    case 'events_retracted':
+    case 'context_checkpoint_created':
+    case 'command_message':
+    case 'approval_required':
+    case 'approval_resolved':
+    case 'openai_root_selector_parity':
+    case 'openai_root_checkpoint_lifecycle':
+    case 'assistant_journal_delta':
+    case 'assistant_journal_item':
+    case 'memory_injected':
+    case 'subagent_started':
+    case 'subagent_tool_started':
+    case 'subagent_completed':
+    case 'subagent_interrupted':
+    case 'subagent_transferred':
+    case 'subagent_question':
+    case 'background_shell_started':
+    case 'background_shell_completed':
+    case 'background_shell_output':
+    case 'error':
+    case 'undo':
+    case 'session_cleared':
+    case 'session_rollover':
+      return null;
+    default:
+      // Unknown and truncated legacy records remain readable storage records
+      // but do not claim public lifecycle meaning.
       return null;
   }
 }
 
-/** The single projection from session updates to public events. */
+/** The compatibility projection for G1's existing public protocol. */
 export const projection: Projection = {
   toWire(sessionId: string, update: SessionUpdate): WireEvent | null {
     if (update.kind === 'fact') return factEvent(sessionId, update.entry);
@@ -97,7 +188,6 @@ export const projection: Projection = {
         return { ...base, type: 'compacted', payload: { replaced: event.replaced } };
       case 'subagent':
         return { ...base, type: 'subagent', payload: { agentId: event.agentId, role: event.role } };
-      // Persisted through facts instead.
       case 'item':
       case 'checkpoint':
       case 'turn_ended':
@@ -106,24 +196,16 @@ export const projection: Projection = {
   },
 
   snapshot(sessionId: string, state: SessionState) {
-    const pending = state.pendingInteraction;
     return {
       protocolVersion: PROTOCOL_VERSION,
       sessionId,
       status: state.status,
       model: { provider: state.model.provider, model: state.model.model },
-      messages: state.history.flatMap((item) => toMessage(item) ?? []),
-      pendingInteraction: pending
-        ? {
-            interactionId: pending.interactionId,
-            approvals: pending.approvals.map((approval) => ({
-              callId: approval.callId,
-              toolName: approval.toolName,
-              summary: bounded(approval.requirement.summary),
-              ...(approval.requirement.risk ? { risk: approval.requirement.risk } : {}),
-            })),
-          }
-        : null,
+      messages: (state.messages.length
+        ? state.messages.map(toSavedMessage)
+        : state.history.map(toCompatibilityMessage)
+      ).filter((message): message is WireMessage => message !== null),
+      pendingInteraction: state.pendingInteraction ? pendingAsLegacyWire(state.pendingInteraction) : null,
       canRetry: state.canRetry,
       seq: state.lastSeq,
     };

@@ -18,6 +18,7 @@ import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import type { SessionIdentity } from '../session/session-identity.js';
 import type { AutomaticMemoryCanary } from '../memory/automatic-memory-canary.js';
+import type { ConversationEvent } from './conversation-events.js';
 
 export type ConversationRuntimeBundle = {
   /** The clean session runtime (no adapter). */
@@ -54,6 +55,8 @@ export type CreateConversationRuntimeOptions = {
   hookEvents?: HookEventFactory;
   toolCallMarkers?: ToolCallMarkerStore;
   enableNestedApproval?: boolean;
+  /** Optional C2 durability barrier used by the bounded proof composition. */
+  awaitLogBoundary?: (event: ConversationEvent) => Promise<void>;
   deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -80,6 +83,7 @@ export function createConversationRuntime(options: CreateConversationRuntimeOpti
     activeCancelTimeoutMs: options.activeCancelTimeoutMs,
     discardOnFailure: options.discardOnFailure,
     sessionIdentity: options.sessionIdentity,
+    awaitLogBoundary: options.awaitLogBoundary,
   });
 
   return { runtime, adapter };

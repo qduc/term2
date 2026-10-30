@@ -213,6 +213,7 @@ export function createAdoptedForeground(options: {
   ): Promise<Admission> => {
     const isCurrent = () => !signal.aborted && runtime.generationGuard.isCurrent(token);
     const sourceEvents: ConversationEvent[] = [];
+    let manuallyInterrupted = false;
     let control: AdoptedTurnControl;
     let nextView: ((run: AdoptedTurnRun) => void) | undefined;
     let queuedView: AdoptedTurnRun | undefined;
@@ -453,7 +454,9 @@ export function createAdoptedForeground(options: {
         ...(decision?.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
       };
     };
-    const bound = runtime.turnAdapter.beginAdoptedTurn(
+    const domain = runtime.createTurnDomain();
+    const postExecuteRunId = `${context.id}:adopted:${receipt.turnId}:${token}`;
+    const bound = domain.beginAdoptedTurn(
       retryOrigin ? receipt.input : injectSkillIntoTurn(receipt.input),
       (event) => {
         sourceEvents.push(event);
@@ -474,7 +477,19 @@ export function createAdoptedForeground(options: {
         ...(inputSurgeApproval ? { inputSurgeApproval } : {}),
         ...(retryOrigin ? { skipUserMessage: true, replayFromHistory: true } : {}),
       },
-      requestDecision,
+      async (terminal, address) => {
+        manuallyInterrupted = true;
+        const answer = await requestDecision(terminal, address);
+        if (!isCurrent()) throw new Error('Adopted turn is stale');
+        return {
+          init: runtime.approvalFlow.buildApprovalDecision(
+            answer.answer,
+            answer.rejectionReason,
+            answer.stopAfterApprovalResolution,
+          ),
+        };
+      },
+      postExecuteRunId,
     );
     let accepted = false;
     let acceptedRef: { logId: string; eventId: string } | undefined;
@@ -487,6 +502,7 @@ export function createAdoptedForeground(options: {
         const registry = runtime.postExecutePending.snapshot();
         const entries = registry.entries.filter((entry) => entry.runId === bound.postExecuteRunId);
         if (entries.length && !interaction) {
+          manuallyInterrupted = true;
           const terminal = bound.postExecuteTerminal(entries);
           await requestDecision(
             terminal,
@@ -838,6 +854,14 @@ export function createAdoptedForeground(options: {
             result,
           });
         await commit(facts);
+        if (result === 'accepted' && !retryOrigin && !manuallyInterrupted && isCurrent()) {
+          for await (const event of runtime.automaticMemoryFinalizer.record(receipt.input)) {
+            if (!isCurrent()) break;
+            runtime.conversationLogger.dispatchEventToLog(event);
+            await commit([]);
+            if (isCurrent()) emitSource({ event });
+          }
+        }
         if (isCurrent()) {
           for (const event of sourceEvents) {
             if (event.type === 'error' || event.type === 'final' || event.type === 'approval_required') {

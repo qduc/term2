@@ -26813,6 +26813,114 @@
       "failures": [],
       "evidence": [],
       "notes": "Seven exact/sibling fixtures passed: exact gateway and tools shared contracts accepted, .tsx siblings rejected in host and tools layers; model-service and service-interfaces exact rows accepted, unmapped model-service.tsx listed. All 14 earlier guard fixtures passed; combined actual A1/A2 adapters passed; layer guard 490 and typecheck passed. This addresses independent review of debc7493; full tracer and parity evidence for that earlier source is in 2026-10-30-port-guard-followup."
+    },
+    {
+      "id": "2026-10-30-port-g2-label-lifecycle-ci",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:04:13Z",
+      "commit": "55b85850cc7baf37cf6af0ae1221c98cb286ab69",
+      "tree": null,
+      "revision_kind": "clean G2 label-lifecycle fix commit; later followed by throwaway probe and revert",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 label lifecycle hosted CI acceptance",
+      "command": "GitHub Actions CI run 41060182154 on PR #90",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub Actions; ubuntu-22.04 and ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": null,
+        "notes": "All five CI jobs, including port, passed on label-lifecycle fix commit 55b85850cc7baf37cf6af0ae1221c98cb286ab69."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/41060182154"
+      ],
+      "notes": "Hosted positive run for the label lifecycle fix. The branch was at this commit before adding the temporary negative golden probe."
+    },
+    {
+      "id": "2026-10-30-port-g2-golden-negative-ci",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:07:53Z",
+      "commit": "cbefa2069a67aac39fa0f2b6be7bda457714ae4d",
+      "tree": null,
+      "revision_kind": "throwaway golden probe commit; reverted by c9d8cf8d671281f66a31eb44168d9d676176e21f",
+      "base_commit": "cf6015a2a30871ecb7295f03f738c2f0810342a7",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 golden-change negative CI acceptance",
+      "command": "GitHub Actions CI run 41060682959 on PR #90",
+      "command_complete": true,
+      "environment": {
+        "os": "GitHub Actions; ubuntu-22.04 and ubuntu-latest",
+        "node_version": null,
+        "pnpm_version": null,
+        "notes": "No golden-change label was present. Four existing CI jobs passed; the port job failed at the intended golden guard."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        "port / Reject unapproved golden changes: Golden changes require the golden-change label: rewrite/parity/goldens/headless-plain-answer.json. Parity and rewrite typecheck/layer steps were skipped after the guard failure."
+      ],
+      "evidence": [
+        "https://github.com/qduc/term2/actions/runs/41060682959",
+        "https://github.com/qduc/term2/actions/runs/41060682959/job/124079896540"
+      ],
+      "notes": "The single-file stdout whitespace probe in rewrite/parity/goldens/headless-plain-answer.json was temporary. The gate detected it and exited 1 as required. The throwaway commit was reverted in c9d8cf8d671281f66a31eb44168d9d676176e21f; no golden-change label was applied."
+    },
+    {
+      "id": "2026-10-30-port-g2-probe-revert-local",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:12:22Z",
+      "commit": "c9d8cf8d671281f66a31eb44168d9d676176e21f",
+      "tree": null,
+      "revision_kind": "clean revert commit; hosted CI for this exact restored head pending",
+      "base_commit": "cbefa2069a67aac39fa0f2b6be7bda457714ae4d",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 restored golden, old CLI parity, inventory and static gates",
+      "command": "pnpm build; node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; git diff --quiet cf6015a2a30871ecb7295f03f738c2f0810342a7 -- rewrite/parity/goldens/headless-plain-answer.json",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Per-worktree dependencies; network-enabled additional sandbox permissions for child processes."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/commit/c9d8cf8d671281f66a31eb44168d9d676176e21f"
+      ],
+      "notes": "Build, inventory, rewrite typecheck and layer guard passed; old CLI parity matched 6/6 goldens. The probed golden was byte-identical to the G1 base after revert. Workflow Prettier and diff checks passed. The restored commit has not yet been pushed, so its hosted CI remains pending."
     }
   ]
 }

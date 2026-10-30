@@ -29084,6 +29084,39 @@
       "failures": [],
       "evidence": [],
       "notes": "Existing immutable CLI parity 9/9 on exact SHA. Independent Sol source and lifecycle reviews passed exact SHA with scoped real-source probes; remaining acceptance cases remain open as listed in candidate task record."
+    },
+    {
+      "id": "2026-10-30-c1-settlement-candidate",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:10:25Z",
+      "commit": "485712c85d05821afd4a22384dc567e766cc595b",
+      "tree": "a4e622377ef52ca76b46eaec70b01b2ab714a9f6",
+      "revision_kind": "candidate source",
+      "base_commit": "62f68b80ddb86e7e023a16d91837c2c55f694646",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "adopted engine settlement candidate verification",
+      "command": "pnpm exec tsc --noEmit; pnpm exec tsc --noEmit -p rewrite/tsconfig.json; pnpm exec tsc --noEmit -p rewrite/tsconfig.native-tracer.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm check:no-unit-tests; pnpm exec tsx rewrite/bench/c1-adopted-approval.mts; pnpm exec tsx rewrite/bench/c1-adopted-kill.mts; SKIP_BUILD_BACKUP=1 pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; strict temporary duplicate batch, compact approval/recovery and real read grant probes; source grant choice probe",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; local fixtures and temporary probes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Typechecks, guard 527, inventory, no-unit guard, retained real approval and SIGKILL benches, build and immutable parity 9/9 passed. Temporary real duplicate call ID, compaction approval/recovery, real read-folder grant (including stale, fsync and cancel negatives), and 13 accepted/50 rejected source grant choices passed. Expected injected fsync failure was observed. Actual edit, Docker and sandbox denied-read grant effects are not claimed. Settlement delta independent review pending. Earlier restart PTY 6/7 had /proc children ENOENT, reproduced on clean base 62f68b80."
     }
   ]
 }

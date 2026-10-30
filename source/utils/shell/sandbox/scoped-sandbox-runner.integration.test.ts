@@ -14,6 +14,36 @@ import { InvalidatableShellChildRegistry } from '../shell-child-registry.js';
 // The CI integration lane builds dist before running this test. The real helper
 // must be the shipped JavaScript entry, not a test-only TypeScript loader.
 describe('scoped sandbox helpers', () => {
+  it('rejects a lossy configuration while preserving a running helper', async () => {
+    const scope = createScopedSandboxNetworkAccess({
+      workspaceRoot: process.cwd(),
+      requestApproval: async () => false,
+    });
+    const entry = new URL('../../../../dist/utils/shell/sandbox/scoped-sandbox-helper.js', import.meta.url);
+    const runner = new ScopedSandboxRunner(
+      scope,
+      () => {},
+      async () => {},
+      entry,
+    );
+    const valid = {
+      network: { allowedDomains: [], deniedDomains: [] },
+      filesystem: { allowWrite: [], denyWrite: [], denyRead: [] },
+    };
+    const lossy = { ...valid, network: { ...valid.network } };
+    Object.defineProperty(lossy.network, 'hidden', { value: true });
+    try {
+      expect((await runner.wrap('true', { cwd: process.cwd(), config: valid })).command).toBeTruthy();
+      await runner.cleanupAfterCommand();
+      await expect(runner.wrap('true', { cwd: process.cwd(), config: lossy })).rejects.toThrow(
+        'Unsupported sandbox configuration',
+      );
+      expect((await runner.wrap('true', { cwd: process.cwd(), config: valid })).command).toBeTruthy();
+      await runner.cleanupAfterCommand();
+    } finally {
+      await runner.dispose();
+    }
+  }, 20_000);
   it('does not spawn when the sandbox capability was invalidated before execution', async () => {
     const children = new InvalidatableShellChildRegistry();
     children.invalidate();
@@ -24,19 +54,19 @@ describe('scoped sandbox helpers', () => {
     expect(execImpl).not.toHaveBeenCalled();
   });
   it('keeps the leased child paused until all graph approvals settle', async () => {
-    const answers: Array<(answer: 'allow-once' | 'deny') => void> = [];
+    const coordinator = new SandboxNetworkApprovalCoordinator();
     const completions: Array<Promise<import('./scoped-sandbox-network-access.js').SandboxNetworkCompletion>> = [];
     const scope = createScopedSandboxNetworkAccess({
       workspaceRoot: process.cwd(),
-      requestApproval: (_request, completion) => {
+      requestApproval: (request, completion) => {
         completions.push(completion);
-        return new Promise((resolve) => {
-          answers.push(resolve);
-        });
+        return coordinator.request(request);
       },
     });
-    const first = scope.request({ host: 'first.example' });
-    const second = scope.request({ host: 'second.example' });
+    const firstRequest = { host: 'first.example' };
+    const secondRequest = { host: 'second.example' };
+    const first = scope.request(firstRequest);
+    const second = scope.request(secondRequest);
     const transitions: string[] = [];
     scope.registerPauseController({
       pause: () => {
@@ -47,10 +77,10 @@ describe('scoped sandbox helpers', () => {
       },
     });
     await vi.waitFor(() => expect(transitions).toEqual(['pause']));
-    answers[0]!('allow-once');
+    coordinator.resolve(firstRequest, 'allow-once');
     expect(await first).toBe(true);
     expect(transitions).toEqual(['pause']);
-    answers[1]!('deny');
+    coordinator.resolve(secondRequest, 'deny');
     expect(await second).toBe(false);
     await vi.waitFor(() => expect(transitions).toEqual(['pause', 'resume']));
     expect(await Promise.all(completions)).toEqual([
@@ -58,19 +88,25 @@ describe('scoped sandbox helpers', () => {
       { kind: 'applied', allowed: false },
     ]);
     scope.dispose();
+    coordinator.dispose();
   });
   it('cancels only the original queued or active approval', async () => {
     const coordinator = new SandboxNetworkApprovalCoordinator();
     const first = { host: 'first.example' };
     const second = { host: 'second.example' };
-    const a = coordinator.request(first);
-    const b = coordinator.request(second);
+    const scope = createScopedSandboxNetworkAccess({
+      workspaceRoot: process.cwd(),
+      requestApproval: (request) => coordinator.request(request),
+    });
+    const a = scope.request(first);
+    const b = scope.request(second);
     expect(coordinator.cancel({ host: 'first.example' })).toBe(false);
     expect(coordinator.cancel(first)).toBe(true);
-    expect(await a).toBe('deny');
+    expect(await a).toBe(false);
     expect(coordinator.getSnapshot().activeRequest).toBe(second);
     coordinator.resolve(second, 'allow-once');
-    expect(await b).toBe('allow-once');
+    expect(await b).toBe(true);
+    scope.dispose();
     coordinator.dispose();
   });
   it('rejects malformed helper responses and invalidates the graph', async () => {

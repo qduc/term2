@@ -21,6 +21,19 @@ function assertSerializable(value: unknown, seen = new Set<object>()): void {
       Object.getPrototypeOf(value) !== null
     )
       throw new Error('Unsupported sandbox configuration object');
+    if (Reflect.ownKeys(value).some((key) => typeof key !== 'string'))
+      throw new Error('Unsupported sandbox configuration key');
+    if (
+      Array.isArray(value) &&
+      (Object.keys(value).length !== value.length || Object.keys(value).some((key, index) => key !== String(index)))
+    )
+      throw new Error('Unsupported sparse sandbox configuration array');
+    for (const key of Object.getOwnPropertyNames(value)) {
+      if (Array.isArray(value) && key === 'length') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor?.enumerable || !('value' in descriptor))
+        throw new Error('Unsupported sandbox configuration property');
+    }
     if (seen.has(value)) throw new Error('Cyclic sandbox configuration');
     seen.add(value);
     for (const child of Object.values(value)) assertSerializable(child, seen);

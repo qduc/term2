@@ -482,6 +482,10 @@ export class LocalSessionStore implements SessionStore {
       },
       retry: (target) =>
         handleClosed ? Promise.resolve({ kind: 'rejected', reason: 'closed' }) : rawSubmission.retry(target),
+      interruptFromUser: () => {
+        if (handleClosed) return Promise.reject(new Error('Session handle is closed'));
+        return rawSubmission.interruptFromUser();
+      },
     };
     let closePromise: Promise<void> | undefined;
     const ensureOpen = () => {

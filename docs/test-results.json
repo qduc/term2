@@ -29444,6 +29444,38 @@
       "failures": [],
       "evidence": [],
       "notes": "Exact c706 root/rewrite/native typechecks, 527-edge guard, 33 log-event inventory, no-unit, old CLI parity 9/9 with unchanged goldens and retained C1/stage2/retry benches pass. Independent driver 18/18, persistence 14/14, app recovery 15/15, budget 3/3; process retry kills after durable boundary reopen both targets without auto execution. Exact original skill, images and pending notice retained; compaction, temporal retraction, duplicate tool occurrences and live/cold projection covered by scoped probes. R04 real completed/open cancellation waits held PID death; source allSettled barrier means this is not provider failure concurrent with running sibling. Tier fallback handler retained but unchanged classifier has no default producer (#6532275657). Provider errors and clock are controlled synthetic stimuli, not proof of real upstream availability/timing. Initial inventory reported missing new retry facts; both records added and rerun passed. See /tmp/term2-c3a-stage3-driver-independent-review.md, /tmp/term2-c3a-stage3-persistence-review.md, /tmp/term2-c3a-stage3-runtime-evidence.md, /tmp/term2-c3a-stage3-budget-evidence.md. Stages 4–5, stage5/C4 network owner and full #76 remain open."
+    },
+    {
+      "id": "2026-10-30-c3a-stage4-interruption",
+      "timestamp": "2026-10-30T20:30:08Z",
+      "commit": "1d530b010d9c38d81baffd0a6495753ba66fe57d",
+      "tree": "801a6588a462adc318060c5285f952055427413a",
+      "revision_kind": "source commit",
+      "base_commit": "1911f1950b09b7f8e8da8b2287b14b1cb810bdf5",
+      "task_ids": [
+        "2026-10-30-c3a-stage4-interruption"
+      ],
+      "suite": "C3a stage 4 interruption, physical settlement and legacy recovery",
+      "command": "root, rewrite and native tracer tsc; layer guard; inventory; no-unit; explicit lint-staged; old CLI build and parity; retained C1/stage2/stage3 and stage4 background, held-tool and process-kill benches; independent driver, runtime, legacy and two-graph background probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, controlled local providers and network-enabled sandbox. Automatic Husky hook absent; explicit equivalent lint and no-unit commands ran."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Exact 1d530 root/rewrite/native typechecks, 527-edge guard, 33 log-event inventory, no-unit, old CLI parity 9/9 and retained C1/stage2/stage3 and stage4 benches pass. Independent cancellation races and interrupt ordering, controlled held source postexecute callback with late effect and successor barrier, actual in-flight shell SIGKILL and fresh recovery, four legacy/fork/export probes, and real two-graph background shell and subagent cancellation pass. Held callback occurs after the real shell completes, not an OS shell ignoring abort; process-kill probe explicitly cleans surviving descendant. Two-graph background probe holds a provider read, while held-tool ordering is independently instrumented; the combined case is not claimed. Void background cancellation does not await physical background settlement. Legacy fork is source-produced, not a legacy OS kill or adopted fork command. C3b notification delivery and scheduling, background durable-event flush, K2 UI, stage 5/C4 and full #76 remain open. See /tmp/term2-c3a-stage4-acceptance.md and stage4 driver-independent-review, runtime, legacy and background evidence files."
     }
   ]
 }

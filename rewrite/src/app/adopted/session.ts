@@ -29,10 +29,28 @@ export function createAppAdoptedSessionHandleFactory(options: {
   return async (context) => {
     let runtime: SessionRuntimeInternals | undefined;
     let assembly: ReturnType<typeof createAppAdoptedEngine> | undefined;
+    let cancelBackground: (() => void) | undefined;
     try {
       assembly = createAppAdoptedEngine({
         ...synchronous(options.engine(context), 'engine options'),
         bindSessionClient(client) {
+          cancelBackground = () => {
+            let failure: unknown;
+            let failed = false;
+            try {
+              client.cancelBackgroundRuns();
+            } catch (error) {
+              failed = true;
+              failure = error;
+            }
+            try {
+              client.cancelBackgroundShellJobs();
+            } catch (error) {
+              if (!failed) failure = error;
+              failed = true;
+            }
+            if (failed) throw failure;
+          };
           runtime = createSessionRuntimeInternals({
             ...synchronous(options.runtime(context), 'runtime options'),
             sessionId: context.id,
@@ -50,6 +68,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
         restored: loadCanonicalConversation(context.id, context.root),
         onSourceEvent: options.onSourceEvent,
         publishFacts: false,
+        cancelBackground,
         makeInput(turnId) {
           const state = context.state();
           const prompt = owned.turnPrompt();

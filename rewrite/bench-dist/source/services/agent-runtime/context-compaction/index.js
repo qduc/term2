@@ -1,0 +1,207 @@
+import { projectConversationMessage } from '../../conversation/conversation-message-projection.js';
+import { projectModelRequestHistory } from '../../conversation/conversation-state-projector.js';
+export function resolveCompactionThreshold(input) {
+    const { compactThreshold, compactThresholdTokens } = input;
+    if (!Number.isFinite(compactThreshold) || compactThreshold < 0 || compactThreshold > 1) {
+        throw new RangeError('compactThreshold must be a finite ratio between 0 and 1');
+    }
+    if (compactThresholdTokens !== null &&
+        (!Number.isFinite(compactThresholdTokens) ||
+            !Number.isInteger(compactThresholdTokens) ||
+            compactThresholdTokens < 1_000)) {
+        throw new RangeError('compactThresholdTokens must be null or an integer of at least 1000');
+    }
+    const ratioThreshold = input.contextWindow === undefined ? undefined : Math.max(1_000, Math.round(input.contextWindow * compactThreshold));
+    if (ratioThreshold === undefined && compactThresholdTokens === null) {
+        return { available: false, reason: 'uncatalogued_without_token_threshold' };
+    }
+    if (ratioThreshold === undefined) {
+        return {
+            available: true,
+            tokenThreshold: compactThresholdTokens,
+            effectiveThreshold: compactThresholdTokens,
+            thresholdSource: 'tokens',
+        };
+    }
+    if (compactThresholdTokens === null) {
+        return { available: true, ratioThreshold, effectiveThreshold: ratioThreshold, thresholdSource: 'ratio' };
+    }
+    const thresholdSource = ratioThreshold === compactThresholdTokens ? 'both' : ratioThreshold < compactThresholdTokens ? 'ratio' : 'tokens';
+    return {
+        available: true,
+        ratioThreshold,
+        tokenThreshold: compactThresholdTokens,
+        effectiveThreshold: Math.min(ratioThreshold, compactThresholdTokens),
+        thresholdSource,
+    };
+}
+const INTERNAL_BOOKKEEPING_KEYS = new Set([
+    'providerItem',
+    'providerMetadata',
+    'providerData',
+    'rawItem',
+    'contextSummary',
+]);
+const compactionReplacer = (key, value) => {
+    if (INTERNAL_BOOKKEEPING_KEYS.has(key)) {
+        return undefined;
+    }
+    return value;
+};
+const isOpaqueReasoning = (item) => {
+    if (!item || typeof item !== 'object')
+        return false;
+    const record = item;
+    if (record.type === 'provider_opaque') {
+        const payload = record.item;
+        if (payload && (typeof payload.reasoning_content === 'string' || typeof payload.reasoning === 'string')) {
+            return true;
+        }
+    }
+    return false;
+};
+const filterHistoryForEstimate = (history) => {
+    const hasReasoningItem = history.some((item) => item?.type === 'reasoning');
+    if (!hasReasoningItem)
+        return history;
+    return history.filter((item) => !isOpaqueReasoning(item));
+};
+const serializedBytes = (value) => {
+    try {
+        return Buffer.byteLength(JSON.stringify(value, compactionReplacer));
+    }
+    catch {
+        return Buffer.byteLength(String(value));
+    }
+};
+export function estimateContext(input) {
+    const filteredHistory = filterHistoryForEstimate(input.history);
+    const renderedBytes = serializedBytes({
+        instructions: input.instructions ?? '',
+        tools: input.tools ?? [],
+        history: projectModelRequestHistory(filteredHistory),
+    });
+    const renderedInputTokens = Math.ceil(renderedBytes / 4);
+    const outputReserveTokens = Math.max(0, Math.ceil(input.maxOutputTokens ?? 0));
+    const safetyReserveTokens = Math.ceil((input.contextWindow ?? 0) * 0.1);
+    return {
+        renderedInputTokens,
+        outputReserveTokens,
+        safetyReserveTokens,
+        hardFitTokens: renderedInputTokens + outputReserveTokens + safetyReserveTokens,
+    };
+}
+const genuineUserTurnStarts = (history) => {
+    const starts = [];
+    history.forEach((item, index) => {
+        const message = projectConversationMessage(item);
+        if (message?.role === 'user' && !message.isSynthetic)
+            starts.push(index);
+    });
+    return starts;
+};
+const turnRanges = (history) => {
+    const starts = genuineUserTurnStarts(history);
+    return starts.map((start, index) => ({ start, end: starts[index + 1] ?? history.length }));
+};
+export function planLocalCompaction(input) {
+    const history = projectModelRequestHistory(input.history);
+    const turns = turnRanges(history);
+    const hotTailBudgetTokens = Math.min(16_000, Math.max(1_000, Math.floor(input.usableInputTokens * 0.25)));
+    const pending = new Set();
+    const seen = new Set();
+    const userBoundaries = new Set();
+    const roundBoundaries = [];
+    for (let index = 0; index < history.length; index++) {
+        const item = history[index];
+        const message = projectConversationMessage(item);
+        if (message?.role === 'user' && !message.isSynthetic && !pending.size)
+            userBoundaries.add(index);
+        const id = item.callId ?? item.call_id ?? item.tool_call_id ?? item.toolCallId ?? item.id;
+        if (item.type === 'function_call' || item.type === 'tool_call') {
+            if (typeof id !== 'string' || seen.has(id))
+                return { kind: 'blocked', reason: 'no_complete_cold_turn' };
+            seen.add(id);
+            pending.add(id);
+        }
+        else if (item.type === 'function_call_result' || item.type === 'tool_result') {
+            if (typeof id !== 'string' || !pending.delete(id))
+                return { kind: 'blocked', reason: 'no_complete_cold_turn' };
+            if (!pending.size)
+                roundBoundaries.push(index + 1);
+        }
+    }
+    const protectedUsersBefore = (cut) => history.slice(0, cut).filter((item) => {
+        const message = projectConversationMessage(item);
+        return message?.role === 'user' && !message.isSynthetic;
+    });
+    const tailAt = (cut) => [...protectedUsersBefore(cut), ...history.slice(cut)];
+    const tailTokensAt = (cut) => Math.ceil(serializedBytes(filterHistoryForEstimate(tailAt(cut))) / 4);
+    // Prefer the latest two whole user turns while they fit the hot-tail budget.
+    // Past it, cut at a settled tool round instead: every user request stays
+    // verbatim regardless, and the older tool output belongs in the summary.
+    const preferred = turns.length >= 3 && userBoundaries.has(turns[turns.length - 2].start) ? turns[turns.length - 2].start : 0;
+    const rounds = roundBoundaries.slice(0, -1);
+    const budget = Math.min(hotTailBudgetTokens, input.usableInputTokens);
+    let cut = preferred > 0 && tailTokensAt(preferred) <= budget
+        ? preferred
+        : rounds.find((boundary) => tailTokensAt(boundary) <= budget) ?? 0;
+    if (!cut) {
+        // Nothing fits the budget, typically because the newest round alone is
+        // large. Keep the smallest admissible tail, not the largest: the latest cut
+        // still retains the newest complete round. A later cut almost never has a
+        // larger estimated tail (unpaired opaque reasoning is the known exception,
+        // which can only produce a refusal), so earlier cuts are not tried.
+        const latest = Math.max(preferred, rounds.at(-1) ?? 0);
+        if (latest > 0 && tailTokensAt(latest) <= input.usableInputTokens)
+            cut = latest;
+    }
+    if (cut <= 0)
+        return {
+            kind: 'blocked',
+            reason: preferred > 0 && userBoundaries.has(preferred) ? 'single_turn_too_large' : 'no_complete_cold_turn',
+        };
+    const coldPrefix = structuredClone(history.slice(0, cut));
+    const hotTail = structuredClone(tailAt(cut));
+    return {
+        kind: 'planned',
+        coldPrefix,
+        hotTail,
+        hotTailBudgetTokens,
+    };
+}
+const stableValue = (value) => {
+    if (typeof value === 'string')
+        return value;
+    try {
+        return JSON.stringify(value);
+    }
+    catch {
+        return String(value);
+    }
+};
+export function serializeColdPrefix(history, options = {}) {
+    const limit = options.maxToolResultCharacters ?? 12_000;
+    const modeled = history.map((item) => {
+        const type = item.type;
+        if (type !== 'function_call_result' && type !== 'tool_result')
+            return structuredClone(item);
+        const output = stableValue(item.output);
+        if (output.length <= limit)
+            return structuredClone(item);
+        const excerpt = Math.max(1, Math.floor(limit / 2));
+        return {
+            ...structuredClone(item),
+            output: `[truncated tool result: name=${String(item.name ?? 'unknown')} callId=${String(item.callId ?? item.call_id ?? 'unknown')} status=completed bytes=${Buffer.byteLength(output)}]\n${output.slice(0, excerpt)}\n…\n${output.slice(-excerpt)}`,
+        };
+    });
+    return JSON.stringify(modeled, null, 2);
+}
+export const rearmAtTokens = (postCompactionEstimatedTokens, effectiveThreshold) => postCompactionEstimatedTokens + Math.max(1_000, Math.ceil(effectiveThreshold * 0.1));
+export function shouldDeferAutomaticCompaction(input) {
+    const rearmAt = input.rearmAtEstimatedTokens ?? input.checkpoint?.rearmAtEstimatedTokens;
+    if (rearmAt !== undefined && input.renderedInputTokens < rearmAt)
+        return 'hysteresis';
+    return null;
+}
+//# sourceMappingURL=index.js.map

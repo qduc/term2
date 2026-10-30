@@ -1,0 +1,271 @@
+import { stripMemoryRecall } from '../../prompts/memory-recall-notice.js';
+import { describeError } from '../../utils/error-helpers.js';
+import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
+import { isRetryRecoveryBudgetExhaustedError } from '../retry/retry-recovery-budget.js';
+import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
+import { resolveSessionId } from './session-identity.js';
+export class InitialTurnRecoveryHandler {
+    deps;
+    constructor(deps) {
+        this.deps = deps;
+    }
+    async *handle(ctx) {
+        const { error, attempt, stream } = ctx;
+        if (!this.deps.generationGuard.isCurrent(attempt.token)) {
+            return { kind: 'stale' };
+        }
+        // Settle the live-turn tool evidence into history before classifying -- see
+        // the matching comment in continuation-recovery-handler.ts. This matters
+        // for the initial path too: a mid-turn tool continuation that fails while
+        // the run loop is still draining the initial stream reaches this handler
+        // with completed pairs that may not yet be committed.
+        const committedToolContinuation = this.deps.record.inspectCommittedToolContinuation();
+        let classified = this.deps.retryClassifier.classify({
+            error,
+            retryCounts: attempt.retryCounts,
+            stream,
+            hasCommittedOutput: attempt.modelEventSeen,
+            committedToolContinuation,
+            maxTransientRetries: attempt.maxTransientRetries,
+            maxModelRetries: attempt.maxModelRetries,
+        });
+        // Blocking fresh starts (subagents) exists to stop a task replaying from the
+        // beginning, so it must not block a retry that provably replays nothing.
+        // `chain_recovery` only severs the response chain and rebuilds the request
+        // from full history, which already carries every completed tool result, so
+        // a connection interruption or provider state rejection cannot re-run work.
+        // Every other kind can reach a plan that does replay -- `model_retry` maps
+        // to `replay_turn` with `rollbackUserMessage` -- and stays blocked.
+        if (!this.deps.freshStartRetriesAllowed && !stream && classified.kind !== 'chain_recovery') {
+            this.deps.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
+                eventType: 'retry.fresh_start_blocked',
+                category: 'retry',
+                phase: 'retry',
+                sessionId: resolveSessionId(this.deps.sessionId),
+                traceId: this.deps.logger.getCorrelationId(),
+                retryKind: classified.kind,
+                errorMessage: error instanceof Error ? error.message : String(error),
+            });
+            classified = { kind: 'unrecoverable' };
+        }
+        if (classified.kind === 'unrecoverable') {
+            const providerFailure = classifyProviderFailure(error);
+            const exhausted = !stream &&
+                (isRetryRecoveryBudgetExhaustedError(error) ||
+                    (providerFailure.retryable &&
+                        providerFailure.errorKind !== 'authentication' &&
+                        providerFailure.errorKind !== 'cancelled'));
+            const droppedUserMessage = attempt.addedUserMessage && !stream
+                ? { text: stripMemoryRecall(attempt.turn.text), imageCount: attempt.turn.images?.length ?? 0 }
+                : undefined;
+            const plan = this.deps.recoveryPolicy.plan({
+                failure: classified,
+                gen: attempt.token,
+                stream,
+                retryCounts: attempt.retryCounts,
+                maxModelRetries: attempt.maxModelRetries,
+                freshStartRetriesAllowed: this.deps.freshStartRetriesAllowed,
+            });
+            const recoveryResult = this.deps.recoveryExecutor.apply({
+                plan,
+                state: {
+                    baseline: 'initial',
+                    addedUserMessage: attempt.addedUserMessage,
+                    stream,
+                },
+                retryCounts: attempt.retryCounts,
+                maxModelRetries: attempt.maxModelRetries,
+            });
+            this.deps.inputPlanner.recordSuccess(this.deps.record.getHistory(), {
+                kind: 'full_history',
+                previousInput: attempt.streamInput,
+            });
+            for (const event of recoveryResult.events) {
+                yield event;
+            }
+            if (exhausted) {
+                const providerName = this.deps.provider ?? 'provider';
+                yield {
+                    type: 'retry_exhausted',
+                    provider: providerName,
+                    errorKind: providerFailure.errorKind,
+                    attempts: Math.max(1, attempt.retryCounts.transientRetryCount + 1),
+                    maxAttempts: attempt.maxTransientRetries + 1,
+                    message: `Could not reach ${providerName} after ${Math.max(1, attempt.retryCounts.transientRetryCount + 1)} attempts. No model response was received.`,
+                    canRetry: true,
+                };
+            }
+            if (!isClassifiedCancellation(error)) {
+                yield {
+                    type: 'error',
+                    message: describeError(error),
+                    ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+                        ? { code: error.code }
+                        : {}),
+                    ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+                    ...(droppedUserMessage ? { droppedUserMessage } : {}),
+                };
+            }
+            this.#logFailure(error);
+            return { kind: 'terminated' };
+        }
+        const presentation = this.deps.retryEventPresenter.present({
+            failure: classified,
+            maxTransientRetries: attempt.maxTransientRetries,
+            maxModelRetries: attempt.maxModelRetries,
+            source: 'initial',
+            error,
+        });
+        yield presentation.event;
+        this.deps.logger.warn(presentation.logMessage, {
+            ...presentation.logFields,
+            sessionId: resolveSessionId(this.deps.sessionId),
+            traceId: this.deps.logger.getCorrelationId(),
+        });
+        if (!this.deps.generationGuard.isCurrent(attempt.token)) {
+            return { kind: 'stale' };
+        }
+        if (classified.kind === 'chain_recovery') {
+            this.deps.breakChaining?.(classified.cause);
+        }
+        // model_retry (hallucination/parsing/behavior detection) is a distinct,
+        // pre-existing retry policy with its own maxModelRetries cap. It is not a
+        // provider transport failure, so it must not draw against or be capped by
+        // the shared transport-recovery envelope -- doing so silently truncated
+        // an established, independently-tested retry count (see the regression
+        // test this comment sits next to in initial-turn-recovery-handler.test.ts).
+        if (classified.kind === 'transient' || classified.kind === 'chain_recovery') {
+            attempt.recoveryBudget.noteRetryableFailure();
+        }
+        attempt.advanceRetry(this.deps.recoveryPolicy.nextRetryCounts(attempt.retryCounts, classified));
+        const plan = this.deps.recoveryPolicy.plan({
+            failure: classified,
+            gen: attempt.token,
+            stream,
+            retryCounts: attempt.retryCounts,
+            maxModelRetries: attempt.maxModelRetries,
+            freshStartRetriesAllowed: this.deps.freshStartRetriesAllowed,
+        });
+        const recoveryState = {
+            baseline: 'initial',
+            addedUserMessage: attempt.addedUserMessage,
+            stream,
+        };
+        // Only retry_fresh (service_tier_fallback/transient/chain_recovery/
+        // transport_downgrade) draws against the automatic-replay budget.
+        // replay_turn is produced exclusively by model_retry, which is excluded
+        // for the same reason noted above.
+        const timeoutAdmission = plan.kind === 'retry_fresh' && classified.kind === 'chain_recovery'
+            ? attempt.recoveryBudget.claimZeroFrameTimeoutRecovery(error, {
+                maxRetries: attempt.maxTransientRetries,
+                automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
+            })
+            : undefined;
+        const recoveryAdmission = timeoutAdmission ??
+            (plan.kind === 'retry_fresh'
+                ? attempt.recoveryBudget.describeAdmission({
+                    automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
+                })
+                : undefined);
+        const admitted = timeoutAdmission?.admitted ??
+            (plan.kind !== 'retry_fresh' ||
+                ((skipsAutomaticReplayClaim(classified, committedToolContinuation) ||
+                    attempt.recoveryBudget.claimAutomaticReplay()) &&
+                    attempt.recoveryBudget.claimPhysicalAttempt()));
+        if (recoveryAdmission) {
+            this.deps.logger.warn('Retry recovery admission evaluated', {
+                eventType: 'retry.recovery_admission',
+                category: 'retry',
+                phase: 'retry',
+                sessionId: resolveSessionId(this.deps.sessionId),
+                traceId: this.deps.logger.getCorrelationId(),
+                source: 'initial',
+                retryKind: classified.kind,
+                retryCause: classified.kind === 'chain_recovery' ? classified.cause : undefined,
+                retryAttempt: classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.attempt : undefined,
+                transientRetryCount: attempt.retryCounts.transientRetryCount,
+                maxTransientRetries: attempt.maxTransientRetries,
+                streamPresent: stream !== null,
+                hasCommittedOutput: attempt.modelEventSeen,
+                completedToolCount: committedToolContinuation?.completedToolCount ?? 0,
+                allToolsCompleted: committedToolContinuation?.allToolsCompleted ?? false,
+                completedPairsPresentInHistory: committedToolContinuation?.completedPairsPresentInHistory ?? false,
+                ...recoveryAdmission,
+                admitted,
+            });
+        }
+        if (!admitted) {
+            // Refusing the plan must still go through the same settlement path a
+            // normal termination does -- open tool calls settle truthfully (not as
+            // blind failures), and the chain is cleared so the next turn cannot
+            // send a text-only continuation against a response still awaiting tool
+            // output. Returning 'terminated' directly here (the original bug)
+            // skipped all of that.
+            const terminateResult = this.deps.recoveryExecutor.apply({
+                plan: { kind: 'terminate', events: [] },
+                state: recoveryState,
+                retryCounts: attempt.retryCounts,
+                maxModelRetries: attempt.maxModelRetries,
+            });
+            if (terminateResult.kind === 'terminated') {
+                for (const event of terminateResult.events) {
+                    yield event;
+                }
+            }
+            yield {
+                type: 'retry_exhausted',
+                provider: this.deps.provider ?? 'provider',
+                errorKind: classifyProviderFailure(error).errorKind,
+                attempts: attempt.recoveryBudget.physicalAttempts,
+                maxAttempts: recoveryAdmission?.maxPhysicalAttempts ?? attempt.recoveryBudget.maxPhysicalAttempts,
+                message: `Could not reach ${this.deps.provider ?? 'provider'} after ${attempt.recoveryBudget.physicalAttempts} attempts. No model response was received.`,
+                canRetry: true,
+            };
+            this.#logFailure(error);
+            return { kind: 'terminated' };
+        }
+        const result = this.deps.recoveryExecutor.apply({
+            plan,
+            state: recoveryState,
+            retryCounts: attempt.retryCounts,
+            maxModelRetries: attempt.maxModelRetries,
+        });
+        if (result.kind === 'terminated') {
+            for (const event of result.events) {
+                yield event;
+            }
+            yield {
+                type: 'error',
+                message: describeError(error),
+                ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+                    ? { code: error.code }
+                    : {}),
+                ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+            };
+            this.#logFailure(error);
+            return { kind: 'terminated' };
+        }
+        return {
+            kind: 'run',
+            instruction: result.instruction,
+            delayMs: classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.delayMs : undefined,
+            useStandardServiceTier: result.useStandardServiceTier,
+        };
+    }
+    #logFailure(error) {
+        const classification = classifyProviderFailure(error);
+        const cancelled = isClassifiedCancellation(error);
+        const log = cancelled ? this.deps.logger.debug : this.deps.logger.error;
+        log.call(this.deps.logger, cancelled ? 'Conversation stream aborted' : 'Conversation stream error', {
+            eventType: cancelled ? 'stream.aborted' : 'stream.failed',
+            category: 'stream',
+            phase: 'abort',
+            sessionId: resolveSessionId(this.deps.sessionId),
+            traceId: this.deps.logger.getCorrelationId(),
+            errorMessage: describeError(error),
+            errorKind: classification.errorKind,
+            stack: error instanceof Error ? error.stack : undefined,
+        });
+    }
+}
+//# sourceMappingURL=initial-turn-recovery-handler.js.map

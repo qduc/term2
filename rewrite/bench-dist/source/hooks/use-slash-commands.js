@@ -1,0 +1,142 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useInputContext } from '../context/InputContext.js';
+import { useSelection } from './use-selection.js';
+// Pure functions exported for testing
+export function filterCommands(commands, filter) {
+    const lowerFilter = filter.toLowerCase();
+    if (!lowerFilter) {
+        return commands;
+    }
+    return commands
+        .filter((cmd) => {
+        const lowerName = cmd.name.toLowerCase();
+        // Case 1: Typing the command (e.g. "mod" matches "model")
+        if (!lowerFilter.includes(' ')) {
+            return lowerName.includes(lowerFilter);
+        }
+        // Case 2: Command with arguments (e.g. "model gpt-4" matches "model")
+        return lowerFilter.startsWith(lowerName + ' ');
+    })
+        .sort((a, b) => {
+        const aLower = a.name.toLowerCase();
+        const bLower = b.name.toLowerCase();
+        const aStartsWith = aLower.startsWith(lowerFilter);
+        const bStartsWith = bLower.startsWith(lowerFilter);
+        if (aStartsWith && !bStartsWith)
+            return -1;
+        if (!aStartsWith && bStartsWith)
+            return 1;
+        // Maintain alphabetical order for items within the same priority
+        return aLower.localeCompare(bLower);
+    });
+}
+export function shouldAutocomplete(command, filter) {
+    if (!command.expectsArgs) {
+        return false;
+    }
+    const fullCommandPrefix = `${command.name} `;
+    return !filter.toLowerCase().startsWith(fullCommandPrefix.toLowerCase());
+}
+export function extractCommandArgs(filter, commandName) {
+    return filter.slice(commandName.length).trim();
+}
+export function executeSlashCommandSelection({ command, filter, setInput, setCursorOverride, close, }) {
+    if (!command)
+        return;
+    if (shouldAutocomplete(command, filter)) {
+        // Close the slash frame before writing a command prefix that activates a
+        // successor menu. The controller reconciles `setInput` synchronously, so
+        // closing afterward would dismiss that newly opened menu instead. Defer
+        // the action as well: actions such as /clear and /quit must not run until
+        // the close transition has been published and rendered.
+        close();
+        const nextValue = `/${command.name} `;
+        queueMicrotask(() => {
+            setInput(nextValue);
+            setCursorOverride(nextValue.length);
+            const shouldClose = command.action();
+            if (shouldClose !== false) {
+                setInput('');
+                setCursorOverride(null);
+            }
+        });
+        return;
+    }
+    const args = extractCommandArgs(filter, command.name);
+    // Close slash menu first. Mode-changing actions (e.g. /rewind opening rewind_selection)
+    // can then take effect without a second local mode transition.
+    close();
+    queueMicrotask(() => {
+        const shouldClose = command.action(args || undefined);
+        if (shouldClose !== false) {
+            setInput('');
+            setCursorOverride(null);
+        }
+    });
+}
+export const useSlashCommands = ({ commands, onClose }) => {
+    const { mode, controller, input, setInput, setCursorOverride } = useInputContext();
+    const isOpen = mode === 'slash_commands';
+    // Derive filter from input directly
+    const filter = isOpen ? (input.startsWith('/') ? input.slice(1) : input) : '';
+    const filteredCommands = useMemo(() => filterCommands(commands, filter), [commands, filter]);
+    const MAX_VISIBLE_ITEMS = 10;
+    const [scrollOffset, setScrollOffset] = useState(0);
+    const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } = useSelection(filteredCommands);
+    // Sync scrollOffset with selectedIndex
+    useEffect(() => {
+        if (selectedIndex < scrollOffset) {
+            setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
+        }
+        else if (selectedIndex >= scrollOffset + MAX_VISIBLE_ITEMS) {
+            setScrollOffset(selectedIndex - MAX_VISIBLE_ITEMS + 1);
+        }
+    }, [selectedIndex, scrollOffset]);
+    // Reset scroll when menu opens or closes
+    useEffect(() => {
+        setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
+    }, [isOpen]);
+    const open = useCallback(() => {
+        // Avoid resetting selection when already open to preserve
+        // keyboard navigation (up/down arrows) state between renders.
+        if (mode === 'slash_commands')
+            return;
+        controller.replaceText(input, input.length);
+        setSelectedIndex(0);
+    }, [mode, controller, input, setSelectedIndex]);
+    const close = useCallback(() => {
+        if (mode === 'slash_commands') {
+            controller.close();
+            onClose();
+        }
+    }, [mode, controller, onClose]);
+    // No need for updateFilter anymore, it reacts to input changes automatically
+    const executeSelected = useCallback(() => {
+        executeSlashCommandSelection({
+            command: getSelectedItem(),
+            filter,
+            setInput,
+            setCursorOverride,
+            close,
+        });
+    }, [getSelectedItem, close, filter, setInput, setCursorOverride]);
+    return {
+        isOpen,
+        filter,
+        selectedIndex,
+        scrollOffset,
+        filteredCommands,
+        open,
+        close,
+        // updateFilter removed
+        moveUp,
+        moveDown,
+        moveHome,
+        moveEnd,
+        pageUp,
+        pageDown,
+        getSelectedItem,
+        executeSelected,
+    };
+};
+//# sourceMappingURL=use-slash-commands.js.map

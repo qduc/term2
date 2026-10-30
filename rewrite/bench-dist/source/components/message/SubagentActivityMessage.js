@@ -1,0 +1,89 @@
+import React from 'react';
+import { Box, Text } from 'ink';
+import CommandMessage from './CommandMessage.js';
+import { getFirstParagraph } from './command-message-helpers.js';
+import { TOOL_STATUS_GLYPH, useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
+import { isResultToolEvent } from '../../types/message.js';
+export { isResultToolEvent } from '../../types/message.js';
+const MAX_TOOL_LENGTH = 96;
+const MAX_TASK_LENGTH = 300;
+const truncate = (value, maxLength) => {
+    if (value.length <= maxLength) {
+        return value;
+    }
+    return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+};
+const buildTitle = (role, task, async, parentTool) => {
+    const roleLabel = role ? `[${role}]` : '';
+    const taskPreview = truncate(getFirstParagraph(task, 200).replace(/\s+/g, ' '), MAX_TASK_LENGTH);
+    // Old logs did not retain parentTool. Their async entries originated from the
+    // retired public tool, so preserve that title while new background runs use
+    // the unified name recorded by the logger.
+    const toolName = parentTool ?? (async ? 'run_subagent_async' : 'run_subagent');
+    return [toolName, roleLabel, taskPreview].filter(Boolean).join(' ');
+};
+const formatSubagentStringTool = (tool, activityStatus) => {
+    let statusChar = TOOL_STATUS_GLYPH.completed;
+    let cleaned = tool;
+    if (tool.endsWith(' (Success)')) {
+        statusChar = TOOL_STATUS_GLYPH.completed;
+        cleaned = tool.slice(0, -' (Success)'.length);
+    }
+    else if (tool.endsWith(' (Failed)')) {
+        statusChar = TOOL_STATUS_GLYPH.failed;
+        cleaned = tool.slice(0, -' (Failed)'.length);
+    }
+    else if (/\s+\(Failed:.*\)$/.test(tool)) {
+        statusChar = TOOL_STATUS_GLYPH.failed;
+        cleaned = tool.replace(/\s+\(Failed:.*\)$/, '');
+    }
+    else if (tool.endsWith(' (Cancelled)')) {
+        statusChar = TOOL_STATUS_GLYPH.failed;
+        cleaned = tool.slice(0, -' (Cancelled)'.length);
+    }
+    else if (/\s+\(\d+\s+matches?\)$/.test(tool)) {
+        statusChar = TOOL_STATUS_GLYPH.completed;
+        cleaned = tool.replace(/\s+\(\d+\s+matches?\)$/, '');
+    }
+    else {
+        statusChar =
+            activityStatus === 'running'
+                ? TOOL_STATUS_GLYPH.running
+                : activityStatus === 'failed' || activityStatus === 'cancelled'
+                    ? TOOL_STATUS_GLYPH.failed
+                    : TOOL_STATUS_GLYPH.completed;
+    }
+    return `${statusChar} ${cleaned}`;
+};
+const SubagentActivityMessage = ({ msg }) => {
+    const theme = useTheme();
+    const { SubagentFeed } = useSkin();
+    const tools = Array.isArray(msg.tools) ? msg.tools.filter(isResultToolEvent).slice(-3) : [];
+    const title = buildTitle(msg.role, msg.task, msg.async, msg.parentTool);
+    const statusSuffix = msg.status && msg.status !== 'running'
+        ? msg.status === 'failed' && msg.error
+            ? ` — failed: ${msg.error}`
+            : msg.status === 'backgrounded'
+                ? ' — moved to background'
+                : ` — ${msg.status}`
+        : '';
+    const tone = msg.status === 'completed'
+        ? 'success'
+        : msg.status === 'failed'
+            ? 'danger'
+            : msg.status === 'cancelled' || msg.status === 'interrupted' || msg.status === 'backgrounded'
+                ? 'textSubtle'
+                : 'warning';
+    const summary = msg.status === 'completed' && msg.finalText ? getFirstParagraph(msg.finalText, 500) : undefined;
+    return (React.createElement(SubagentFeed, { title: title, statusSuffix: statusSuffix, status: msg.status, tone: tone, summary: summary }, summary === undefined &&
+        tools.map((tool, index) => {
+            if (tool && typeof tool === 'object') {
+                return (React.createElement(Box, { key: index },
+                    React.createElement(CommandMessage, { command: tool.command, output: tool.output, status: tool.status, success: tool.success, failureReason: tool.failureReason, toolName: tool.toolName, toolArgs: tool.toolArgs, isApprovalRejection: tool.isApprovalRejection, hadApproval: tool.hadApproval, displayMode: "concise", textColor: theme.textSubtle, isSubagent: true })));
+            }
+            return (React.createElement(Text, { key: `${tool}-${index}`, color: theme.textSubtle }, truncate(formatSubagentStringTool(tool, msg.status), MAX_TOOL_LENGTH)));
+        })));
+};
+export default React.memo(SubagentActivityMessage);
+//# sourceMappingURL=SubagentActivityMessage.js.map

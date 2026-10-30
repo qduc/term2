@@ -1,0 +1,1 @@
+{"version":3,"file":"openai-compatible-middleware.d.ts","sourceRoot":"","sources":["../../../../source/providers/openai-compatible-middleware.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,oBAAoB,CAAC;AAoC1D,wBAAgB,wBAAwB,CAAC,IAAI,EAAE,GAAG,GAAG,GAAG,CA+BvD;AAED,0EAA0E;AAC1E,wBAAgB,gCAAgC,IAAI,eAAe,CAalE;AAED,gEAAgE;AAChE,wBAAgB,+BAA+B,IAAI,eAAe,CAWjE"}

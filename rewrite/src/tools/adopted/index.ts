@@ -50,16 +50,6 @@ export type AdoptedToolRegistryOptions = {
   isMaxTurnsExceeded?: (error: unknown) => boolean;
 };
 
-/** Reviewed read-only tools that are safe to repeat if a caller explicitly retries them. */
-const IDEMPOTENT_READ_ONLY_TOOLS = new Set([
-  'read_file',
-  'grep',
-  'glob',
-  'read_code_outline',
-  'code_context_search',
-  'web_search',
-  'web_fetch',
-]);
 let nextDisplayCallId = 0;
 
 function isZodSchema(schema: unknown): schema is RuntimeSchema {
@@ -222,7 +212,6 @@ function displaySafely(
 function adaptTool(definition: AdoptedOriginalToolDefinition, options: AdoptedToolRegistryOptions): Tool<unknown> {
   return {
     spec: toolSpec(definition),
-    idempotent: IDEMPOTENT_READ_ONLY_TOOLS.has(definition.name),
     parse: (raw) => parseToolInput(definition, raw),
     approval: (input, toolContext) => approvalFor(definition, input, toolContext, options),
     async execute(input, toolContext): Promise<ToolResult> {

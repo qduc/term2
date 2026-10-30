@@ -1,0 +1,783 @@
+import fs from 'fs';
+import { isToolResultHistoryItem } from '../tool-execution-ledger.js';
+import crypto from 'crypto';
+import os from 'os';
+import path from 'path';
+import { LOG_ENVELOPE_VERSION, SIDECAR_EVENT_TYPES, deltaSidecarPathFor, } from './conversation-log-events.js';
+import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
+import { isPidAlive, saveLastConversation } from '../conversation/conversation-persistence.js';
+export const CONVERSATION_FSYNC_EVENTS = new Set([
+    'user_message',
+    'assistant_turn',
+    'undo',
+    'session_init',
+    // Critical recovery markers. Tool lifecycle and approval boundaries must
+    // survive a crash; provider-backed journal items must not be replayed twice
+    // by the next resumed request.
+    'tool_started',
+    'tool_result',
+    'approval_required',
+    'assistant_journal_item',
+    'goal_changed',
+    'events_retracted',
+    'context_checkpoint_created',
+]);
+const MAX_EVENT_BYTES = 256 * 1024;
+export class LockConflictError extends Error {
+    sessionId;
+    lockPath;
+    lockInfo;
+    constructor(sessionId, lockPath, lockInfo) {
+        super(lockInfo
+            ? `Conversation ${sessionId} is locked (pid ${lockInfo.pid}, started ${lockInfo.startedAt}, host ${lockInfo.host}).`
+            : `Conversation ${sessionId} is locked.`);
+        this.name = 'LockConflictError';
+        this.sessionId = sessionId;
+        this.lockPath = lockPath;
+        this.lockInfo = lockInfo;
+    }
+}
+function logPath(dir, sessionId) {
+    return path.join(dir, `${sessionId}.jsonl`);
+}
+function deltaPath(dir, sessionId) {
+    return deltaSidecarPathFor(logPath(dir, sessionId));
+}
+/**
+ * Event types that settle or discard the current user turn. Used to decide
+ * whether the sidecar still holds deltas recovery would need.
+ *
+ * A structural "was the last event an `assistant_turn`" test does not work:
+ * `conversationService.shutdown()` is awaited before `logWriter.close()` and
+ * appends background-shell and subagent lifecycle events after the final turn,
+ * so the sidecar would almost never be collected at close.
+ */
+const TURN_SETTLING_EVENTS = new Set([
+    'assistant_turn',
+    'undo',
+    'session_cleared',
+    'session_rollover',
+]);
+function lockPath(dir, sessionId) {
+    return path.join(dir, `${sessionId}.lock`);
+}
+function ensureDir(fileSystem, dir) {
+    if (!fileSystem.existsSync(dir)) {
+        fileSystem.mkdirSync(dir, { recursive: true });
+    }
+}
+const RECOVERY_CHUNK_BYTES = 32 * 1024;
+const MAX_RECOVERY_LINE_BYTES = MAX_EVENT_BYTES * 2;
+function decodeSequence(line) {
+    try {
+        const envelope = decodeLogEnvelope(JSON.parse(line));
+        return envelope && Number.isSafeInteger(envelope.seq) && envelope.seq >= 0 ? envelope.seq : null;
+    }
+    catch {
+        return null;
+    }
+}
+function findLineStart(fileSystem, fd, end) {
+    let position = end;
+    while (position > 0) {
+        const length = Math.min(RECOVERY_CHUNK_BYTES, position);
+        const start = position - length;
+        const chunk = Buffer.allocUnsafe(length);
+        const bytesRead = fileSystem.readSync(fd, chunk, 0, length, start);
+        for (let index = bytesRead - 1; index >= 0; index -= 1) {
+            if (chunk[index] === 0x0a)
+                return start + index + 1;
+        }
+        position = start;
+    }
+    return 0;
+}
+/**
+ * Read one known line without allowing a single read request to grow with the
+ * event. The returned string is necessarily line-sized for JSON.parse, but
+ * the recovery scan and individual filesystem reads remain bounded.
+ */
+function readLine(fileSystem, fd, start, length) {
+    const line = Buffer.allocUnsafe(length);
+    let offset = 0;
+    while (offset < length) {
+        const bytesRead = fileSystem.readSync(fd, line, offset, Math.min(RECOVERY_CHUNK_BYTES, length - offset), start + offset);
+        if (bytesRead <= 0)
+            break;
+        offset += bytesRead;
+    }
+    return line.subarray(0, offset).toString('utf8');
+}
+function readLogTailState(fileSystem, filePath, recoverSequence) {
+    if (!fileSystem.existsSync(filePath))
+        return { seq: 0, needsLineBreak: false };
+    const fd = fileSystem.openSync(filePath, 'r');
+    try {
+        const size = fileSystem.fstatSync(fd).size;
+        if (size === 0)
+            return { seq: 0, needsLineBreak: false };
+        const finalByte = Buffer.allocUnsafe(1);
+        fileSystem.readSync(fd, finalByte, 0, 1, size - 1);
+        const needsLineBreak = finalByte[0] !== 0x0a;
+        if (!recoverSequence)
+            return { seq: 0, needsLineBreak };
+        // Walk complete lines from the tail. The final line is different from
+        // older lines: full event retention means it may exceed the scan bound,
+        // so read that one line in bounded filesystem chunks and decode it. Older
+        // oversized lines remain skippable, keeping recovery memory bounded.
+        let lineEnd = needsLineBreak ? size : size - 1;
+        let isFinalLine = true;
+        let highWaterSeq = 0;
+        let newestSeq = null;
+        let detectedSequenceRegression = false;
+        while (lineEnd > 0) {
+            const lineStart = findLineStart(fileSystem, fd, lineEnd);
+            const lineLength = lineEnd - lineStart;
+            // A missing terminal newline identifies a torn tail. Never allocate the
+            // entire oversized fragment just to prove that it is malformed; the
+            // preceding complete line is the recovery candidate instead.
+            if (lineLength <= MAX_RECOVERY_LINE_BYTES || (isFinalLine && !needsLineBreak)) {
+                const line = readLine(fileSystem, fd, lineStart, lineLength);
+                const seq = decodeSequence(line);
+                if (seq !== null) {
+                    if (newestSeq === null) {
+                        newestSeq = seq;
+                        highWaterSeq = seq;
+                    }
+                    else if (seq > newestSeq) {
+                        detectedSequenceRegression = true;
+                        highWaterSeq = Math.max(highWaterSeq, seq);
+                    }
+                    else if (!detectedSequenceRegression) {
+                        // The immediate tail is monotonic; preserve the bounded fast path.
+                        return { seq: newestSeq, needsLineBreak };
+                    }
+                    else {
+                        highWaterSeq = Math.max(highWaterSeq, seq);
+                    }
+                }
+                else if (newestSeq !== null && !detectedSequenceRegression) {
+                    // Older legacy/malformed records carry no usable sequence. They do
+                    // not justify an unbounded scan before a valid sequenced tail.
+                    return { seq: newestSeq, needsLineBreak };
+                }
+            }
+            if (lineStart === 0)
+                break;
+            lineEnd = lineStart - 1;
+            isFinalLine = false;
+        }
+        return { seq: highWaterSeq, needsLineBreak };
+    }
+    finally {
+        fileSystem.closeSync(fd);
+    }
+}
+/** Remove only an unterminated new atomic batch tail while the caller holds its lock. */
+function discardUnterminatedBatchTail(fileSystem, filePath) {
+    if (!fileSystem.existsSync(filePath))
+        return;
+    const fd = fileSystem.openSync(filePath, 'r+');
+    try {
+        const size = fileSystem.fstatSync(fd).size;
+        if (size === 0)
+            return;
+        const finalByte = Buffer.allocUnsafe(1);
+        fileSystem.readSync(fd, finalByte, 0, 1, size - 1);
+        if (finalByte[0] === 0x0a)
+            return;
+        const start = findLineStart(fileSystem, fd, size);
+        const tail = readLine(fileSystem, fd, start, size - start);
+        let isBatch = /"type"\s*:\s*"session_fact_batch"/.test(tail);
+        if (!isBatch) {
+            try {
+                const value = JSON.parse(tail);
+                isBatch = value.event?.type === 'session_fact_batch';
+            }
+            catch {
+                // A partial JSON prefix can still identify an interrupted batch.
+            }
+        }
+        if (!isBatch)
+            return;
+        if (!fileSystem.ftruncateSync)
+            throw new Error('filesystem cannot repair an incomplete session batch');
+        fileSystem.ftruncateSync(fd, start);
+        fileSystem.fsyncSync(fd);
+    }
+    finally {
+        fileSystem.closeSync(fd);
+    }
+}
+export function sanitizeSubagentResult(value) {
+    if (!value) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (parsed && typeof parsed === 'object') {
+                    const sanitized = sanitizeSubagentResult(parsed);
+                    return JSON.stringify(sanitized);
+                }
+            }
+            catch {
+                // Return original string
+            }
+        }
+        return value;
+    }
+    if (Array.isArray(value)) {
+        return value.map(sanitizeSubagentResult);
+    }
+    if (typeof value === 'object') {
+        const obj = { ...value };
+        delete obj['nestedRunResult'];
+        for (const key of Object.keys(obj)) {
+            obj[key] = sanitizeSubagentResult(obj[key]);
+        }
+        return obj;
+    }
+    return value;
+}
+/** Preserve new input facts exactly except for source-classified tool outputs. */
+function sanitizeLogFact(fact) {
+    if (fact.type === 'user_message') {
+        const event = fact;
+        if (event.message.submittedTurn) {
+            const sanitized = sanitizeSubagentResult(event);
+            sanitized.message.text = event.message.text;
+            if (event.message.skill === undefined)
+                delete sanitized.message.skill;
+            else
+                sanitized.message.skill = structuredClone(event.message.skill);
+            sanitized.message.submittedTurn = structuredClone(event.message.submittedTurn);
+            return sanitized;
+        }
+    }
+    if (fact.type === 'user_input_accepted' || fact.type === 'tool_output_rewound' || fact.type === 'user_turn_retried') {
+        const event = structuredClone(fact);
+        const scrubItem = (item) => (isToolResultHistoryItem(item) ? sanitizeSubagentResult(item) : item);
+        event.snapshot.history = event.snapshot.history.map(scrubItem);
+        event.snapshot.toolLedger = event.snapshot.toolLedger.map((entry) => ({
+            ...entry,
+            ...('output' in entry ? { output: sanitizeSubagentResult(entry.output) } : {}),
+            ...(entry.historyItems ? { historyItems: entry.historyItems.map(scrubItem) } : {}),
+        }));
+        return event;
+    }
+    return sanitizeSubagentResult(fact);
+}
+function acquireLock(dir, sessionId, fileSystem = fs, isPidAliveFn = isPidAlive) {
+    const lp = lockPath(dir, sessionId);
+    const payload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), host: os.hostname() });
+    let fd;
+    try {
+        fd = fileSystem.openSync(lp, 'wx');
+    }
+    catch (err) {
+        const errorObj = err;
+        if (errorObj?.code === 'EEXIST') {
+            let info = null;
+            try {
+                info = JSON.parse(fileSystem.readFileSync(lp, 'utf-8'));
+            }
+            catch {
+                info = null;
+            }
+            // Owner-decided liveness path: a lock from this host whose PID is
+            // demonstrably dead is stale and is reclaimed. Corrupt payloads, live
+            // PIDs, and foreign-host locks still raise LockConflictError.
+            if (info !== null && info.host === os.hostname() && !isPidAliveFn(info.pid)) {
+                try {
+                    fileSystem.unlinkSync(lp);
+                }
+                catch {
+                    // Fall through to a conflict if the stale lock cannot be removed.
+                }
+                try {
+                    fd = fileSystem.openSync(lp, 'wx');
+                }
+                catch (err2) {
+                    const errorObj2 = err2;
+                    if (errorObj2?.code === 'EEXIST') {
+                        throw new LockConflictError(sessionId, lp, info);
+                    }
+                    throw err2;
+                }
+            }
+            else {
+                throw new LockConflictError(sessionId, lp, info);
+            }
+        }
+        else {
+            throw err;
+        }
+    }
+    try {
+        fileSystem.writeSync(fd, payload);
+        fileSystem.fsyncSync(fd);
+    }
+    finally {
+        fileSystem.closeSync(fd);
+    }
+}
+function releaseLock(dir, sessionId, fileSystem = fs) {
+    try {
+        fileSystem.unlinkSync(lockPath(dir, sessionId));
+    }
+    catch (err) {
+        const errorObj = err;
+        if (errorObj?.code !== 'ENOENT') {
+            // best-effort
+        }
+    }
+}
+class ConversationLogWriterImpl {
+    #sessionId;
+    #dir;
+    #logger;
+    #fileSystem;
+    #saveLast;
+    #fd = null;
+    /** Lazily opened on the first delta, so quiet sessions create no sidecar. */
+    #deltaFd = null;
+    #hasUnsettledTurn = false;
+    #seq = 0;
+    #closed = false;
+    #failure = null;
+    #writeErrorLogged = false;
+    #deferLastConversationPublication = false;
+    #projectPath;
+    #sshHost;
+    #isPidAlive;
+    constructor(opts) {
+        this.#sessionId = opts.sessionId;
+        this.#dir = opts.dir;
+        this.#logger = opts.logger;
+        this.#fileSystem = opts.fileSystem ?? fs;
+        this.#saveLast = opts.saveLast ?? saveLastConversation;
+        this.#isPidAlive = opts.isPidAlive ?? isPidAlive;
+    }
+    get sessionId() {
+        return this.#sessionId;
+    }
+    init(meta) {
+        this.#initialize(meta, true);
+    }
+    initBatch(meta, facts) {
+        this.#initialize(meta, true, [{ type: 'session_init', ...meta }, ...facts]);
+    }
+    openExisting(meta) {
+        const existing = logPath(this.#dir, this.#sessionId);
+        if (!this.#fileSystem.existsSync(existing))
+            throw new Error(`conversation ${this.#sessionId} does not exist`);
+        this.#hasUnsettledTurn = this.#fileSystem.existsSync(deltaPath(this.#dir, this.#sessionId));
+        this.#initialize(meta, true, undefined, false);
+    }
+    #initialize(meta, recoverSequence, initialBatch, appendSessionInit = true) {
+        this.#projectPath = meta.projectPath;
+        this.#sshHost = meta.sshHost;
+        ensureDir(this.#fileSystem, this.#dir);
+        acquireLock(this.#dir, this.#sessionId, this.#fileSystem, this.#isPidAlive);
+        try {
+            const filePath = logPath(this.#dir, this.#sessionId);
+            if (initialBatch !== undefined &&
+                (this.#fileSystem.existsSync(filePath) || this.#fileSystem.existsSync(deltaPath(this.#dir, this.#sessionId))))
+                throw new Error(`conversation ${this.#sessionId} already exists`);
+            discardUnterminatedBatchTail(this.#fileSystem, filePath);
+            const tailState = readLogTailState(this.#fileSystem, filePath, recoverSequence);
+            // Sequence numbers are shared across both files so recovery can merge
+            // them by `seq`. Deltas outnumber everything else ~10:1, so after a crash
+            // the high-water mark usually lives in the sidecar; resuming from the
+            // canonical tail alone would reissue sequence numbers.
+            const deltaTailState = recoverSequence
+                ? readLogTailState(this.#fileSystem, deltaPath(this.#dir, this.#sessionId), true)
+                : { seq: 0, needsLineBreak: false };
+            this.#seq = Math.max(tailState.seq, deltaTailState.seq);
+            this.#fd = this.#fileSystem.openSync(filePath, 'a');
+            if (tailState.needsLineBreak) {
+                try {
+                    this.#fileSystem.writeSync(this.#fd, '\n');
+                }
+                catch (err) {
+                    this.#recordFailure(err);
+                    throw err;
+                }
+            }
+            if (initialBatch !== undefined) {
+                if (initialBatch.length > 0)
+                    void this.appendBatch(initialBatch);
+            }
+            else if (appendSessionInit)
+                this.append({ type: 'session_init', ...meta });
+        }
+        catch (err) {
+            if (this.#fd !== null) {
+                try {
+                    this.#fileSystem.closeSync(this.#fd);
+                }
+                catch {
+                    // Preserve the initialization failure.
+                }
+                this.#fd = null;
+            }
+            releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+            throw err;
+        }
+    }
+    append(event) {
+        this.#throwIfFailed();
+        if (this.#closed || this.#fd === null) {
+            return;
+        }
+        const sanitizedEvent = sanitizeLogFact(event);
+        const envelope = {
+            v: LOG_ENVELOPE_VERSION,
+            seq: ++this.#seq,
+            ts: new Date().toISOString(),
+            logId: this.#sessionId,
+            eventId: crypto.randomUUID(),
+            event: sanitizedEvent,
+        };
+        const line = JSON.stringify(envelope) + '\n';
+        if (SIDECAR_EVENT_TYPES.has(sanitizedEvent.type)) {
+            this.#appendDelta(line);
+            return;
+        }
+        if (sanitizedEvent.type === 'user_message') {
+            this.#hasUnsettledTurn = true;
+        }
+        else if (TURN_SETTLING_EVENTS.has(sanitizedEvent.type)) {
+            this.#hasUnsettledTurn = false;
+        }
+        try {
+            this.#fileSystem.writeSync(this.#fd, line);
+            if (CONVERSATION_FSYNC_EVENTS.has(sanitizedEvent.type)) {
+                this.#fileSystem.fsyncSync(this.#fd);
+                if (!this.#deferLastConversationPublication) {
+                    this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+                }
+            }
+        }
+        catch (err) {
+            if (CONVERSATION_FSYNC_EVENTS.has(sanitizedEvent.type)) {
+                this.#recordFailure(err);
+                throw err;
+            }
+            this.#logWriteFailure(err);
+        }
+    }
+    appendBatch(facts) {
+        this.#throwIfFailed();
+        if (facts.length === 0)
+            return Promise.resolve([]);
+        if (this.#closed || this.#fd === null)
+            throw new Error('conversation log writer is not open');
+        if (facts.some((fact) => !fact ||
+            typeof fact.type !== 'string' ||
+            fact.type.length === 0 ||
+            fact.type === 'session_fact_batch' ||
+            SIDECAR_EVENT_TYPES.has(fact.type))) {
+            throw new Error('atomic batch contains an invalid or unsupported event');
+        }
+        const at = new Date().toISOString();
+        const firstSeq = this.#seq + 1;
+        const entries = facts.map((fact, index) => ({
+            v: LOG_ENVELOPE_VERSION,
+            seq: firstSeq + index,
+            ts: at,
+            logId: this.#sessionId,
+            eventId: crypto.randomUUID(),
+            event: sanitizeLogFact(fact),
+        }));
+        const final = entries.at(-1);
+        const physical = JSON.stringify({
+            v: LOG_ENVELOPE_VERSION,
+            seq: final.seq,
+            ts: final.ts,
+            logId: final.logId,
+            eventId: final.eventId,
+            event: { type: 'session_fact_batch', version: 1, entries },
+        }) + '\n';
+        // Serialize before touching the file so cycles or unsupported values never
+        // leave a partially written record.
+        const bytes = Buffer.from(physical, 'utf8');
+        try {
+            let offset = 0;
+            while (offset < bytes.length) {
+                const written = this.#fileSystem.writeSync(this.#fd, bytes, offset, bytes.length - offset);
+                if (!Number.isInteger(written) || written <= 0)
+                    throw new Error('atomic batch write made no progress');
+                offset += written;
+            }
+            this.#fileSystem.fsyncSync(this.#fd);
+        }
+        catch (error) {
+            this.#recordFailure(error);
+            throw error;
+        }
+        this.#seq = final.seq;
+        for (const fact of facts) {
+            if (fact.type === 'user_message')
+                this.#hasUnsettledTurn = true;
+            else if (TURN_SETTLING_EVENTS.has(fact.type))
+                this.#hasUnsettledTurn = false;
+        }
+        if (!this.#deferLastConversationPublication) {
+            this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+        }
+        return Promise.resolve(entries);
+    }
+    /**
+     * Deltas are non-critical: never fsync'd, and a write failure is logged
+     * rather than raised. Losing the sidecar tail degrades a recovered partial
+     * turn; it can never corrupt a settled one.
+     */
+    #appendDelta(line) {
+        // A delta is itself evidence that a turn is streaming. Deriving the flag
+        // from the delta rather than only from the preceding `user_message` means
+        // any sidecar content keeps the sidecar alive until a turn settles it.
+        this.#hasUnsettledTurn = true;
+        try {
+            const fd = this.#ensureDeltaFd();
+            if (fd === null)
+                return;
+            this.#fileSystem.writeSync(fd, line);
+        }
+        catch (err) {
+            this.#logWriteFailure(err);
+        }
+    }
+    #ensureDeltaFd() {
+        if (this.#deltaFd !== null)
+            return this.#deltaFd;
+        const filePath = deltaPath(this.#dir, this.#sessionId);
+        // A sidecar can already exist when resuming a crashed session; repair a
+        // torn final line the same way the canonical log does.
+        const tailState = readLogTailState(this.#fileSystem, filePath, false);
+        const fd = this.#fileSystem.openSync(filePath, 'a');
+        this.#deltaFd = fd;
+        if (tailState.needsLineBreak) {
+            this.#fileSystem.writeSync(fd, '\n');
+        }
+        return fd;
+    }
+    /** Close the sidecar fd, returning any failure rather than throwing. */
+    #closeDeltaFd() {
+        if (this.#deltaFd === null)
+            return null;
+        let failure = null;
+        try {
+            this.#fileSystem.closeSync(this.#deltaFd);
+        }
+        catch (err) {
+            failure = err;
+        }
+        this.#deltaFd = null;
+        return failure;
+    }
+    /**
+     * Drop the sidecar when no turn is left unsettled. Safe against a late
+     * append because `append()` no-ops once `#closed` is set, so the flag read
+     * and the unlink observe the same state.
+     */
+    #dropDeltaSidecarIfSettled() {
+        if (this.#hasUnsettledTurn)
+            return;
+        try {
+            this.#fileSystem.unlinkSync(deltaPath(this.#dir, this.#sessionId));
+        }
+        catch (err) {
+            const errorObj = err;
+            if (errorObj?.code !== 'ENOENT') {
+                this.#logWriteFailure(err);
+            }
+        }
+    }
+    rotate(newSessionId, meta, initialEvents = []) {
+        this.#throwIfFailed();
+        let rotateFailure = null;
+        if (this.#fd !== null) {
+            try {
+                this.#fileSystem.fsyncSync(this.#fd);
+            }
+            catch (err) {
+                rotateFailure = err;
+            }
+            try {
+                this.#fileSystem.closeSync(this.#fd);
+            }
+            catch (err) {
+                rotateFailure ??= err;
+            }
+            this.#fd = null;
+        }
+        rotateFailure ??= this.#closeDeltaFd();
+        // Drop before releasing the lock, so a crash mid-rotate cannot leave an
+        // orphan the startup GC is unable to distinguish from a live sidecar.
+        this.#dropDeltaSidecarIfSettled();
+        releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+        if (rotateFailure !== null) {
+            this.#recordFailure(rotateFailure);
+            throw rotateFailure;
+        }
+        this.#sessionId = newSessionId;
+        this.#seq = 0;
+        this.#hasUnsettledTurn = false;
+        this.#writeErrorLogged = false;
+        this.#deferLastConversationPublication = true;
+        try {
+            this.#initialize(meta, false);
+            for (const event of initialEvents)
+                this.append(event);
+            this.#deferLastConversationPublication = false;
+            this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+        }
+        catch (err) {
+            this.#recordFailure(err);
+            throw err;
+        }
+    }
+    async flush() {
+        this.#throwIfFailed();
+        if (this.#fd !== null) {
+            try {
+                this.#fileSystem.fsyncSync(this.#fd);
+            }
+            catch (err) {
+                this.#recordFailure(err);
+                throw err;
+            }
+        }
+    }
+    async deleteSessionFiles() {
+        if (this.#closed || this.#fd === null)
+            throw new Error('conversation log writer is not open');
+        this.#throwIfFailed();
+        this.#closed = true;
+        let failure = null;
+        try {
+            this.#fileSystem.fsyncSync(this.#fd);
+        }
+        catch (error) {
+            failure = error;
+        }
+        try {
+            this.#fileSystem.closeSync(this.#fd);
+        }
+        catch (error) {
+            failure ??= error;
+        }
+        this.#fd = null;
+        failure ??= this.#closeDeltaFd();
+        if (failure === null) {
+            try {
+                this.#fileSystem.unlinkSync(deltaPath(this.#dir, this.#sessionId));
+            }
+            catch (error) {
+                if (error.code !== 'ENOENT')
+                    failure = error;
+            }
+        }
+        if (failure === null) {
+            try {
+                this.#fileSystem.unlinkSync(logPath(this.#dir, this.#sessionId));
+                const directoryFd = this.#fileSystem.openSync(this.#dir, 'r');
+                try {
+                    this.#fileSystem.fsyncSync(directoryFd);
+                }
+                finally {
+                    this.#fileSystem.closeSync(directoryFd);
+                }
+            }
+            catch (error) {
+                failure = error;
+            }
+        }
+        releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+        if (failure !== null) {
+            this.#recordFailure(failure);
+            throw failure;
+        }
+    }
+    async close() {
+        if (this.#closed) {
+            this.#throwIfFailed();
+            return;
+        }
+        this.#closed = true;
+        const primaryFailure = this.#failure;
+        let cleanupFailure = null;
+        if (this.#fd !== null) {
+            try {
+                this.#fileSystem.fsyncSync(this.#fd);
+            }
+            catch (err) {
+                cleanupFailure = err;
+            }
+            try {
+                this.#fileSystem.closeSync(this.#fd);
+            }
+            catch (err) {
+                cleanupFailure ??= err;
+            }
+            this.#fd = null;
+        }
+        cleanupFailure ??= this.#closeDeltaFd();
+        // Unlink before releasing the lock: a crash in between would otherwise
+        // leave a sidecar with no lock, indistinguishable from a live one.
+        this.#dropDeltaSidecarIfSettled();
+        if (primaryFailure === null && cleanupFailure === null) {
+            this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+        }
+        releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+        if (primaryFailure !== null)
+            throw primaryFailure;
+        if (cleanupFailure !== null) {
+            this.#recordFailure(cleanupFailure);
+            throw cleanupFailure;
+        }
+    }
+    #throwIfFailed() {
+        if (this.#failure !== null)
+            throw this.#failure;
+    }
+    #recordFailure(err) {
+        this.#failure ??= err;
+        this.#logWriteFailure(err);
+    }
+    #logWriteFailure(err) {
+        if (this.#writeErrorLogged)
+            return;
+        this.#writeErrorLogged = true;
+        const message = err instanceof Error ? err.message : String(err);
+        try {
+            this.#logger.error('Conversation log write failed', {
+                eventType: 'conversation_log.write_failed',
+                category: 'persistence',
+                sessionId: this.#sessionId,
+                errorMessage: message,
+            });
+        }
+        catch {
+            // Persistence diagnostics must not mask the underlying storage failure.
+        }
+        // A failed critical append is rethrown to stop the affected session path;
+        // a failed delta append is best-effort and cannot be rethrown safely. In
+        // either case the user must know that recovery data may be missing, even
+        // when the general log transport is itself unavailable.
+        try {
+            process.stderr.write(`[Conversation persistence] Write failed; this session may not be recoverable: ${message}\n`);
+        }
+        catch {
+            // The original persistence error remains the authoritative failure.
+        }
+    }
+}
+export function createConversationLogWriter(opts) {
+    return new ConversationLogWriterImpl(opts);
+}
+//# sourceMappingURL=conversation-log-writer.js.map

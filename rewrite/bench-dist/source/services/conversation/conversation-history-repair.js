@@ -1,0 +1,280 @@
+import { toolOccurrenceKey } from './tool-occurrence.js';
+import { createHash } from 'node:crypto';
+import { normalizeRunItem } from './run-item-normalizer.js';
+const asRecord = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+const rawItem = (item) => {
+    const record = asRecord(item);
+    if (!record) {
+        return null;
+    }
+    return asRecord(record.rawItem) ?? record;
+};
+const typeOf = (raw) => {
+    const type = raw?.type;
+    return typeof type === 'string' ? type : '';
+};
+const canonicalToolItem = (item) => {
+    for (const normalized of normalizeRunItem(item)) {
+        if (normalized.type === 'tool_call' || normalized.type === 'tool_result') {
+            return normalized;
+        }
+    }
+    return null;
+};
+const toolSignature = (item) => `call:${toolOccurrenceKey(item)}:${item.type}`;
+const cloneHistory = (history) => {
+    try {
+        return structuredClone(history);
+    }
+    catch {
+        try {
+            return JSON.parse(JSON.stringify(history));
+        }
+        catch {
+            return history.slice();
+        }
+    }
+};
+const hashString = (str) => {
+    return createHash('sha256').update(str).digest('hex');
+};
+const itemSignature = (item) => {
+    const toolItem = canonicalToolItem(item);
+    if (toolItem) {
+        return toolSignature(toolItem);
+    }
+    const raw = rawItem(item);
+    const type = typeOf(raw);
+    const id = raw?.id;
+    if (typeof id === 'string' && id) {
+        return `id:${id}`;
+    }
+    // Message-like items: role + type + content parts + tool_calls.
+    const role = raw?.role;
+    if (typeof role === 'string' && role) {
+        const parts = [];
+        const content = raw?.content;
+        if (typeof content === 'string') {
+            if (content) {
+                parts.push(`text:${content}`);
+            }
+        }
+        else if (Array.isArray(content)) {
+            for (const c of content) {
+                if (c && typeof c === 'object') {
+                    if (typeof c.type === 'string') {
+                        parts.push(`part:${c.type}`);
+                    }
+                    if (typeof c.text === 'string' && c.text) {
+                        parts.push(`text:${c.text}`);
+                    }
+                    // Image URLs / base64 image data
+                    if (typeof c.image === 'string' && c.image) {
+                        parts.push(`image:${hashString(c.image)}`);
+                    }
+                    if (c.image_url && typeof c.image_url.url === 'string' && c.image_url.url) {
+                        parts.push(`image_url:${hashString(c.image_url.url)}`);
+                    }
+                }
+            }
+        }
+        // Embed tool calls inside the signature if present
+        const toolCalls = item?.tool_calls ?? raw?.tool_calls;
+        if (Array.isArray(toolCalls)) {
+            for (const tc of toolCalls) {
+                if (tc && typeof tc === 'object') {
+                    const tcId = tc.id ?? tc.callId ?? tc.call_id ?? '';
+                    const tcName = tc.function?.name ?? tc.name ?? '';
+                    parts.push(`tool:${tcId}:${tcName}`);
+                }
+            }
+        }
+        return `msg:${role}:${type}:${parts.join('|')}`;
+    }
+    const name = raw?.name;
+    return `item:${type}:${typeof name === 'string' ? name : ''}`;
+};
+const collectCallSignatures = (items) => {
+    const signatures = new Set();
+    for (const item of items) {
+        const signature = itemSignature(item);
+        if (signature.startsWith('call:')) {
+            signatures.add(signature);
+        }
+    }
+    return signatures;
+};
+const countDuplicatePairs = (items) => {
+    const calls = new Map();
+    const results = new Map();
+    for (const item of items) {
+        const toolItem = canonicalToolItem(item);
+        if (!toolItem) {
+            continue;
+        }
+        if (toolItem.type === 'tool_call') {
+            calls.set(toolOccurrenceKey(toolItem), (calls.get(toolOccurrenceKey(toolItem)) ?? 0) + 1);
+        }
+        else {
+            results.set(toolOccurrenceKey(toolItem), (results.get(toolOccurrenceKey(toolItem)) ?? 0) + 1);
+        }
+    }
+    let duplicatePairs = 0;
+    let maxCopies = 0;
+    for (const [callId, callCount] of calls) {
+        const copies = Math.min(callCount, results.get(callId) ?? 0);
+        if (copies < 2) {
+            continue;
+        }
+        duplicatePairs++;
+        maxCopies = Math.max(maxCopies, copies);
+    }
+    return { duplicatePairs, maxCopies };
+};
+const collectStats = (items) => ({
+    count: items.length,
+    ...countDuplicatePairs(items),
+});
+const repairMetadata = (kind, before, after) => {
+    const beforeStats = collectStats(before);
+    return {
+        kind,
+        removedItems: before.length - after.length,
+        beforeCount: before.length,
+        afterCount: after.length,
+        duplicatePairsBefore: beforeStats.duplicatePairs,
+        maxCopiesBefore: beforeStats.maxCopies,
+    };
+};
+const isPrefixMatch = (prefix, full) => {
+    if (prefix.length > full.length) {
+        return false;
+    }
+    for (let i = 0; i < prefix.length; i++) {
+        if (itemSignature(prefix[i]) !== itemSignature(full[i])) {
+            return false;
+        }
+    }
+    return true;
+};
+const collapseReplayedHistoryPrefixes = (input) => {
+    let collapsed = input;
+    const repairs = [];
+    while (collapsed.length > 1) {
+        const firstSignature = itemSignature(collapsed[0]);
+        let replayStart = -1;
+        for (let i = collapsed.length - 1; i > 0; i--) {
+            if (itemSignature(collapsed[i]) !== firstSignature) {
+                continue;
+            }
+            const prefix = collapsed.slice(0, i);
+            const suffix = collapsed.slice(i);
+            // Require tool calls in the prefix before collapsing.
+            const prefixCallSignatures = collectCallSignatures(prefix);
+            if (prefixCallSignatures.size > 0) {
+                // Heuristic 1: prefix is an exact/ordered prefix match of the suffix.
+                if (isPrefixMatch(prefix, suffix)) {
+                    replayStart = i;
+                    break;
+                }
+                // Heuristic 2: the prefix contains tool calls, and all those tool calls are present in the suffix.
+                const suffixCallSignatures = collectCallSignatures(suffix);
+                let allPrefixCallsReplayed = true;
+                for (const signature of prefixCallSignatures) {
+                    if (!suffixCallSignatures.has(signature)) {
+                        allPrefixCallsReplayed = false;
+                        break;
+                    }
+                }
+                if (allPrefixCallsReplayed) {
+                    replayStart = i;
+                    break;
+                }
+            }
+        }
+        if (replayStart === -1) {
+            break;
+        }
+        const before = collapsed;
+        collapsed = collapsed.slice(replayStart);
+        repairs.push(repairMetadata('replayed_full_history_prefix', before, collapsed));
+    }
+    return { history: collapsed, repairs };
+};
+const repairDuplicatedToolPairs = (input) => {
+    const pairCounts = countDuplicatePairs(input);
+    if (pairCounts.duplicatePairs === 0) {
+        return { history: input, repairs: [] };
+    }
+    const calls = new Map();
+    const results = new Map();
+    for (const item of input) {
+        const toolItem = canonicalToolItem(item);
+        if (!toolItem) {
+            continue;
+        }
+        if (toolItem.type === 'tool_call') {
+            calls.set(toolOccurrenceKey(toolItem), (calls.get(toolOccurrenceKey(toolItem)) ?? 0) + 1);
+        }
+        else {
+            results.set(toolOccurrenceKey(toolItem), (results.get(toolOccurrenceKey(toolItem)) ?? 0) + 1);
+        }
+    }
+    const duplicatedPairCallIds = new Set();
+    for (const [callId, callCount] of calls) {
+        if (callCount > 1 && (results.get(callId) ?? 0) > 1) {
+            duplicatedPairCallIds.add(callId);
+        }
+    }
+    if (duplicatedPairCallIds.size === 0) {
+        return { history: input, repairs: [] };
+    }
+    const keptCalls = new Set();
+    const keptResults = new Set();
+    const repaired = input.filter((item) => {
+        const toolItem = canonicalToolItem(item);
+        if (!toolItem || !duplicatedPairCallIds.has(toolOccurrenceKey(toolItem))) {
+            return true;
+        }
+        if (toolItem.type === 'tool_call') {
+            if (keptCalls.has(toolOccurrenceKey(toolItem))) {
+                return false;
+            }
+            keptCalls.add(toolOccurrenceKey(toolItem));
+            return true;
+        }
+        if (keptResults.has(toolOccurrenceKey(toolItem))) {
+            return false;
+        }
+        keptResults.add(toolOccurrenceKey(toolItem));
+        return true;
+    });
+    if (repaired.length === input.length) {
+        return { history: input, repairs: [] };
+    }
+    return {
+        history: repaired,
+        repairs: [repairMetadata('duplicated_tool_call_result_pair', input, repaired)],
+    };
+};
+export function repairConversationHistory(history) {
+    const statsBefore = collectStats(history);
+    let repairedHistory = cloneHistory(history);
+    const repairs = [];
+    const prefixRepair = collapseReplayedHistoryPrefixes(repairedHistory);
+    repairedHistory = prefixRepair.history;
+    repairs.push(...prefixRepair.repairs);
+    const pairRepair = repairDuplicatedToolPairs(repairedHistory);
+    repairedHistory = pairRepair.history;
+    repairs.push(...pairRepair.repairs);
+    const statsAfter = collectStats(repairedHistory);
+    return {
+        history: repairedHistory,
+        repaired: repairedHistory.length !== history.length,
+        removedItems: history.length - repairedHistory.length,
+        repairs,
+        statsBefore,
+        statsAfter,
+    };
+}
+//# sourceMappingURL=conversation-history-repair.js.map

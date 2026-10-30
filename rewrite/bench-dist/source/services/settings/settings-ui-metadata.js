@@ -1,0 +1,455 @@
+import { SETTING_KEYS, RUNTIME_MODIFIABLE_SETTINGS } from './settings-schema.js';
+import { resolveSettingAtPath, unwrapSchema } from './setting-schema-utils.js';
+/**
+ * Short, human-readable names for the settings list. A setting without an entry
+ * here still renders through `humanizeSettingKey`, so new keys never fall back
+ * to showing the raw dotted key alone.
+ */
+export const SETTING_LABELS = {
+    [SETTING_KEYS.VERIFIER_MODEL]: 'Verifier model',
+    [SETTING_KEYS.AGENT_BACKGROUND_WAIT_TIMEOUT_MS]: 'Headless background wait limit',
+    [SETTING_KEYS.ENABLE_AGENT_WORKFLOW]: 'Agent workflows',
+    [SETTING_KEYS.AGENT_MODEL_SELECTION]: 'Model',
+    [SETTING_KEYS.AGENT_SMART_MODEL]: 'Smart model',
+    [SETTING_KEYS.AGENT_SMART_REASONING_EFFORT]: 'Smart reasoning effort',
+    [SETTING_KEYS.AGENT_BALANCED_MODEL]: 'Balanced model',
+    [SETTING_KEYS.AGENT_BALANCED_REASONING_EFFORT]: 'Balanced reasoning effort',
+    [SETTING_KEYS.AGENT_CHEAP_MODEL]: 'Cheap model',
+    [SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT]: 'Cheap reasoning effort',
+    [SETTING_KEYS.AGENT_CHORE_MODEL]: 'Chore model',
+    [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort',
+    [SETTING_KEYS.AGENT_TEMPERATURE]: 'Temperature',
+    [SETTING_KEYS.AGENT_FAVORITE_MODELS]: 'Favorite models',
+    [SETTING_KEYS.AGENT_MODEL_NICKNAMES]: 'Model nicknames',
+    [SETTING_KEYS.AGENT_DISABLED_PROVIDERS]: 'Disabled providers',
+    [SETTING_KEYS.AGENT_MAX_TURNS]: 'Max turns',
+    [SETTING_KEYS.AGENT_MAX_REQUEST_INPUT_TOKENS]: 'Max request input tokens',
+    [SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS]: 'Max output tokens',
+    [SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS]: 'Max streamed output',
+    [SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS]: 'Model request time limit',
+    [SETTING_KEYS.AGENT_MAX_MODEL_STREAM_IDLE_MS]: 'Model stream idle limit',
+    [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Retry attempts',
+    [SETTING_KEYS.AGENT_TRANSPORT]: 'Model connection',
+    [SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS]: 'Max parallel tool calls',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]: 'Run cost limit',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]: 'Run token limit',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]: 'Run time limit',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]: 'Warn at USD left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS]: 'Warn at tokens left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS]: 'Warn at time left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS]: 'Wrap-up nudge at USD left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS]: 'Wrap-up nudge at tokens left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS]: 'Wrap-up nudge at time left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP]: 'Runaway turn limit',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT]: 'Extension size',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS]: 'Extensions before asking',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]: 'Stall: repeated calls',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]: 'At a run limit',
+    [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED]: 'Background check-ins',
+    [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS]: 'Check-in interval',
+    [SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED]: 'Session rollover',
+    [SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES]: 'Rollover reminder points',
+    [SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF]: 'Auto-pass rollover brief',
+    [SETTING_KEYS.AGENT_OPENROUTER_API_KEY]: 'OpenRouter API key',
+    [SETTING_KEYS.AGENT_OPENAI_API_KEY]: 'OpenAI API key',
+    [SETTING_KEYS.AGENT_OPENROUTER_BASE_URL]: 'OpenRouter base URL',
+    [SETTING_KEYS.AGENT_OPENROUTER_REFERRER]: 'OpenRouter referrer',
+    [SETTING_KEYS.AGENT_OPENROUTER_TITLE]: 'OpenRouter title',
+    [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]: 'Codex first-reply timeout',
+    [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]: 'Codex stream-gap timeout',
+    [SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT]: 'Mentor reasoning effort',
+    [SETTING_KEYS.AGENT_MENTOR_SAMPLES]: 'Mentor samples',
+    [SETTING_KEYS.AGENT_MENTOR_POOL]: 'Mentor models',
+    [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]: 'Flex service tier',
+    [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED]: 'Context compaction',
+    [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE]: 'Compaction mode',
+    [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD]: 'Compaction threshold',
+    [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS]: 'Compaction token ceiling',
+    [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell timeout',
+    [SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT]: 'Background shell timeout',
+    [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Shell output lines',
+    [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Shell output chars',
+    [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell auto-approval',
+    [SETTING_KEYS.SANDBOX_ENABLED]: 'Sandbox',
+    [SETTING_KEYS.SANDBOX_READ_POLICY]: 'Sandbox read policy',
+    [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Sandbox extra read paths',
+    [SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]: 'Docker access grants',
+    [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Sandbox networking',
+    [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]: 'Approval review effort',
+    [SETTING_KEYS.AGENT_DECISION_MODEL]: 'Fast approval model',
+    [SETTING_KEYS.AGENT_COMPLETION_VERIFICATION]: 'Completion verification',
+    [SETTING_KEYS.AGENT_VERIFICATION_MAX_REPAIRS]: 'Max verification repairs',
+    [SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT]: 'Explorer subagent effort',
+    [SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT]: 'Worker subagent effort',
+    [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT]: 'Librarian subagent effort',
+    [SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS]: 'Subagent session TTL',
+    [SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP]: 'Subagent message cap',
+    [SETTING_KEYS.UI_HISTORY_SIZE]: 'History size',
+    [SETTING_KEYS.UI_PASTE_THRESHOLD]: 'Paste threshold',
+    [SETTING_KEYS.UI_DISPLAY_MODE]: 'Display mode',
+    [SETTING_KEYS.UI_THEME]: 'Theme',
+    [SETTING_KEYS.UI_SKIN]: 'Skin',
+    [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Log level',
+    [SETTING_KEYS.LOGGING_DISABLE]: 'Disable logging',
+    [SETTING_KEYS.LOGGING_DEBUG]: 'Debug logging',
+    [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]: 'Suppress console output',
+    [SETTING_KEYS.ENV_NODE_ENV]: 'Node environment',
+    [SETTING_KEYS.APP_SHELL_PATH]: 'Shell path',
+    [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile',
+    [SETTING_KEYS.APP_MENTOR_MODE]: 'Mentor mode',
+    [SETTING_KEYS.APP_LITE_MODE]: 'Lite mode (Bare)',
+    [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode',
+    [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Orchestrator mode',
+    [SETTING_KEYS.APP_NOTIFICATIONS]: 'Notifications',
+    [SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL]: 'Approval notifications',
+    [SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE]: 'Completion notifications',
+    [SETTING_KEYS.APP_SEARCH_VIA_SHELL]: 'Code search via shell',
+    [SETTING_KEYS.TOOLS_LOG_FILE_OPS]: 'Log file operations',
+    [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Edit healing',
+    [SETTING_KEYS.TOOLS_SHELL_ENABLED]: 'Shell tools',
+    [SETTING_KEYS.TOOLS_WEB_ENABLED]: 'Web tools',
+    [SETTING_KEYS.TOOLS_FILE_READ_ENABLED]: 'File read tools',
+    [SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED]: 'File edit tools',
+    [SETTING_KEYS.TOOLS_MEMORY_ENABLED]: 'Memory tools',
+    [SETTING_KEYS.TOOLS_SESSIONS_ENABLED]: 'Session tools',
+    [SETTING_KEYS.TOOLS_SKILLS_ENABLED]: 'Skill tools',
+    [SETTING_KEYS.TOOLS_MENTOR_ENABLED]: 'Mentor tool',
+    [SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED]: 'Subagent tools',
+    [SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED]: 'Background task tools',
+    [SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED]: 'Ask-user tool',
+    [SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED]: 'Code context tools',
+    [SETTING_KEYS.DEBUG_BASH_TOOL]: 'Bash tool debugging',
+    [SETTING_KEYS.SSH_ENABLED]: 'SSH',
+    [SETTING_KEYS.SSH_HOST]: 'SSH host',
+    [SETTING_KEYS.SSH_PORT]: 'SSH port',
+    [SETTING_KEYS.SSH_USERNAME]: 'SSH username',
+    [SETTING_KEYS.SSH_REMOTE_DIR]: 'SSH remote directory',
+    [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider',
+    [SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY]: 'Tavily API key',
+    [SETTING_KEYS.WEB_SEARCH_EXA_API_KEY]: 'Exa API key',
+    [SETTING_KEYS.WEB_SEARCH_FIRECRAWL_API_KEY]: 'Firecrawl API key',
+    [SETTING_KEYS.WEB_SEARCH_FIRECRAWL_BASE_URL]: 'Firecrawl base URL',
+    [SETTING_KEYS.WEB_SEARCH_SEARXNG_BASE_URL]: 'SearXNG base URL',
+    [SETTING_KEYS.MEMORY_ENABLED]: 'Memory',
+    [SETTING_KEYS.MEMORY_DIRECTORY]: 'Memory directory',
+    [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Memory context budget',
+    [SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT]: 'Memory search results',
+    [SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT]: 'Memory max search results',
+    [SETTING_KEYS.HOOKS_USER_ENABLED]: 'User hooks',
+    [SETTING_KEYS.HOOKS_PROJECT_ENABLED]: 'Project hooks',
+    [SETTING_KEYS.HOOKS_TRUSTED_PROJECT_ROOTS]: 'Trusted hook roots',
+    [SETTING_KEYS.HOOKS_INCLUDE_USER_TEXT]: 'Include user text',
+    [SETTING_KEYS.HOOKS_INCLUDE_TOOL_ARGUMENTS]: 'Include tool arguments',
+    [SETTING_KEYS.HOOKS_INCLUDE_TOOL_RESULTS]: 'Include tool results',
+    [SETTING_KEYS.HOOKS_TIMEOUT_MS]: 'Hook timeout',
+};
+/**
+ * Turn a dotted setting key into a readable name when no curated label exists
+ * (for example a key added after `SETTING_LABELS`).
+ */
+export function humanizeSettingKey(key) {
+    const leaf = key.slice(key.lastIndexOf('.') + 1);
+    const words = leaf
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .replace(/[_-]+/g, ' ')
+        .toLowerCase()
+        .trim();
+    if (!words)
+        return key;
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+export function getSettingLabel(key) {
+    return SETTING_LABELS[key] ?? humanizeSettingKey(key);
+}
+/**
+ * Fallback descriptions for setting keys whose schema field does not define a `.describe()` text.
+ */
+const FALLBACK_SETTING_DESCRIPTIONS = {
+    [SETTING_KEYS.ENABLE_AGENT_WORKFLOW]: 'Enable bounded JavaScript workflows that coordinate concurrent read-only agents (true|false)',
+    [SETTING_KEYS.AGENT_FAVORITE_MODELS]: 'Favorited models as "provider/modelId" strings, matched fast by --model before any catalog loads (edit via ctrl+f in the model picker)',
+    [SETTING_KEYS.AGENT_MODEL_NICKNAMES]: 'Short names for models as a nickname -> "provider/modelId" map, matched exactly by --model before any catalog loads (browse on the model picker Nicknames tab; edit via ctrl+n on a favorite)',
+    [SETTING_KEYS.AGENT_SMART_MODEL]: 'Model for smart-tier helper agents (the hardest side tasks) (falls back to agent.modelSelection)',
+    [SETTING_KEYS.AGENT_SMART_REASONING_EFFORT]: 'Reasoning effort for smart-tier helper agents (the hardest side tasks) (none|minimal|low|medium|high|xhigh|default)',
+    [SETTING_KEYS.AGENT_BALANCED_MODEL]: 'Model for balanced-tier helper agents (everyday side tasks) (falls back to agent.modelSelection)',
+    [SETTING_KEYS.AGENT_BALANCED_REASONING_EFFORT]: 'Reasoning effort for balanced-tier helper agents (everyday side tasks) (none|minimal|low|medium|high|xhigh|default)',
+    [SETTING_KEYS.AGENT_CHEAP_MODEL]: 'Model for cheap-tier helper agents (simple, high-volume side tasks) (falls back to agent.modelSelection)',
+    [SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT]: 'Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks) (none|minimal|low|medium|high|xhigh|default)',
+    [SETTING_KEYS.AGENT_CHORE_MODEL]: 'Model for small background jobs like repairing failed file edits and reviewing shell auto-approvals (falls back to agent.modelSelection)',
+    [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort (none|minimal|low|medium|high|xhigh|default)',
+    [SETTING_KEYS.AGENT_TEMPERATURE]: 'Model temperature (0-2, controls randomness)',
+    [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]: 'Use OpenAI Flex Service Tier to reduce costs (true|false, OpenAI only)',
+    [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED]: 'Enable context compaction (true|false)',
+    [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE]: 'Context compaction strategy: native uses provider support only; auto prefers native then falls back to local; local always uses the application summarizer (native|auto|local; default auto)',
+    [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD]: 'Context-window ratio for automatic context compaction (0-1, 0%-100%)',
+    [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS]: 'Optional raw-token ceiling for automatic context compaction (null or integer >=1000)',
+    [SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED]: 'Remind the agent when context reaches milestones so it can plan a session rollover (true|false)',
+    [SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES]: 'Context token milestones that trigger session rollover reminders (e.g. 200000, 300000, 400000)',
+    [SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF]: 'Automatically pass the handoff brief into the new session upon rollover (true|false)',
+    [SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT]: 'Reasoning effort for the mentor model (none|minimal|low|medium|high|xhigh|default)',
+    [SETTING_KEYS.AGENT_MENTOR_SAMPLES]: 'Independent mentor answers per consultation (1-8; >1 costs one mentor call each)',
+    [SETTING_KEYS.AGENT_MENTOR_POOL]: 'Models consulted per mentor question, one answer each (overrides agent.mentorSamples)',
+    [SETTING_KEYS.AGENT_MAX_TURNS]: 'Maximum conversation turns',
+    [SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS]: 'Maximum tokens generated by one model request',
+    [SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS]: 'Maximum streamed text or tool-argument characters per model request; reasoning above this is truncated, not aborted',
+    [SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS]: 'Optional total wall-clock ceiling for one model request, in milliseconds (0 disables; opt-in backstop)',
+    [SETTING_KEYS.AGENT_MAX_MODEL_STREAM_IDLE_MS]: 'Abort a request that streams no output for this many milliseconds; re-arms on each streamed delta so long reasoning survives (0 disables)',
+    [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',
+    [SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS]: 'Maximum number of tool calls allowed to run at the same time',
+    [SETTING_KEYS.AGENT_TRANSPORT]: 'How term2 connects to model providers: a persistent WebSocket or plain HTTP requests (websocket|http)',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]: 'Spending limit for one run, counted on requests with a known price',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]: 'Token limit for one run when the provider reports no price; cache reads count a tenth and subscription providers are exempt',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]: 'Active-time limit for one run; time spent waiting for your approval does not count',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]: 'Warn when this much of the run cost limit is left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS]: 'Warn when this many tokens of the run token limit are left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS]: 'Warn when this much of the run time limit is left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS]: 'Nudge the agent to wrap up when this much of the run cost limit is left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS]: 'Nudge the agent to wrap up when this many tokens of the run token limit are left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS]: 'Nudge the agent to wrap up when this much of the run time limit is left',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP]: 'Stop a run that reaches this many turns — a safety net against infinite loops, not a budget',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT]: 'Size of each budget extension, as a percentage of the original limit',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS]: 'Budget extensions a parent agent may grant a subagent before asking you',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]: 'Identical tool calls in a row, with no edit in between, that count as a stall',
+    [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]: 'warn shows a status-bar warning; contain pauses when a limit is reached; pause also stops on warnings and stalls; disabled turns run limits off',
+    [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED]: 'Wake the agent periodically to check on a still-running background shell job or subagent while idle',
+    [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS]: 'How often to check in on a still-running background task',
+    [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]: 'Codex WebSocket timeout before the first response frame, in milliseconds',
+    [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]: 'Codex WebSocket timeout between response frames, in milliseconds',
+    [SETTING_KEYS.AGENT_OPENROUTER_API_KEY]: 'OpenRouter API key',
+    [SETTING_KEYS.AGENT_OPENROUTER_BASE_URL]: 'OpenRouter base URL',
+    [SETTING_KEYS.AGENT_OPENROUTER_REFERRER]: 'OpenRouter HTTP Referer header',
+    [SETTING_KEYS.AGENT_OPENROUTER_TITLE]: 'OpenRouter X-Title header',
+    [SETTING_KEYS.AGENT_OPENAI_API_KEY]: 'OpenAI API key',
+    [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell command timeout in milliseconds',
+    [SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT]: 'Timeout for background shell jobs in milliseconds (default 30 minutes)',
+    [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Maximum lines of shell output to capture',
+    [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Maximum characters of shell output to capture',
+    [SETTING_KEYS.UI_HISTORY_SIZE]: 'Number of history items to keep',
+    [SETTING_KEYS.UI_PASTE_THRESHOLD]: 'Max paste length before text is replaced by a placeholder',
+    [SETTING_KEYS.UI_DISPLAY_MODE]: 'Display mode for rendering output (standard|concise)',
+    [SETTING_KEYS.UI_SKIN]: 'Layout skin (classic|rail|cards|ledger|zen); changes how output and prompts are drawn',
+    [SETTING_KEYS.UI_THEME]: 'Colour theme (auto|dark|light|high-contrast|mono); auto follows the terminal background',
+    [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Logging level (debug, info, warn, error)',
+    [SETTING_KEYS.LOGGING_DISABLE]: 'Disable all file logging (true|false)',
+    [SETTING_KEYS.LOGGING_DEBUG]: 'Enable debug logging to disk (true|false)',
+    [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]: 'Suppress console output (true|false) to avoid interfering with Ink UI',
+    [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Use AI to automatically correct failed search_replace operations',
+    [SETTING_KEYS.TOOLS_SHELL_ENABLED]: 'Enable shell tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+    [SETTING_KEYS.TOOLS_WEB_ENABLED]: 'Enable web_search and web_fetch tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+    [SETTING_KEYS.TOOLS_FILE_READ_ENABLED]: 'Enable file read tools for the main agent (true|false); applies on the next model request.',
+    [SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED]: 'Enable file edit tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+    [SETTING_KEYS.TOOLS_MEMORY_ENABLED]: 'Enable memory tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+    [SETTING_KEYS.TOOLS_SESSIONS_ENABLED]: 'Enable prior-session tools for the main agent (true|false). Applies on the next model request.',
+    [SETTING_KEYS.TOOLS_SKILLS_ENABLED]: 'Enable the activate_skill tool and skill catalog for the main agent (true|false). Applies on the next model request.',
+    [SETTING_KEYS.TOOLS_MENTOR_ENABLED]: 'Enable the ask_mentor tool for the main agent (true|false). Also requires a configured mentor model; applies on the next model request.',
+    [SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED]: 'Enable subagent delegation tools for the main agent (true|false). Does not restrict the subagents themselves; applies on the next model request.',
+    [SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED]: 'Enable background task tools for the main agent (true|false). Applies on the next model request.',
+    [SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED]: 'Enable the ask_user tool for the main agent (true|false). Applies on the next model request.',
+    [SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED]: 'Enable code-context tools for the main agent (true|false). Applies on the next model request.',
+    [SETTING_KEYS.TOOLS_LOG_FILE_OPS]: 'Log file operations to disk (true|false)',
+    [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell command auto-approval mode (off|advisory|auto|always); `always` disables sandbox.enabled',
+    [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]: 'Reasoning effort for risky shell auto-approval reviews (none|minimal|low|medium|high|xhigh)',
+    [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode: read-only research and implementation planning (true|false)',
+    [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Delegate tool-backed work through subagents (true|false)',
+    [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile identifier (builtin:standard, builtin:plan, etc.)',
+    [SETTING_KEYS.APP_MENTOR_MODE]: 'Legacy mentor mode flag (mapped to active profile)',
+    [SETTING_KEYS.APP_LITE_MODE]: 'Legacy lite mode flag (selects the Bare profile)',
+    [SETTING_KEYS.APP_SHELL_PATH]: 'Path to shell executable',
+    [SETTING_KEYS.APP_NOTIFICATIONS]: 'Enable desktop notifications when the terminal is unfocused (true|false)',
+    [SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL]: 'Notify when the agent needs tool-call approval (true|false)',
+    [SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE]: 'Notify when the agent finishes responding (true|false)',
+    [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider (tavily, exa, firecrawl, searxng)',
+    [SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY]: 'Tavily search API key',
+    [SETTING_KEYS.WEB_SEARCH_EXA_API_KEY]: 'Exa search API key',
+    [SETTING_KEYS.WEB_SEARCH_FIRECRAWL_API_KEY]: 'Firecrawl API key',
+    [SETTING_KEYS.WEB_SEARCH_FIRECRAWL_BASE_URL]: 'Firecrawl API base URL',
+    [SETTING_KEYS.WEB_SEARCH_SEARXNG_BASE_URL]: 'SearXNG base URL',
+    [SETTING_KEYS.APP_SEARCH_VIA_SHELL]: 'Use shell commands (ripgrep/find) for codebase search instead of built-in tools; only `on` withholds them, `auto` matches `off` (auto|on|off)',
+    [SETTING_KEYS.SANDBOX_ENABLED]: 'Enable sandbox mode for safer command execution (true|false)',
+    [SETTING_KEYS.SANDBOX_READ_POLICY]: 'File read policy for sandbox (standard|strict)',
+    [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Additional paths allowed for sandbox file reads (comma-separated)',
+    [SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]: 'Projects you allowed to control Docker on the host; remove a path to revoke its access (JSON array)',
+    [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Allow sandboxed commands to access the network (true|false)',
+    [SETTING_KEYS.MEMORY_ENABLED]: 'Enable persistent memory across sessions (true|false)',
+    [SETTING_KEYS.MEMORY_DIRECTORY]: 'Directory where memory files are stored (path)',
+    [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Character budget for the injected memory index (number)',
+    [SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT]: 'Default number of search results to return (number)',
+    [SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT]: 'Maximum number of search results to return (number)',
+    [SETTING_KEYS.HOOKS_USER_ENABLED]: 'Load trusted user hooks from ~/.term2/hooks (true|false)',
+    [SETTING_KEYS.HOOKS_PROJECT_ENABLED]: 'Discover project hooks when the project root is trusted (true|false)',
+    [SETTING_KEYS.HOOKS_TRUSTED_PROJECT_ROOTS]: 'Canonical project roots trusted to load hooks (JSON array)',
+    [SETTING_KEYS.HOOKS_INCLUDE_USER_TEXT]: 'Include user turn text in hook payloads (true|false)',
+    [SETTING_KEYS.HOOKS_INCLUDE_TOOL_ARGUMENTS]: 'Include full tool arguments in hook payloads (true|false)',
+    [SETTING_KEYS.HOOKS_INCLUDE_TOOL_RESULTS]: 'Include full tool results in hook payloads (true|false)',
+    [SETTING_KEYS.HOOKS_TIMEOUT_MS]: 'Maximum time to await one hook callback in milliseconds',
+    [SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT]: 'Reasoning effort for the explorer subagent (none|minimal|low|medium|high|xhigh|default)',
+    [SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT]: 'Reasoning effort for the worker subagent (none|minimal|low|medium|high|xhigh|default)',
+    [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT]: 'Reasoning effort for the librarian subagent (none|minimal|low|medium|high|xhigh|default)',
+    [SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS]: 'How long completed async subagent sessions are retained in memory before eviction, in milliseconds',
+    [SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP]: 'Maximum number of user turns to retain in a persisted async subagent session',
+    [SETTING_KEYS.DEBUG_BASH_TOOL]: 'Enable debug logging for the bash tool (true|false)',
+    [SETTING_KEYS.SSH_ENABLED]: 'Enable SSH remote execution (true|false)',
+    [SETTING_KEYS.SSH_HOST]: 'SSH remote host',
+    [SETTING_KEYS.SSH_PORT]: 'SSH remote port',
+    [SETTING_KEYS.SSH_USERNAME]: 'SSH remote username',
+    [SETTING_KEYS.SSH_REMOTE_DIR]: 'SSH remote directory',
+    [SETTING_KEYS.ENV_NODE_ENV]: 'Node environment (development|production|test)',
+};
+/**
+ * Extract enum options from an unwrapped Zod enum schema.
+ */
+function extractEnumValues(unwrapped) {
+    const def = unwrapped?.def ?? unwrapped?._def;
+    if (!def)
+        return [];
+    if (Array.isArray(unwrapped.options)) {
+        return unwrapped.options;
+    }
+    if (Array.isArray(def.values)) {
+        return def.values;
+    }
+    if (def.entries && typeof def.entries === 'object') {
+        return Object.values(def.entries);
+    }
+    return [];
+}
+/**
+ * Determine the primitive or composite type of a setting schema.
+ */
+function getSettingValueType(schema) {
+    const unwrapped = unwrapSchema(schema);
+    if (!unwrapped)
+        return 'string';
+    const def = unwrapped.def ?? unwrapped._def;
+    const typeName = def?.type ?? def?.typeName;
+    if (typeName === 'enum' || typeName === 'ZodEnum')
+        return 'enum';
+    if (typeName === 'boolean' || typeName === 'ZodBoolean')
+        return 'boolean';
+    if (typeName === 'number' || typeName === 'ZodNumber')
+        return 'number';
+    if (typeName === 'array' || typeName === 'ZodArray')
+        return 'array';
+    if (typeName === 'object' || typeName === 'ZodObject')
+        return 'object';
+    return 'string';
+}
+/**
+ * Derive full UI metadata for a setting key from the schema and registered defaults.
+ */
+export function getSettingMetadata(key) {
+    if (!key)
+        return undefined;
+    const schema = resolveSettingAtPath(key);
+    if (!schema) {
+        // Dynamic or custom settings (e.g. agent.<customProvider>.apiKey)
+        const isSecret = /(^|\.)apiKey$/.test(key);
+        return {
+            key,
+            label: getSettingLabel(key),
+            type: 'string',
+            isSecret,
+            isRuntimeModifiable: RUNTIME_MODIFIABLE_SETTINGS.has(key),
+            isArray: false,
+            description: FALLBACK_SETTING_DESCRIPTIONS[key],
+        };
+    }
+    const unwrapped = unwrapSchema(schema);
+    const type = getSettingValueType(schema);
+    const enumOptions = type === 'enum' ? extractEnumValues(unwrapped) : undefined;
+    // Description precedence:
+    // 1. Leaf schema .description
+    // 2. Unwrapped leaf .description
+    // 3. Leaf .def.description
+    // 4. Fallback dictionary (written per key, so it beats a shared parent text)
+    // 5. Parent schema .description (for wrappers like tools.shell.enabled -> tools.shell)
+    let description = schema.description ??
+        unwrapped?.description ??
+        schema.def?.description ??
+        unwrapped?.def?.description ??
+        FALLBACK_SETTING_DESCRIPTIONS[key];
+    if (!description && key.includes('.')) {
+        const parentKey = key.split('.').slice(0, -1).join('.');
+        const parentSchema = resolveSettingAtPath(parentKey);
+        const unwrappedParent = unwrapSchema(parentSchema);
+        description =
+            parentSchema?.description ??
+                unwrappedParent?.description ??
+                parentSchema?.def?.description ??
+                unwrappedParent?.def?.description;
+    }
+    const isSecret = (typeof schema.meta === 'function' && schema.meta()?.secret === true) ||
+        (typeof unwrapped?.meta === 'function' && unwrapped.meta()?.secret === true) ||
+        /(^|\.)apiKey$/.test(key);
+    const isRuntimeModifiable = RUNTIME_MODIFIABLE_SETTINGS.has(key);
+    const isArray = type === 'array';
+    return {
+        key,
+        label: getSettingLabel(key),
+        type,
+        enumOptions,
+        description,
+        isSecret,
+        isRuntimeModifiable,
+        isArray,
+    };
+}
+export function isSecretSetting(key) {
+    const meta = getSettingMetadata(key);
+    return meta ? meta.isSecret : /(^|\.)apiKey$/.test(key);
+}
+function isSettingType(key, expectedType) {
+    const meta = getSettingMetadata(key);
+    return meta ? meta.type === expectedType : false;
+}
+export function isStringSetting(key) {
+    return isSettingType(key, 'string');
+}
+export function isNumberSetting(key) {
+    return isSettingType(key, 'number');
+}
+export function isBooleanSetting(key) {
+    return isSettingType(key, 'boolean');
+}
+export function isArraySetting(key) {
+    const meta = getSettingMetadata(key);
+    return meta ? meta.isArray : false;
+}
+export function getSettingDescription(key) {
+    return getSettingMetadata(key)?.description;
+}
+export function getAllSettingDescriptions() {
+    const result = {};
+    for (const key of Object.values(SETTING_KEYS)) {
+        const desc = getSettingDescription(key);
+        if (desc) {
+            result[key] = desc;
+        }
+    }
+    return result;
+}
+/** Numeric settings stored in milliseconds; the UI accepts `5m`, `30s`, `1h 30m`. */
+export function isDurationSetting(key) {
+    return ((key.endsWith('Ms') || key === SETTING_KEYS.SHELL_TIMEOUT || key === SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT) &&
+        isNumberSetting(key));
+}
+/** Numeric settings stored in USD micros (1,000,000 = $1); the UI accepts `$5`. */
+export function isUsdMicrosSetting(key) {
+    return key.endsWith('UsdMicros') && isNumberSetting(key);
+}
+/**
+ * True for keys a user can set one value on: the registered setting keys, any
+ * other leaf schema path, and the dynamic per-provider credential keys
+ * (`agent.<provider>.apiKey`). A group such as `sandbox` is not one, and
+ * neither is text that merely looks like a key (a search word).
+ */
+export function isKnownSettingKey(key) {
+    if (!key)
+        return false;
+    if (Object.values(SETTING_KEYS).includes(key))
+        return true;
+    if (/^agent\.[^.]+\.apiKey$/.test(key))
+        return true;
+    const schema = resolveSettingAtPath(key);
+    return Boolean(schema) && getSettingValueType(schema) !== 'object';
+}
+//# sourceMappingURL=settings-ui-metadata.js.map

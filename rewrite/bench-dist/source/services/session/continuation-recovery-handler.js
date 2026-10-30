@@ -1,0 +1,170 @@
+import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
+import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
+import { resolveSessionId } from './session-identity.js';
+export class ContinuationRecoveryHandler {
+    deps;
+    constructor(deps) {
+        this.deps = deps;
+    }
+    async *handle(ctx) {
+        const { error, state } = ctx;
+        const maxTransientRetries = this.deps.resolveRetryLimit();
+        const retryStream = state.lastStream;
+        // Settle the live-turn tool evidence into history before classifying.
+        // Completed pairs are durable in the ledger; committing them to the store
+        // first lets the admission gate see them where the projection permits, and
+        // leaves the full-history rebuild self-contained. Open/unknown calls are
+        // unaffected and stay guarded by allToolsCompleted.
+        const committedToolContinuation = this.deps.record.inspectCommittedToolContinuation();
+        const classified = this.deps.retryClassifier.classify({
+            error,
+            retryCounts: state.retryCounts,
+            stream: retryStream,
+            committedToolContinuation,
+            maxTransientRetries,
+        });
+        if (classified.kind === 'chain_recovery') {
+            this.deps.breakChaining?.(classified.cause);
+        }
+        if (classified.kind === 'unrecoverable') {
+            // Even an unrecoverable host error must settle the stream before the
+            // continuation returns to idle. Otherwise an interrupted tool remains
+            // started and provider continuity still points at unpaid work.
+            const terminateResult = this.deps.recoveryExecutor.apply({
+                plan: { kind: 'terminate', events: [] },
+                state: {
+                    baseline: 'decision',
+                    addedUserMessage: false,
+                    stream: retryStream,
+                },
+                retryCounts: state.retryCounts,
+            });
+            if (terminateResult.kind === 'terminated') {
+                for (const event of terminateResult.events)
+                    yield event;
+            }
+            return { kind: 'terminated' };
+        }
+        // model_retry (hallucination/parsing/behavior detection) has its own
+        // pre-existing maxModelRetries cap and must not draw against or be capped
+        // by the shared transport-recovery envelope; see the matching comment in
+        // initial-turn-recovery-handler.ts.
+        if (classified.kind === 'transient' || classified.kind === 'chain_recovery') {
+            state.recoveryBudget.noteRetryableFailure();
+        }
+        const presentation = this.deps.retryEventPresenter.present({
+            failure: classified,
+            maxTransientRetries,
+            source: 'continuation',
+            error,
+        });
+        yield presentation.event;
+        this.deps.logger.warn(presentation.logMessage, {
+            ...presentation.logFields,
+            sessionId: resolveSessionId(this.deps.sessionId),
+            traceId: this.deps.logger.getCorrelationId(),
+        });
+        if (!this.deps.generationGuard.isCurrent(state.token)) {
+            return { kind: 'stale' };
+        }
+        const nextRetryCounts = this.deps.recoveryPolicy.nextRetryCounts(state.retryCounts, classified);
+        state.setRetryCounts(nextRetryCounts);
+        const plan = this.deps.recoveryPolicy.plan({
+            failure: classified,
+            gen: state.token,
+            stream: retryStream,
+            retryCounts: state.retryCounts,
+            freshStartRetriesAllowed: true,
+        });
+        const recoveryState = {
+            baseline: 'decision',
+            addedUserMessage: false,
+            stream: retryStream,
+        };
+        const transientDelayMs = classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.delayMs : undefined;
+        // Only retry_fresh draws against the automatic-replay budget; replay_turn
+        // comes exclusively from model_retry, excluded for the reason above.
+        const timeoutAdmission = plan.kind === 'retry_fresh' && classified.kind === 'chain_recovery'
+            ? state.recoveryBudget.claimZeroFrameTimeoutRecovery(error, {
+                maxRetries: maxTransientRetries,
+                automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
+            })
+            : undefined;
+        const recoveryAdmission = timeoutAdmission ??
+            (plan.kind === 'retry_fresh'
+                ? state.recoveryBudget.describeAdmission({
+                    automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
+                })
+                : undefined);
+        const admitted = timeoutAdmission?.admitted ??
+            (plan.kind !== 'retry_fresh' ||
+                ((skipsAutomaticReplayClaim(classified, committedToolContinuation) ||
+                    state.recoveryBudget.claimAutomaticReplay()) &&
+                    state.recoveryBudget.claimPhysicalAttempt()));
+        if (recoveryAdmission) {
+            this.deps.logger.warn('Retry recovery admission evaluated', {
+                eventType: 'retry.recovery_admission',
+                category: 'retry',
+                phase: 'retry',
+                sessionId: resolveSessionId(this.deps.sessionId),
+                traceId: this.deps.logger.getCorrelationId(),
+                source: 'continuation',
+                retryKind: classified.kind,
+                retryCause: classified.kind === 'chain_recovery' ? classified.cause : undefined,
+                retryAttempt: classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.attempt : undefined,
+                transientRetryCount: state.retryCounts.transientRetryCount,
+                maxTransientRetries,
+                streamPresent: retryStream !== null,
+                completedToolCount: committedToolContinuation?.completedToolCount ?? 0,
+                allToolsCompleted: committedToolContinuation?.allToolsCompleted ?? false,
+                completedPairsPresentInHistory: committedToolContinuation?.completedPairsPresentInHistory ?? false,
+                ...recoveryAdmission,
+                admitted,
+            });
+        }
+        if (!admitted) {
+            // Refusing the plan must still settle open tool calls truthfully and
+            // clear the provider chain, exactly like an ordinary termination does --
+            // see the matching comment in initial-turn-recovery-handler.ts.
+            const terminateResult = this.deps.recoveryExecutor.apply({
+                plan: { kind: 'terminate', events: [] },
+                state: recoveryState,
+                retryCounts: state.retryCounts,
+            });
+            if (terminateResult.kind === 'terminated') {
+                for (const event of terminateResult.events) {
+                    yield event;
+                }
+            }
+            const providerName = this.deps.provider ?? 'provider';
+            yield {
+                type: 'retry_exhausted',
+                provider: providerName,
+                errorKind: classifyProviderFailure(error).errorKind,
+                attempts: state.recoveryBudget.physicalAttempts,
+                maxAttempts: recoveryAdmission?.maxPhysicalAttempts ?? state.recoveryBudget.maxPhysicalAttempts,
+                message: `Could not reach ${providerName} after ${state.recoveryBudget.physicalAttempts} attempts. No model response was received.`,
+                canRetry: true,
+            };
+            return { kind: 'terminated' };
+        }
+        const recoveryResult = this.deps.recoveryExecutor.apply({
+            plan,
+            state: recoveryState,
+            retryCounts: state.retryCounts,
+        });
+        if (recoveryResult.kind === 'terminated') {
+            return { kind: 'terminated' };
+        }
+        return {
+            kind: 'fresh_start',
+            retryCounts: state.retryCounts,
+            ...(typeof transientDelayMs === 'number' ? { delayMs: transientDelayMs } : {}),
+            ...(recoveryResult.useStandardServiceTier ? { useStandardServiceTier: true } : {}),
+            ...(recoveryResult.disableChainingForAttempt || recoveryResult.instruction.disableChainingForAttempt
+                ? { disableChainingForAttempt: true }
+                : {}),
+        };
+    }
+}
+//# sourceMappingURL=continuation-recovery-handler.js.map

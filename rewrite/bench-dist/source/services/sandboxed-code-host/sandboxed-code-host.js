@@ -1,0 +1,498 @@
+import { isJsonValue } from '../agent-runtime/workflow/workflow-types.js';
+import { createSandbox, serializeSandboxInputData } from './sandbox.js';
+import { isCapabilityOutcome, } from './host-types.js';
+function bytes(value) {
+    return Buffer.byteLength(JSON.stringify(value), 'utf8');
+}
+function safeMessage(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+/**
+ * Runs model-authored code in a disposable worker thread and brokers its calls
+ * back into the harness.
+ *
+ * The host owns everything that is the same for every caller: worker lifecycle,
+ * the wall-clock deadline, parent cancellation, code and output byte budgets,
+ * console capture, per-capability admission control and concurrency permits.
+ * What the code can *reach* is explicit in the input: `run_agent_workflow`
+ * passes the `agent` capability, while `run_code` passes `tools` plus a
+ * realm-created JSON `inputs` object.
+ */
+export class SandboxedCodeHostImpl {
+    async run(input) {
+        const { limits, subject } = input;
+        const failure = (code, message) => ({ ok: false, error: { code, message } });
+        if (typeof input.code !== 'string')
+            return failure('runtime_error', `${subject} code must be a string`);
+        let inputData;
+        try {
+            inputData = input.inputData === undefined ? undefined : serializeSandboxInputData(input.inputData);
+        }
+        catch {
+            return failure('runtime_error', `${subject} inputs must be JSON-serializable`);
+        }
+        const admittedBytes = Buffer.byteLength(input.code, 'utf8') + (inputData?.bytes ?? 0);
+        if (admittedBytes > limits.maxCodeBytes) {
+            return failure('code_too_large', inputData
+                ? `${subject} code and inputs total ${admittedBytes} bytes, over the ${limits.maxCodeBytes}-byte limit`
+                : `${subject} code exceeds the configured size limit`);
+        }
+        const entries = Object.entries(input.capabilities);
+        let worker;
+        try {
+            worker =
+                input.workerFactory?.(input.code, limits.timeoutMs) ??
+                    createSandbox(input.code, {
+                        syncTimeoutMs: limits.timeoutMs,
+                        maxConsoleBytes: limits.maxConsoleBytes,
+                        subject,
+                        allowVoidOutput: input.allowVoidOutput,
+                        inputDataJson: inputData?.json,
+                        capabilities: entries.map(([, handler]) => handler.binding),
+                    });
+        }
+        catch (error) {
+            return failure('sandbox_unavailable', `${subject} sandbox is unavailable: ${safeMessage(error)}`);
+        }
+        const controller = new AbortController();
+        const onAbort = () => {
+            controller.abort();
+            failFromParentAbort?.();
+        };
+        let failFromParentAbort;
+        let settled = false;
+        let workTimer;
+        let longStopTimer;
+        const LONG_STOP_FLOOR_MS = 1_800_000;
+        const MAX_TIMER_DELAY_MS = 2_147_483_647;
+        const waitingSet = new Set();
+        let idleLatch = null;
+        let resultsSent = 0;
+        let workPaused = false;
+        let workRemainingMs = limits.timeoutMs;
+        let workDeadline = Date.now() + workRemainingMs;
+        let admissionClosed = false;
+        let closeSent = false;
+        let bodyTerminal = null;
+        const admittedCalls = new Map();
+        const delayUntil = (deadline) => Math.max(0, Math.min(deadline - Date.now(), MAX_TIMER_DELAY_MS));
+        const originals = entries.map(([, handler]) => ({
+            handler,
+            onWaiting: handler.onWaiting,
+            onResumed: handler.onResumed,
+        }));
+        // One admission ledger per capability: a script reading 200 files and a
+        // workflow spawning 8 agents want different budgets, so they never share.
+        const ledgers = new Map();
+        for (const [name, handler] of entries)
+            ledgers.set(name, createLedger(handler, () => settled || controller.signal.aborted));
+        const cancelWaiting = () => {
+            for (const ledger of ledgers.values())
+                ledger.cancelWaiting();
+        };
+        const result = await new Promise((resolve) => {
+            const finish = (value) => {
+                if (settled)
+                    return;
+                settled = true;
+                if (workTimer)
+                    clearTimeout(workTimer);
+                if (longStopTimer)
+                    clearTimeout(longStopTimer);
+                cancelWaiting();
+                resolve(value);
+            };
+            const fail = (code, message, detail) => finish({ ok: false, error: { code, message, ...(detail ? { detail } : {}) } });
+            const markUnsettledUnknown = (reason) => {
+                for (const [requestId, call] of admittedCalls) {
+                    call.handler.onAborted?.(call.prepared, call.context, reason);
+                    admittedCalls.delete(requestId);
+                }
+            };
+            const abortAndFail = (code, message) => {
+                markUnsettledUnknown('did not settle before the script run ended');
+                controller.abort();
+                fail(code, message);
+            };
+            const armWorkClock = () => {
+                if (workTimer)
+                    clearTimeout(workTimer);
+                workTimer = undefined;
+                if (workPaused)
+                    return;
+                workTimer = setTimeout(() => {
+                    abortAndFail('timeout', `${subject} exceeded its configured timeout`);
+                }, delayUntil(workDeadline));
+            };
+            const pauseWorkClock = () => {
+                if (workPaused)
+                    return;
+                workPaused = true;
+                workRemainingMs = Math.max(0, workDeadline - Date.now());
+                if (workTimer)
+                    clearTimeout(workTimer);
+                workTimer = undefined;
+            };
+            const resumeWorkClock = () => {
+                if (!workPaused)
+                    return;
+                workPaused = false;
+                workDeadline = Date.now() + workRemainingMs;
+                armWorkClock();
+            };
+            const pausePredicate = () => {
+                if (!idleLatch)
+                    return false;
+                if (idleLatch.pending.length === 0)
+                    return false;
+                if (idleLatch.resultsConsumed !== resultsSent)
+                    return false;
+                return idleLatch.pending.every((id) => waitingSet.has(id));
+            };
+            const reevaluatePause = () => {
+                if (pausePredicate())
+                    pauseWorkClock();
+                else
+                    resumeWorkClock();
+            };
+            for (const { handler, onWaiting, onResumed } of originals) {
+                handler.onWaiting = (context) => {
+                    waitingSet.add(context.requestId);
+                    onWaiting?.(context);
+                    reevaluatePause();
+                };
+                handler.onResumed = (context) => {
+                    waitingSet.delete(context.requestId);
+                    onResumed?.(context);
+                    reevaluatePause();
+                };
+            }
+            failFromParentAbort = () => abortAndFail('cancelled', `${subject} was cancelled by its parent`);
+            armWorkClock();
+            longStopTimer = setTimeout(() => {
+                abortAndFail('deadline', `${subject} exceeded its deadline`);
+            }, delayUntil(Date.now() + Math.max(limits.timeoutMs, LONG_STOP_FLOOR_MS)));
+            if (input.signal?.aborted)
+                onAbort();
+            input.signal?.addEventListener('abort', onAbort, { once: true });
+            let consoleBytes = 0;
+            worker.on('message', async (message) => {
+                if (settled)
+                    return;
+                if (message?.type === 'workflow.idle') {
+                    if (Array.isArray(message.pending) &&
+                        message.pending.every((id) => typeof id === 'string') &&
+                        typeof message.resultsConsumed === 'number' &&
+                        Number.isFinite(message.resultsConsumed)) {
+                        idleLatch = { pending: message.pending, resultsConsumed: message.resultsConsumed };
+                        reevaluatePause();
+                    }
+                    return;
+                }
+                if (message?.type === 'workflow.busy') {
+                    idleLatch = null;
+                    reevaluatePause();
+                    return;
+                }
+                if (message?.type === 'console.log') {
+                    if (Array.isArray(message.values) && message.values.every((value) => isJsonValue(value))) {
+                        const size = bytes(message.values);
+                        if (size <= limits.maxConsoleBytes && consoleBytes + size <= limits.maxConsoleBytes) {
+                            consoleBytes += size;
+                            input.onConsole?.(message.values);
+                        }
+                    }
+                    return;
+                }
+                const maybeCloseWorker = () => {
+                    if (!bodyTerminal || admittedCalls.size > 0 || closeSent || settled)
+                        return;
+                    closeSent = true;
+                    worker.postMessage({ type: 'workflow.close' });
+                };
+                if (message?.type === 'workflow.body-complete') {
+                    admissionClosed = true;
+                    bodyTerminal = {
+                        kind: 'complete',
+                        output: message.output,
+                        ...(message.voidOutput === true ? { voidOutput: true } : {}),
+                    };
+                    maybeCloseWorker();
+                    return;
+                }
+                if (message?.type === 'workflow.body-error') {
+                    admissionClosed = true;
+                    bodyTerminal = { kind: 'error', error: message.error, syntax: message.syntax, detail: message.detail };
+                    maybeCloseWorker();
+                    return;
+                }
+                if (message?.type === 'workflow.settled') {
+                    const unhandled = Array.isArray(message.unhandled)
+                        ? message.unhandled.filter((entry) => entry &&
+                            typeof entry.requestId === 'string' &&
+                            typeof entry.message === 'string' &&
+                            entry.message.length > 0)
+                        : [];
+                    if (!bodyTerminal) {
+                        fail('runtime_error', `${subject} completed without a script-body result`);
+                        return;
+                    }
+                    if (bodyTerminal.kind === 'error') {
+                        const errorMessage = safeMessage(bodyTerminal.error?.message ?? `${subject} failed`);
+                        finish({
+                            ok: false,
+                            error: {
+                                code: bodyTerminal.syntax
+                                    ? 'syntax_error'
+                                    : /timed out/i.test(errorMessage)
+                                        ? 'timeout'
+                                        : 'runtime_error',
+                                message: errorMessage,
+                                ...(bodyTerminal.detail ? { detail: bodyTerminal.detail } : {}),
+                            },
+                        });
+                    }
+                    else if (unhandled.length > 0) {
+                        const details = unhandled.map((entry) => `${entry.requestId}: ${entry.message}`).join('; ');
+                        finish({
+                            ok: false,
+                            error: {
+                                code: 'runtime_error',
+                                message: `unhandled_nested_failure: ${details}`,
+                                detail: 'unhandled_nested_failure',
+                            },
+                        });
+                    }
+                    else if (!isJsonValue(bodyTerminal.output)) {
+                        fail('invalid_output', `${subject} return value is not JSON-safe`);
+                    }
+                    else if (bytes(bodyTerminal.output) > limits.maxOutputBytes) {
+                        fail('invalid_output', `${subject} returned ${bytes(bodyTerminal.output)} bytes, over the ${limits.maxOutputBytes}-byte limit. ` +
+                            `Return less per call: select the fields you need, summarise instead of returning full contents, ` +
+                            `or process the input in batches across several calls.`);
+                    }
+                    else {
+                        finish({
+                            ok: true,
+                            output: bodyTerminal.output,
+                            ...(bodyTerminal.voidOutput === true ? { voidOutput: true } : {}),
+                        });
+                    }
+                    return;
+                }
+                // Keep the old completion messages as a small compatibility seam for
+                // custom worker factories. The built-in worker uses body-complete plus
+                // settled so normal completion cannot outrun admitted calls.
+                if (message?.type === 'workflow.complete') {
+                    admissionClosed = true;
+                    // Size and JSON-safety are reported separately: a model told only
+                    // "must be JSON-safe and within the size limit" cannot tell whether
+                    // to change the shape of its result or the amount of it. Only the
+                    // size branch is reachable in practice — host-worker.ts rejects
+                    // non-JSON output before it is sent — but conflating them cost a
+                    // real run its fan-out (docs/plans/tools/run-code/code-mode-field-test.md).
+                    if (!isJsonValue(message.output)) {
+                        fail('invalid_output', `${subject} return value is not JSON-safe`);
+                    }
+                    else if (bytes(message.output) > limits.maxOutputBytes) {
+                        fail('invalid_output', `${subject} returned ${bytes(message.output)} bytes, over the ${limits.maxOutputBytes}-byte limit. ` +
+                            `Return less per call: select the fields you need, summarise instead of returning full contents, ` +
+                            `or process the input in batches across several calls.`);
+                    }
+                    else
+                        finish({ ok: true, output: message.output, ...(message.voidOutput === true ? { voidOutput: true } : {}) });
+                    return;
+                }
+                if (message?.type === 'workflow.error') {
+                    admissionClosed = true;
+                    const errorMessage = safeMessage(message.error?.message ?? `${subject} failed`);
+                    finish({
+                        ok: false,
+                        error: {
+                            code: message.syntax ? 'syntax_error' : /timed out/i.test(errorMessage) ? 'timeout' : 'runtime_error',
+                            message: errorMessage,
+                            ...(message.detail === 'unknown_tool' ? { detail: 'unknown_tool' } : {}),
+                        },
+                    });
+                    return;
+                }
+                if (typeof message?.type !== 'string' || !message.type.endsWith('.run'))
+                    return;
+                if (admissionClosed)
+                    return;
+                const name = message.type.slice(0, -'.run'.length);
+                const handler = input.capabilities[name];
+                const ledger = ledgers.get(name);
+                if (!handler || !ledger)
+                    return;
+                const reply = (result) => {
+                    // Keep structured clone from widening the capability contract. A
+                    // handler is typed to return JsonValue, but this is also a runtime
+                    // boundary: normalize in the host before data enters the worker.
+                    let serialized;
+                    try {
+                        serialized = JSON.stringify(result);
+                    }
+                    catch (error) {
+                        fail('invalid_output', `${subject} capability result is not JSON-serializable: ${safeMessage(error)}`);
+                        return;
+                    }
+                    if (serialized === undefined) {
+                        fail('invalid_output', `${subject} capability result is not JSON-serializable`);
+                        return;
+                    }
+                    let plainResult;
+                    try {
+                        plainResult = JSON.parse(serialized);
+                    }
+                    catch (error) {
+                        fail('invalid_output', `${subject} capability result is not JSON-serializable: ${safeMessage(error)}`);
+                        return;
+                    }
+                    resultsSent++;
+                    idleLatch = null;
+                    reevaluatePause();
+                    worker.postMessage({ type: `${name}.result`, requestId: message.requestId, result: plainResult });
+                };
+                const { type: _type, requestId: _requestId, ...payload } = message;
+                let prepared;
+                try {
+                    prepared = await handler.prepare(payload);
+                }
+                catch (error) {
+                    fail('runtime_error', safeMessage(error));
+                    return;
+                }
+                if (settled)
+                    return;
+                if (isCapabilityOutcome(prepared)) {
+                    if (prepared.kind === 'fail')
+                        fail(prepared.code, prepared.message, prepared.detail);
+                    else
+                        reply(prepared.result);
+                    return;
+                }
+                const admitted = ledger.admit();
+                if (!admitted.ok) {
+                    const outcome = handler.overBudget?.({
+                        usedCalls: ledger.admitted(),
+                        maxCalls: handler.limits.maxCalls,
+                    }, prepared);
+                    if (!outcome || outcome.kind === 'fail')
+                        fail(outcome?.code ?? 'limit_exceeded', outcome?.message ?? handler.limits.limitExceededMessage);
+                    else
+                        reply(outcome.result);
+                    return;
+                }
+                const callContext = {
+                    callId: admitted.callId,
+                    requestId: String(message.requestId),
+                    signal: controller.signal,
+                };
+                handler.onAdmitted?.(prepared, callContext);
+                admittedCalls.set(callContext.requestId, { handler, prepared, context: callContext });
+                const releasePermit = await ledger.acquire(handler.lane?.(prepared) ?? 'default');
+                if (!releasePermit)
+                    return;
+                if (settled || controller.signal.aborted) {
+                    if (admittedCalls.delete(callContext.requestId))
+                        handler.onAborted?.(prepared, callContext, 'did not settle before the script run ended');
+                    releasePermit();
+                    return;
+                }
+                try {
+                    const outcome = await handler.invoke(prepared, callContext);
+                    if (admittedCalls.delete(callContext.requestId)) {
+                        if (outcome.kind === 'fail')
+                            fail(outcome.code, outcome.message, outcome.detail);
+                        else
+                            reply(outcome.result);
+                    }
+                }
+                catch (error) {
+                    if (admittedCalls.delete(callContext.requestId))
+                        fail('runtime_error', safeMessage(error));
+                }
+                finally {
+                    releasePermit();
+                    maybeCloseWorker();
+                }
+            });
+            worker.once('error', (error) => {
+                if (settled)
+                    return;
+                markUnsettledUnknown('did not settle before the script run ended');
+                fail('sandbox_unavailable', `${subject} sandbox failed: ${safeMessage(error)}`);
+            });
+            worker.once('exit', (code) => {
+                if (!settled) {
+                    markUnsettledUnknown('did not settle before the script run ended');
+                    fail('sandbox_unavailable', `${subject} sandbox exited unexpectedly (${code})`);
+                }
+            });
+        });
+        if (workTimer)
+            clearTimeout(workTimer);
+        if (longStopTimer)
+            clearTimeout(longStopTimer);
+        for (const { handler, onWaiting, onResumed } of originals) {
+            handler.onWaiting = onWaiting;
+            handler.onResumed = onResumed;
+        }
+        input.signal?.removeEventListener('abort', onAbort);
+        controller.abort();
+        await worker.terminate().catch(() => undefined);
+        return result;
+    }
+}
+/**
+ * Admission counting and concurrency permits for one capability. A released
+ * permit is handed directly to the next waiter so a settled run cannot leak it.
+ */
+function createLedger(handler, isDone) {
+    let admissions = 0;
+    const pools = {
+        default: { active: 0, limit: handler.limits.maxConcurrency, waiting: [] },
+        // A lane of one: the run loop's rule that a tool which is not declared
+        // parallel-safe never overlaps another such call.
+        serial: { active: 0, limit: 1, waiting: [] },
+    };
+    const grantPermit = (pool) => {
+        pool.active++;
+        let released = false;
+        return () => {
+            if (released)
+                return;
+            released = true;
+            pool.active--;
+            const waiter = pool.waiting.shift();
+            if (waiter)
+                waiter(grantPermit(pool));
+        };
+    };
+    return {
+        admit() {
+            if (admissions >= handler.limits.maxCalls)
+                return { ok: false };
+            admissions++;
+            return { ok: true, callId: admissions };
+        },
+        admitted() {
+            return admissions;
+        },
+        async acquire(lane) {
+            if (isDone())
+                return undefined;
+            const pool = pools[lane];
+            if (pool.active < pool.limit)
+                return grantPermit(pool);
+            return new Promise((resolve) => pool.waiting.push(resolve));
+        },
+        cancelWaiting() {
+            for (const pool of Object.values(pools))
+                for (const waiter of pool.waiting.splice(0))
+                    waiter(undefined);
+        },
+    };
+}
+//# sourceMappingURL=sandboxed-code-host.js.map

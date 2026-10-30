@@ -1,0 +1,549 @@
+import { healPatchOperation } from './tools/file/patch-healing.js';
+import { healSearchReplaceParams } from './tools/file/edit-healing.js';
+import { createDiscordSendToolDefinition } from './tools/discord-send.js';
+import { createGrepToolDefinition } from './tools/file/grep.js';
+import { presentBareShell } from './tools/system/bare-shell.js';
+import { createReadFileToolDefinition } from './tools/file/read-file.js';
+import { createFindFilesToolDefinition } from './tools/file/glob.js';
+import { createSearchReplaceToolDefinition } from './tools/file/search-replace.js';
+import { createApplyPatchToolDefinition } from './tools/file/apply-patch.js';
+import { createBackgroundShellJobToolDefinitions, createShellToolDefinition, } from './tools/system/shell.js';
+import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
+import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
+import { createRunSubagentToolDefinition } from './tools/agent/run-subagent.js';
+import { createListModelsToolDefinition } from './tools/agent/list-models.js';
+import { SessionIndexService } from './services/conversation/session-index/session-index-service.js';
+import { createGetSubagentResultToolDefinition, createGetSubagentStatusToolDefinition, createSendMessageToolDefinition, createCancelRunToolDefinition, } from './tools/agent/run-subagent-async.js';
+import { createSelectedActivateSkillTool, createWebToolDefinitions, } from './services/assembly/feature-selection.js';
+import { createCreateFileToolDefinition } from './tools/file/create-file.js';
+import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition, } from './tools/file/code-context.js';
+import { createConfigureTaskCheckInToolDefinition, } from './tools/agent/configure-task-check-in.js';
+import { registerToolFormatters } from './tools/command-message-formatters.js';
+import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
+import os from 'os';
+import fs from 'fs';
+import path from 'path';
+import { buildPromptSpec } from './prompts/prompt-constructor.js';
+import { ProfileResolutionError, resolveActiveProfile } from './services/profiles/index.js';
+import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
+import { createProposeGoalToolDefinition } from './tools/agent/propose-goal.js';
+import { createGoalCheckToolDefinition } from './tools/agent/goal-check.js';
+import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow.js';
+import { createWorktreeToolDefinitions } from './tools/system/worktree.js';
+import { createRunCodeToolDefinition } from './tools/system/run-code/index.js';
+import { createRootAgentAuthoritySnapshot } from './services/agent-runtime/permission-boundary.js';
+import { deriveAuthorizedWorktreeScope } from './services/subagents/worker-worktree.js';
+import { getProjectTreeForPrompt } from './utils/project-tree.js';
+import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
+import { resolveDisabledCapabilities } from './services/tool-toggles.js';
+import { createSessionBrowserToolDefinitions } from './tools/session-browser/session-browser-tools.js';
+import { ToolApprovalPolicyRegistry } from './services/approval/tool-approval-policy-registry.js';
+import { createSessionRolloverToolDefinition } from './tools/session-rollover/session-rollover-tool.js';
+import { renderDurableGoalContext } from './prompts/durable-goal-context.js';
+const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
+export function getEnvInfo(settingsService, executionContext, minimal = false) {
+    const isRemote = !!executionContext?.isRemote();
+    // This process's own OS/shell are the controller's, not the remote host's —
+    // asserting them as fact over SSH tells the model the wrong platform outright.
+    const shellPath = isRemote ? undefined : settingsService.get('app.shellPath') || 'unknown';
+    const cwd = executionContext?.getCwd() || process.cwd();
+    const osType = isRemote ? undefined : os.type();
+    const osRelease = isRemote ? undefined : os.release();
+    const osPlatform = isRemote ? undefined : os.platform();
+    const now = new Date().toISOString().slice(0, 10);
+    // State the home directory explicitly. Without it a model asked about a path
+    // outside cwd has to guess what `~` resolves to, and weaker models guess the
+    // container default (/root), producing paths that cannot exist on this host.
+    // Remote sessions run against another machine's home, which this process
+    // cannot know, so only claim it for local ones.
+    const home = isRemote ? '' : `; home (\`~\`): ${os.homedir()}`;
+    const hostLine = isRemote
+        ? "Host: remote via SSH — OS/shell are the remote machine's, not this controller's, and are unknown here; use commands (e.g. `uname -a`) if you need them"
+        : `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}`;
+    if (minimal) {
+        // Bare keeps the environment line short: no top-level tree
+        return `${hostLine}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}`;
+    }
+    // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously
+    // We'll skip top-level entries for now if remote, or maybe we can't get them sync.
+    // getProjectTreeForPrompt is sync and uses fs.readdirSync. This won't work for remote.
+    // So if remote, we skip that part.
+    let topLevel = '';
+    if (!executionContext?.isRemote()) {
+        topLevel = `${getProjectTreeForPrompt(cwd)}`;
+    }
+    return `${hostLine}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}\n${topLevel}\n\n`;
+}
+export function getAgentsInstructions(cwd) {
+    // A global AGENTS.md may live at ~/.agents/AGENTS.md and applies to every
+    // project; the project-root AGENTS.md (if present) takes precedence and is
+    // appended after it so project-specific guidance stays closest to the model.
+    const globalAgentsPath = path.join(os.homedir(), '.agents', 'AGENTS.md');
+    const agentsPath = path.join(cwd, 'AGENTS.md');
+    const parts = [];
+    try {
+        if (fs.existsSync(globalAgentsPath)) {
+            const globalContents = fs.readFileSync(globalAgentsPath, 'utf-8').trim();
+            if (globalContents) {
+                parts.push(`\n\nGlobal AGENTS.md contents (~/.agents/AGENTS.md):\n${globalContents}`);
+            }
+        }
+    }
+    catch {
+        // Ignore an unreadable global AGENTS.md; the project file still applies.
+    }
+    if (fs.existsSync(agentsPath)) {
+        try {
+            const contents = fs.readFileSync(agentsPath, 'utf-8').trim();
+            parts.push(`\n\nAGENTS.md contents:\n${contents}`);
+        }
+        catch (e) {
+            parts.push(`\n\nFailed to read AGENTS.md: ${e.message}`);
+        }
+    }
+    return parts.join('');
+}
+function toSubagentResult(result, role) {
+    return {
+        agentId: result.agentId ?? 'unknown',
+        role: result.role ?? role ?? 'agent',
+        status: result.status ?? 'completed',
+        finalText: result.finalText,
+        filesChanged: result.filesChanged ?? [],
+        toolsUsed: result.toolsUsed ?? [],
+        finalTextTruncated: result.finalTextTruncated,
+        finalTextArtifactPath: result.finalTextArtifactPath,
+        usage: result.usage,
+        error: result.error,
+        nestedRunResult: result.nestedRunResult,
+        diffStat: result.diffStat,
+        validation: result.validation,
+        interrupted: result.interrupted,
+    };
+}
+function resolvePrompt(promptPath) {
+    try {
+        return fs.readFileSync(promptPath, 'utf-8').trim();
+    }
+    catch (e) {
+        const relativePromptPath = path.relative(BASE_PROMPT_PATH, promptPath);
+        const sourcePromptPath = path.join(import.meta.dirname, '../source/prompts', relativePromptPath.startsWith('..') ? path.basename(promptPath) : relativePromptPath);
+        if (sourcePromptPath !== promptPath && fs.existsSync(sourcePromptPath)) {
+            return fs.readFileSync(sourcePromptPath, 'utf-8').trim();
+        }
+        throw new Error(`Failed to read prompt file at ${promptPath}: ${e.message}`);
+    }
+}
+function positiveIntegerSetting(settings, key) {
+    const value = settings.get(key);
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+/**
+ * Returns the agent definition with appropriate tools based on the model.
+ */
+export const getAgentDefinition = (deps, model) => {
+    const { settingsService, loggingService, executionContext, approvalPolicyRegistry, askMentor, runSubagent, runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, cancelSubagentRun, runResolvedSubagent, runResolvedSubagentAsync, getAskUserAnswer, proposeGoal, skillsService, agentRuntime, postExecuteDeniedRead = false, sessionAccess, readOnly = false, backgroundShellRegistry, backgroundShellOutput, shellChildRegistry, scopedSandbox, allowBackgroundShell = true, allowAskUser = true, sessionBrowser, requestSessionRollover, configureTaskCheckIn, setTaskCheckInPolicy, mcpToolSource, } = deps;
+    const resolvedApprovalPolicyRegistry = approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry();
+    const defaultModel = settingsService.get('agent.modelSelection').model;
+    const resolvedModel = model?.trim() || defaultModel;
+    if (!resolvedModel)
+        throw new Error('Model cannot be undefined or empty');
+    // Search exposure is uniform across models: only an explicit `on` withholds
+    // the dedicated search tools and routes search through the shell. `auto` is
+    // the schema default and behaves exactly like `off`.
+    const searchViaShell = settingsService.get('app.searchViaShell') === 'on';
+    // Code-context tools operate on the local filesystem only; disable them for
+    // remote (SSH) execution where the workspace lives on another host.
+    const codeContextEnabled = !(executionContext?.isRemote() ?? false);
+    const usesPatchEditingSurface = shouldPreferPatchEditingModel(resolvedModel);
+    const sandboxEnabled = settingsService.get('sandbox.enabled');
+    // Async delegation is an all-or-nothing parent capability: launch, status
+    // preflight, result retrieval, and the two non-blocking control tools share
+    // one registry path.
+    const asyncSubagentEnabled = Boolean(runSubagentAsync) &&
+        Boolean(getSubagentResult) &&
+        Boolean(getSubagentStatus) &&
+        Boolean(sendSubagentMessage) &&
+        Boolean(cancelSubagentRun);
+    // A complete async capability owns the model-facing delegation contract. The
+    // nested runner remains wired for foreground-only compatibility sessions and
+    // for legacy lifecycle controls, but is not selectable alongside async work.
+    const runSubagentForegroundEnabled = Boolean(runSubagent) && !asyncSubagentEnabled;
+    let profile;
+    try {
+        profile = resolveActiveProfile(settingsService, {
+            availableIntegrations: new Map([['builtin:integration/async-subagents', asyncSubagentEnabled]]),
+        });
+    }
+    catch (error) {
+        // The resolver reports unavailable required integrations as a resolution
+        // error rather than returning them, so this remap is the enforcement point:
+        // preserve the agent's established prerequisite message while allowing
+        // other profile diagnostics to propagate.
+        const unavailableAsyncSubagents = error instanceof ProfileResolutionError &&
+            error.diagnostics.some((diagnostic) => diagnostic.code === 'unavailable-integration' &&
+                diagnostic.message.includes('builtin:integration/async-subagents'));
+        if (!unavailableAsyncSubagents)
+            throw error;
+        throw new Error('orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.');
+    }
+    const bareMode = profile.identity.id === 'builtin:bare';
+    const capabilities = profile.tools.capabilities;
+    // Per-group kill switches (tools.<group>.enabled): mask the resolved set so
+    // every registration below consults the effective capabilities, and a
+    // disabled group's capability-gated prompt fragments drop with it. Toggles
+    // never restrict subagents, which resolve their own capabilities.
+    const disabledCapabilities = resolveDisabledCapabilities(settingsService);
+    const effectiveCapabilities = disabledCapabilities.size === 0
+        ? capabilities
+        : new Set([...capabilities].filter((capability) => !disabledCapabilities.has(capability)));
+    if (disabledCapabilities.size > 0) {
+        loggingService.debug('Tool capability toggles applied', { disabled: [...disabledCapabilities].sort() });
+    }
+    const hasCapability = (capability) => effectiveCapabilities.has(capability);
+    const filesystemReadEnabled = hasCapability('filesystem-read-workspace') || hasCapability('filesystem-read-external');
+    const filesystemWriteEnabled = !readOnly && hasCapability('filesystem-write');
+    const backgroundTasksEnabled = hasCapability('background-tasks');
+    const isContextSourceEnabled = (source) => profile.context.sources.some((item) => item.source === source && item.enabled);
+    const environmentEnabled = isContextSourceEnabled('environment');
+    const projectInstructionsEnabled = isContextSourceEnabled('project-instructions');
+    const skillsCatalogEnabled = isContextSourceEnabled('skills-catalog');
+    const memoryContextEnabled = isContextSourceEnabled('memory');
+    const sessionBrowserContextEnabled = isContextSourceEnabled('session-browser');
+    const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
+        onWarning: (message) => loggingService.warn(message),
+    }).build({ kind: 'main' }, {
+        projectPath: executionContext?.getCwd() ?? process.cwd(),
+        includeContext: memoryContextEnabled && hasCapability('memory'),
+        snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
+    });
+    const discordSendEnabled = Boolean(deps.discordSend) &&
+        !readOnly &&
+        hasCapability('discord-send') &&
+        !profile.enforcement.denials.has('discord-send') &&
+        !profile.enforcement.denials.has('filesystem-mutation');
+    const promptSpec = buildPromptSpec({
+        model: resolvedModel,
+        profile,
+        searchViaShell,
+        codeContextEnabled: codeContextEnabled && hasCapability('code-context'),
+        runSubagentEnabled: hasCapability('subagents') && (Boolean(runSubagent) || asyncSubagentEnabled),
+        runSubagentForegroundEnabled: hasCapability('subagents') && runSubagentForegroundEnabled,
+        runSubagentAsyncEnabled: hasCapability('subagents') && asyncSubagentEnabled,
+        asyncSubagentControlsEnabled: hasCapability('subagents') && asyncSubagentEnabled,
+        backgroundShellEnabled: backgroundTasksEnabled && allowBackgroundShell && Boolean(backgroundShellRegistry),
+        sandboxEnabled,
+        memoryEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
+        memoryGuidance: hasCapability('memory') ? memoryCapability.guidance : '',
+        memoryContext: memoryCapability.context,
+        sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
+        executionContext,
+        runCodeEnabled: hasCapability('shell'),
+        editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
+    });
+    let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile));
+    for (const fragmentFile of promptSpec.fragmentFiles) {
+        try {
+            prompt = `${prompt}\n\n${resolvePrompt(path.join(BASE_PROMPT_PATH, fragmentFile))}`;
+        }
+        catch (e) {
+            loggingService.error(`Failed to load prompt fragment ${fragmentFile}: ${e}`);
+        }
+    }
+    for (const inlineSection of promptSpec.inlineSections) {
+        prompt = `${prompt}\n\n${inlineSection}`;
+    }
+    const cwd = executionContext?.getCwd() || process.cwd();
+    // grep/glob register whenever the surface can read and search has not been
+    // routed to the shell; the flag keeps the search-tool descriptions consistent
+    // so the model does not call a tool that is not on its allowlist.
+    const globAvailable = filesystemReadEnabled && !searchViaShell;
+    const envInfo = environmentEnabled ? getEnvInfo(settingsService, executionContext, bareMode) : '';
+    const skipAgentsMd = !projectInstructionsEnabled || (executionContext?.isRemote() ?? false);
+    const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
+    let skillsInstructions = '';
+    if (hasCapability('skills') && skillsCatalogEnabled && skillsService) {
+        const catalog = skillsService.getSkillCatalog(bareMode ? { loadVia: 'shell' } : {});
+        if (catalog) {
+            skillsInstructions = `\n\n${catalog}`;
+        }
+    }
+    const rootBackgroundShellRegistry = backgroundTasksEnabled && allowBackgroundShell ? backgroundShellRegistry : undefined;
+    const rootBackgroundShellOutput = backgroundTasksEnabled && allowBackgroundShell ? backgroundShellOutput : undefined;
+    const shellTool = createShellToolDefinition({
+        settingsService,
+        loggingService,
+        executionContext,
+        searchViaShell,
+        postExecuteDeniedRead,
+        sessionAccess,
+        backgroundShellRegistry: rootBackgroundShellRegistry,
+        backgroundShellWatches: rootBackgroundShellOutput?.watches,
+        configureCheckIn: setTaskCheckInPolicy,
+        shellChildRegistry,
+        shellSandboxRunner: scopedSandbox?.runner,
+        registerSandboxNetworkPauseController: scopedSandbox?.registerPauseController,
+        sandboxChildRegistry: scopedSandbox?.childRegistry,
+        readOnly,
+        allowUnsandboxed: deps.allowUnsandboxed,
+    });
+    const features = {
+        web: hasCapability('web'),
+        // Bare loads skills by reading SKILL.md through the shell.
+        activateSkill: hasCapability('skills') && !bareMode && Boolean(skillsService),
+    };
+    const tools = [];
+    if (hasCapability('shell'))
+        tools.push(bareMode ? presentBareShell(shellTool, { background: Boolean(rootBackgroundShellRegistry) }) : shellTool);
+    if (features.web)
+        tools.push(...createWebToolDefinitions({ settingsService, loggingService }));
+    if (backgroundTasksEnabled &&
+        configureTaskCheckIn &&
+        (rootBackgroundShellRegistry || (hasCapability('subagents') && asyncSubagentEnabled))) {
+        tools.push(createConfigureTaskCheckInToolDefinition(configureTaskCheckIn));
+    }
+    if (rootBackgroundShellRegistry) {
+        const backgroundTools = createBackgroundShellJobToolDefinitions(rootBackgroundShellRegistry, rootBackgroundShellOutput);
+        tools.push(backgroundTools.get, backgroundTools.cancel);
+        if (backgroundTools.monitor)
+            tools.push(backgroundTools.monitor);
+        if (backgroundTools.cancelMonitor)
+            tools.push(backgroundTools.cancelMonitor);
+    }
+    // Worktree switching re-roots the local filesystem; in remote mode the remote
+    // directory owns the execution root, so the tools have nothing to lease.
+    if (!bareMode &&
+        !readOnly &&
+        (filesystemReadEnabled || filesystemWriteEnabled) &&
+        executionContext &&
+        !executionContext.isRemote()) {
+        const worktreeTools = createWorktreeToolDefinitions({
+            executionContext,
+            getRunningJobs: () => (rootBackgroundShellRegistry?.list() ?? [])
+                .filter((job) => job.status === 'running' || job.status === 'cancelling')
+                .map((job) => ({ id: job.id, command: job.command })),
+        });
+        tools.push(worktreeTools.enter, worktreeTools.exit);
+    }
+    if (hasCapability('memory'))
+        tools.push(...memoryCapability.tools);
+    if (hasCapability('subagents')) {
+        tools.push(createListModelsToolDefinition({
+            settingsService,
+            loggingService,
+            getHistory: hasCapability('sessions') && !executionContext?.isRemote()
+                ? async () => {
+                    const index = new SessionIndexService();
+                    try {
+                        return await index.list({ projectPath: executionContext?.getCwd() ?? process.cwd() });
+                    }
+                    finally {
+                        await index.close();
+                    }
+                }
+                : undefined,
+        }));
+    }
+    if (hasCapability('sessions') && sessionBrowser)
+        tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
+    if (hasCapability('sessions') && requestSessionRollover)
+        tools.push(createSessionRolloverToolDefinition(requestSessionRollover));
+    if (features.activateSkill && skillsService) {
+        const activateSkill = createSelectedActivateSkillTool(skillsService);
+        if (activateSkill)
+            tools.push(activateSkill);
+    }
+    if (hasCapability('user-interaction') && allowAskUser && proposeGoal && deps.getGoal) {
+        tools.push(createProposeGoalToolDefinition({
+            getGoal: deps.getGoal,
+            appendGoal: proposeGoal.appendGoal,
+            hasPriorProposal: proposeGoal.hasPriorProposal,
+        }));
+    }
+    // The stop self-check is root-only (only the root receives `getGoal`) and is
+    // available in Bare too: selecting a small tool surface cannot waive goal verification.
+    if (deps.getGoal)
+        tools.push(createGoalCheckToolDefinition({ getGoal: deps.getGoal }));
+    if (hasCapability('user-interaction') && getAskUserAnswer && allowAskUser) {
+        const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
+        if (askUserTool.name !== TOOL_NAME_ASK_USER) {
+            throw new Error(`Unexpected ask_user tool name: ${askUserTool.name}`);
+        }
+        tools.push(askUserTool);
+    }
+    if (codeContextEnabled && hasCapability('code-context')) {
+        tools.push(createReadCodeOutlineToolDefinition({ executionContext, settingsService }), createCodeContextSearchToolDefinition({ executionContext, globAvailable, settingsService }));
+    }
+    {
+        if (filesystemReadEnabled || bareMode) {
+            tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
+            // Search is a read capability: it is gated on read plus the setting, never
+            // on write authority or the editing surface.
+            if (filesystemReadEnabled && !searchViaShell) {
+                tools.push(createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }), createFindFilesToolDefinition({ executionContext, sessionAccess, settingsService }));
+            }
+        }
+        if (filesystemWriteEnabled) {
+            if (usesPatchEditingSurface) {
+                tools.push(createApplyPatchToolDefinition({
+                    settingsService,
+                    loggingService,
+                    executionContext,
+                    sessionAccess,
+                    patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) => healPatchOperation(path, diff, content, diagnosis, model, key, {
+                        ...healingDeps,
+                        driverFactory: deps.driverFactory,
+                        modelBinding: deps.modelBinding,
+                    }),
+                }));
+            }
+            else {
+                tools.push(createCreateFileToolDefinition({
+                    settingsService,
+                    loggingService,
+                    executionContext,
+                    sessionAccess,
+                }), createSearchReplaceToolDefinition({
+                    editHealing: (params, content, model, key, healingDeps) => healSearchReplaceParams(params, content, model, key, {
+                        ...healingDeps,
+                        driverFactory: deps.driverFactory,
+                        modelBinding: deps.modelBinding,
+                    }),
+                    settingsService,
+                    loggingService,
+                    executionContext,
+                    sessionAccess,
+                }));
+            }
+        }
+    }
+    // Add mentor tool if the smart tier has a configured model pool.
+    const smartPool = settingsService.get('agent.smartModel');
+    const smartConfigured = Array.isArray(smartPool) && smartPool.length > 0;
+    if (hasCapability('mentor') && smartConfigured && askMentor) {
+        tools.push(createAskMentorToolDefinition(askMentor));
+    }
+    // One model-facing delegation tool selects the existing foreground nested
+    // runner or background registry callback; lifecycle ownership stays split.
+    if (hasCapability('subagents') && (runSubagent || asyncSubagentEnabled)) {
+        tools.push(createRunSubagentToolDefinition({
+            runSubagent: runSubagent
+                ? async (params, context, details) => toSubagentResult(await runSubagent(params, context, details), params.role)
+                : undefined,
+            runSubagentAsync: asyncSubagentEnabled ? runSubagentAsync : undefined,
+            configureCheckIn: setTaskCheckInPolicy,
+        }));
+    }
+    // Add async subagent tools. The conjunction is `asyncSubagentEnabled` spelled
+    // out so the callbacks narrow: registering any of these without the rest would
+    // advertise delegation the prompt never explains.
+    if (hasCapability('subagents') &&
+        runSubagentAsync &&
+        getSubagentResult &&
+        getSubagentStatus &&
+        sendSubagentMessage &&
+        cancelSubagentRun) {
+        tools.push(createGetSubagentResultToolDefinition(getSubagentResult, getSubagentStatus));
+        tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
+        tools.push(createSendMessageToolDefinition(sendSubagentMessage), createCancelRunToolDefinition(cancelSubagentRun));
+    }
+    if (hasCapability('subagents') && settingsService.get('enable_agent_workflow') && agentRuntime) {
+        tools.push(createRunAgentWorkflowToolDefinition({
+            runtime: agentRuntime,
+            parentTools: tools.map((tool) => tool.name),
+            limits: settingsService.getDynamic('agentWorkflow'),
+        }));
+    }
+    if (discordSendEnabled && deps.discordSend) {
+        tools.push(createDiscordSendToolDefinition(deps.discordSend));
+    }
+    // Registered last so its bridge exposes every other tool this profile
+    // resolved. The registry it actually calls is injected later by
+    // bindRunCodeRegistry, once the policy layer has wrapped these definitions.
+    if (hasCapability('shell')) {
+        const filesystemScope = filesystemReadEnabled || filesystemWriteEnabled
+            ? {
+                read: filesystemReadEnabled ? ['**'] : [],
+                write: filesystemWriteEnabled ? ['**'] : [],
+            }
+            : undefined;
+        const maxTurns = positiveIntegerSetting(settingsService, 'agent.maxTurns');
+        const maxTokens = positiveIntegerSetting(settingsService, 'agent.maxOutputTokens');
+        const planMode = profile.enforcement.denials.has('filesystem-mutation');
+        const worktreeScope = deps.worktreeScope ??
+            (executionContext
+                ? deriveAuthorizedWorktreeScope({
+                    homeRoot: executionContext.getHomeWorkspace?.() ?? executionContext.getCwd?.() ?? process.cwd(),
+                    isRemote: executionContext.isRemote?.() ?? false,
+                    readOnly,
+                    planMode,
+                    listWorktreesSync: deps.listWorktreesSync,
+                })
+                : undefined);
+        const worktreePaths = deps.worktreePaths ?? worktreeScope?.authorizedPaths;
+        const agentSpecAuthority = createRootAgentAuthoritySnapshot({
+            effectiveTools: tools.map((tool) => tool.name),
+            filesystemScope,
+            limits: {
+                ...(maxTurns !== undefined ? { maxTurns } : {}),
+                ...(maxTokens !== undefined ? { maxTokens } : {}),
+            },
+            readOnly,
+            planMode,
+            ...(worktreeScope ? { worktreeScope } : {}),
+            ...(worktreePaths ? { worktreePaths } : {}),
+        });
+        // The script-only agent capability rides on the same root authority
+        // snapshot as run_code and additionally requires the subagents capability
+        // plus at least one resolved-launch seam. Raw runSubagent callbacks are
+        // deliberately never wired here: scripts launch through resolved
+        // definitions only, so no raw script spec can reach a raw launch path.
+        const agentSpecBridge = hasCapability('subagents') &&
+            agentSpecAuthority &&
+            (runResolvedSubagent || (runSubagentAsync && getSubagentResult && getSubagentStatus && cancelSubagentRun))
+            ? {
+                settings: settingsService,
+                ...(runResolvedSubagent ? { runResolvedSubagent } : {}),
+                ...(runSubagentAsync && getSubagentResult && getSubagentStatus && cancelSubagentRun
+                    ? { runResolvedSubagentAsync, getSubagentResult, getSubagentStatus, cancelSubagentRun }
+                    : {}),
+            }
+            : undefined;
+        tools.push(createRunCodeToolDefinition({
+            loggingService,
+            executionContext,
+            getCwd: () => executionContext?.getCwd() || process.cwd(),
+            approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
+            sessionAccess,
+            ...(bareMode ? { catalogOtherTools: 'names' } : {}),
+            ...(agentSpecAuthority ? { agentSpecAuthority } : {}),
+            ...(agentSpecBridge ? { agentSpecBridge } : {}),
+            ...(hasCapability('mcp') && !profile.enforcement.denials.has('mcp') && mcpToolSource ? { mcpToolSource } : {}),
+        }));
+    }
+    registerToolFormatters(tools);
+    const instructions = `${prompt}\n\n${environmentEnabled ? `Environment: ${envInfo}` : ''}${agentsInstructions}${skillsInstructions}${!allowAskUser
+        ? '\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.'
+        : ''}`;
+    const resolveInstructionsForRequest = deps.getGoal || deps.isDiscordInputEnabled
+        ? () => `${instructions}${discordSendEnabled && deps.isDiscordInputEnabled?.()
+            ? `\n\n${resolvePrompt(path.join(BASE_PROMPT_PATH, 'discord-communication.md'))}`
+            : ''}${deps.getGoal ? renderDurableGoalContext(deps.getGoal()) : ''}`
+        : undefined;
+    return {
+        name: 'Terminal Assistant',
+        memoryContextEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
+        instructions,
+        ...(resolveInstructionsForRequest ? { resolveInstructionsForRequest } : {}),
+        ...(deps.getGoal
+            ? {
+                // Read at the same request boundary as the rendered goal above, so
+                // goal_check records the goal the model judged, not a later one.
+                resolveRequestSnapshot: () => ({ goal: deps.getGoal?.() }),
+            }
+            : {}),
+        tools,
+        model: resolvedModel,
+    };
+};
+//# sourceMappingURL=agent.js.map

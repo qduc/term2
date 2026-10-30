@@ -1,0 +1,62 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+/**
+ * Project identity for sessions and persistent memory. A path belongs to the
+ * git project that owns it (`git rev-parse --git-common-dir`), so a project's
+ * root checkout and all of its worktrees share one scope and one project
+ * memory store. Every project comparison — persistence, the session index, and
+ * the memory store directory — must go through {@link projectScopeKey}:
+ * separate call sites choosing their own root is how rotated sessions once
+ * became invisible to their own process.
+ */
+export function normalizeProjectPath(projectPath) {
+    const normalized = path.normalize(projectPath);
+    return normalized.endsWith(path.sep) && normalized !== path.sep ? normalized.slice(0, -1) : normalized;
+}
+export function readGitCommonDir(dir) {
+    // Most historical session paths are removed worktrees; skip the git spawn.
+    if (!existsSync(dir))
+        return null;
+    try {
+        return (execFileSync('git', ['rev-parse', '--git-common-dir'], {
+            cwd: dir,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim() || null);
+    }
+    catch {
+        // Not a repository, git unavailable, or the directory no longer exists.
+        return null;
+    }
+}
+const WORKTREES_SEGMENT = `${path.sep}.worktrees${path.sep}`;
+/**
+ * Worktrees are removed after merge, so git can no longer place their
+ * historical sessions. term2 creates them under `<project>/.worktrees/` (the
+ * shell sandbox only permits writes there), which still identifies the owner.
+ */
+function worktreeConventionRoot(normalized) {
+    const index = normalized.indexOf(WORKTREES_SEGMENT);
+    return index > 0 ? normalized.slice(0, index) : null;
+}
+export function createProjectScopeResolver(gitCommonDir = readGitCommonDir) {
+    const cache = new Map();
+    return (projectPath, sshHost) => {
+        const normalized = normalizeProjectPath(projectPath);
+        // A remote path names a directory on another machine; local git cannot place it.
+        if (sshHost)
+            return normalized;
+        const cached = cache.get(normalized);
+        if (cached !== undefined)
+            return cached;
+        const commonDir = gitCommonDir(normalized);
+        const key = commonDir
+            ? normalizeProjectPath(path.dirname(path.resolve(normalized, commonDir)))
+            : worktreeConventionRoot(normalized) ?? normalized;
+        cache.set(normalized, key);
+        return key;
+    };
+}
+export const projectScopeKey = createProjectScopeResolver();
+//# sourceMappingURL=project-scope.js.map

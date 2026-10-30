@@ -1,0 +1,89 @@
+import { z } from 'zod';
+import fs from 'fs';
+import path from 'path';
+import { getCallIdFromItem, getOutputText, normalizeToolArguments, createBaseMessage, isSuccessOutput, } from '../format-helpers.js';
+const ACTIVATE_SKILL_DESCRIPTION = 'Load the full instructions for a specified skill to perform a specialized task. ' +
+    "Use this when the user's request matches one of the available skills (e.g., refactoring, testing guidance, prompt writing). " +
+    'Do NOT use this if no skill is relevant—use the standard tools instead. ' +
+    'Returns the skill instructions, directory, and any referenced resource files.';
+const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.cache', '.DS_Store'];
+export const createActivateSkillToolDefinition = (skillsService) => {
+    const availableSkills = skillsService.getAvailableSkillsForModel();
+    const skillNames = availableSkills.map((s) => s.name);
+    const nameSchema = skillNames.length > 0
+        ? z.enum(skillNames).describe('The name of the skill to activate.')
+        : z.string().describe('The name of the skill to activate.');
+    const activateSkillSchema = z.object({
+        name: nameSchema,
+    });
+    return {
+        name: 'activate_skill',
+        description: ACTIVATE_SKILL_DESCRIPTION,
+        scriptedReturnShape: 'string: the activated skill\u2019s instructions wrapped in <skill_content>; "Error: Skill \u0027<name>\u0027 not found." on failure',
+        scriptedReturnSchema: z.string(),
+        parameters: activateSkillSchema,
+        parallelSafe: true,
+        needsApproval: () => false, // Safe operation
+        execute: async (params) => {
+            const { name } = params;
+            const skill = skillsService.activateSkill(name);
+            if (!skill) {
+                return `Error: Skill '${name}' not found.`;
+            }
+            const baseDir = path.dirname(skill.location);
+            let resourceXml = '';
+            try {
+                if (fs.existsSync(baseDir)) {
+                    const scanFiles = (dir) => {
+                        const results = [];
+                        const list = fs.readdirSync(dir, { withFileTypes: true });
+                        for (const file of list) {
+                            const filePath = path.join(dir, file.name);
+                            if (file.isDirectory()) {
+                                if (!ALWAYS_IGNORE.includes(file.name)) {
+                                    results.push(...scanFiles(filePath));
+                                }
+                            }
+                            else {
+                                results.push(path.relative(baseDir, filePath));
+                            }
+                        }
+                        return results;
+                    };
+                    const resources = scanFiles(baseDir).filter((r) => r !== 'SKILL.md');
+                    if (resources.length > 0) {
+                        resourceXml = `\n\n<skill_resources>\n${resources
+                            .map((r) => `  <file>${r}</file>`)
+                            .join('\n')}\n</skill_resources>`;
+                    }
+                }
+            }
+            catch (_e) {
+                // Ignore or log error
+            }
+            return `<skill_content name="${skill.name}">
+${skill.body}
+
+Skill directory: ${baseDir}
+Relative paths in this skill are relative to the skill directory.${resourceXml}
+</skill_content>`;
+        },
+        formatCommandMessage: (item, index, toolCallArgumentsById) => {
+            const callId = getCallIdFromItem(item);
+            const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+            const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+            const args = normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? {};
+            const skillName = args?.name ?? 'unknown';
+            return [
+                createBaseMessage(item, index, 0, false, {
+                    command: `activate_skill "${skillName}"`,
+                    output: getOutputText(item) || 'Activated successfully.',
+                    success: isSuccessOutput(getOutputText(item) || ''),
+                    toolName: 'activate_skill',
+                    toolArgs: args,
+                }),
+            ];
+        },
+    };
+};
+//# sourceMappingURL=activate-skill.js.map

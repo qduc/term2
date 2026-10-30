@@ -1,0 +1,361 @@
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useInputContext } from '../context/InputContext.js';
+import { useModelCatalog } from './use-model-catalog.js';
+import { ModelCatalogSession, orderedProviderIds, } from '../services/models/model-catalog-session.js';
+import { getProviderIds } from '../providers/index.js';
+import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
+import { getModelSettingConfigForInput } from '../utils/ai/model-settings.js';
+import { getProviderCredentialSettingKey, getProviderIdForCredentialSettingKey, resolveProviderCredentials, } from '../utils/ai/provider-credentials.js';
+import { getFavoriteModelInfos, serializeFavorite, toggleFavoriteModel } from '../services/models/model-favorites.js';
+import { commitNicknameEdit, getNicknameEntries, getNicknameLabels, getNicknameModelInfos, removeNicknameTarget, } from '../services/models/model-nicknames.js';
+import { nextModelTab, pinnedModelsForTab, previousModelTab, selectModelsForTab, } from '../services/models/model-tabs.js';
+import { SETTING_KEYS } from '../services/settings/settings-schema.js';
+import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
+export const useModelSelection = (deps) => {
+    const { loggingService, settingsService, modelFetcher } = deps;
+    const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
+    const catalogSession = useMemo(() => new ModelCatalogSession({ settingsService, loggingService, fetcher: modelFetcher }), [settingsService, loggingService, modelFetcher]);
+    const [selectedIndex, setSelectedIndex] = useState(0);
+    const [modelTab, setModelTab] = useState('all');
+    const provider = null;
+    const [scrollOffset, setScrollOffset] = useState(0);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const [credentialRevision, setCredentialRevision] = useState(0);
+    const [favoritesRevision, setFavoritesRevision] = useState(0);
+    const [nicknamesRevision, setNicknamesRevision] = useState(0);
+    const [nicknameDraft, setNicknameDraft] = useState(null);
+    const shouldPreselectRef = useRef(false);
+    // Favorites render purely from settings: no catalog fetch, no credential
+    // check. Recomputed whenever a toggle (or an external settings change)
+    // bumps favoritesRevision.
+    const favoriteModelInfos = useMemo(() => getFavoriteModelInfos(settingsService), 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, favoritesRevision]);
+    const favoriteKeys = useMemo(() => new Set(favoriteModelInfos.map((m) => serializeFavorite(m.provider, m.id))), [favoriteModelInfos]);
+    // Nicknames render purely from settings, like favorites; recomputed when a
+    // commit (or an external settings change) bumps nicknamesRevision.
+    const nicknameLabels = useMemo(() => getNicknameLabels(settingsService), 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, nicknamesRevision]);
+    const nicknameModelInfos = useMemo(() => getNicknameModelInfos(settingsService), 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, nicknamesRevision]);
+    const nicknameKeys = useMemo(() => new Set(nicknameModelInfos.map((model) => serializeFavorite(model.provider, model.id))), [nicknameModelInfos]);
+    const controllerFrame = controller.getSnapshot().stack.at(-1);
+    const isControllerOpen = controllerFrame?.kind === 'model';
+    const isOpen = isControllerOpen || mode === 'model_selection';
+    // getModelSettingConfigForInput reads the raw composer text directly, which
+    // is authoritative whether or not the model graph is controller-owned.
+    const modelSettingConfig = getModelSettingConfigForInput(input);
+    const providerIds = useMemo(() => orderedProviderIds(settingsService, getProviderIds()), 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, credentialRevision]);
+    const unavailableConfiguredModels = useMemo(() => {
+        const selection = settingsService.get('agent.modelSelection');
+        const configuredModel = selection.model;
+        const configuredProvider = selection.provider;
+        if (typeof configuredModel !== 'string' ||
+            !configuredModel ||
+            typeof configuredProvider !== 'string' ||
+            providerIds.includes(configuredProvider)) {
+            return [];
+        }
+        const credentials = resolveProviderCredentials(settingsService, configuredProvider);
+        return [
+            {
+                id: configuredModel,
+                provider: configuredProvider,
+                unavailableReason: credentials.unavailableReason ?? 'missing-credentials',
+            },
+        ];
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [modelSettingConfig, providerIds, settingsService, credentialRevision]);
+    useEffect(() => {
+        const unsubscribe = settingsService.onChange?.((changedKey) => {
+            if (!changedKey ||
+                changedKey === getProviderCredentialSettingKey('openai') ||
+                changedKey === getProviderCredentialSettingKey('openrouter')) {
+                const providerId = getProviderIdForCredentialSettingKey(changedKey);
+                if (providerId)
+                    catalogSession.invalidate(providerId);
+                else
+                    catalogSession.clear();
+                setCredentialRevision((revision) => revision + 1);
+            }
+            else if (changedKey === 'providers') {
+                catalogSession.clear();
+                setCredentialRevision((revision) => revision + 1);
+            }
+            else if (changedKey === SETTING_KEYS.AGENT_FAVORITE_MODELS) {
+                setFavoritesRevision((revision) => revision + 1);
+            }
+            else if (changedKey === SETTING_KEYS.AGENT_MODEL_NICKNAMES) {
+                setNicknamesRevision((revision) => revision + 1);
+            }
+        });
+        return unsubscribe;
+    }, [settingsService, catalogSession]);
+    // While the model graph is controller-owned, the binding is the source of
+    // truth for both the query and the replacement start. Keep the legacy
+    // triggerIndex projection for callers that still use this hook directly.
+    const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
+    const parsedQuery = useMemo(() => {
+        if (!isOpen)
+            return { modelId: '', provider: undefined };
+        if (isControllerOpen)
+            return parseModelProviderArg(controllerFrame.binding.query);
+        if (triggerIndex === null)
+            return { modelId: '', provider: undefined };
+        const end = Math.min(cursorOffset, input.length);
+        return parseModelProviderArg(input.slice(triggerIndex, end));
+    }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
+    const query = parsedQuery.modelId;
+    useEffect(() => {
+        if (isOpen) {
+            shouldPreselectRef.current = true;
+        }
+    }, [isOpen, catalogSession]);
+    const { catalogs, loading, warning } = useModelCatalog({
+        active: isOpen,
+        session: catalogSession,
+        providerIds,
+        refreshKey,
+    });
+    const refresh = useCallback(() => {
+        if (!isOpen)
+            return;
+        for (const providerId of providerIds)
+            catalogSession.refresh(providerId);
+        setRefreshKey((k) => k + 1);
+    }, [isOpen, providerIds, catalogSession]);
+    const filteredModels = useMemo(() => {
+        const source = mergeUnifiedModels(providerIds, catalogs, [
+            ...pinnedModelsForTab(modelTab, favoriteModelInfos, nicknameModelInfos),
+            ...unavailableConfiguredModels,
+        ]);
+        const tabModels = selectModelsForTab(source, modelTab, { favoriteKeys, nicknameKeys });
+        return filterUnifiedModels(tabModels, query, parsedQuery.provider);
+    }, [
+        providerIds,
+        catalogs,
+        favoriteModelInfos,
+        nicknameModelInfos,
+        unavailableConfiguredModels,
+        favoriteKeys,
+        nicknameKeys,
+        modelTab,
+        query,
+        parsedQuery.provider,
+    ]);
+    const filteredModelsRef = useRef(filteredModels);
+    const selectedIndexRef = useRef(selectedIndex);
+    filteredModelsRef.current = filteredModels;
+    selectedIndexRef.current = selectedIndex;
+    useEffect(() => {
+        /* eslint-disable react-hooks/set-state-in-effect */
+        // Keep the selection and viewport together when results change.
+        // Opening the picker still preselects the current model.
+        setScrollOffset(0);
+        if (filteredModels.length === 0) {
+            setSelectedIndex(0);
+            return;
+        }
+        if (shouldPreselectRef.current) {
+            const selection = settingsService.get('agent.modelSelection');
+            const currentModelValue = selection.model;
+            const currentProviderValue = selection.provider;
+            if (typeof currentModelValue === 'string' && currentModelValue) {
+                const index = filteredModels.findIndex((m) => m.id === currentModelValue &&
+                    (typeof currentProviderValue !== 'string' || m.provider === currentProviderValue));
+                if (index >= 0) {
+                    setSelectedIndex(index);
+                    shouldPreselectRef.current = false;
+                    return;
+                }
+            }
+            if (!loading) {
+                shouldPreselectRef.current = false;
+            }
+        }
+        // Retaining a lower selection would make auto-scroll undo the reset.
+        setSelectedIndex(0);
+        /* eslint-enable react-hooks/set-state-in-effect */
+    }, [filteredModels, loading, modelSettingConfig, settingsService]);
+    // Auto-scroll to keep selected item visible
+    useEffect(() => {
+        const maxHeight = 10;
+        if (selectedIndex < scrollOffset) {
+            setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
+        }
+        else if (selectedIndex >= scrollOffset + maxHeight) {
+            setScrollOffset(selectedIndex - maxHeight + 1);
+        }
+    }, [selectedIndex, scrollOffset]);
+    // Keep an editor open only while its model remains visible in the current tab.
+    useEffect(() => {
+        if (!nicknameDraft)
+            return;
+        const modelKey = serializeFavorite(nicknameDraft.provider, nicknameDraft.modelId);
+        const stillEligible = !nicknameDraft.existingNickname || nicknameKeys.has(modelKey);
+        const stillListed = stillEligible &&
+            filteredModels.some((m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId);
+        if (!stillListed)
+            setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
+    }, [filteredModels, nicknameDraft, nicknameKeys]);
+    // Never leak an open editor into the next menu session.
+    useEffect(() => {
+        if (!isOpen && nicknameDraft)
+            setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
+    }, [isOpen, nicknameDraft]);
+    const open = useCallback((startIndex) => {
+        if (mode === 'model_selection')
+            return;
+        const editor = controller.getSnapshot().editor;
+        controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
+        shouldPreselectRef.current = true;
+        setSelectedIndex(0);
+        setScrollOffset(0);
+    }, [mode, controller]);
+    const close = useCallback(() => {
+        if (mode === 'model_selection') {
+            controller.close();
+            setSelectedIndex(0);
+            setScrollOffset(0);
+        }
+    }, [mode, controller]);
+    const moveUp = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex((prev) => {
+            if (filteredModels.length === 0)
+                return 0;
+            return prev > 0 ? prev - 1 : filteredModels.length - 1;
+        });
+    }, [filteredModels.length]);
+    const switchModelTab = useCallback((direction = 'next') => {
+        shouldPreselectRef.current = false;
+        setModelTab((tab) => (direction === 'previous' ? previousModelTab(tab) : nextModelTab(tab)));
+        setSelectedIndex(0);
+        setScrollOffset(0);
+    }, []);
+    const moveDown = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex((prev) => {
+            if (filteredModels.length === 0)
+                return 0;
+            return prev < filteredModels.length - 1 ? prev + 1 : 0;
+        });
+    }, [filteredModels.length]);
+    const moveHome = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex(0);
+    }, []);
+    const moveEnd = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex(Math.max(0, filteredModels.length - 1));
+    }, [filteredModels.length]);
+    const pageUp = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex((prev) => Math.max(0, prev - 10));
+    }, []);
+    const pageDown = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex((prev) => (filteredModels.length === 0 ? 0 : Math.min(filteredModels.length - 1, prev + 10)));
+    }, [filteredModels.length]);
+    const getSelectedItem = useCallback(() => {
+        const currentModels = filteredModelsRef.current;
+        if (currentModels.length === 0)
+            return undefined;
+        const safeIndex = Math.min(selectedIndexRef.current, currentModels.length - 1);
+        return currentModels[safeIndex];
+    }, []);
+    const toggleFavorite = useCallback(() => {
+        const selected = getSelectedItem();
+        if (!selected)
+            return;
+        toggleFavoriteModel(settingsService, selected.provider, selected.id);
+        setFavoritesRevision((revision) => revision + 1);
+    }, [getSelectedItem, settingsService]);
+    const startNicknameEdit = useCallback(() => {
+        const selected = getSelectedItem();
+        if (!selected)
+            return;
+        const existing = getNicknameEntries(settingsService).find((entry) => entry.provider.toLowerCase() === selected.provider.toLowerCase() && entry.modelId === selected.id);
+        setNicknameDraft({
+            provider: selected.provider,
+            modelId: selected.id,
+            text: existing?.nickname ?? '',
+            existingNickname: existing != null,
+            error: null,
+            pendingReplace: null,
+        });
+    }, [getSelectedItem, settingsService]);
+    // The draft keeps its cursor at the end of the text: it names one row, so
+    // mid-string cursor movement (and the arrows that would provide it) is not
+    // part of this editor.
+    const typeNicknameDraft = useCallback((text) => {
+        if (!text)
+            return;
+        setNicknameDraft((draft) => draft ? { ...draft, text: draft.text + text, error: null, pendingReplace: null } : draft);
+    }, []);
+    const backspaceNicknameDraft = useCallback(() => {
+        setNicknameDraft((draft) => draft ? { ...draft, text: draft.text.slice(0, -1), error: null, pendingReplace: null } : draft);
+    }, []);
+    const commitNicknameDraft = useCallback(() => {
+        if (!nicknameDraft)
+            return;
+        const result = commitNicknameEdit(settingsService, nicknameDraft, getProviderIds());
+        if (!result.saved) {
+            // Rejected input keeps the user in the editor with the reason shown.
+            // A name owned by another model stays uncommitted until the next Enter.
+            setNicknameDraft({ ...nicknameDraft, error: result.error, pendingReplace: result.pendingReplace });
+            return;
+        }
+        setNicknameDraft(null);
+        setNicknamesRevision((revision) => revision + 1);
+    }, [nicknameDraft, settingsService]);
+    const cancelNicknameDraft = useCallback(() => setNicknameDraft(null), []);
+    const removeNicknameDraft = useCallback(() => {
+        if (!nicknameDraft?.existingNickname)
+            return;
+        removeNicknameTarget(settingsService, nicknameDraft);
+        setNicknameDraft(null);
+        setNicknamesRevision((revision) => revision + 1);
+    }, [nicknameDraft, settingsService]);
+    return {
+        isOpen,
+        triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
+        query,
+        loading,
+        error: null,
+        warning,
+        provider,
+        modelTab,
+        switchModelTab,
+        filteredModels,
+        selectedIndex,
+        scrollOffset,
+        open,
+        close,
+        moveUp,
+        moveDown,
+        moveHome,
+        moveEnd,
+        pageUp,
+        pageDown,
+        getSelectedItem,
+        toggleFavorite,
+        favoriteKeys,
+        nicknameDraft,
+        nicknameLabels,
+        startNicknameEdit,
+        typeNicknameDraft,
+        backspaceNicknameDraft,
+        commitNicknameDraft,
+        cancelNicknameDraft,
+        removeNicknameDraft,
+        refresh,
+        modelSettingConfig,
+        credentialRevision,
+    };
+};
+//# sourceMappingURL=use-model-selection.js.map

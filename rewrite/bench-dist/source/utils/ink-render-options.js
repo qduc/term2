@@ -1,0 +1,8 @@
+/**
+ * Centralize Ink render options so the CLI entrypoint stays small and
+ * the behavior is unit-testable.
+ */
+export function getInkRenderOptions() {
+    return { incrementalRendering: false, exitOnCtrlC: false };
+}
+//# sourceMappingURL=ink-render-options.js.map

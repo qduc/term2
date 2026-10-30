@@ -1,0 +1,1159 @@
+import { z } from 'zod';
+import process from 'process';
+import path from 'path';
+import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { relaxedNumber } from '../utils.js';
+import { validateCommandSafety } from '../../utils/shell/command-safety/index.js';
+import { logValidationError as logValidationErrorUtil } from '../../utils/shell/command-logger.js';
+import { executeShellCommand } from '../../utils/shell/execute-shell.js';
+import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
+import { coerceToText, getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem, safeJsonParse, } from '../format-helpers.js';
+import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
+import { createSandboxEnvironment } from '../../utils/shell/sandbox/sandbox-env.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
+import { SANDBOX_ESCAPE_INSTRUCTION, createSandboxRuntimeConfig, } from '../../utils/shell/sandbox/sandbox-policy.js';
+import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sandbox-runner.js';
+import { DETAILED_DENIED_READ_INSTRUCTION } from '../../utils/shell/sandbox/denied-read-detector.js';
+import { getProjectAllowReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
+import { classifySandboxFailure } from '../../utils/shell/sandbox/sandbox-failure-classifier.js';
+import { resolveActiveEnforcement } from '../../services/profiles/index.js';
+import { createDockerHostControl, DOCKER_HOST_CONTROL_RETRY_INSTRUCTION, } from '../../utils/shell/sandbox/docker-host-control.js';
+const READ_ONLY_REQUIRES_SANDBOX_ERROR = 'Error: shell is unavailable in a read-only session unless it runs inside the sandbox. Enable sandbox.enabled, or use a read_write workspace. Command not executed.';
+const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
+const monitorOptionsSchema = z.object({
+    pattern: z
+        .string()
+        .optional()
+        .describe('Regular expression matched against each complete output line; absent matches any line.'),
+    stream: z.enum(['stdout', 'stderr', 'both']).optional().describe('Which output stream to monitor. Defaults to both.'),
+    idle_ms: relaxedNumber
+        .int()
+        .nonnegative()
+        .optional()
+        .describe('Quiet window in milliseconds that coalesces a burst of matches into one notification. Defaults to 1500.'),
+    notify_limit: relaxedNumber
+        .int()
+        .nonnegative()
+        .optional()
+        .describe('Maximum number of notifications before the watch retires. 0 means unlimited; defaults to 0.'),
+    once: z.boolean().optional().describe('Retire the watch after its first notification (notify_limit 1).'),
+});
+const checkInOptionsSchema = z.object({
+    enabled: z
+        .boolean()
+        .optional()
+        .describe('Enable or disable proactive check-ins for this background shell job. Defaults to true.'),
+    interval_seconds: relaxedNumber
+        .int()
+        .positive()
+        .optional()
+        .describe('Custom interval in seconds between proactive check-ins.'),
+});
+export const shellParametersSchema = z.object({
+    command: z.string().min(1).describe('Single shell command to execute.'),
+    description: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('Optional human-readable description to display for this shell call.'),
+    timeout_ms: relaxedNumber
+        .int()
+        .positive()
+        .optional()
+        .describe('Optional timeout in milliseconds for each command. Defaults to shell.timeout (foreground) or shell.backgroundTimeout (background) if not specified. Choose an explicit finite timeout for known long-running work: the 120s foreground and 30min background defaults are not ceilings and do not guarantee completion — a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms sized to the job.'),
+    max_output_length: relaxedNumber
+        .int()
+        .positive()
+        .optional()
+        .describe('Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to 40000 characters if not specified.'),
+    sandbox: shellSandboxModeSchema.describe('Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.'),
+    background: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe('Run locally in the background and return a job ID immediately. Defaults to false.'),
+    monitor: monitorOptionsSchema
+        .optional()
+        .describe('When background is true, attach an output monitor in this same call. The job keeps running and matching output is delivered as shell_output notifications.'),
+    check_in: checkInOptionsSchema
+        .optional()
+        .describe('When background is true, configure or mute proactive check-ins for this job.'),
+});
+const getBackgroundShellJobParameters = z.object({
+    job_id: z.string().min(1).describe('The background shell job ID.'),
+});
+const monitorShellJobParameters = z
+    .object({
+    job_id: z.string().min(1).describe('The background shell job ID to monitor.'),
+})
+    .merge(monitorOptionsSchema);
+const cancelShellMonitorParameters = z.object({
+    watch_id: z.string().min(1).describe('The watch ID returned by monitor_shell_job.'),
+});
+function backgroundShellJobResponse(job) {
+    return {
+        jobId: job.id,
+        command: job.command,
+        status: job.status,
+        ...(job.result === undefined ? {} : { output: job.result.output }),
+        ...(job.error === undefined ? {} : { error: job.error }),
+    };
+}
+const ACTIVE_JOB_MESSAGE = 'This background shell job is still running. End the current turn and wait for its automatic completion notification; do not poll get_shell_job.';
+function activeBackgroundShellJobResponse(job, output) {
+    const tail = output?.store.readTail(job.id);
+    if (!tail) {
+        // The store has no stream for this job (no monitoring layer, or a job
+        // that never went through the shell-tool seam): keep the refusal form.
+        return {
+            status: 'background_job_active',
+            jobId: job.id,
+            message: ACTIVE_JOB_MESSAGE,
+        };
+    }
+    return {
+        status: 'background_job_active',
+        jobId: job.id,
+        command: job.command,
+        tail: tail.text,
+        droppedBytes: tail.droppedBytes,
+        message: ACTIVE_JOB_MESSAGE,
+    };
+}
+/**
+ * Common transcript extraction for the job/monitor control tools: call id,
+ * normalized arguments, the parsed tool result, and a string reader.
+ */
+function backgroundShellToolTranscript(item, toolCallArgumentsById) {
+    const callId = getCallIdFromItem(item);
+    const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+    const args = normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ?? normalizeToolArguments(fallbackArgs) ?? {};
+    const toolName = item?.toolName ?? item?.rawItem?.name ?? 'shell_job';
+    const outputText = getOutputText(item);
+    const response = safeJsonParse(outputText);
+    const readString = (value) => (typeof value === 'string' ? value : '');
+    return { callId, args, toolName, outputText, response, readString };
+}
+/**
+ * Job control is part of what the model did, so it belongs in the transcript.
+ * It also has to be: the UI opens a `running` command row on every
+ * `tool_started` and only closes it when a command message arrives for the same
+ * callId. A formatter returning `[]` leaves that row running forever, and
+ * because a running command is the first thing that cannot render statically,
+ * every message behind it stays out of Ink's Static region for the rest of the
+ * session.
+ */
+export const formatBackgroundShellJobCommandMessage = (item, index, toolCallArgumentsById) => {
+    const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(item, toolCallArgumentsById);
+    const jobId = readString(response?.jobId) || readString(args?.job_id);
+    const status = readString(response?.status);
+    const jobCommand = readString(response?.command);
+    const output = (() => {
+        if (!response) {
+            return outputText || 'No output';
+        }
+        if (status === 'not_found') {
+            return `Job ${jobId} not found.`;
+        }
+        // The active-job response carries an instruction aimed at the model
+        // ("do not poll"), which is noise in the transcript: show the bounded
+        // tail and drop accounting instead of the static refusal string.
+        if (status === 'background_job_active') {
+            const tail = readString(response?.tail);
+            const droppedBytes = typeof response?.droppedBytes === 'number' ? response.droppedBytes : 0;
+            const body = [tail, droppedBytes > 0 ? `(${droppedBytes} bytes of earlier output dropped)` : '']
+                .filter(Boolean)
+                .join('\n');
+            return body || 'Still running.';
+        }
+        const header = jobCommand ? `${status} · ${jobCommand}` : status ? `status: ${status}` : '';
+        const body = readString(response.output);
+        const error = readString(response.error);
+        return [header, body, error].filter(Boolean).join('\n') || outputText || 'No output';
+    })();
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command: jobId ? `${toolName} ${jobId}` : toolName,
+            output,
+            success: status !== 'not_found' && !readString(response?.error),
+            toolName,
+            toolArgs: args,
+        }),
+    ];
+};
+/**
+ * Transcript row for `monitor_shell_job`. Renders the returned watchId and the
+ * job it is attached to; a later `background_shell_output` notification carries
+ * the seq/matchedLines of each firing.
+ */
+export const formatBackgroundShellMonitorCommandMessage = (item, index, toolCallArgumentsById) => {
+    const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(item, toolCallArgumentsById);
+    const jobId = readString(response?.jobId) || readString(args?.job_id);
+    const watchId = readString(response?.watchId);
+    const status = readString(response?.status);
+    const output = (() => {
+        if (!response) {
+            return outputText || 'No output';
+        }
+        if (status === 'not_found') {
+            return `Job ${jobId} not found.`;
+        }
+        const error = readString(response?.error);
+        if (error) {
+            return error;
+        }
+        if (status === 'monitoring') {
+            const seq = typeof response?.seq === 'number' ? ` (firing ${response.seq})` : '';
+            const matched = readString(response?.matchedLines);
+            return [watchId ? `Monitoring job ${jobId} (watch ${watchId}).${seq}` : `Monitoring job ${jobId}.`, matched]
+                .filter(Boolean)
+                .join('\n');
+        }
+        return outputText || 'No output';
+    })();
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command: watchId ? `${toolName} ${watchId}` : `${toolName} ${jobId}`,
+            output,
+            success: status === 'monitoring',
+            toolName,
+            toolArgs: args,
+        }),
+    ];
+};
+/** Transcript row for `cancel_shell_monitor`. */
+export const formatBackgroundShellCancelMonitorCommandMessage = (item, index, toolCallArgumentsById) => {
+    const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(item, toolCallArgumentsById);
+    const watchId = readString(response?.watchId) || readString(args?.watch_id);
+    const status = readString(response?.status);
+    const output = (() => {
+        if (!response) {
+            return outputText || 'No output';
+        }
+        const error = readString(response?.error);
+        if (error) {
+            return error;
+        }
+        if (status === 'not_found') {
+            return `Watch ${watchId} not found.`;
+        }
+        if (status === 'cancelled') {
+            return `Stopped monitoring (watch ${watchId}).`;
+        }
+        return outputText || 'No output';
+    })();
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command: watchId ? `${toolName} ${watchId}` : toolName,
+            output,
+            success: status === 'cancelled',
+            toolName,
+            toolArgs: args,
+        }),
+    ];
+};
+/**
+ * Root composition registers these alongside `shell` when it supplies the
+ * session-owned registry. Keeping them here makes the model contract and its
+ * shell lifecycle use the same job representation.
+ *
+ * `output` carries the session-owned store + watch layer; when it is absent
+ * (legacy callers), the monitor tools are not registered.
+ */
+export function createBackgroundShellJobToolDefinitions(registry, output) {
+    const definitions = {
+        get: {
+            name: 'get_shell_job',
+            scriptedReturnShape: 'JSON string (JSON.parse first): { jobId, status: job lifecycle | "background_job_active" | "not_found", command?, output?, tail?, error?, message? }',
+            description: 'Get the non-blocking status and bounded output of a background shell job. Do not use this to poll a running job; completion is delivered automatically.',
+            scriptedReturnSchema: z.string(),
+            parameters: getBackgroundShellJobParameters,
+            parallelSafe: true,
+            needsApproval: () => false,
+            execute: ({ job_id }) => {
+                const job = registry.get(job_id);
+                if (job?.status === 'running' || job?.status === 'cancelling')
+                    return JSON.stringify(activeBackgroundShellJobResponse(job, output));
+                return JSON.stringify(job ? backgroundShellJobResponse(job) : { jobId: job_id, status: 'not_found' });
+            },
+            formatCommandMessage: formatBackgroundShellJobCommandMessage,
+        },
+        cancel: {
+            name: 'cancel_shell_job',
+            scriptedReturnShape: 'JSON string (JSON.parse first): { jobId, status: job lifecycle | "not_found", command?, output?, error? }',
+            description: 'Request cancellation of a running background shell job without waiting for it to exit.',
+            scriptedReturnSchema: z.string(),
+            parameters: getBackgroundShellJobParameters,
+            needsApproval: () => false,
+            execute: ({ job_id }) => {
+                const job = registry.get(job_id);
+                if (!job)
+                    return JSON.stringify({ jobId: job_id, status: 'not_found' });
+                registry.cancel(job_id);
+                const current = registry.get(job_id);
+                return JSON.stringify(backgroundShellJobResponse(current ?? job));
+            },
+            formatCommandMessage: formatBackgroundShellJobCommandMessage,
+        },
+    };
+    if (output) {
+        definitions.monitor = {
+            name: 'monitor_shell_job',
+            scriptedReturnShape: 'JSON string (JSON.parse first): { watchId, jobId, status: "monitoring"|"not_found"|"error", error? } — stop it with tools.cancel_shell_monitor({ watch_id })',
+            description: "Attach a watch to a running background shell job. The watch replays the job's retained output, and each time a complete line in the selected stream matches `pattern` (or any line arrives when `pattern` is absent) and the output has been quiet for `idle_ms`, a `shell_output` notification carrying the matched lines is delivered through the conversation; the job keeps running. Returns a watchId; inside run_code, stop the watch with tools.cancel_shell_monitor(...). Each notification includes the number of distinct lines coalesced into it (`coalescedCount`) and the inclusive seq range (`seqRange`), so bursts hidden by `idle_ms` are visible.",
+            scriptedReturnSchema: z.string(),
+            parameters: monitorShellJobParameters,
+            needsApproval: () => false,
+            execute: ({ job_id, pattern, stream, idle_ms, notify_limit, once }) => {
+                const job = registry.get(job_id);
+                if (!job ||
+                    output.store.readTail(job_id) === undefined ||
+                    (job.status !== 'running' && job.status !== 'cancelling')) {
+                    return JSON.stringify({ jobId: job_id, status: 'not_found' });
+                }
+                let compiled;
+                if (pattern !== undefined) {
+                    try {
+                        compiled = new RegExp(pattern);
+                    }
+                    catch (error) {
+                        return JSON.stringify({
+                            jobId: job_id,
+                            status: 'error',
+                            error: `Invalid monitor pattern: ${error instanceof Error ? error.message : String(error)}`,
+                        });
+                    }
+                }
+                const options = {
+                    jobId: job_id,
+                    pattern: compiled,
+                    stream,
+                    idleMs: idle_ms,
+                    notifyLimit: once ? 1 : notify_limit,
+                    command: job.command,
+                };
+                const watchId = output.watches.registerWatch(options);
+                return JSON.stringify({ watchId, jobId: job_id, status: 'monitoring' });
+            },
+            formatCommandMessage: formatBackgroundShellMonitorCommandMessage,
+        };
+        definitions.cancelMonitor = {
+            name: 'cancel_shell_monitor',
+            scriptedReturnShape: 'JSON string (JSON.parse first): { watchId, status: "cancelled"|"not_found" }',
+            description: 'Stop a shell monitor watch so it stops delivering shell_output notifications.',
+            scriptedReturnSchema: z.string(),
+            parameters: cancelShellMonitorParameters,
+            needsApproval: () => false,
+            execute: ({ watch_id }) => {
+                const cancelled = output.watches.cancelWatch(watch_id);
+                return JSON.stringify({ watchId: watch_id, status: cancelled ? 'cancelled' : 'not_found' });
+            },
+            formatCommandMessage: formatBackgroundShellCancelMonitorCommandMessage,
+        };
+    }
+    return definitions;
+}
+/**
+ * Strip redundant 'cd <path> &&' prefix if it targets the current working directory
+ */
+function stripRedundantCd(command, cwd) {
+    const cdPattern = /^cd\s+([^\s&]+)\s+&&\s+(.+)$/;
+    const match = command.match(cdPattern);
+    if (match) {
+        const [, targetPath, restOfCommand] = match;
+        // Resolve the target path to absolute
+        const absoluteTargetPath = path.resolve(cwd, targetPath);
+        // If target path is same as cwd, strip the cd part
+        if (absoluteTargetPath === cwd) {
+            return restOfCommand;
+        }
+    }
+    return command;
+}
+function isMutatingCommand(command, cwd, log) {
+    return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
+}
+function getConversationSessionId(context) {
+    if (!context || typeof context !== 'object')
+        return undefined;
+    const runContext = context.context;
+    if (!runContext || typeof runContext !== 'object')
+        return undefined;
+    const sessionId = runContext.sessionId;
+    return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
+}
+const coerceCommandText = (value) => {
+    if (typeof value === 'string') {
+        return value;
+    }
+    if (Array.isArray(value)) {
+        return value
+            .map((part) => coerceToText(part))
+            .filter(Boolean)
+            .join('\n');
+    }
+    return coerceToText(value);
+};
+export const formatShellCommandMessage = (item, index, toolCallArgumentsById) => {
+    const callId = getCallIdFromItem(item);
+    const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args = normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? {};
+    const command = (() => {
+        if (typeof args === 'string') {
+            return args;
+        }
+        const argsRecord = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+        const directCommand = coerceCommandText(argsRecord.command);
+        if (directCommand) {
+            return directCommand;
+        }
+        const commandsValue = argsRecord.commands;
+        if (typeof commandsValue === 'string') {
+            return commandsValue;
+        }
+        if (Array.isArray(commandsValue)) {
+            const commands = commandsValue
+                .map((entry) => typeof entry === 'string'
+                ? entry
+                : entry && typeof entry === 'object' && 'command' in entry
+                    ? coerceCommandText(entry.command)
+                    : coerceCommandText(entry))
+                .filter(Boolean)
+                .join('\n');
+            if (commands) {
+                return commands;
+            }
+        }
+        return 'Unknown command';
+    })();
+    const displayDescription = args && typeof args === 'object' && !Array.isArray(args) && typeof args.description === 'string'
+        ? args.description.trim()
+        : '';
+    const displayCommand = displayDescription || command;
+    const outputText = getOutputText(item);
+    const backgroundRequested = args !== null && typeof args === 'object' && !Array.isArray(args) && args.background === true;
+    const launchAcknowledgement = backgroundRequested
+        ? safeJsonParse(outputText)
+        : null;
+    if (launchAcknowledgement?.status === 'running' &&
+        typeof launchAcknowledgement.jobId === 'string' &&
+        launchAcknowledgement.jobId.length > 0) {
+        return [
+            createBaseMessage(item, index, 0, false, {
+                command: displayCommand,
+                output: `Background job ${launchAcknowledgement.jobId} is running.`,
+                success: true,
+                toolName: 'shell',
+                toolArgs: args,
+            }),
+        ];
+    }
+    // Check if this is an error message (doesn't start with expected status formats)
+    const firstLine = outputText.split('\n')[0]?.trim() || '';
+    const isErrorMessage = firstLine.startsWith('Tool input did not match schema') ||
+        firstLine.includes('error') ||
+        firstLine.includes('Error') ||
+        firstLine.includes('failed') ||
+        firstLine.includes('Failed') ||
+        (!firstLine.startsWith('exit ') && firstLine !== 'timeout' && outputText && !outputText.includes('\n'));
+    let output;
+    let success;
+    let failureReason;
+    if (isErrorMessage && !firstLine.startsWith('exit ') && firstLine !== 'timeout') {
+        // For error messages, use the entire output
+        output = outputText || 'No output';
+        success = false;
+        failureReason = 'error';
+    }
+    else {
+        // For normal shell output, parse status line and body
+        const [statusLineRaw, ...bodyLines] = outputText.split('\n');
+        const statusLine = (statusLineRaw ?? '').trim();
+        const bodyText = bodyLines.join('\n').trim();
+        output = bodyText || 'No output';
+        if (statusLine === 'timeout') {
+            success = false;
+            failureReason = 'timeout';
+        }
+        else if (statusLine === 'cancelled') {
+            success = false;
+            failureReason = 'cancelled';
+        }
+        else if (statusLine.startsWith('exit ')) {
+            const parsedExitCode = Number(statusLine.slice(5).trim());
+            success = Number.isFinite(parsedExitCode) ? parsedExitCode === 0 : undefined;
+        }
+    }
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command: displayCommand,
+            output,
+            success,
+            failureReason,
+            toolName: 'shell',
+        }),
+    ];
+};
+const getShellDescription = (searchViaShell) => 'Execute a single shell command. ' +
+    'Long output is truncated and the full output is saved to a file; ' +
+    (searchViaShell
+        ? 'Do NOT use this to write. Use the specialized tools for those tasks. '
+        : 'Do NOT use this to read, write or search. Use the specialized tools for those tasks. ') +
+    'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
+    'Do NOT use this for complex multi-step edits or broad codebase exploration; use `run_subagent` instead. ' +
+    'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling. ' +
+    'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s foreground and 30min background defaults are not ceilings, do not guarantee completion, and a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms. A timeout is a deadline, not a retry grant: when a command times out, diagnose the failure and do not blindly re-run a command whose earlier effects may already have landed.';
+const SHELL_DESCRIPTION_ORCHESTRATOR = 'Execute a single shell command. Directly inspect, test, or perform a small clear operation when that is the most efficient path. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
+    'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage. For background output notifications, set background: true and monitor in the same call, then wait for shell_output rather than polling. Known long-running work (watchers, full-suite validation) needs an explicit finite timeout_ms sized to the job: the background default is not a ceiling, and a timeout is a deadline to diagnose, not a license to re-run a command whose earlier effects may already have landed.';
+export function createShellToolDefinition(deps) {
+    const { loggingService, settingsService, executionContext, executeShellCommandImpl = executeShellCommand, shellSandboxRunner = getDefaultShellSandboxRunner(), registerSandboxNetworkPauseController, dockerHostControlFactory = createDockerHostControl, orchestratorMode = false, searchViaShell: searchViaShellExplicit, postExecuteDeniedRead = false, sessionAccess, nestedCompatibility, backgroundShellRegistry, backgroundShellWatches, configureCheckIn, shellChildRegistry, sandboxChildRegistry, gatewayMode = false, readOnly = false, allowUnsandboxed = true, } = deps;
+    const deniedReadByCallId = new Map();
+    const overrideByCallId = new Map();
+    // Create command logger function with dependencies
+    const logValidationError = (message) => logValidationErrorUtil(settingsService, message);
+    // Only an explicit `on` routes search through the shell; `auto` (the schema
+    // default) behaves like `off`, so the description must not claim that
+    // search belongs to the shell.
+    const settingRoutesSearchViaShell = settingsService.get('app.searchViaShell') === 'on';
+    const resolvedSearchViaShell = searchViaShellExplicit ?? settingRoutesSearchViaShell;
+    const shellDescription = orchestratorMode
+        ? SHELL_DESCRIPTION_ORCHESTRATOR
+        : getShellDescription(resolvedSearchViaShell);
+    // Read per call: the sandbox can be toggled while a session is running, and a
+    // stale value would let needsApproval and execute disagree about Docker.
+    const isSandboxEnabled = () => settingsService.get('sandbox.enabled') !== false;
+    return {
+        name: 'shell',
+        scriptedReturnSchema: z.string(),
+        description: shellDescription,
+        parameters: shellParametersSchema,
+        needsApproval: async (params, context) => {
+            if (settingsService.get('shell.autoApproveMode') === 'always') {
+                loggingService.security('Shell tool needsApproval: auto-approved in YOLO mode', {
+                    command: typeof params?.command === 'string' ? params.command.substring(0, 100) : String(params?.command),
+                });
+                return false;
+            }
+            try {
+                if (params.sandbox === 'unsandboxed') {
+                    return true;
+                }
+                const cwd = executionContext?.getCwd() || process.cwd();
+                const sessionId = getConversationSessionId(context);
+                const sandboxEnabled = isSandboxEnabled();
+                const dockerHostControlRequested = sandboxEnabled &&
+                    (sessionAccess?.requiresDockerApproval(params.command) ??
+                        nestedCompatibility?.docker.requiresApproval(sessionId, params.command) ??
+                        false);
+                if (dockerHostControlRequested &&
+                    !(sessionAccess?.hasDockerProject(cwd) ?? nestedCompatibility?.docker.hasProject(cwd) ?? false) &&
+                    !(sessionAccess?.hasDockerSessionGrant(cwd) ??
+                        (sessionId ? nestedCompatibility?.docker.hasSession(sessionId, cwd) : false) ??
+                        false)) {
+                    return true;
+                }
+                const sshService = executionContext?.getSSHService();
+                if (!sshService && sandboxEnabled) {
+                    // If a previous sandboxed run denied a read for this command, require
+                    // approval so the user can allow/remember the path or escape unsandboxed.
+                    if (!postExecuteDeniedRead && nestedCompatibility?.deniedReads.peek(params.command)) {
+                        return true;
+                    }
+                    const availability = await shellSandboxRunner.availability();
+                    if (availability.type === 'available') {
+                        return false;
+                    }
+                    return true;
+                }
+                const isDangerous = isMutatingCommand(params.command, cwd, loggingService);
+                // Log security event for all shell commands with dangerous flag
+                loggingService.security('Shell tool needsApproval check', {
+                    commands: [params.command.substring(0, 100)], // Truncate for safety
+                    optimizedCommand: stripRedundantCd(params.command, cwd).substring(0, 100),
+                    isDangerous,
+                });
+                return isDangerous;
+            }
+            catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                logValidationError(`Validation failed: ${errorMessage}`);
+                loggingService.error('Shell tool validation error', {
+                    error: errorMessage,
+                    // params.command may itself be why we're in this catch (e.g. undefined
+                    // after a malformed tool call), so don't re-dereference it unguarded.
+                    commands: [typeof params.command === 'string' ? params.command.substring(0, 100) : String(params.command)],
+                });
+                return true; // fail-safe: require approval on validation errors
+            }
+        },
+        execute: async ({ command, timeout_ms, max_output_length, sandbox: requestedSandbox = 'default', background = false, monitor, check_in, }, _context, details) => {
+            let sandbox = requestedSandbox;
+            const toolCallId = details?.toolCall?.callId;
+            // The application run loop owns turn cancellation on its typed context;
+            // SDK details only identify the provider tool call.
+            const toolSignal = _context?.signal ??
+                details?.signal;
+            const cwd = executionContext?.getCwd() || process.cwd();
+            if (sandbox === 'unsandboxed' && !allowUnsandboxed) {
+                sandbox = 'default';
+            }
+            const sessionId = getConversationSessionId(_context);
+            const sandboxEnabled = isSandboxEnabled();
+            const sshService = executionContext?.getSSHService();
+            if (!sshService && !existsSync(cwd)) {
+                return `Error: Working directory no longer exists: ${cwd}`;
+            }
+            const dockerHostControlRequested = sandboxEnabled &&
+                (sessionAccess?.requiresDockerApproval(command) ??
+                    nestedCompatibility?.docker.requiresApproval(sessionId, command) ??
+                    false);
+            const hasDockerGrant = dockerHostControlRequested &&
+                (sessionAccess?.hasDockerGrant(command, cwd) ??
+                    (nestedCompatibility
+                        ? nestedCompatibility.docker.hasProject(cwd) ||
+                            (sessionId &&
+                                (nestedCompatibility.docker.hasSession(sessionId, cwd) ||
+                                    nestedCompatibility.docker.consumeOnce(sessionId, command)))
+                        : false));
+            if (dockerHostControlRequested && !hasDockerGrant) {
+                return 'Error: Docker host control requires explicit approval.';
+            }
+            if (resolveActiveEnforcement(settingsService).denials.has('shell-mutation') &&
+                isMutatingCommand(command, cwd, loggingService)) {
+                return `Error: plan mode is read-only. Command not executed: ${command}`;
+            }
+            if (monitor !== undefined && !background) {
+                return 'Error: shell.monitor requires background: true.';
+            }
+            if (background && !backgroundShellRegistry) {
+                return 'Error: Background shell execution is unavailable in this session.';
+            }
+            if (background && sshService) {
+                return 'Error: Background shell execution is only available for local sessions.';
+            }
+            const previousCorrelationId = loggingService.getCorrelationId();
+            const correlationId = randomUUID();
+            const startedAt = Date.now();
+            let sandboxed = false;
+            let sandboxLeaseRelease;
+            let dockerHostControl;
+            let backgroundCleanupDeferred = false;
+            let transferred = false;
+            let observedJobId;
+            let monitorPattern;
+            let monitorSetupError;
+            if (monitor?.pattern !== undefined) {
+                try {
+                    monitorPattern = new RegExp(monitor.pattern);
+                }
+                catch (error) {
+                    return `Error: Invalid monitor pattern: ${error instanceof Error ? error.message : String(error)}`;
+                }
+            }
+            // Background-only monitor seam: set when the background branch opens the
+            // job's output stream, so the shared onOutputChunk never touches the
+            // store for a foreground lease job.
+            let monitoredJobId;
+            const ownsCorrelationId = !background;
+            let foregroundCorrelationRestored = false;
+            const restoreForegroundCorrelation = () => {
+                if (!ownsCorrelationId || foregroundCorrelationRestored)
+                    return;
+                foregroundCorrelationRestored = true;
+                if (previousCorrelationId) {
+                    loggingService.setCorrelationId(previousCorrelationId);
+                }
+                else {
+                    loggingService.clearCorrelationId();
+                }
+            };
+            // The logger correlation ID is process-global. A foreground command owns
+            // it for the duration of its await; a background job uses the explicit
+            // `correlationId` fields below instead so it cannot contaminate another
+            // overlapping command's logs.
+            if (ownsCorrelationId)
+                loggingService.setCorrelationId(correlationId);
+            const withExecutionCorrelation = (metadata) => background || transferred ? { ...metadata, correlationId } : metadata;
+            try {
+                // Use provided values or settings defaults or hardcoded defaults. A
+                // background launch uses shell.backgroundTimeout instead of
+                // shell.timeout (background jobs may legitimately outlive the
+                // foreground budget); an explicit timeout_ms always wins.
+                const timeoutValue = timeout_ms ?? settingsService.get(background ? 'shell.backgroundTimeout' : 'shell.timeout');
+                const timeout = timeoutValue != null ? timeoutValue : undefined;
+                // Budget provenance for launch/settlement evidence: an investigator must
+                // be able to tell an explicit per-invocation choice from a settings
+                // default without re-deriving precedence.
+                const timeoutSource = timeout_ms !== undefined ? 'invocation' : background ? 'background_setting' : 'foreground_setting';
+                const executionMode = background || transferred ? 'background' : 'foreground';
+                const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
+                const configuredMaxOutputLength = settingsService.get('shell.maxOutputChars');
+                // Clamp foreground requests to the configured maximum, mirroring the
+                // background path below: a model-chosen budget is reduction-only.
+                const foregroundMaxOutputLength = configuredMaxOutputLength != null
+                    ? Math.min(maxOutputLengthValue ?? configuredMaxOutputLength, configuredMaxOutputLength)
+                    : maxOutputLengthValue ?? undefined;
+                const backgroundMaxOutputLength = configuredMaxOutputLength != null
+                    ? Math.min(foregroundMaxOutputLength ?? configuredMaxOutputLength, configuredMaxOutputLength)
+                    : foregroundMaxOutputLength;
+                const initialMaxOutputLength = background ? backgroundMaxOutputLength : foregroundMaxOutputLength;
+                loggingService.debug('Shell command execution started', withExecutionCorrelation({
+                    commandCount: 1,
+                    commands: [command],
+                    timeout,
+                    timeoutSource,
+                    mode: executionMode,
+                    workingDirectory: cwd,
+                    maxOutputLength: initialMaxOutputLength,
+                }));
+                // Strip redundant 'cd <path> &&' if it targets the current directory
+                const optimizedCommand = stripRedundantCd(command, cwd);
+                if (optimizedCommand !== command) {
+                    loggingService.debug('Stripped redundant cd command', withExecutionCorrelation({ original: command, optimized: optimizedCommand, cwd }));
+                }
+                let commandToRun = optimizedCommand;
+                let sandboxAvailability;
+                // Consume any execution override set by a denied-read approval decision.
+                // This is a one-shot override for this single execution only.
+                const override = postExecuteDeniedRead && typeof toolCallId === 'string'
+                    ? overrideByCallId.get(toolCallId) ?? null
+                    : nestedCompatibility?.executionOverrides.consume(command) ?? null;
+                if (postExecuteDeniedRead && typeof toolCallId === 'string')
+                    overrideByCallId.delete(toolCallId);
+                if (override?.forceUnsandboxed) {
+                    if (allowUnsandboxed)
+                        sandbox = 'unsandboxed';
+                    loggingService.debug('Shell executing unsandboxed by approved override', withExecutionCorrelation({ command: optimizedCommand.substring(0, 100) }));
+                }
+                const extraAllowReadFromOverride = override?.extraAllowRead ?? [];
+                if (dockerHostControlRequested) {
+                    if (sandbox !== 'default' || sshService || !sandboxEnabled) {
+                        return 'Error: Docker host control requires the default local sandbox.';
+                    }
+                    try {
+                        dockerHostControl = dockerHostControlFactory();
+                        // The run that uses the approval settles the pending block, so a
+                        // later run of the same command is judged on its own.
+                        if (sessionAccess)
+                            sessionAccess.consumeDockerDenial(command);
+                        else
+                            nestedCompatibility?.docker.consumeDenial(sessionId, command);
+                        loggingService.security('Docker host-control capability granted for shell command', withExecutionCorrelation({
+                            command: optimizedCommand.substring(0, 100),
+                            cwd,
+                            socketPath: dockerHostControl.socketPath,
+                        }));
+                    }
+                    catch (error) {
+                        return `Error: ${error instanceof Error ? error.message : String(error)}`;
+                    }
+                }
+                if (!sshService && sandbox === 'default' && sandboxEnabled) {
+                    if (shellSandboxRunner.acquire)
+                        sandboxLeaseRelease = await shellSandboxRunner.acquire();
+                    sandboxAvailability = await shellSandboxRunner.availability();
+                    if (dockerHostControlRequested && sandboxAvailability.type !== 'available') {
+                        return 'Error: Docker host control requires an available local sandbox.';
+                    }
+                    if (sandboxAvailability.type === 'available') {
+                        try {
+                            const projectAllowRead = getProjectAllowReadStore(cwd).load();
+                            const sandboxConfig = createSandboxRuntimeConfig({
+                                cwd,
+                                tmpDir: SANDBOX_TEMP_DIR,
+                                allowWrite: !readOnly,
+                                readPolicy: settingsService.get('sandbox.readPolicy'),
+                                allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
+                                dockerSocketPath: dockerHostControl?.socketPath,
+                                allowReadExtra: [
+                                    ...(settingsService.get('sandbox.allowReadExtra') ?? []),
+                                    ...projectAllowRead,
+                                    ...extraAllowReadFromOverride,
+                                ],
+                                onProtectedFiltered: (filtered) => {
+                                    loggingService.info('Shell sandbox removed write access to protected paths', withExecutionCorrelation({ filtered, cwd }));
+                                },
+                            });
+                            const wrapped = await shellSandboxRunner.wrap(commandToRun, {
+                                cwd,
+                                config: sandboxConfig,
+                                signal: toolSignal,
+                            });
+                            commandToRun = wrapped.command;
+                            sandboxed = true;
+                            if (wrapped.diagnostics?.length) {
+                                loggingService.debug('Shell sandbox diagnostics', withExecutionCorrelation({ diagnostics: wrapped.diagnostics }));
+                            }
+                        }
+                        catch (error) {
+                            loggingService.warn('Shell sandbox initialization failed; refusing unsandboxed fallback', withExecutionCorrelation({ error: error instanceof Error ? error.message : String(error) }));
+                            return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
+                        }
+                    }
+                    else {
+                        loggingService.warn('Shell sandbox unavailable; refusing unsandboxed fallback', withExecutionCorrelation({
+                            availability: sandboxAvailability.type,
+                            reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
+                        }));
+                        return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
+                    }
+                }
+                // A read-only session may only run commands the sandbox has wrapped with
+                // a read-only filesystem. Without the sandbox (sandbox.enabled=false, an
+                // approved unsandboxed run, or an SSH session) nothing stops a command
+                // from writing the workspace, and a command-level check cannot make a
+                // general shell read-only, so refuse to run.
+                if (readOnly && !sandboxed) {
+                    loggingService.security('Shell refused: read-only session cannot run outside the sandbox', withExecutionCorrelation({ command: optimizedCommand.substring(0, 100), sandboxEnabled, sandbox }));
+                    return READ_ONLY_REQUIRES_SANDBOX_ERROR;
+                }
+                const executePreparedCommand = async (signal) => {
+                    const result = await executeShellCommandImpl(commandToRun, {
+                        cwd,
+                        timeout,
+                        maxBuffer: 1024 * 1024, // 1MB max buffer
+                        // A long-running monitored background job must survive a full
+                        // buffer: drop from the head of the retained text instead of
+                        // killing the child. Foreground keeps the 'kill' default.
+                        overflow: background ? 'truncate' : 'kill',
+                        ...(gatewayMode ? { gatewayMode: true } : {}),
+                        env: sandboxed
+                            ? createSandboxEnvironment(undefined, {
+                                cwd,
+                                readPolicy: settingsService.get('sandbox.readPolicy'),
+                                dockerHostControl,
+                                tmpDir: SANDBOX_TEMP_DIR,
+                            })
+                            : undefined,
+                        pauseOnSandboxNetworkApproval: sandboxed,
+                        registerSandboxNetworkPauseController,
+                        signal,
+                        sshService,
+                        childRegistry: sandboxed ? sandboxChildRegistry ?? shellChildRegistry : shellChildRegistry,
+                        onOutputChunk: (stream, text) => {
+                            if (observedJobId)
+                                backgroundShellRegistry?.recordOutputChunk(observedJobId);
+                            // Monitoring is background-only: the store stream is opened only
+                            // for the background branch, so a foreground lease job is never
+                            // pushed here. watches.push feeds the store and evaluates the
+                            // job's watches in one call.
+                            if (monitoredJobId)
+                                backgroundShellWatches?.push(monitoredJobId, stream, text);
+                        },
+                    });
+                    const stdout = result.stdout ?? '';
+                    const rawStderr = result.stderr ?? '';
+                    const annotatedStderr = sandboxed
+                        ? await shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr)
+                        : rawStderr;
+                    const readPolicy = settingsService.get('sandbox.readPolicy');
+                    const sandboxFailure = classifySandboxFailure({
+                        command: optimizedCommand,
+                        rawStderr,
+                        annotatedStderr,
+                        sandboxed,
+                        readPolicy,
+                        dockerHostControlActive: Boolean(dockerHostControl),
+                        exitCode: result.exitCode,
+                    });
+                    if (sandboxFailure?.type === 'docker_blocked') {
+                        // Keyed by the command the model passed, because that is what the
+                        // approval flow and the retry will present.
+                        if (sessionAccess)
+                            sessionAccess.recordDockerDenial(command);
+                        else
+                            nestedCompatibility?.docker.recordDenial(sessionId, command);
+                        loggingService.security('Sandbox blocked Docker daemon access; agent retry will prompt for approval', withExecutionCorrelation({
+                            confidence: sandboxFailure.confidence,
+                            command: command.substring(0, 100),
+                            cwd,
+                            sessionId,
+                            // Without a session the block is unattributable, so it is not
+                            // remembered and the retry will be sandboxed again.
+                            denialRecorded: Boolean(sessionId),
+                        }));
+                        return { output: `Error: ${DOCKER_HOST_CONTROL_RETRY_INSTRUCTION}`, status: 'failed' };
+                    }
+                    if (sandboxFailure?.type === 'denied_read') {
+                        if (!background && !transferred && postExecuteDeniedRead && typeof toolCallId !== 'string') {
+                            throw new HarnessInvariantError('Root shell denied-read handling requires an SDK tool call ID');
+                        }
+                        // Keyed by the command the model passed, not `optimizedCommand`: the
+                        // retry and both approval lookups (needsApproval here, and the
+                        // conversation layer, which has no cwd to re-derive the stripped form)
+                        // only ever see the raw string.
+                        if ((background || transferred) && postExecuteDeniedRead) {
+                            loggingService.security('Sandbox denied read in background shell job; foreground retry is required', withExecutionCorrelation({
+                                deniedPath: sandboxFailure.deniedRead.path,
+                                suggestedParent: sandboxFailure.deniedRead.suggestedParent,
+                                sensitive: sandboxFailure.deniedRead.sensitive,
+                                confidence: sandboxFailure.confidence,
+                                command: optimizedCommand.substring(0, 100),
+                            }));
+                            return {
+                                output: 'Error: Sandbox blocked a read access. Background jobs cannot request permission after launch; rerun this command in the foreground to choose an allow option.',
+                                status: 'failed',
+                            };
+                        }
+                        if (postExecuteDeniedRead) {
+                            deniedReadByCallId.set(toolCallId, sandboxFailure.deniedRead);
+                        }
+                        else {
+                            nestedCompatibility?.deniedReads.record(command, sandboxFailure.deniedRead);
+                        }
+                        loggingService.security('Sandbox denied read; agent retry will prompt for approval', withExecutionCorrelation({
+                            deniedPath: sandboxFailure.deniedRead.path,
+                            suggestedParent: sandboxFailure.deniedRead.suggestedParent,
+                            sensitive: sandboxFailure.deniedRead.sensitive,
+                            confidence: sandboxFailure.confidence,
+                            command: optimizedCommand.substring(0, 100),
+                        }));
+                        return { output: `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`, status: 'failed' };
+                    }
+                    const stderr = sandboxFailure ? `${sandboxFailure.stderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}` : annotatedStderr;
+                    const exitCode = result.exitCode ?? null;
+                    // Deadline classification belongs to the executor's typed reason.
+                    // Keep accepting legacy timeout-shaped injected results, but never
+                    // infer a deadline from the cancellation bit or a process signal.
+                    const cancelled = result.terminationKind === 'cancelled';
+                    const processTerminated = result.terminationKind === 'process-terminated';
+                    const deadlineTimeout = result.terminationKind === 'deadline' ||
+                        (result.terminationKind === undefined && result.timedOut && !cancelled && !processTerminated);
+                    const outcome = deadlineTimeout
+                        ? { type: 'timeout' }
+                        : { type: 'exit', exitCode };
+                    const settlementFields = {
+                        command: optimizedCommand.substring(0, 100),
+                        timeout,
+                        timeoutSource,
+                        mode: transferred || background ? 'background' : 'foreground',
+                        elapsedMs: Date.now() - startedAt,
+                        ...(result.terminationKind === undefined ? {} : { terminationKind: result.terminationKind }),
+                        ...(result.pausedMs === undefined ? {} : { pausedMs: result.pausedMs }),
+                        ...(toolCallId === undefined ? {} : { callId: toolCallId }),
+                        ...(observedJobId === undefined ? {} : { jobId: observedJobId }),
+                    };
+                    if (cancelled) {
+                        loggingService.debug('Shell command cancelled', withExecutionCorrelation(settlementFields));
+                    }
+                    else if (processTerminated) {
+                        loggingService.warn('Shell command process terminated', withExecutionCorrelation(settlementFields));
+                    }
+                    else if (deadlineTimeout) {
+                        loggingService.warn('Shell command timeout', withExecutionCorrelation(settlementFields));
+                    }
+                    else if (exitCode === 0) {
+                        loggingService.debug('Shell command executed successfully', withExecutionCorrelation({
+                            command: optimizedCommand.substring(0, 100),
+                            exitCode: 0,
+                            stdoutLength: stdout.length,
+                            stderrLength: stderr.length,
+                        }));
+                    }
+                    else {
+                        loggingService.debug('Shell command execution failed', withExecutionCorrelation({
+                            command: optimizedCommand.substring(0, 100),
+                            exitCode,
+                            stderrLength: stderr.length,
+                        }));
+                    }
+                    loggingService.debug('Shell command execution completed', withExecutionCorrelation({
+                        commandCount: 1,
+                        successCount: outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
+                        failureCount: outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,
+                        timeoutCount: outcome.type === 'timeout' ? 1 : 0,
+                        mode: transferred || background ? 'background' : 'foreground',
+                        elapsedMs: Date.now() - startedAt,
+                        ...(result.terminationKind === undefined ? {} : { terminationKind: result.terminationKind }),
+                        ...(result.pausedMs === undefined ? {} : { pausedMs: result.pausedMs }),
+                        ...(toolCallId === undefined ? {} : { callId: toolCallId }),
+                        ...(observedJobId === undefined ? {} : { jobId: observedJobId }),
+                    }));
+                    const formattedOutput = await formatShellExecutionOutput({
+                        command: optimizedCommand,
+                        cwd,
+                        stdout,
+                        stderr,
+                        exitCode,
+                        timedOut: deadlineTimeout,
+                        cancelled: cancelled || undefined,
+                        timeoutMs: timeout ?? undefined,
+                        timeoutSource,
+                        maxOutputLength: background || transferred ? backgroundMaxOutputLength : foregroundMaxOutputLength,
+                        durationMs: Date.now() - startedAt,
+                    });
+                    return {
+                        output: formattedOutput.text,
+                        status: deadlineTimeout ? 'timed_out' : exitCode === 0 ? 'completed' : 'failed',
+                    };
+                };
+                const cleanupAfterExecution = async () => {
+                    try {
+                        if (sandboxed)
+                            await shellSandboxRunner.cleanupAfterCommand?.();
+                    }
+                    finally {
+                        sandboxLeaseRelease?.();
+                        sandboxLeaseRelease = undefined;
+                        dockerHostControl?.cleanup();
+                        restoreForegroundCorrelation();
+                    }
+                };
+                if (background) {
+                    try {
+                        const job = backgroundShellRegistry.launch({
+                            command: optimizedCommand,
+                            run: executePreparedCommand,
+                            onStarted: (jobId) => {
+                                observedJobId = jobId;
+                                // Open the retained output stream (and the watch layer) for
+                                // this job at launch; settled in onSettled below.
+                                if (backgroundShellWatches) {
+                                    monitoredJobId = jobId;
+                                    backgroundShellWatches.open(jobId);
+                                }
+                            },
+                            onSettled: () => {
+                                // Flush matched-but-undelivered watch firings before the
+                                // registry emits background_shell_completed (it awaits this
+                                // callback first): no monitor firing may trail the terminal
+                                // notification. Then release shell resources as before.
+                                if (monitoredJobId)
+                                    backgroundShellWatches?.settleJob(monitoredJobId);
+                                return cleanupAfterExecution();
+                            },
+                            resultToStatus: (result) => result.status,
+                        });
+                        backgroundCleanupDeferred = true;
+                        if (check_in !== undefined && configureCheckIn) {
+                            configureCheckIn({ kind: 'shell', id: job.id }, {
+                                enabled: check_in.enabled,
+                                intervalMs: check_in.interval_seconds !== undefined ? check_in.interval_seconds * 1000 : undefined,
+                            });
+                        }
+                        let watchId;
+                        if (monitor !== undefined) {
+                            if (!backgroundShellWatches) {
+                                monitorSetupError = 'Background shell monitoring is unavailable in this session.';
+                            }
+                            else {
+                                try {
+                                    watchId = backgroundShellWatches.registerWatch({
+                                        jobId: job.id,
+                                        pattern: monitorPattern,
+                                        stream: monitor.stream,
+                                        idleMs: monitor.idle_ms,
+                                        notifyLimit: monitor.once ? 1 : monitor.notify_limit,
+                                        command: job.command,
+                                        deferInitialDelivery: true,
+                                    });
+                                }
+                                catch (error) {
+                                    monitorSetupError = error instanceof Error ? error.message : String(error);
+                                }
+                            }
+                        }
+                        return JSON.stringify({
+                            jobId: job.id,
+                            status: job.status,
+                            ...(monitor === undefined
+                                ? {}
+                                : {
+                                    monitor: watchId
+                                        ? { status: 'monitoring', watchId }
+                                        : { status: 'setup_failed', error: monitorSetupError ?? 'Monitor setup failed.' },
+                                }),
+                        });
+                    }
+                    catch (error) {
+                        return `Error: ${error instanceof Error ? error.message : String(error)}`;
+                    }
+                }
+                if (backgroundShellRegistry && !sshService && typeof toolCallId === 'string') {
+                    const lease = backgroundShellRegistry.startForeground({
+                        callId: toolCallId,
+                        command: optimizedCommand,
+                        parentSignal: toolSignal,
+                        run: executePreparedCommand,
+                        onStarted: (jobId) => {
+                            observedJobId = jobId;
+                        },
+                        onSettled: cleanupAfterExecution,
+                        resultToStatus: (result) => result.status,
+                        onAdopted: () => {
+                            transferred = true;
+                            restoreForegroundCorrelation();
+                        },
+                    });
+                    // Cleanup is lease-owned now, whether it stays foreground or moves.
+                    backgroundCleanupDeferred = true;
+                    const result = await lease.foregroundResult;
+                    if ('jobId' in result) {
+                        // The tool call returns now, but only the parent-turn ownership is
+                        // released. Process cleanup remains deferred to lease settlement.
+                        restoreForegroundCorrelation();
+                        return JSON.stringify(result);
+                    }
+                    return result.output;
+                }
+                return (await executePreparedCommand(toolSignal)).output;
+            }
+            finally {
+                if (!backgroundCleanupDeferred) {
+                    try {
+                        if (sandboxed)
+                            await shellSandboxRunner.cleanupAfterCommand?.();
+                    }
+                    finally {
+                        sandboxLeaseRelease?.();
+                        sandboxLeaseRelease = undefined;
+                        dockerHostControl?.cleanup();
+                        restoreForegroundCorrelation();
+                    }
+                }
+            }
+        },
+        postExecutePause: postExecuteDeniedRead
+            ? {
+                describe: (params, _result, details) => {
+                    const callId = details?.toolCall?.callId;
+                    if (typeof callId !== 'string')
+                        return null;
+                    const info = deniedReadByCallId.get(callId);
+                    if (!info)
+                        return null;
+                    return {
+                        toolName: 'shell',
+                        argumentsText: JSON.stringify(params),
+                        deniedRead: {
+                            deniedPath: info.path,
+                            suggestedParent: info.suggestedParent,
+                            sensitive: info.sensitive,
+                            command: params.command,
+                        },
+                    };
+                },
+                resolve: async ({ result, details, executeAgain }, decision) => {
+                    const callId = details?.toolCall?.callId;
+                    const info = typeof callId === 'string' ? deniedReadByCallId.get(callId) : undefined;
+                    if (typeof callId === 'string')
+                        deniedReadByCallId.delete(callId);
+                    if (typeof callId !== 'string' ||
+                        !info ||
+                        (decision !== 'allow-once' && decision !== 'allow-remember' && decision !== 'unsandboxed-once')) {
+                        return result;
+                    }
+                    if (decision === 'allow-remember') {
+                        getProjectAllowReadStore(executionContext?.getCwd() || process.cwd()).append(info.suggestedParent);
+                    }
+                    overrideByCallId.set(callId, decision === 'unsandboxed-once' ? { forceUnsandboxed: true } : { extraAllowRead: [info.suggestedParent] });
+                    return executeAgain();
+                },
+            }
+            : undefined,
+        formatCommandMessage: formatShellCommandMessage,
+    };
+}
+//# sourceMappingURL=shell.js.map

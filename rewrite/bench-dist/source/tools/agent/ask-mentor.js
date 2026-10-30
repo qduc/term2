@@ -1,0 +1,56 @@
+import { z } from 'zod';
+import { getOutputText, isSuccessOutput, normalizeToolArguments, createBaseMessage, getCallIdFromItem, } from '../format-helpers.js';
+import { isAbortLike } from '../../services/subagents/utils.js';
+const ASK_MENTOR_DESCRIPTION = 'Ask a mentor model for advice or clarification on a hard problem. ' +
+    'Use this for architecture trade-offs, design review, debugging strategy, or when you need a second opinion. ' +
+    'The mentor does not see your thinking, files, or conversation context—fully explain the situation in your question. ' +
+    'Do NOT use this to perform actions, read files, or run commands; use the standard tools for those. ' +
+    'Returns the mentor answer as text. ' +
+    'If sampling is configured, several independent answers are returned as labelled sections. ' +
+    'Where they disagree, treat the disagreement as a signal that the question is genuinely uncertain — ' +
+    'weigh the reasoning rather than adopting whichever answer matches your current plan.';
+const askMentorSchema = z.object({
+    question: z.string().describe('The question to ask the mentor.'),
+    context: z.string().optional().describe('Additional context for the question.'),
+});
+export const formatAskMentorCommandMessage = (item, index, toolCallArgumentsById) => {
+    const callId = getCallIdFromItem(item);
+    const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args = normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? {};
+    const question = args?.question ?? 'Unknown question';
+    const command = `ask_mentor: ${question}`;
+    const output = getOutputText(item) || 'No response from mentor';
+    const success = isSuccessOutput(output) && !output.startsWith('Failed to ask mentor:');
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command,
+            output,
+            success,
+            toolName: 'ask_mentor',
+            toolArgs: args,
+        }),
+    ];
+};
+export const createAskMentorToolDefinition = (askMentor) => ({
+    name: 'ask_mentor',
+    description: ASK_MENTOR_DESCRIPTION,
+    parameters: askMentorSchema,
+    parallelSafe: true,
+    needsApproval: () => false,
+    execute: async ({ question, context }) => {
+        const prompt = context ? `Context:\n${context}\n\nQuestion:\n${question}` : question;
+        try {
+            const answer = await askMentor(prompt);
+            return answer;
+        }
+        catch (error) {
+            if (isAbortLike(error?.message, error)) {
+                throw error;
+            }
+            return `Failed to ask mentor: ${error.message}. Ensure mentor model is configured in settings.`;
+        }
+    },
+    formatCommandMessage: formatAskMentorCommandMessage,
+});
+//# sourceMappingURL=ask-mentor.js.map

@@ -1,0 +1,121 @@
+import { z } from 'zod';
+import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem, isSuccessOutput, } from '../format-helpers.js';
+import { boundToolResultText, resolveResultMaxBytesForCall } from '../../utils/output/bound-tool-result.js';
+import { formatFullOutputSavedNote, saveOutputArtifact } from '../../utils/shell/shell-output.js';
+const WEB_FETCH_DESCRIPTION = 'Fetch a web page and convert its HTML content to Markdown. ' +
+    'Use this when you need the full content of a specific URL referenced by tools.web_search(...) inside run_code or by the user. ' +
+    'Do NOT use this for broad queries; inside run_code, use tools.web_search(...) instead. ' +
+    'Returns the page title, URL, table of contents, and extracted Markdown. ' +
+    'Initial fetches are truncated to max_chars; the full content is saved to a temporary file when exceeded ' +
+    '(look for "Full output saved to" and read that path when you need more).';
+const DEFAULT_MAX_CHARS = 10000;
+const MAX_CHARS_LIMIT = 200000;
+const webFetchSchema = z.object({
+    url: z.string().describe('The URL of the web page to fetch.'),
+    max_chars: z
+        .number()
+        .min(200)
+        .max(MAX_CHARS_LIMIT)
+        .optional()
+        .default(DEFAULT_MAX_CHARS)
+        .describe('Maximum number of characters to return.'),
+    heading: z
+        .array(z.union([z.string(), z.number()]))
+        .optional()
+        .default([])
+        .describe('Optional: Array of headings (h1-h3) to retrieve content from.'),
+    continuation_token: z
+        .string()
+        .optional()
+        .describe('Optional: Token from previous response to fetch the next chunk of content.'),
+});
+/**
+ * Format command message for display in the terminal
+ */
+export const formatWebFetchCommandMessage = (item, index, toolCallArgumentsById) => {
+    const callId = getCallIdFromItem(item);
+    const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args = normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? {};
+    const url = args?.url ?? 'unknown url';
+    const command = `web_fetch: "${url}"`;
+    const output = getOutputText(item) || 'No results';
+    const success = isSuccessOutput(output);
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command,
+            output,
+            success,
+            toolName: 'web_fetch',
+            toolArgs: args,
+        }),
+    ];
+};
+export const createWebFetchToolDefinition = (deps) => {
+    const { loggingService } = deps;
+    return {
+        name: 'web_fetch',
+        description: WEB_FETCH_DESCRIPTION,
+        scriptedReturnShape: 'string: "Title: \u2026\nURL: \u2026" plus page markdown and truncation/continuation notes; "Error: \u2026" on failure',
+        scriptedReturnSchema: z.string(),
+        parameters: webFetchSchema,
+        parallelSafe: true,
+        needsApproval: () => false,
+        execute: async (params, context) => {
+            const { url, max_chars = DEFAULT_MAX_CHARS, heading: targetHeadings, continuation_token } = params;
+            try {
+                const { fetchWebPage } = await import('@qduc/web-fetch');
+                // For initial fetches, get as much content as the library can return.
+                // For continuation requests, pass the user's max_chars through unchanged.
+                const isContinuation = !!continuation_token;
+                const result = await fetchWebPage({
+                    url,
+                    maxChars: isContinuation ? max_chars : MAX_CHARS_LIMIT,
+                    headings: targetHeadings,
+                    continuationToken: continuation_token ?? undefined,
+                });
+                let displayMarkdown = result.markdown;
+                let tempFilePath = null;
+                // For initial fetches, if content exceeds the user's requested max, save full to temp file
+                if (!isContinuation && result.markdown.length > max_chars) {
+                    tempFilePath = await saveOutputArtifact(result.markdown, { filenamePrefix: 'web-fetch' });
+                    // Truncate the displayed markdown at a clean boundary near max_chars
+                    const truncated = result.markdown.slice(0, max_chars);
+                    const lastNewline = truncated.lastIndexOf('\n');
+                    displayMarkdown = lastNewline > max_chars * 0.8 ? truncated.slice(0, lastNewline) : truncated;
+                    displayMarkdown += `\n\n[... Content truncated at ${max_chars} characters for display ...]`;
+                }
+                let output = `Title: ${result.title}\nURL: ${result.url}\n\n`;
+                if (result.toc) {
+                    output += `## Table of Contents\n\n${result.toc}\n\n---\n\n`;
+                }
+                output += displayMarkdown;
+                if (result.continuationToken) {
+                    output += `\n\n**Note: Content still truncated. Use continuation_token: "${result.continuationToken}" to fetch more.**`;
+                }
+                if (tempFilePath) {
+                    output += `\n${formatFullOutputSavedNote(tempFilePath)}`;
+                }
+                // Final hard bound so even max_chars near the upper limit cannot blow
+                // context alone. A scripted call is exempt: the page goes to the
+                // script, which reduces it, and only the script's return value reaches
+                // context. Truncating here hands the script a partial page whose own
+                // continuation note it is unlikely to act on.
+                const bounded = await boundToolResultText({
+                    fullText: output,
+                    maxBytes: resolveResultMaxBytesForCall(context),
+                });
+                return bounded.text;
+            }
+            catch (error) {
+                loggingService.error('Web fetch failed', {
+                    url,
+                    error: error.message || String(error),
+                });
+                return `Error: ${error.message || String(error)}`;
+            }
+        },
+        formatCommandMessage: formatWebFetchCommandMessage,
+    };
+};
+//# sourceMappingURL=web-fetch.js.map

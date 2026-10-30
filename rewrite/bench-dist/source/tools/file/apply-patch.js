@@ -1,0 +1,760 @@
+import { z } from 'zod';
+import { readFile, writeFile, mkdir, unlink } from 'fs/promises';
+import path from 'path';
+import { applyDiff } from '../../utils/apply-diff.js';
+import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
+import { getOutputText, isSuccessOutput, safeJsonParse, normalizeToolArguments, createBaseMessage, formatPatchOutputItems, } from '../format-helpers.js';
+import { withFileLock } from './file-locks.js';
+import { TOOL_NAME_APPLY_PATCH } from '../tool-names.js';
+import { boundToolResultText, resolveResultMaxBytesForCall, truncateToUtf8Bytes, } from '../../utils/output/bound-tool-result.js';
+import { healPatchOperation } from './patch-healing.js';
+import { resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
+import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
+/**
+ * Error thrown when patch validation fails (malformed diff)
+ */
+export class PatchValidationError extends Error {
+    filePath;
+    constructor(message, filePath) {
+        super(message);
+        this.filePath = filePath;
+        this.name = 'PatchValidationError';
+    }
+}
+// Canonical-only schema: the patch envelope IS the argument. The legacy
+// {type,path,diff} / operations[] JSON shape is deleted, not deprecated —
+// keeping two accepted formats lets the model drift back into the shape
+// suspected of causing whitespace degeneration.
+const applyPatchParametersSchema = z
+    .object({
+    patch: z
+        .string()
+        .min(1, 'Patch cannot be empty')
+        .describe('Complete patch script starting with *** Begin Patch and ending with *** End Patch.'),
+})
+    .strict();
+// Strict-schema providers receive the identical single-string shape.
+const applyPatchStrictParametersSchema = z.object({
+    patch: z
+        .string()
+        .min(1, 'Patch cannot be empty')
+        .describe('Complete patch script starting with *** Begin Patch and ending with *** End Patch.'),
+});
+function getApplyPatchOperations(params) {
+    return parseUpstreamApplyPatch(params.patch).operations;
+}
+export const formatApplyPatchCommandMessage = (item, index, toolCallArgumentsById) => {
+    const rawItem = item?.providerItem ?? item?.rawItem ?? item;
+    const callId = rawItem?.callId ??
+        rawItem?.call_id ??
+        rawItem?.tool_call_id ??
+        rawItem?.toolCallId ??
+        rawItem?.id ??
+        item?.callId ??
+        item?.call_id ??
+        item?.tool_call_id ??
+        item?.toolCallId ??
+        item?.id;
+    const argsFromMap = callId ? toolCallArgumentsById.get(callId) : undefined;
+    const rawArguments = item?.arguments ?? item?.input ?? argsFromMap ?? rawItem?.arguments ?? rawItem?.input ?? rawItem?.operation;
+    let normalizedArgs = normalizeToolArguments(rawArguments) ?? {};
+    // Canonical-only arguments: a raw envelope string parses to parsed
+    // operations; the legacy {type,path,diff} / operations[] object shape is
+    // no longer accepted, only displayed from inert history records.
+    if (typeof rawArguments === 'string' && rawArguments.trimStart().startsWith('*** Begin Patch')) {
+        try {
+            normalizedArgs = parseUpstreamApplyPatch(rawArguments);
+        }
+        catch {
+            normalizedArgs = {};
+        }
+    }
+    const isNativePatchResult = rawItem?.type === 'apply_patch_call_output' || item?.type === 'apply_patch_call_output';
+    const rawStatus = rawItem?.status ?? item?.status;
+    const operations = Array.isArray(normalizedArgs?.operations)
+        ? normalizedArgs.operations
+        : normalizedArgs?.type
+            ? [normalizedArgs]
+            : [];
+    const firstOperation = operations[0] ?? {};
+    const operationType = firstOperation.type ?? rawItem?.operation?.type ?? 'unknown';
+    const filePath = firstOperation.path ?? rawItem?.operation?.path ?? 'unknown';
+    const rawOutput = getOutputText(item) || 'No output';
+    // Backward compatibility: old outputs were JSON strings with an output array.
+    const parsedOutput = rawOutput.startsWith('{') ? safeJsonParse(rawOutput) : undefined;
+    let output;
+    let parsedSuccess;
+    if (Array.isArray(parsedOutput?.output) && parsedOutput.output.length > 0) {
+        output = formatPatchOutputItems(parsedOutput.output) || rawOutput;
+        parsedSuccess = parsedOutput.output.every((entry) => entry?.success === true);
+    }
+    else if (isNativePatchResult) {
+        output = rawOutput;
+    }
+    else {
+        output = rawOutput;
+        if (typeof parsedOutput?.success === 'boolean') {
+            parsedSuccess = parsedOutput.success;
+        }
+    }
+    const success = typeof parsedSuccess === 'boolean'
+        ? parsedSuccess
+        : isNativePatchResult
+            ? rawStatus !== 'failed' &&
+                !output.startsWith('Invalid patch') &&
+                !output.startsWith('Cannot update') &&
+                isSuccessOutput(output)
+            : isSuccessOutput(output);
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command: `apply_patch ${operationType} ${filePath}`,
+            output,
+            success,
+            toolName: TOOL_NAME_APPLY_PATCH,
+            toolArgs: {
+                path: filePath,
+                diff: firstOperation.diff ?? rawItem?.operation?.diff ?? '',
+                type: operationType,
+            },
+        }),
+    ];
+};
+const APPLY_PATCH_DESCRIPTION = 'Apply file changes with a patch script. Write the patch directly — no JSON escaping of the body.\n\n' +
+    '```\n' +
+    '*** Begin Patch\n' +
+    '*** Add File: <path>     — create a file; every following line is a + line\n' +
+    '*** Update File: <path>  — edit a file (add *** Move to: <new-path> directly after to move)\n' +
+    '*** Delete File: <path>  — delete a file\n' +
+    '*** End Patch\n' +
+    '```\n\n' +
+    '## Rules:\n' +
+    '1. Every line starts with exactly one of: space (unchanged context), + (added), - (removed)\n' +
+    '2. Prefix every new line with + — including when creating a new file, where EVERY line is a + line\n' +
+    '3. Use paths relative to the workspace root, never absolute paths\n' +
+    '4. Context lines start with a SPACE character; match the file indentation exactly\n' +
+    '5. Use @@ markers (e.g. @@ function calculate) to anchor where the change applies\n' +
+    '6. Include 2-3 context lines before and after each change\n\n' +
+    '## Grammar:\n' +
+    '```\n' +
+    'Patch := Begin { FileOp } End\n' +
+    'Begin := "*** Begin Patch" NEWLINE\n' +
+    'End := "*** End Patch" NEWLINE\n' +
+    'FileOp := AddFile | DeleteFile | UpdateFile\n' +
+    'AddFile := "*** Add File: " path NEWLINE { "+" line NEWLINE }\n' +
+    'DeleteFile := "*** Delete File: " path NEWLINE\n' +
+    'UpdateFile := "*** Update File: " path NEWLINE [ MoveTo ] { Hunk }\n' +
+    'MoveTo := "*** Move to: " newPath NEWLINE\n' +
+    'Hunk := "@@" [ header ] NEWLINE { HunkLine }\n' +
+    'HunkLine := (" " | "-" | "+") text NEWLINE\n' +
+    '```\n\n' +
+    '## Examples:\n' +
+    'Create:\n' +
+    '```\n' +
+    '*** Begin Patch\n' +
+    '*** Add File: notes.txt\n' +
+    '+line 1\n' +
+    '+line 2\n' +
+    '*** End Patch\n' +
+    '```\n' +
+    'Update:\n' +
+    '```\n' +
+    '*** Begin Patch\n' +
+    '*** Update File: calc.js\n' +
+    '@@ function calculate\n' +
+    ' function calculate(x) {\n' +
+    '-  return x * 2;\n' +
+    '+  return x * 3;\n' +
+    ' }\n' +
+    '*** End Patch\n' +
+    '```\n\n' +
+    'Combined (add + update-with-move + delete between one Begin/End pair):\n' +
+    '```\n' +
+    '*** Begin Patch\n' +
+    '*** Add File: hello.txt\n' +
+    '+Hello world\n' +
+    '*** Update File: src/app.py\n' +
+    '*** Move to: src/main.py\n' +
+    '@@ def greet():\n' +
+    '-print("Hi")\n' +
+    '+print("Hello, world!")\n' +
+    '*** Delete File: obsolete.txt\n' +
+    '*** End Patch\n' +
+    '```\n\n' +
+    'On failure, earlier operations in the same patch may already be applied — check the per-operation result lines and re-read files before retrying.\n' +
+    'Put the whole script in the single patch argument.\n' +
+    'Returns a plain-text summary with one line per operation: Created <path>, Updated <path>, or Error: <reason>.';
+export function createApplyPatchToolDefinition(deps) {
+    const { loggingService, settingsService, executionContext, sessionAccess, patchHealing = healPatchOperation } = deps;
+    return {
+        name: 'apply_patch',
+        description: APPLY_PATCH_DESCRIPTION,
+        scriptedReturnSchema: z.string(),
+        scriptedReturnShape: 'string: one status line per patch operation, newline-joined — "Created <path>" | "Updated <path>" | "Updated <path> and moved to <to>" | "Deleted <path>" | "Error: \u2026"',
+        effect: 'mutating',
+        canRequireApproval: true,
+        parameters: applyPatchParametersSchema,
+        strictParameters: applyPatchStrictParametersSchema,
+        needsApproval: async (params) => {
+            if (sessionAccess?.isReadOnly)
+                return false;
+            if (settingsService.get('shell.autoApproveMode') === 'always') {
+                let operationCount;
+                try {
+                    operationCount = getApplyPatchOperations(params).length;
+                }
+                catch {
+                    // YOLO skips approval even for malformed input; execute reports the parse error.
+                }
+                loggingService.security('apply_patch needsApproval: auto-approved in YOLO mode', {
+                    ...(operationCount === undefined ? {} : { operationCount }),
+                });
+                return false;
+            }
+            let operations;
+            try {
+                operations = getApplyPatchOperations(params);
+            }
+            catch {
+                // Envelope parse failures cannot be path-scoped, so require
+                // approval and let execute report the syntax error.
+                return true;
+            }
+            try {
+                const workspaceRoot = executionContext?.getCwd() || process.cwd();
+                const sshService = executionContext?.getSSHService();
+                const isRemote = executionContext?.isRemote() && !!sshService;
+                const resolvedOperations = [];
+                // Resolve and check every target before validation. In particular, do
+                // not read an update target until all batch paths have passed the
+                // physical boundary check; an in-workspace symlink may point outside.
+                for (const operation of operations) {
+                    const { type, path: filePath } = operation;
+                    let targetPath;
+                    try {
+                        targetPath = resolveWorkspacePath(filePath, workspaceRoot);
+                    }
+                    catch (e) {
+                        loggingService.security('apply_patch needsApproval: outside workspace', {
+                            type,
+                            path: filePath,
+                            error: e?.message || String(e),
+                        });
+                        return true;
+                    }
+                    const insideCwd = targetPath.startsWith(workspaceRoot + path.sep) ||
+                        targetPath === SANDBOX_TEMP_DIR ||
+                        targetPath.startsWith(SANDBOX_TEMP_DIR + path.sep);
+                    const physicallyInsideWorkspace = !isRemote &&
+                        insideCwd &&
+                        !isProtectedHookPath(targetPath, workspaceRoot) &&
+                        ((await isWorkspacePathPhysicallyInside(targetPath, workspaceRoot)) ||
+                            (await isWorkspacePathPhysicallyInside(targetPath, SANDBOX_TEMP_DIR)));
+                    if (!physicallyInsideWorkspace) {
+                        if (!sessionAccess?.allowsEdit(targetPath, workspaceRoot)) {
+                            loggingService.security('apply_patch needsApproval: physical boundary requires approval', {
+                                type,
+                                path: filePath,
+                                targetPath,
+                                insideCwd,
+                            });
+                            return true;
+                        }
+                    }
+                    let moveTargetPath;
+                    if (operation.moveTo) {
+                        try {
+                            moveTargetPath = resolveWorkspacePath(operation.moveTo, workspaceRoot);
+                        }
+                        catch {
+                            return true;
+                        }
+                        if (!sessionAccess?.allowsEdit(moveTargetPath, workspaceRoot)) {
+                            const moveTargetInside = moveTargetPath.startsWith(workspaceRoot + path.sep) ||
+                                moveTargetPath === SANDBOX_TEMP_DIR ||
+                                moveTargetPath.startsWith(SANDBOX_TEMP_DIR + path.sep);
+                            if (!moveTargetInside || isProtectedHookPath(moveTargetPath, workspaceRoot))
+                                return true;
+                        }
+                    }
+                    resolvedOperations.push({
+                        ...operation,
+                        targetPath,
+                        insideCwd,
+                        ...(moveTargetPath ? { moveTargetPath } : {}),
+                    });
+                }
+                for (const { type, path: filePath, diff, targetPath, insideCwd, moveTo } of resolvedOperations) {
+                    // Validate diff syntax by attempting a dry-run (before approval)
+                    if ((type === 'create_file' || type === 'update_file') && !(type === 'update_file' && moveTo && !diff)) {
+                        try {
+                            if (type === 'create_file') {
+                                // Dry-run: apply diff to empty content for new file
+                                applyDiff('', diff);
+                            }
+                            else {
+                                // Dry-run: read existing file and test diff application.
+                                // Read failures are environment/file-state issues, not
+                                // deterministic patch syntax failures.
+                                const original = isRemote && sshService ? await sshService.readFile(targetPath) : await readFile(targetPath, 'utf8');
+                                applyDiff(original, diff);
+                            }
+                            loggingService.debug('apply_patch validation passed', {
+                                type,
+                                path: filePath,
+                            });
+                        }
+                        catch (diffError) {
+                            // Keep fast UX for deterministic patch-format errors, but
+                            // require approval for environment/file-state failures.
+                            const fileAccessFailure = typeof diffError?.code === 'string' ||
+                                ['enoent', 'not found', 'no such file', 'permission denied', 'eacces', 'eperm', 'is a directory'].some((token) => String(diffError?.message || '')
+                                    .toLowerCase()
+                                    .includes(token));
+                            if (fileAccessFailure) {
+                                loggingService.warn('apply_patch prevalidation could not confirm patch due to file/context issue', {
+                                    type,
+                                    path: filePath,
+                                    error: diffError?.message || String(diffError),
+                                });
+                                return true;
+                            }
+                            // Diff-format validation failed - auto-approve and let execute
+                            // return a structured error without bothering the user.
+                            loggingService.error('apply_patch validation failed - will fail in execute', {
+                                type,
+                                path: filePath,
+                                error: diffError?.message || String(diffError),
+                            });
+                            // Return false to auto-approve - execute will handle the error gracefully
+                            return false;
+                        }
+                    }
+                    if (!insideCwd || type === 'delete_file' || Boolean(moveTo)) {
+                        loggingService.security('apply_patch needsApproval: approval required', {
+                            type,
+                            path: filePath,
+                            targetPath,
+                            insideCwd,
+                        });
+                        return true;
+                    }
+                }
+                loggingService.security('apply_patch needsApproval: auto-approved in standard mode', {
+                    operationCount: operations.length,
+                });
+                return false;
+            }
+            catch (error) {
+                loggingService.error('apply_patch needsApproval error', {
+                    error: error?.message || String(error),
+                });
+                // Fail-safe: require approval on any error
+                return true;
+            }
+        },
+        execute: async (params, context) => {
+            if (sessionAccess?.isReadOnly)
+                return 'Error: apply_patch is unavailable in a read-only session.';
+            const enableFileLogging = settingsService.get('tools.logFileOperations');
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
+            let operations;
+            try {
+                operations = getApplyPatchOperations(params);
+            }
+            catch (error) {
+                const detail = error?.message || String(error);
+                const message = `Error: ${detail.startsWith('Invalid patch:') ? detail : `Invalid patch: ${detail}`}`;
+                return (await boundToolResultText({ fullText: message, maxBytes: resolveResultMaxBytesForCall(context) })).text;
+            }
+            const readFileFn = async (p) => {
+                if (isRemote && sshService)
+                    return sshService.readFile(p);
+                return readFile(p, 'utf8');
+            };
+            const writeFileFn = async (p, c) => {
+                if (isRemote && sshService)
+                    return sshService.writeFile(p, c);
+                return writeFile(p, c, 'utf8');
+            };
+            const mkdirFn = async (p) => {
+                if (isRemote && sshService)
+                    return sshService.mkdir(p);
+                return mkdir(p, { recursive: true });
+            };
+            const runOperation = async ({ type, path: filePath, diff, moveTo }) => {
+                // Standard modes enforce the workspace boundary in `needsApproval`;
+                // YOLO deliberately reaches execute without a permission prompt.
+                const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
+                if (enableFileLogging) {
+                    loggingService.debug(`File operation started: ${type}`, {
+                        path: filePath,
+                        targetPath,
+                    });
+                }
+                switch (type) {
+                    case 'create_file': {
+                        return withFileLock(targetPath, async () => {
+                            // Ensure parent directory exists
+                            await mkdirFn(path.dirname(targetPath));
+                            // Apply diff to empty content for new file
+                            let content;
+                            try {
+                                content = applyDiff('', diff);
+                            }
+                            catch (err) {
+                                return {
+                                    success: false,
+                                    operation: 'create_file',
+                                    path: filePath,
+                                    error: formatPatchError(err, diff, ''),
+                                };
+                            }
+                            await writeFileFn(targetPath, content);
+                            sessionAccess?.recordCreatedFile(targetPath, cwd);
+                            if (enableFileLogging) {
+                                try {
+                                    loggingService.debug('File created', {
+                                        path: filePath,
+                                        contentLength: content.length,
+                                    });
+                                }
+                                catch (_error) {
+                                    // Ignore logging errors to prevent operation failure
+                                }
+                            }
+                            return {
+                                success: true,
+                                operation: 'create_file',
+                                path: filePath,
+                                message: `Created ${filePath}`,
+                            };
+                        });
+                    }
+                    case 'update_file': {
+                        return withFileLock(targetPath, async () => {
+                            // Read existing file
+                            let original;
+                            try {
+                                original = await readFileFn(targetPath);
+                            }
+                            catch (error) {
+                                if (error?.code === 'ENOENT') {
+                                    if (enableFileLogging) {
+                                        loggingService.error('Cannot update missing file', {
+                                            path: filePath,
+                                            targetPath,
+                                        });
+                                    }
+                                    return {
+                                        success: false,
+                                        operation: 'update_file',
+                                        path: filePath,
+                                        error: `Cannot update missing file: ${filePath}`,
+                                    };
+                                }
+                                throw error;
+                            }
+                            // Re-apply validation against the locked, current content.
+                            let patched;
+                            let usedHealing = false;
+                            try {
+                                patched = diff ? applyDiff(original, diff) : original;
+                            }
+                            catch (err) {
+                                const errMessage = err?.message || String(err);
+                                const isContextError = /^Invalid (?:EOF )?Context \d+:/.test(errMessage);
+                                const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
+                                if (isContextError && enableEditHealing) {
+                                    const contextMatch = errMessage.match(/^Invalid (?:EOF )?Context \d+:\n([\s\S]*)$/);
+                                    const contextText = contextMatch ? contextMatch[1] : '';
+                                    const mismatchDiagnosis = diagnoseContextMismatch(contextText, original);
+                                    try {
+                                        const { model: healingModel, provider: providerId } = resolveAncillaryModelTier('chore', settingsService);
+                                        const healingResult = await patchHealing(filePath, diff, original, mismatchDiagnosis, healingModel, process.env.OPENAI_API_KEY ?? '', {
+                                            settingsService,
+                                            loggingService,
+                                            providerId,
+                                        });
+                                        if (healingResult.wasModified && healingResult.healedDiff) {
+                                            patched = applyDiff(original, healingResult.healedDiff);
+                                            usedHealing = true;
+                                        }
+                                    }
+                                    catch (healingError) {
+                                        loggingService.warn('apply_patch self-healing failed', {
+                                            path: filePath,
+                                            error: healingError?.message || String(healingError),
+                                        });
+                                    }
+                                }
+                                if (!usedHealing || patched === undefined) {
+                                    return {
+                                        success: false,
+                                        operation: 'update_file',
+                                        path: filePath,
+                                        error: formatPatchError(err, diff, original),
+                                    };
+                                }
+                            }
+                            if (moveTo) {
+                                if (isRemote)
+                                    throw new Error('Move operations are not supported for remote workspaces.');
+                                const destinationPath = resolveWorkspacePath(moveTo, cwd, { allowOutsideWorkspace: true });
+                                await mkdirFn(path.dirname(destinationPath));
+                                await writeFileFn(destinationPath, patched);
+                                await unlink(targetPath);
+                            }
+                            else {
+                                await writeFileFn(targetPath, patched);
+                            }
+                            if (enableFileLogging) {
+                                try {
+                                    loggingService.debug('File updated', {
+                                        path: filePath,
+                                        originalLength: original.length,
+                                        patchedLength: patched.length,
+                                        healed: usedHealing,
+                                        ...(moveTo ? { moveTo } : {}),
+                                    });
+                                }
+                                catch (_error) {
+                                    // Ignore logging errors to prevent operation failure
+                                }
+                            }
+                            return {
+                                success: true,
+                                operation: 'update_file',
+                                path: filePath,
+                                message: moveTo
+                                    ? `Updated ${filePath} and moved to ${moveTo}`
+                                    : usedHealing
+                                        ? `Updated ${filePath} (healed)`
+                                        : `Updated ${filePath}`,
+                            };
+                        });
+                    }
+                    case 'delete_file': {
+                        return withFileLock(targetPath, async () => {
+                            if (isRemote)
+                                throw new Error('Delete operations are not supported for remote workspaces.');
+                            await unlink(targetPath);
+                            return {
+                                success: true,
+                                operation: 'delete_file',
+                                path: filePath,
+                                message: `Deleted ${filePath}`,
+                            };
+                        });
+                    }
+                    default: {
+                        return {
+                            success: false,
+                            error: `Unknown operation type: ${type}`,
+                        };
+                    }
+                }
+            };
+            try {
+                const output = [];
+                for (const operation of operations) {
+                    try {
+                        output.push(await runOperation(operation));
+                    }
+                    catch (operationError) {
+                        loggingService.error('Patch operation failed in execute', {
+                            type: operation.type,
+                            path: operation.path,
+                            error: operationError?.message || String(operationError),
+                        });
+                        output.push({
+                            success: false,
+                            error: `Invalid patch: ${operationError?.message || String(operationError)}. Please check the file path and diff format.`,
+                        });
+                    }
+                }
+                const joined = output
+                    .map((item) => item.success
+                    ? item.message || `Updated ${item.path ?? 'unknown'}`
+                    : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`)
+                    .join('\n');
+                return (await boundToolResultText({ fullText: joined, maxBytes: resolveResultMaxBytesForCall(context) })).text;
+            }
+            catch (error) {
+                if (enableFileLogging) {
+                    loggingService.error('File operation failed', {
+                        type: 'apply_patch',
+                        path: 'multiple',
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+                const message = `Error: ${(error.message || String(error)).replace(/\n/g, ' ')}`;
+                return (await boundToolResultText({ fullText: message, maxBytes: resolveResultMaxBytesForCall(context) })).text;
+            }
+        },
+        formatCommandMessage: formatApplyPatchCommandMessage,
+    };
+}
+/**
+ * Helper to analyze why a context block failed to match the original file content.
+ */
+function findClosestContextBlocks(contextLines, originalLines) {
+    const nonBlankContextLines = contextLines.filter((line) => line.trim() !== '');
+    if (nonBlankContextLines.length < 2 || originalLines.length === 0) {
+        return [];
+    }
+    const windowSize = Math.min(Math.max(contextLines.length, nonBlankContextLines.length), originalLines.length);
+    const minimumScore = Math.max(2, Math.ceil(nonBlankContextLines.length / 2));
+    const candidates = [];
+    for (let start = 0; start <= originalLines.length - windowSize; start++) {
+        const windowLines = originalLines.slice(start, start + windowSize);
+        const score = nonBlankContextLines.reduce((matches, contextLine) => matches + (windowLines.includes(contextLine) ? 1 : 0), 0);
+        if (score >= minimumScore && score < nonBlankContextLines.length) {
+            candidates.push({
+                start,
+                end: start + windowSize - 1,
+                score,
+            });
+        }
+    }
+    return candidates
+        .sort((a, b) => b.score - a.score || a.start - b.start)
+        .slice(0, 3)
+        .map((candidate) => `- lines ${candidate.start + 1}-${candidate.end + 1}: ${candidate.score}/${nonBlankContextLines.length} context lines matched`);
+}
+export function diagnoseContextMismatch(contextText, original) {
+    const contextLines = contextText.split(/\r?\n/);
+    const originalLines = original.split(/\r?\n/);
+    if (originalLines.length === 0 || (originalLines.length === 1 && originalLines[0] === '')) {
+        return 'The target file is empty. To create a new file, use a *** Add File: <path> *** section with + lines.';
+    }
+    const reports = [];
+    for (let i = 0; i < contextLines.length; i++) {
+        const contextLine = contextLines[i];
+        const trimmedContext = contextLine.trim();
+        if (!trimmedContext)
+            continue;
+        // Find any line in original that matches when trimmed
+        const matchIndices = [];
+        originalLines.forEach((origLine, idx) => {
+            if (origLine.trim() === trimmedContext) {
+                matchIndices.push(idx);
+            }
+        });
+        if (matchIndices.length === 0) {
+            reports.push(`- Line ${i + 1}: "${trimmedContext}" could not be found anywhere in the file.`);
+        }
+        else {
+            // Check if ANY of the matches in the original file are exact matches (including indentation)
+            const exactMatch = matchIndices.some((idx) => originalLines[idx] === contextLine);
+            if (!exactMatch) {
+                // Find if any match has matching indentation
+                const sameIndentMatch = matchIndices.find((idx) => {
+                    const origIndent = originalLines[idx].match(/^\s*/)?.[0] || '';
+                    const contextIndent = contextLine.match(/^\s*/)?.[0] || '';
+                    return origIndent === contextIndent;
+                });
+                if (sameIndentMatch !== undefined) {
+                    const origLine = originalLines[sameIndentMatch];
+                    reports.push(`- Line ${i + 1}: Whitespace mismatch for "${trimmedContext}". Diff has "${contextLine.replace(/ /g, '·')}" but file has "${origLine.replace(/ /g, '·')}" on line ${sameIndentMatch + 1}.`);
+                }
+                else {
+                    const matchIdx = matchIndices[0];
+                    const origLine = originalLines[matchIdx];
+                    const contextIndent = contextLine.match(/^\s*/)?.[0] || '';
+                    const origIndent = origLine.match(/^\s*/)?.[0] || '';
+                    const displayContextIndent = contextIndent.replace(/ /g, '·').replace(/\t/g, '→');
+                    const displayOrigIndent = origIndent.replace(/ /g, '·').replace(/\t/g, '→');
+                    reports.push(`- Line ${i + 1}: Indentation mismatch for "${trimmedContext}". Diff expected "${displayContextIndent}" but file has "${displayOrigIndent}" on line ${matchIdx + 1}.`);
+                }
+            }
+        }
+    }
+    let diagnosis = 'Patch failed: the context block was not found in the file.\n';
+    if (reports.length > 0) {
+        diagnosis += 'Mismatch details:\n' + reports.slice(0, 5).join('\n');
+        if (reports.length > 5) {
+            diagnosis += `\n... and ${reports.length - 5} more line mismatches.`;
+        }
+    }
+    else {
+        diagnosis +=
+            'The lines exist individually, but not in the same order or location. Make the block contiguous and match the file.';
+        const closestBlocks = findClosestContextBlocks(contextLines, originalLines);
+        if (closestBlocks.length > 0) {
+            diagnosis +=
+                '\nClosest matching blocks:\n' +
+                    closestBlocks.join('\n') +
+                    '\nThe patch is ambiguous. Add a stronger @@ anchor or use a smaller context block.';
+        }
+    }
+    return diagnosis;
+}
+/**
+ * Format errors from applyDiff to be clearer and more actionable.
+ */
+function formatPatchError(error, diff, original) {
+    const message = error.message || String(error);
+    let formatted = '';
+    // 1. Check for standard unified diff headers: "--- a/file" or "+++ b/file"
+    if (diff.includes('--- ') || diff.includes('+++ ')) {
+        formatted =
+            'Remove standard file headers. Use *** Update File: <path> with @@ anchors, context, + lines, and - lines.';
+    }
+    // 2. Check for unified diff chunk headers with line numbers: "@@ -1,5 +1,6 @@"
+    else if (/@@\s+-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s+@@/.test(diff)) {
+        formatted = 'Remove line numbers from "@@" headers. Use plain anchors like "@@ functionName" or a bare "@@".';
+    }
+    // 3. Check for leading line numbers like "10: const x = 1;" or "10  const x = 1;"
+    else if (diff.split(/\r?\n/).some((line) => /^\s*\d+[:\s]/.test(line) && !line.startsWith('@@') && !line.startsWith('***'))) {
+        formatted = 'Remove leading line numbers from patch lines.';
+    }
+    // 4. Check for invalid line prefix (missing space, +, -, or @@)
+    else {
+        const lines = diff.split(/\r?\n/);
+        let invalidPrefixLine = -1;
+        let invalidLineContent = '';
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith('@@') ||
+                line.trim() === '' ||
+                line.startsWith('***') ||
+                line === '*** End Patch' ||
+                line === '*** End of File') {
+                continue;
+            }
+            if (line[0] !== ' ' && line[0] !== '+' && line[0] !== '-') {
+                invalidPrefixLine = i + 1;
+                invalidLineContent = line;
+                break;
+            }
+        }
+        if (invalidPrefixLine !== -1) {
+            formatted = `Line ${invalidPrefixLine} starts with '${invalidLineContent[0]}'. Use only space, +, -, or @@ prefixes.`;
+        }
+        // 5. Handle "Invalid Context" / "Invalid EOF Context" errors
+        else {
+            const contextMatch = message.match(/^Invalid (?:EOF )?Context \d+:\n([\s\S]*)$/);
+            if (contextMatch && original !== undefined) {
+                const contextText = contextMatch[1];
+                formatted = diagnoseContextMismatch(contextText, original);
+            }
+            // 6. Handle "Invalid Line" error
+            else {
+                const invalidLineMatch = message.match(/^Invalid Line:\s*([\s\S]*)$/);
+                if (invalidLineMatch) {
+                    const invalidLine = truncateToUtf8Bytes(invalidLineMatch[1].trim(), 200).text;
+                    formatted = `Invalid line: "${invalidLine}". Use only space, +, -, or @@ prefixes.`;
+                }
+            }
+        }
+    }
+    if (formatted) {
+        return `Invalid patch: ${formatted}`;
+    }
+    // 7. General cleanup for any other error
+    return `Invalid patch: ${message}. Please check the file path and diff format.`;
+}
+//# sourceMappingURL=apply-patch.js.map

@@ -1,0 +1,298 @@
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { SubagentSession } from './subagent-session.js';
+import { loadRoleDefinition, resolvePrompt, PROMPTS_DIR } from './role-loader.js';
+import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
+import { getProvider } from '../../providers/index.js';
+import { extractFinalText, isAbortLike, safeEmit } from './utils.js';
+import { selectAgentStreamItems } from '../agent-stream.js';
+import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
+import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
+import { readRunBudgetPolicy } from '../agent-runtime/run-budget.js';
+import { resolveActiveProfile } from '../profiles/index.js';
+import { SubagentPoolEntrySchema } from '../settings/settings-schema.js';
+/** Upper bound on `agent.mentorSamples`; each sample is a full mentor call. */
+const MAX_MENTOR_SAMPLES = 8;
+const mentorLabel = (index) => `Mentor ${String.fromCharCode(65 + index)}`;
+export class MentorRunner {
+    #driverFactory;
+    #modelBinding;
+    #logger;
+    #settings;
+    #sessionContextService;
+    #executionContext;
+    #mentorSession;
+    #onEvent;
+    constructor(deps) {
+        this.#driverFactory = deps.driverFactory;
+        this.#modelBinding = deps.modelBinding;
+        this.#logger = deps.logger;
+        this.#settings = deps.settings;
+        this.#sessionContextService = deps.sessionContextService;
+        this.#executionContext = deps.executionContext;
+        this.#mentorSession = deps.session ?? new SubagentSession(randomUUID(), 'mentor');
+        this.#onEvent = deps.onEvent;
+    }
+    reset() {
+        this.#mentorSession.reset();
+    }
+    async run(agentId, task, signal, session, executionBudget) {
+        let slot;
+        let childBudget = executionBudget;
+        if (executionBudget) {
+            childBudget = executionBudget.createChildBudget();
+            const acquired = executionBudget.tryAcquireChild();
+            if (!(acquired instanceof AcquiredChildSlot)) {
+                return {
+                    agentId,
+                    role: 'mentor',
+                    status: 'failed',
+                    finalText: '',
+                    filesChanged: [],
+                    toolsUsed: [],
+                    error: `Budget exhausted: ${acquired.reason}${acquired.max !== undefined ? ` (${acquired.current}/${acquired.max})` : ''}`,
+                };
+            }
+            slot = acquired;
+        }
+        const previousSession = this.#mentorSession;
+        if (session)
+            this.#mentorSession = session;
+        try {
+            try {
+                const consultations = this.#resolveConsultations();
+                const result = consultations.length > 1
+                    ? await this.#runSamples(agentId, task, consultations, signal)
+                    : await this.#runWithSession(agentId, task, this.#mentorSession, signal, consultations[0]);
+                if (slot && result.usage)
+                    childBudget.recordUsage(result.usage);
+                return result;
+            }
+            catch (error) {
+                if (!signal?.aborted && !isAbortLike(error?.message, error))
+                    throw error;
+                const usage = normalizeAgentRunUsage(error?.usage) ?? extractUsage(error);
+                if (slot && usage)
+                    childBudget.recordUsage(usage);
+                if (usage)
+                    await safeEmit(this.#logger, this.#onEvent, { type: 'subagent_usage_update', agentId, usage }, { propagate: true });
+                return {
+                    agentId,
+                    role: 'mentor',
+                    status: 'cancelled',
+                    finalText: '',
+                    filesChanged: [],
+                    toolsUsed: [],
+                    error: error?.message ?? 'The subagent run was aborted.',
+                    ...(usage ? { usage } : {}),
+                };
+            }
+        }
+        finally {
+            slot?.release();
+            if (session)
+                this.#mentorSession = previousSession;
+        }
+    }
+    async runInSession(agentId, task, signal, session) {
+        return this.run(agentId, task, signal, session, undefined);
+    }
+    #resolveSampleCount() {
+        const configured = this.#settings.get('agent.mentorSamples');
+        const parsed = typeof configured === 'number' ? configured : Number(configured);
+        if (!Number.isFinite(parsed))
+            return 1;
+        return Math.max(1, Math.min(MAX_MENTOR_SAMPLES, Math.floor(parsed)));
+    }
+    /**
+     * Builds the list of consultations for one mentor call.
+     *
+     * A configured pool *defines* the consultations — one per entry — and
+     * `agent.mentorSamples` is ignored. The two do not multiply: a pool asks
+     * different models the same question, which is a different intent from
+     * asking one model repeatedly, and combining them silently would make the
+     * cost of a consultation hard to predict.
+     */
+    #resolveConsultations() {
+        const pool = this.#settings.get('agent.mentorPool');
+        if (Array.isArray(pool) && pool.length > 0) {
+            return SubagentPoolEntrySchema.array()
+                .parse(pool)
+                .slice(0, MAX_MENTOR_SAMPLES)
+                .map((entry) => ({
+                selection: { model: entry.model, provider: entry.provider },
+                reasoningEffort: entry.reasoningEffort,
+            }));
+        }
+        return Array.from({ length: this.#resolveSampleCount() }, () => ({}));
+    }
+    /**
+     * Runs every consultation concurrently and returns all the answers.
+     *
+     * Each one gets its own throwaway session. Sharing one session would feed
+     * answer N-1 into consultation N as conversation history, so the answers
+     * would anchor on the first opinion instead of being independent — the whole
+     * reason for sampling. The persistent `#mentorSession` is left untouched, so
+     * single-consultation mentor mode keeps its ongoing relationship.
+     */
+    async #runSamples(agentId, task, consultations, signal) {
+        const samples = consultations.length;
+        const settled = await Promise.allSettled(consultations.map((consultation) => this.#runWithSession(agentId, task, new SubagentSession(randomUUID(), 'mentor'), signal, consultation)));
+        const answers = [];
+        const failures = [];
+        const usageTotals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+        const costRecords = [];
+        let sawUsage = false;
+        settled.forEach((outcome, index) => {
+            if (outcome.status === 'rejected') {
+                failures.push({ index, reason: outcome.reason });
+                return;
+            }
+            const result = outcome.value;
+            const heading = `## ${mentorLabel(index)} of ${samples}`;
+            answers.push(`${heading}\n\n${result.finalText}`);
+            if (result.usage) {
+                sawUsage = true;
+                usageTotals.prompt_tokens += result.usage.prompt_tokens ?? 0;
+                usageTotals.completion_tokens += result.usage.completion_tokens ?? 0;
+                usageTotals.total_tokens += result.usage.total_tokens ?? 0;
+            }
+            if (result.costRecords)
+                costRecords.push(...result.costRecords);
+        });
+        if (answers.length === 0) {
+            // Nothing to hand back, so surface the real failure rather than an empty
+            // consultation. An abort is rethrown as-is so `run` reports `cancelled`.
+            const abort = failures.find(({ reason }) => isAbortLike(reason?.message, reason));
+            throw (abort ?? failures[0]).reason;
+        }
+        const sections = [...answers];
+        if (failures.length > 0) {
+            const detail = failures
+                // Do not expose configured model or provider names to the main agent.
+                // The generic label still identifies which opinion was unavailable.
+                .map(({ index }) => `${mentorLabel(index)} failed`)
+                .join('; ');
+            sections.push(`_${failures.length} of ${samples} mentor samples failed: ${detail}_`);
+        }
+        return {
+            agentId,
+            role: 'mentor',
+            status: 'completed',
+            finalText: sections.join('\n\n'),
+            filesChanged: [],
+            toolsUsed: [],
+            ...(sawUsage ? { usage: usageTotals } : {}),
+            ...(costRecords.length > 0 ? { costRecords } : {}),
+        };
+    }
+    async #runWithSession(agentId, task, mentorSession, signal, consultation) {
+        const definition = loadRoleDefinition('mentor', this.#settings);
+        // A pool entry overrides the configured mentor model for this consultation
+        // only. An entry may name a model without a provider, in which case it runs
+        // on the mentor's usual provider.
+        const selection = consultation?.selection ?? { model: definition.model, provider: definition.provider };
+        const mentorModelName = selection.model;
+        const mentorProvider = selection.provider;
+        const profile = resolveActiveProfile(this.#settings, {
+            availableIntegrations: new Map([['builtin:integration/mentor', true]]),
+        });
+        const baseInstructions = profile.integrations.get('builtin:integration/mentor')?.available ?? false
+            ? resolvePrompt(path.join(PROMPTS_DIR, 'mentor-mode.md'))
+            : definition.instructions;
+        const envInfo = getEnvInfo(this.#settings, this.#executionContext);
+        const cwd = this.#executionContext?.getCwd() ?? process.cwd();
+        const agentsInstructions = this.#executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
+        const instructions = `${baseInstructions}\n\nEnvironment: ${envInfo}${agentsInstructions}`;
+        mentorSession.switchProvider(mentorProvider);
+        const providerDef = this.#modelBinding
+            ? this.#modelBinding.providerDefinition(mentorProvider)
+            : getProvider(mentorProvider);
+        if (!providerDef?.createStreamedModel) {
+            const providerLabel = providerDef?.label || mentorProvider;
+            throw new Error(`${providerLabel} is configured but could not be initialized. ` +
+                `Please check that all required credentials and provider settings are set.`);
+        }
+        const streamedModel = await mentorSession.ensureModel(mentorProvider, (providerId) => {
+            const definition = this.#modelBinding
+                ? this.#modelBinding.providerDefinition(providerId)
+                : getProvider(providerId);
+            if (!definition?.createStreamedModel)
+                throw new Error(`${providerId} has no streamed model`);
+            if (this.#modelBinding)
+                return this.#modelBinding.scopedModel({ provider: providerId, model: mentorModelName }, {
+                    settingsService: this.#settings,
+                    loggingService: this.#logger,
+                    sessionContextService: this.#sessionContextService,
+                });
+            return definition.createStreamedModel(mentorModelName, {
+                settingsService: this.#settings,
+                loggingService: this.#logger,
+                sessionContextService: this.#sessionContextService,
+            });
+        }, this.#modelBinding && signal ? { signal, onDetached: this.#modelBinding.trackDetachedRead } : undefined);
+        if (!streamedModel)
+            throw new Error(`${providerDef.label || mentorProvider} is configured but could not be initialized.`);
+        const mentorAgent = mentorSession.ensureAgent(() => {
+            const reasoningEffort = consultation?.reasoningEffort ?? this.#settings.get('agent.mentorReasoningEffort');
+            const modelSettings = {
+                retry: { maxRetries: this.#settings.get('agent.retryAttempts') ?? 2 },
+            };
+            if (reasoningEffort && reasoningEffort !== 'default') {
+                modelSettings.reasoning = { effort: reasoningEffort, summary: 'auto' };
+            }
+            return {
+                name: definition.name,
+                model: mentorModelName,
+                ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
+                instructions,
+                tools: [],
+            };
+        });
+        mentorSession.addUserMessage(task);
+        const supportsChaining = providerDef.capabilities?.supportsConversationChaining ?? false;
+        const input = mentorSession.getInput(task, supportsChaining);
+        const factory = this.#driverFactory;
+        if (!factory)
+            throw new Error('Missing nested run driver');
+        const loop = factory({
+            resolveModel: () => streamedModel,
+            resolveMaxParallelToolCalls: () => this.#settings.get('agent.maxParallelToolCalls'),
+        });
+        const stream = loop.startStream(mentorAgent, input, {
+            ...(signal ? { signal } : {}),
+            providerId: mentorProvider,
+            supportsConversationChaining: supportsChaining,
+            maxTurns: definition.maxTurns,
+            runBudget: readRunBudgetPolicy(this.#settings),
+            wrapUpOnCriticalRunBudget: true,
+            onRunBudgetEvent: (event) => safeEmit(this.#logger, this.#onEvent, { type: 'subagent_run_budget', agentId, role: 'mentor', event }),
+            ...(supportsChaining && mentorSession.previousResponseId
+                ? { previousResponseId: mentorSession.previousResponseId }
+                : {}),
+        });
+        try {
+            await stream.completed;
+        }
+        catch (error) {
+            if (stream.runUsage !== undefined)
+                error.usage = stream.runUsage;
+            throw error;
+        }
+        mentorSession.appendOutput({ output: selectAgentStreamItems(stream), lastResponseId: stream.lastResponseId });
+        const usage = normalizeAgentRunUsage(stream.runUsage) ?? extractUsage(stream);
+        if (usage)
+            await safeEmit(this.#logger, this.#onEvent, { type: 'subagent_usage_update', agentId, usage }, { propagate: true });
+        return {
+            agentId,
+            role: 'mentor',
+            status: 'completed',
+            finalText: extractFinalText(stream),
+            filesChanged: [],
+            toolsUsed: [],
+            usage,
+            costRecords: stream.runCostRecords,
+        };
+    }
+}
+//# sourceMappingURL=mentor-runner.js.map

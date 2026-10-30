@@ -1,0 +1,168 @@
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import { parseUpstreamApplyPatch } from '../../tools/file/upstream-apply-patch.js';
+/**
+ * Normalize tool arguments from JSON string or object.
+ * Provider implementations may send arguments as either format.
+ */
+export function parseToolArguments(rawArgs) {
+    if (typeof rawArgs !== 'string') {
+        return rawArgs;
+    }
+    const trimmed = rawArgs.trim();
+    if (!trimmed) {
+        return rawArgs;
+    }
+    try {
+        return JSON.parse(trimmed);
+    }
+    catch {
+        return rawArgs;
+    }
+}
+/**
+ * Build a human-readable command string for display in the UI.
+ * Each tool has its own formatting logic.
+ */
+function isPlainObject(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+export function formatToolCommand(toolName, args) {
+    if (!isPlainObject(args)) {
+        return toolName;
+    }
+    if (toolName === 'shell') {
+        if (typeof args.description === 'string' && args.description.trim()) {
+            return args.description;
+        }
+        const cmd = args.command ?? args.commands;
+        if (typeof cmd === 'string' && cmd.trim()) {
+            return cmd;
+        }
+        if (Array.isArray(cmd) && cmd.length > 0) {
+            return cmd.join('\n');
+        }
+        return toolName;
+    }
+    if (toolName === 'grep') {
+        if (args.pattern) {
+            return `grep "${args.pattern}" ${args.path ?? '.'}`;
+        }
+        return toolName;
+    }
+    if (toolName === TOOL_NAME_SEARCH_REPLACE) {
+        return `${TOOL_NAME_SEARCH_REPLACE} "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${args.path ?? ''}`;
+    }
+    if (toolName === TOOL_NAME_APPLY_PATCH) {
+        if (typeof args.patch === 'string') {
+            try {
+                const operations = parseUpstreamApplyPatch(args.patch).operations;
+                const firstOperation = operations[0];
+                if (firstOperation) {
+                    const remaining = operations.length > 1 ? ` (+${operations.length - 1} more)` : '';
+                    return `${TOOL_NAME_APPLY_PATCH} ${firstOperation.type} ${firstOperation.path}${remaining}`;
+                }
+            }
+            catch {
+                // Keep the generic legacy fallback for malformed/incomplete patches.
+            }
+        }
+        return `${TOOL_NAME_APPLY_PATCH} ${args.type ?? 'unknown'} ${args.path ?? ''}`;
+    }
+    if (toolName === 'ask_mentor') {
+        return `ask_mentor: ${args.question ?? ''}`;
+    }
+    return formatGenericToolCommand(toolName, args);
+}
+/** Preferred argument keys for the generic tool label, most identifying first. */
+const GENERIC_PARAM_KEY_ORDER = ['path', 'pattern', 'command', 'query', 'url', 'file', 'symbol', 'question'];
+const MAX_GENERIC_PARAMS = 3;
+const MAX_GENERIC_LABEL_LENGTH = 100;
+const formatScalarParam = (value) => {
+    if (typeof value === 'string') {
+        const singleLine = value.replaceAll(/\s+/g, ' ').trim();
+        if (!singleLine)
+            return undefined;
+        return /\s/.test(singleLine) ? `"${singleLine}"` : singleLine;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean')
+        return String(value);
+    return undefined;
+};
+/**
+ * Fallback label for tools without a dedicated formatter: the tool name plus
+ * up to three scalar `key=value` parameters. Always a single bounded line so
+ * it is safe for the task panel and pending tool messages.
+ */
+function formatGenericToolCommand(toolName, args) {
+    const orderedKeys = [
+        ...GENERIC_PARAM_KEY_ORDER.filter((key) => key in args),
+        ...Object.keys(args).filter((key) => !GENERIC_PARAM_KEY_ORDER.includes(key)),
+    ];
+    const params = [];
+    for (const key of orderedKeys) {
+        if (params.length >= MAX_GENERIC_PARAMS)
+            break;
+        const formatted = formatScalarParam(args[key]);
+        if (formatted === undefined)
+            continue;
+        params.push(`${key}=${formatted}`);
+    }
+    if (params.length === 0)
+        return toolName;
+    const label = `${toolName} ${params.join(' ')}`;
+    return label.length > MAX_GENERIC_LABEL_LENGTH ? `${label.slice(0, MAX_GENERIC_LABEL_LENGTH - 1)}…` : label;
+}
+/**
+ * Create initial streaming state for a new message send/approval flow.
+ */
+export function createStreamingState() {
+    return {
+        accumulatedText: '',
+        flushedTextLength: 0,
+        currentBotMessageId: null,
+        accumulatedReasoningText: '',
+        flushedReasoningLength: 0,
+        textWasFlushed: false,
+        currentReasoningMessageId: null,
+        contextCompactionMessageId: null,
+        latestUsage: null,
+    };
+}
+/**
+ * Enhance error messages for common API key issues.
+ */
+export function enhanceApiKeyError(message) {
+    if (message.includes('OPENAI_API_KEY') ||
+        (message.includes('401') && message.toLowerCase().includes('unauthorized'))) {
+        return 'The active provider API key is missing or invalid. Check the provider settings with /providers and verify its required environment variable.';
+    }
+    return message;
+}
+/**
+ * Check if an error message indicates max turns exceeded.
+ */
+export function isMaxTurnsError(message) {
+    return message.includes('Max turns') && message.includes('exceeded');
+}
+/**
+ * Format shell command output for display.
+ */
+export function createShellMessageOutput(returnCode, stdout, stderr) {
+    const parts = [];
+    // Combine stdout and stderr
+    const trimmedStdout = stdout.replace(/\n+$/, '');
+    const trimmedStderr = stderr.replace(/\n+$/, '');
+    if (trimmedStdout) {
+        parts.push(trimmedStdout);
+    }
+    if (trimmedStderr) {
+        parts.push(trimmedStderr);
+    }
+    let output = parts.join('\n');
+    // Add return code if available
+    if (returnCode !== null) {
+        output += `\n\nReturn code: ${returnCode}`;
+    }
+    return output;
+}
+//# sourceMappingURL=conversation-utils.js.map

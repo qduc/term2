@@ -1,0 +1,1 @@
+{"version":3,"file":"busy-turn-guard.d.ts","sourceRoot":"","sources":["../../../../source/utils/busy-turn-guard.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,YAAY,EAAE,MAAM,sBAAsB,CAAC;AAEzD;;;;;;;;;;GAUG;AACH,wBAAgB,oBAAoB,CAClC,OAAO,EAAE,YAAY,EACrB,IAAI,EAAE;IAAE,YAAY,EAAE,MAAM,OAAO,CAAC;IAAC,MAAM,EAAE,CAAC,IAAI,EAAE,MAAM,KAAK,IAAI,CAAA;CAAE,GACpE,YAAY,CAad"}

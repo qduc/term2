@@ -1,0 +1,1 @@
+{"version":3,"file":"WebFetchRenderer.d.ts","sourceRoot":"","sources":["../../../../../source/components/message/WebFetchRenderer.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,EAAE,EAAE,EAAE,MAAM,OAAO,CAAC;AAMlC,KAAK,KAAK,GAAG;IACX,MAAM,EAAE,MAAM,CAAC;IACf,oBAAoB,EAAE,MAAM,KAAK,CAAC,YAAY,CAAC;CAChD,CAAC;AAEF,QAAA,MAAM,gBAAgB,EAAE,EAAE,CAAC,KAAK,CA6D/B,CAAC;eAEa,gBAAgB"}

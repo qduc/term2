@@ -1,0 +1,1513 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+export const TRAFFIC_TEXT_LIMIT = 100;
+const PREVIEW_LIMIT = 160;
+import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
+export const PROVIDER_REQUEST_FINGERPRINT_VERSION = 'provider-request-fingerprint-v1';
+function fingerprintValue(value) {
+    let encoded;
+    if (typeof value === 'string') {
+        encoded = value;
+    }
+    else {
+        try {
+            encoded = JSON.stringify(value) ?? String(value);
+        }
+        catch {
+            encoded = '[unserializable-provider-request-component]';
+        }
+    }
+    return {
+        encoded,
+        sha256: createHash('sha256').update(encoded, 'utf8').digest('hex'),
+        bytes: Buffer.byteLength(encoded, 'utf8'),
+    };
+}
+/**
+ * Hash the unsanitized request prefix and tool definitions at the logging
+ * boundary. The ordered component hashes and byte counts show which prefix
+ * components were sent and whether they match across requests without putting
+ * prompt text or tool schemas in logs. This proves serialized-component
+ * equality, not provider tokenization or cache acceptance.
+ */
+export function buildProviderRequestFingerprint(body) {
+    const parts = [];
+    const rawParts = [];
+    const addPart = (source, value) => {
+        const measurement = fingerprintValue(value);
+        parts.push({ source, sha256: measurement.sha256, bytes: measurement.bytes });
+        rawParts.push(source + '\0' + measurement.encoded);
+        return { sha256: measurement.sha256, bytes: measurement.bytes };
+    };
+    const direct = {};
+    if (body.instructions !== undefined)
+        direct.instructions = addPart('instructions', body.instructions);
+    if (body.system !== undefined)
+        direct.system = addPart('system', body.system);
+    const addRoleParts = (source, value) => {
+        if (!Array.isArray(value))
+            return;
+        value.forEach((item, index) => {
+            if (!item || typeof item !== 'object')
+                return;
+            if (item.type === 'additional_tools')
+                return;
+            const role = item.role;
+            if (role === 'system' || role === 'developer')
+                addPart(source + '[' + index + ']', item);
+        });
+    };
+    addRoleParts('messages', body.messages);
+    addRoleParts('input', body.input);
+    const toolGroups = [];
+    if (Array.isArray(body.tools))
+        toolGroups.push({ source: 'tools', value: body.tools });
+    if (Array.isArray(body.additional_tools))
+        toolGroups.push({ source: 'additional_tools', value: body.additional_tools });
+    if (Array.isArray(body.input)) {
+        body.input.forEach((item, index) => {
+            if (!item || typeof item !== 'object')
+                return;
+            const itemTools = item.tools;
+            if (!Array.isArray(itemTools))
+                return;
+            toolGroups.push({ source: 'input[' + index + '].tools', value: itemTools });
+        });
+    }
+    const toolValues = toolGroups.flatMap(({ source, value }) => value.map((tool) => ({ source, tool })));
+    const tools = toolValues.length > 0
+        ? (() => {
+            const measurement = fingerprintValue(toolValues);
+            return { sha256: measurement.sha256, bytes: measurement.bytes, count: toolValues.length };
+        })()
+        : undefined;
+    const prefixMeasurement = fingerprintValue(rawParts.join('\0'));
+    return {
+        version: PROVIDER_REQUEST_FINGERPRINT_VERSION,
+        prefix: {
+            sha256: prefixMeasurement.sha256,
+            bytes: prefixMeasurement.bytes,
+            parts,
+        },
+        ...(direct.instructions ? { instructions: direct.instructions } : {}),
+        ...(direct.system ? { system: direct.system } : {}),
+        ...(tools ? { tools } : {}),
+    };
+}
+/**
+ * Same truth table as `parseBooleanEnv` in logging-service.ts (kept local:
+ * that module imports this one, so importing it here would be a cycle).
+ * Only consulted for the opt-in raw-traffic sidecar, which must be
+ * impossible to enable by accident — absent/unset means off.
+ */
+const parseBooleanEnvValue = (value) => {
+    if (typeof value !== 'string') {
+        return false;
+    }
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+};
+const asRecord = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        return null;
+    return value;
+};
+const tryParseJson = (text) => {
+    try {
+        return JSON.parse(text);
+    }
+    catch {
+        return undefined;
+    }
+};
+const normalizeWhitespace = (text) => text.replace(/\s+/g, ' ').trim();
+const truncateTrafficText = (text) => {
+    if (text.length <= TRAFFIC_TEXT_LIMIT)
+        return text;
+    const omitted = text.length - TRAFFIC_TEXT_LIMIT;
+    return `${text.slice(0, TRAFFIC_TEXT_LIMIT)}[omitted ${omitted} chars]`;
+};
+const normalizePreview = (text) => {
+    const normalized = normalizeWhitespace(text ?? '');
+    if (normalized.length <= PREVIEW_LIMIT)
+        return normalized;
+    return normalized.slice(0, PREVIEW_LIMIT);
+};
+const sanitizeContentArray = (content) => content.map((item) => {
+    const record = asRecord(item);
+    if (!record)
+        return item;
+    if ((record.type === 'text' || record.type === 'input_text') && typeof record.text === 'string') {
+        return { ...record, text: truncateTrafficText(record.text) };
+    }
+    return item;
+});
+const sanitizeInstructionLikeValue = (value) => {
+    if (typeof value === 'string') {
+        return truncateTrafficText(value);
+    }
+    if (Array.isArray(value)) {
+        return sanitizeContentArray(value);
+    }
+    return value;
+};
+const sanitizeToolDefinitions = (tools) => {
+    if (!Array.isArray(tools))
+        return tools;
+    return tools.map((tool) => {
+        const record = asRecord(tool);
+        if (!record)
+            return tool;
+        const fn = asRecord(record.function);
+        if (typeof fn?.name === 'string')
+            return fn.name;
+        if (typeof record.name === 'string')
+            return record.name;
+        if (typeof record.type === 'string')
+            return record.type;
+        return 'unknown-tool';
+    });
+};
+/**
+ * Placeholder written in place of any `encrypted_content` ciphertext. It is a
+ * visible marker rather than `''` on purpose: an empty string is
+ * indistinguishable from an item that never carried encrypted reasoning at
+ * all, which makes the log useless for confirming that encrypted reasoning is
+ * actually round-tripping on the Responses lane.
+ */
+export const ENCRYPTED_CONTENT_REDACTION = '<redacted>';
+/**
+ * Field-name pattern for values that may carry bearer credentials in a
+ * request body (API keys, tokens, secrets). Applied only to the opt-in raw
+ * sidecar, where the body is otherwise written unsanitized — headers arrive
+ * pre-sanitized via `sanitizeHeaders` at every call site, but nothing stands
+ * between the body and disk there. Keep in sync with the pattern in
+ * `source/utils/header-sanitizer.ts`.
+ */
+const RAW_CREDENTIAL_KEY_PATTERN = /authorization|api[_-]?key|key|cookie|token|secret|signature/i;
+export const isRawTrafficCaptureEnabled = (env = process.env) => parseBooleanEnvValue(env.TERM2_RAW_TRAFFIC);
+const redactRawCredentialFields = (value) => {
+    if (Array.isArray(value))
+        return value.map(redactRawCredentialFields);
+    if (value && typeof value === 'object') {
+        const record = value;
+        const out = {};
+        for (const [key, v] of Object.entries(record)) {
+            out[key] = RAW_CREDENTIAL_KEY_PATTERN.test(key) ? '[REDACTED]' : redactRawCredentialFields(v);
+        }
+        return out;
+    }
+    return value;
+};
+/**
+ * Derives the sidecar path for an opt-in raw (unsanitized) request-body
+ * capture from the sanitized artifact path: `<request>_raw.json` next to it.
+ */
+export const rawCapturePathForRequestPath = (requestPath) => requestPath.replace(/\.json$/, '_raw.json');
+const sanitizeReasoningDetails = (reasoningDetails) => {
+    if (!Array.isArray(reasoningDetails))
+        return reasoningDetails;
+    return reasoningDetails.map((item) => {
+        const record = asRecord(item);
+        if (!record)
+            return item;
+        if (record.type === 'reasoning.encrypted' && typeof record.data === 'string') {
+            return { ...record, data: ENCRYPTED_CONTENT_REDACTION };
+        }
+        return item;
+    });
+};
+const sanitizeMessageContent = (message) => {
+    const sanitizedMessage = Object.prototype.hasOwnProperty.call(message, 'reasoning_details')
+        ? { ...message, reasoning_details: sanitizeReasoningDetails(message.reasoning_details) }
+        : message;
+    const role = typeof message.role === 'string' ? message.role : undefined;
+    if (role !== 'system' && role !== 'developer')
+        return sanitizedMessage;
+    if (!Object.prototype.hasOwnProperty.call(message, 'content'))
+        return sanitizedMessage;
+    const content = message.content;
+    if (Array.isArray(content)) {
+        return { ...sanitizedMessage, content: sanitizeContentArray(content) };
+    }
+    return { ...sanitizedMessage, content: sanitizeInstructionLikeValue(content) };
+};
+const emptyTrafficRecord = () => ({});
+const parseTrafficEnvelope = (requestPath) => {
+    if (!fs.existsSync(requestPath)) {
+        return { sent: emptyTrafficRecord(), received: emptyTrafficRecord() };
+    }
+    const raw = fs.readFileSync(requestPath, 'utf8').trim();
+    if (!raw) {
+        return { sent: emptyTrafficRecord(), received: emptyTrafficRecord() };
+    }
+    const parsed = asRecord(tryParseJson(raw));
+    if (parsed &&
+        (Object.prototype.hasOwnProperty.call(parsed, 'sent') || Object.prototype.hasOwnProperty.call(parsed, 'received'))) {
+        return {
+            sent: asRecord(parsed.sent) ?? emptyTrafficRecord(),
+            received: asRecord(parsed.received) ?? emptyTrafficRecord(),
+        };
+    }
+    const legacyBlocks = raw
+        .split(/\n\n+/)
+        .map((block) => block.trim())
+        .filter(Boolean);
+    return {
+        sent: asRecord(tryParseJson(legacyBlocks[0] ?? '')) ?? emptyTrafficRecord(),
+        received: asRecord(tryParseJson(legacyBlocks[1] ?? '')) ?? emptyTrafficRecord(),
+    };
+};
+const writeTrafficEnvelope = (requestPath, envelope) => {
+    fs.mkdirSync(path.dirname(requestPath), { recursive: true });
+    fs.writeFileSync(requestPath, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
+};
+/**
+ * Redacts an `encrypted_content` field wherever it appears, at any depth.
+ * OpenAI Responses reasoning items (requested via `include:
+ * ['reasoning.encrypted_content']` on every request — openai-responses-model.ts)
+ * and `provider_opaque` compaction items (docs/plans/context-and-memory/openai-context-compaction.md
+ * Step 1/2) both carry it directly on the item rather than nested under
+ * `reasoning_details` the way the Chat Completions shape does (see
+ * `sanitizeReasoningDetails` above, which stays as the Chat-Completions-specific
+ * case). This is the generic fallback for any other shape that carries the
+ * same field name.
+ */
+const redactEncryptedContent = (value) => {
+    if (Array.isArray(value))
+        return value.map(redactEncryptedContent);
+    if (value && typeof value === 'object') {
+        const record = value;
+        const out = {};
+        for (const [key, v] of Object.entries(record)) {
+            out[key] =
+                key === 'encrypted_content' && typeof v === 'string' ? ENCRYPTED_CONTENT_REDACTION : redactEncryptedContent(v);
+        }
+        return out;
+    }
+    return value;
+};
+export const sanitizeSentTrafficBody = (body) => {
+    const sanitized = { ...body };
+    if (Object.prototype.hasOwnProperty.call(sanitized, 'instructions')) {
+        sanitized.instructions = sanitizeInstructionLikeValue(sanitized.instructions);
+    }
+    if (Object.prototype.hasOwnProperty.call(sanitized, 'system')) {
+        sanitized.system = sanitizeInstructionLikeValue(sanitized.system);
+    }
+    if (Array.isArray(sanitized.messages)) {
+        sanitized.messages = sanitized.messages.map((item) => {
+            const record = asRecord(item);
+            return record ? sanitizeMessageContent(record) : item;
+        });
+    }
+    if (Array.isArray(sanitized.input)) {
+        sanitized.input = sanitized.input.map((item) => {
+            const record = asRecord(item);
+            if (!record)
+                return item;
+            const role = typeof record.role === 'string' ? record.role : undefined;
+            const type = typeof record.type === 'string' ? record.type : undefined;
+            if (type === 'additional_tools') {
+                return { ...record, tools: sanitizeToolDefinitions(record.tools) };
+            }
+            if (role === 'system' || role === 'developer' || type === 'message') {
+                return sanitizeMessageContent(record);
+            }
+            return item;
+        });
+    }
+    if (Object.prototype.hasOwnProperty.call(sanitized, 'tools')) {
+        sanitized.tools = sanitizeToolDefinitions(sanitized.tools);
+    }
+    // Catches encrypted_content on any item the branches above didn't already
+    // reshape — in particular Responses-API `type: 'reasoning'` and
+    // `type: 'compaction'`/`provider_opaque` input items, which are not
+    // message-shaped and so fall through the `input` branch above untouched.
+    return redactEncryptedContent(sanitized);
+};
+const safeTimestampForPath = (timestamp) => timestamp.replace(/:/g, '-');
+const safePathSegment = (segment) => segment.replace(/[\\/]/g, '_');
+const timePartForPath = (timestamp) => safeTimestampForPath(timestamp.includes('T') ? timestamp.substring(timestamp.indexOf('T') + 1) : timestamp);
+const detectContentType = (response) => response.headers.get('content-type')?.toLowerCase() ?? '';
+const sniffTransportFromBody = (raw) => {
+    const head = raw.trimStart().slice(0, 64);
+    if (!head)
+        return 'unknown';
+    if (/^(event:|data:|:)/.test(head))
+        return 'sse';
+    if (head.startsWith('{') || head.startsWith('['))
+        return 'json';
+    return 'unknown';
+};
+const transportFromContentType = (contentType) => {
+    if (contentType.includes('text/event-stream'))
+        return 'sse';
+    if (contentType.includes('application/json'))
+        return 'json';
+    if (contentType.startsWith('text/'))
+        return 'text';
+    return 'unknown';
+};
+const parseToolArgumentsJson = (text) => {
+    if (!text)
+        return undefined;
+    return tryParseJson(text);
+};
+const getFrameSignature = (parsed) => {
+    const keys = Object.keys(parsed).sort();
+    const choiceDelta = asRecord(parsed.choices?.[0])?.delta;
+    const deltaKeys = choiceDelta ? Object.keys(asRecord(choiceDelta) ?? {}).sort() : [];
+    return JSON.stringify({ keys, deltaKeys });
+};
+const mergeStringMapValue = (map, key, chunk) => {
+    map.set(key, (map.get(key) ?? '') + chunk);
+};
+const decodeJsonStringFragment = (value) => {
+    try {
+        return JSON.parse(`"${value}"`);
+    }
+    catch {
+        return value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    }
+};
+const firstDefinedString = (...values) => {
+    for (const value of values) {
+        if (typeof value === 'string' && value)
+            return value;
+    }
+    return undefined;
+};
+const extractJsonText = (body) => {
+    if (typeof body.output_text === 'string')
+        return body.output_text;
+    if (typeof body.text === 'string')
+        return body.text;
+    const response = asRecord(body.response);
+    if (typeof response?.output_text === 'string')
+        return response.output_text;
+    const choice = asRecord(body.choices?.[0]);
+    const message = asRecord(choice?.message);
+    const delta = asRecord(choice?.delta);
+    return firstDefinedString(message?.content, choice?.text, delta?.content, delta?.text);
+};
+const extractJsonReasoning = (body) => {
+    const choice = asRecord(body.choices?.[0]);
+    const delta = asRecord(choice?.delta);
+    const message = asRecord(choice?.message);
+    return firstDefinedString(body.reasoning, body.reasoning_text, delta?.reasoning, delta?.reasoning_text, message?.reasoning, message?.reasoning_text);
+};
+const extractJsonToolCalls = (body) => {
+    const choice = asRecord(body.choices?.[0]);
+    const message = asRecord(choice?.message);
+    const delta = asRecord(choice?.delta);
+    const toolCalls = message?.tool_calls ?? delta?.tool_calls ?? [];
+    if (!Array.isArray(toolCalls))
+        return [];
+    return toolCalls.map((item, index) => {
+        const record = asRecord(item) ?? {};
+        const fn = asRecord(record.function) ?? {};
+        const key = firstDefinedString(record.id, String(record.index ?? index)) ?? String(index);
+        const argumentsText = typeof fn.arguments === 'string' ? fn.arguments : undefined;
+        return {
+            key,
+            name: typeof fn.name === 'string' ? fn.name : undefined,
+            argumentsText,
+            argumentsJson: parseToolArgumentsJson(argumentsText),
+        };
+    });
+};
+export async function summarizeReceivedTraffic(response) {
+    const contentType = detectContentType(response);
+    const raw = await response.text();
+    let transport = transportFromContentType(contentType);
+    if (transport === 'unknown' || transport === 'text') {
+        const sniffed = sniffTransportFromBody(raw);
+        if (sniffed !== 'unknown')
+            transport = sniffed;
+    }
+    const summary = {
+        transport,
+        status: response.status,
+        errorFrames: [],
+        malformedFrames: [],
+        unknownFrames: [],
+    };
+    if (summary.transport === 'json') {
+        const parsed = asRecord(tryParseJson(raw));
+        if (!parsed) {
+            summary.fallbackBody = raw;
+            return summary;
+        }
+        const extractedText = extractJsonText(parsed);
+        const extractedReasoning = extractJsonReasoning(parsed);
+        const extractedToolCalls = extractJsonToolCalls(parsed);
+        const extractedId = firstDefinedString(parsed.id, asRecord(parsed.response)?.id);
+        // A non-streaming Responses body's `output` array can carry reasoning
+        // items (encrypted_content requested on every request) and, once Step 3/4
+        // of docs/plans/context-and-memory/openai-context-compaction.md land, compaction items —
+        // both have it directly on the item. This is stored verbatim in the
+        // on-disk traffic artifact and passed to the winston debug log by
+        // ProviderTraffic.recordResponseReceived, so it must be redacted here.
+        const redactedParsed = redactEncryptedContent(parsed);
+        summary.wireShape =
+            Array.isArray(parsed.output) || asRecord(parsed.response)
+                ? 'responses'
+                : Array.isArray(parsed.choices)
+                    ? 'chat_completions'
+                    : 'unknown';
+        if (!extractedText && !extractedReasoning && extractedToolCalls.length === 0 && !extractedId) {
+            summary.fallbackBody = redactedParsed;
+        }
+        else {
+            summary.payload = redactedParsed;
+        }
+        return summary;
+    }
+    if (summary.transport !== 'sse') {
+        summary.fallbackBody = raw;
+        return summary;
+    }
+    let sseResponseId;
+    let sseFinishReason;
+    let sseUsage;
+    const outputChunks = [];
+    const reasoningChunks = [];
+    const toolNameByKey = new Map();
+    const toolArgsByKey = new Map();
+    const toolKeyByIndex = new Map();
+    const unknownFrameMap = new Map();
+    // The assembled payload is rendered in the wire shape it actually arrived in.
+    // Rendering a Responses stream as `choices[0].delta` (the old behaviour) hid
+    // exactly the things you open the log to check on that lane: whether
+    // reasoning items came back at all, and whether they carried encrypted
+    // content. See docs/plans/grok-responses-api.md.
+    let sawResponsesEvent = false;
+    let sawChatCompletionsFrame = false;
+    const responsesReasoningItems = [];
+    const responsesFunctionCallOrder = [];
+    const blocks = raw.split(/\r?\n\r?\n/);
+    for (const block of blocks) {
+        const trimmed = block.trim();
+        if (!trimmed || trimmed.startsWith(':'))
+            continue;
+        const lines = block.split(/\r?\n/);
+        const dataLines = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim());
+        if (dataLines.length === 0)
+            continue;
+        const dataText = dataLines.join('\n');
+        if (dataText === '[DONE]')
+            continue;
+        const parsed = asRecord(tryParseJson(dataText));
+        if (!parsed) {
+            const argMatch = dataText.match(/"arguments":"((?:\\.|[^"])*)"/);
+            if (argMatch) {
+                const indexMatch = dataText.match(/"index":(\d+)/);
+                const index = indexMatch?.[1] ? Number.parseInt(indexMatch[1], 10) : 0;
+                const key = toolKeyByIndex.get(index) ?? String(index);
+                mergeStringMapValue(toolArgsByKey, key, decodeJsonStringFragment(argMatch[1]));
+                const finishMatch = dataText.match(/"finish_reason":"([^"]+)"/);
+                if (finishMatch?.[1])
+                    sseFinishReason = sseFinishReason ?? finishMatch[1];
+                const idMatches = [...dataText.matchAll(/"id":"([^"]+)"/g)];
+                const lastId = idMatches[idMatches.length - 1]?.[1];
+                if (lastId)
+                    sseResponseId = sseResponseId ?? lastId;
+                continue;
+            }
+            summary.malformedFrames.push({ raw: dataText, error: 'invalid_json' });
+            continue;
+        }
+        const response = asRecord(parsed.response);
+        const choice = asRecord(parsed.choices?.[0]);
+        const delta = asRecord(choice?.delta);
+        if (typeof parsed.type === 'string' && parsed.type.startsWith('response.'))
+            sawResponsesEvent = true;
+        if (Array.isArray(parsed.choices))
+            sawChatCompletionsFrame = true;
+        sseResponseId =
+            sseResponseId ?? firstDefinedString(parsed.id, response?.id, asRecord(choice?.message)?.id);
+        const usageData = asRecord(parsed.usage) ?? asRecord(response?.usage);
+        if (usageData)
+            sseUsage = usageData;
+        sseFinishReason =
+            sseFinishReason ??
+                firstDefinedString(parsed.finish_reason, choice?.finish_reason, delta?.finish_reason, response?.status, parsed.status);
+        if (parsed.error) {
+            summary.errorFrames.push(parsed);
+            continue;
+        }
+        const eventType = typeof parsed.type === 'string' ? parsed.type : undefined;
+        let recognized = false;
+        const deltaText = firstDefinedString(parsed.delta, parsed.text);
+        if (eventType?.includes('output_text') && typeof parsed.delta === 'string') {
+            outputChunks.push(parsed.delta);
+            recognized = true;
+        }
+        else if (eventType?.includes('output_text') && typeof deltaText === 'string') {
+            recognized = true;
+        }
+        if ((eventType?.includes('reasoning') || eventType?.includes('summary')) && typeof parsed.delta === 'string') {
+            reasoningChunks.push(parsed.delta);
+            recognized = true;
+        }
+        else if ((eventType?.includes('reasoning') || eventType?.includes('summary')) && typeof deltaText === 'string') {
+            recognized = true;
+        }
+        if (eventType?.includes('function_call_arguments') && typeof parsed.delta === 'string') {
+            const key = firstDefinedString(parsed.item_id, parsed.call_id, parsed.id) ?? String(toolArgsByKey.size);
+            mergeStringMapValue(toolArgsByKey, key, parsed.delta);
+            recognized = true;
+        }
+        if (eventType?.includes('completed') || eventType?.includes('done')) {
+            recognized = true;
+        }
+        if (eventType?.includes('content_part')) {
+            recognized = true;
+        }
+        const outputItem = asRecord(parsed.item);
+        if (eventType?.includes('output_item') && outputItem) {
+            if (outputItem.type === 'function_call') {
+                const name = typeof outputItem.name === 'string' ? outputItem.name : undefined;
+                if (name) {
+                    if (typeof outputItem.id === 'string')
+                        toolNameByKey.set(outputItem.id, name);
+                    if (typeof outputItem.call_id === 'string')
+                        toolNameByKey.set(outputItem.call_id, name);
+                }
+                const callKey = firstDefinedString(outputItem.call_id, outputItem.id);
+                if (callKey && !responsesFunctionCallOrder.includes(callKey))
+                    responsesFunctionCallOrder.push(callKey);
+            }
+            if (outputItem.type === 'reasoning' && eventType.includes('done')) {
+                const itemId = typeof outputItem.id === 'string' ? outputItem.id : undefined;
+                if (!responsesReasoningItems.some((item) => item.id === itemId && itemId !== undefined)) {
+                    responsesReasoningItems.push(redactEncryptedContent(outputItem));
+                }
+            }
+            recognized = true;
+        }
+        const toolCalls = Array.isArray(delta?.tool_calls) ? delta?.tool_calls : [];
+        if (typeof delta?.content === 'string') {
+            outputChunks.push(delta.content);
+            recognized = true;
+        }
+        if (typeof delta?.reasoning === 'string') {
+            reasoningChunks.push(delta.reasoning);
+            recognized = true;
+        }
+        if (typeof delta?.reasoning_text === 'string') {
+            reasoningChunks.push(delta.reasoning_text);
+            recognized = true;
+        }
+        if (typeof delta?.reasoning_content === 'string') {
+            reasoningChunks.push(delta.reasoning_content);
+            recognized = true;
+        }
+        for (const toolCall of toolCalls) {
+            const toolCallRecord = asRecord(toolCall) ?? {};
+            const fn = asRecord(toolCallRecord.function) ?? {};
+            const frameId = typeof toolCallRecord.id === 'string' && toolCallRecord.id ? toolCallRecord.id : undefined;
+            const frameIndex = typeof toolCallRecord.index === 'number' ? toolCallRecord.index : undefined;
+            const key = frameId ?? (frameIndex !== undefined ? toolKeyByIndex.get(frameIndex) : undefined) ?? String(frameIndex ?? 0);
+            if (frameIndex !== undefined) {
+                toolKeyByIndex.set(frameIndex, key);
+            }
+            if (typeof fn.name === 'string')
+                toolNameByKey.set(key, fn.name);
+            if (typeof fn.arguments === 'string')
+                mergeStringMapValue(toolArgsByKey, key, fn.arguments);
+            recognized = true;
+        }
+        const message = asRecord(choice?.message);
+        if (Array.isArray(message?.tool_calls)) {
+            for (const toolCall of message.tool_calls) {
+                const toolCallRecord = asRecord(toolCall) ?? {};
+                const fn = asRecord(toolCallRecord.function) ?? {};
+                const key = firstDefinedString(toolCallRecord.id, String(toolCallRecord.index ?? 0)) ?? '0';
+                if (typeof fn.name === 'string')
+                    toolNameByKey.set(key, fn.name);
+                if (typeof fn.arguments === 'string')
+                    mergeStringMapValue(toolArgsByKey, key, fn.arguments);
+                recognized = true;
+            }
+        }
+        // Frames with no output content but metadata already captured by maybe* calls
+        if (!recognized &&
+            (choice?.finish_reason || (Array.isArray(parsed.choices) && parsed.choices.length === 0 && parsed.usage))) {
+            recognized = true;
+        }
+        // Responses API lifecycle frames (response.created, response.in_progress, response.completed, etc.)
+        if (!recognized && asRecord(parsed.response)) {
+            recognized = true;
+        }
+        // Provider-specific bookkeeping frames with no useful content for the assembled payload.
+        if (!recognized &&
+            typeof parsed.cost === 'string' &&
+            Array.isArray(parsed.choices) &&
+            parsed.choices.length === 0) {
+            recognized = true;
+        }
+        // Init frame: role announcement with no content
+        if (!recognized &&
+            delta &&
+            typeof delta.role === 'string' &&
+            !Object.prototype.hasOwnProperty.call(delta, 'content') &&
+            Object.keys(delta).length === 1) {
+            recognized = true;
+        }
+        if (!recognized &&
+            delta &&
+            typeof delta.role === 'string' &&
+            delta.content === null &&
+            Object.keys(delta).length <= 2) {
+            recognized = true;
+        }
+        if (!recognized) {
+            const signature = getFrameSignature(parsed);
+            const existing = unknownFrameMap.get(signature);
+            if (existing) {
+                existing.count += 1;
+                existing.lastRaw = dataText;
+            }
+            else {
+                unknownFrameMap.set(signature, {
+                    signature,
+                    count: 1,
+                    firstRaw: dataText,
+                    lastRaw: dataText,
+                });
+            }
+        }
+    }
+    if (!sseResponseId) {
+        const idMatches = [...raw.matchAll(/"id":"([^"]+)"/g)];
+        sseResponseId = idMatches[idMatches.length - 1]?.[1];
+    }
+    if (!sseFinishReason) {
+        const finishMatch = raw.match(/"finish_reason":"([^"]+)"/);
+        if (finishMatch?.[1])
+            sseFinishReason = finishMatch[1];
+    }
+    const assembledContent = outputChunks.length > 0 ? outputChunks.join('') : undefined;
+    const assembledReasoning = reasoningChunks.length > 0 ? reasoningChunks.join('') : undefined;
+    const assembledToolCalls = [...toolArgsByKey.entries()].map(([key, argumentsText]) => {
+        const name = toolNameByKey.get(key);
+        return {
+            id: key,
+            type: 'function',
+            function: {
+                ...(name !== undefined ? { name } : {}),
+                arguments: argumentsText,
+            },
+        };
+    });
+    summary.unknownFrames = [...unknownFrameMap.values()];
+    const hasAssembled = assembledContent !== undefined ||
+        assembledReasoning !== undefined ||
+        assembledToolCalls.length > 0 ||
+        responsesReasoningItems.length > 0;
+    // Reasoning summary deltas are only worth re-emitting as their own item when
+    // the captured reasoning items didn't already carry the summary text.
+    const responsesReasoningItemsCarrySummary = responsesReasoningItems.some((item) => Array.isArray(item.summary) && item.summary.length > 0);
+    const wireShape = sawResponsesEvent
+        ? 'responses'
+        : sawChatCompletionsFrame
+            ? 'chat_completions'
+            : 'unknown';
+    summary.wireShape = wireShape;
+    if (hasAssembled || sseResponseId || sseFinishReason || sseUsage) {
+        summary.payload =
+            wireShape === 'responses'
+                ? {
+                    ...(sseResponseId ? { id: sseResponseId } : {}),
+                    ...(sseFinishReason ? { status: sseFinishReason } : {}),
+                    ...(sseUsage ? { usage: sseUsage } : {}),
+                    output: [
+                        ...responsesReasoningItems,
+                        ...(assembledReasoning !== undefined && !responsesReasoningItemsCarrySummary
+                            ? [{ type: 'reasoning', summary: [{ type: 'summary_text', text: assembledReasoning }] }]
+                            : []),
+                        ...(assembledContent !== undefined
+                            ? [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: assembledContent }] }]
+                            : []),
+                        ...assembledToolCalls.map((call) => ({
+                            type: 'function_call',
+                            call_id: call.id,
+                            ...(call.function.name !== undefined ? { name: call.function.name } : {}),
+                            arguments: call.function.arguments,
+                        })),
+                    ],
+                }
+                : {
+                    ...(sseResponseId ? { id: sseResponseId } : {}),
+                    ...(sseUsage ? { usage: sseUsage } : {}),
+                    choices: [
+                        {
+                            ...(sseFinishReason ? { finish_reason: sseFinishReason } : {}),
+                            delta: {
+                                ...(assembledContent !== undefined ? { content: assembledContent } : {}),
+                                ...(assembledReasoning !== undefined ? { reasoning: assembledReasoning } : {}),
+                                ...(assembledToolCalls.length > 0 ? { tool_calls: assembledToolCalls } : {}),
+                            },
+                        },
+                    ],
+                };
+    }
+    if (!summary.payload && summary.unknownFrames.length === 0) {
+        summary.fallbackBody = raw;
+    }
+    return summary;
+}
+export class ProviderTrafficArtifactStore {
+    #rootDir;
+    #requestPaths = new Map();
+    #rawCaptureEnabled;
+    #enabled;
+    constructor({ rootDir, rawCaptureEnabled, enabled = true, }) {
+        this.#rootDir = rootDir;
+        this.#enabled = enabled;
+        // Resolved once at construction so a mid-process env change cannot flip
+        // capture on for a store that started with it off (and tests can inject
+        // the flag directly without touching process.env).
+        this.#rawCaptureEnabled = rawCaptureEnabled ?? isRawTrafficCaptureEnabled();
+    }
+    recordRequestStart(input) {
+        if (!this.#enabled)
+            return;
+        const { dayDir, requestPath, sessionDirName } = this.#pathsFor(input);
+        this.#requestPaths.set(input.requestId, requestPath);
+        try {
+            const sentRecord = {
+                direction: 'sent',
+                requestId: input.requestId,
+                timestamp: input.timestamp,
+                provider: input.provider,
+                model: input.model,
+                ...(input.modelClass ? { modelClass: input.modelClass } : {}),
+                ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
+                sessionId: input.sessionId,
+                ...(input.promptCacheKey ? { promptCacheKey: input.promptCacheKey } : {}),
+                ...(input.providerHistoryKey ? { providerHistoryKey: input.providerHistoryKey } : {}),
+                ...(input.transportDiagnostics ? { transportDiagnostics: input.transportDiagnostics } : {}),
+                ...(input.requestFingerprint ? { requestFingerprint: input.requestFingerprint } : {}),
+                mode: input.mode ?? 'unknown',
+                ...(input.headers ? { headers: input.headers } : {}),
+                body: sanitizeSentTrafficBody(input.sentBody),
+            };
+            writeTrafficEnvelope(requestPath, { sent: sentRecord, received: emptyTrafficRecord() });
+            let rawCaptureFailure = null;
+            if (this.#rawCaptureEnabled) {
+                rawCaptureFailure = this.#writeRawCapture(requestPath, input);
+            }
+            this.#upsertDailyIndex(dayDir, {
+                sessionId: input.sessionId,
+                sessionDir: sessionDirName,
+                firstRequestAt: input.timestamp,
+                lastRequestAt: input.timestamp,
+                requestCount: 1,
+                firstUserMessagePreview: normalizePreview(input.firstUserMessagePreview),
+                latestProvider: input.provider,
+                latestModel: input.model,
+                providersSeen: [input.provider],
+                modelsSeen: [input.model],
+                latestMode: input.mode ?? 'unknown',
+                modesSeen: [input.mode ?? 'unknown'],
+            });
+            if (rawCaptureFailure)
+                throw rawCaptureFailure;
+        }
+        catch (error) {
+            // A start that did not fully land must not retain a stale correlation
+            // entry: a later completion falls back to #pathsFor and writes a fresh
+            // artifact instead of reusing a path the failed start never proved.
+            this.#requestPaths.delete(input.requestId);
+            throw error;
+        }
+    }
+    recordRequestComplete(input) {
+        if (!this.#enabled)
+            return;
+        const { dayDir, requestPath: fallbackRequestPath, sessionDirName } = this.#pathsFor(input);
+        const requestPath = this.#requestPaths.get(input.requestId) ?? fallbackRequestPath;
+        try {
+            const receivedRecord = {
+                direction: 'received',
+                requestId: input.requestId,
+                timestamp: input.timestamp,
+                provider: input.provider,
+                model: input.model,
+                ...(input.modelClass ? { modelClass: input.modelClass } : {}),
+                ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
+                sessionId: input.sessionId,
+                mode: input.mode ?? 'unknown',
+                ...(input.receivedSummary ? { summary: input.receivedSummary } : {}),
+                ...(input.error ? { error: input.error } : {}),
+            };
+            const envelope = parseTrafficEnvelope(requestPath);
+            writeTrafficEnvelope(requestPath, {
+                sent: envelope.sent,
+                received: receivedRecord,
+            });
+            this.#touchDailyIndex(dayDir, {
+                sessionId: input.sessionId,
+                sessionDir: sessionDirName,
+                lastRequestAt: input.timestamp,
+                latestProvider: input.provider,
+                latestModel: input.model,
+                latestMode: input.mode ?? 'unknown',
+            });
+        }
+        finally {
+            // Completion is the owner cleanup path for request correlation: the
+            // entry is released whether the artifact write succeeded or failed, so
+            // an abandoned or partially-written completion cannot leak map entries
+            // for the life of the process.
+            this.#requestPaths.delete(input.requestId);
+        }
+    }
+    #writeRawCapture(requestPath, input) {
+        // Best-effort by design: a raw sidecar must never fail the request it
+        // observes, nor disturb the sanitized artifact. Swallow write failures
+        // without disrupting the sanitized envelope; report its failure through
+        // ProviderTraffic's once-only residual warning boundary.
+        try {
+            const rawPath = rawCapturePathForRequestPath(requestPath);
+            fs.mkdirSync(path.dirname(rawPath), { recursive: true });
+            fs.writeFileSync(rawPath, `${JSON.stringify({
+                requestId: input.requestId,
+                timestamp: input.timestamp,
+                provider: input.provider,
+                model: input.model,
+                ...(input.headers ? { headers: input.headers } : {}),
+                body: redactRawCredentialFields(input.sentBody),
+            }, null, 2)}\n`, 'utf8');
+            return null;
+        }
+        catch (error) {
+            return error instanceof Error ? error : new Error(String(error));
+        }
+    }
+    #pathsFor(input) {
+        const dateKey = input.timestamp.slice(0, 10);
+        const dayDir = `${this.#rootDir}/${dateKey}`;
+        const sessionTimePart = timePartForPath(input.sessionStartedAt).replace(/\..*$/, '');
+        const sessionDirName = `${sessionTimePart}_${input.sessionId.substring(0, 5)}`;
+        const sessionDir = `${dayDir}/${sessionDirName}`;
+        const requestTimePart = timePartForPath(input.timestamp);
+        const requestIdShort = safePathSegment(input.requestId).substring(0, 5);
+        const requestFileName = `${input.evaluator ? 'evaluator_' : ''}${requestTimePart}_${requestIdShort}.json`;
+        const requestPath = `${sessionDir}/${requestFileName}`;
+        return { dayDir, sessionDir, requestPath, sessionDirName };
+    }
+    #readDailyIndex(dayDir) {
+        const indexPath = `${dayDir}/index.jsonl`;
+        if (!fs.existsSync(indexPath))
+            return [];
+        const entries = [];
+        for (const line of fs.readFileSync(indexPath, 'utf8').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed)
+                continue;
+            // An unclean shutdown, disk-full write, or crash can leave a partial or
+            // malformed line behind. Recover by scanning and keeping only entries
+            // that parse as objects; the next index rewrite drops the bad lines.
+            const parsed = tryParseJson(trimmed);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                entries.push(parsed);
+            }
+        }
+        return entries;
+    }
+    #writeDailyIndex(dayDir, entries) {
+        fs.mkdirSync(dayDir, { recursive: true });
+        const sorted = [...entries].sort((a, b) => b.lastRequestAt.localeCompare(a.lastRequestAt));
+        fs.writeFileSync(`${dayDir}/index.jsonl`, `${sorted.map((entry) => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
+    }
+    #upsertDailyIndex(dayDir, entry) {
+        const entries = this.#readDailyIndex(dayDir);
+        const index = entries.findIndex((candidate) => candidate.sessionDir === entry.sessionDir);
+        if (index === -1) {
+            entries.push(entry);
+        }
+        else {
+            const current = entries[index];
+            const isNewerRequest = entry.lastRequestAt >= current.lastRequestAt;
+            entries[index] = {
+                ...current,
+                // A request is counted when its sent envelope is created. Completion
+                // is best-effort and may never run for a failed stream, so counting at
+                // completion loses exactly the requests this index is meant to find.
+                requestCount: current.requestCount + entry.requestCount,
+                firstRequestAt: entry.firstRequestAt < current.firstRequestAt ? entry.firstRequestAt : current.firstRequestAt,
+                lastRequestAt: entry.lastRequestAt > current.lastRequestAt ? entry.lastRequestAt : current.lastRequestAt,
+                firstUserMessagePreview: current.firstUserMessagePreview || entry.firstUserMessagePreview,
+                ...(isNewerRequest
+                    ? {
+                        latestProvider: entry.latestProvider,
+                        latestModel: entry.latestModel,
+                        latestMode: entry.latestMode,
+                    }
+                    : {}),
+                providersSeen: [...new Set([...(current.providersSeen ?? []), ...entry.providersSeen])],
+                modelsSeen: [...new Set([...(current.modelsSeen ?? []), ...entry.modelsSeen])],
+                modesSeen: [...new Set([...(current.modesSeen ?? []), ...entry.modesSeen])],
+            };
+        }
+        this.#writeDailyIndex(dayDir, entries);
+    }
+    #touchDailyIndex(dayDir, update) {
+        const entries = this.#readDailyIndex(dayDir);
+        const index = entries.findIndex((candidate) => candidate.sessionDir === update.sessionDir);
+        if (index === -1) {
+            return;
+        }
+        const current = entries[index];
+        const isNewerRequest = update.lastRequestAt >= current.lastRequestAt;
+        entries[index] = {
+            ...current,
+            lastRequestAt: update.lastRequestAt > current.lastRequestAt ? update.lastRequestAt : current.lastRequestAt,
+            ...(isNewerRequest
+                ? {
+                    latestProvider: update.latestProvider,
+                    latestModel: update.latestModel,
+                    latestMode: update.latestMode,
+                }
+                : {}),
+            providersSeen: [...new Set([...(current.providersSeen ?? []), update.latestProvider])],
+            modelsSeen: [...new Set([...(current.modelsSeen ?? []), update.latestModel])],
+            modesSeen: [...new Set([...(current.modesSeen ?? []), update.latestMode])],
+        };
+        this.#writeDailyIndex(dayDir, entries);
+    }
+}
+const extractResponseText = (body) => {
+    if (!body)
+        return undefined;
+    if (typeof body.output_text === 'string') {
+        return body.output_text;
+    }
+    if (typeof body.text === 'string') {
+        return body.text;
+    }
+    const choices = body.choices;
+    if (Array.isArray(choices)) {
+        const firstChoice = asRecord(choices[0]);
+        const message = asRecord(firstChoice?.message);
+        if (typeof message?.content === 'string') {
+            return message.content;
+        }
+        const delta = asRecord(firstChoice?.delta);
+        if (typeof delta?.content === 'string') {
+            return delta.content;
+        }
+        if (typeof firstChoice?.text === 'string') {
+            return firstChoice.text;
+        }
+    }
+    return undefined;
+};
+const extractToolCalls = (body) => {
+    if (!body)
+        return undefined;
+    const choices = body.choices;
+    if (!Array.isArray(choices)) {
+        return undefined;
+    }
+    const firstChoice = asRecord(choices[0]);
+    const message = asRecord(firstChoice?.message);
+    const delta = asRecord(firstChoice?.delta);
+    return message?.tool_calls ?? delta?.tool_calls;
+};
+const stringValue = (value) => (typeof value === 'string' && value ? value : undefined);
+/**
+ * Summarize a websocket response (non-Response payload with output items)
+ * into a ReceivedTrafficSummary with transport: 'websocket'.
+ */
+function summarizeWebsocketResponse(response) {
+    const record = asRecord(response) ?? {};
+    // Some callers pass a normalized provider response that wraps provider-specific
+    // data. Unwrap providerData while keeping the output items for extraction.
+    const providerDataRecord = asRecord(record.providerData);
+    const effectiveRecord = providerDataRecord ? { ...record, ...providerDataRecord } : record;
+    const output = Array.isArray(effectiveRecord.output) ? effectiveRecord.output : [];
+    // Extract text content from assistant message items
+    const messageTexts = [];
+    for (const item of output) {
+        const itemRec = asRecord(item);
+        if (itemRec?.type === 'message' && (itemRec.role === 'assistant' || itemRec.role === undefined)) {
+            const content = itemRec.content;
+            if (Array.isArray(content)) {
+                for (const part of content) {
+                    const partRec = asRecord(part);
+                    if ((partRec?.type === 'output_text' || partRec?.type === 'text') && typeof partRec.text === 'string') {
+                        messageTexts.push(partRec.text);
+                    }
+                }
+            }
+            else if (typeof content === 'string') {
+                messageTexts.push(content);
+            }
+        }
+    }
+    const text = messageTexts.length > 0 ? messageTexts.join('\n') : undefined;
+    // Extract reasoning content from reasoning items
+    const reasoningTexts = [];
+    for (const item of output) {
+        const itemRec = asRecord(item);
+        if (itemRec?.type === 'reasoning') {
+            const reasoningVal = stringValue(itemRec.text) ??
+                stringValue(itemRec.delta) ??
+                stringValue(itemRec.summary) ??
+                stringValue(itemRec.reasoning_content);
+            if (reasoningVal) {
+                reasoningTexts.push(reasoningVal);
+            }
+        }
+    }
+    const reasoning = reasoningTexts.length > 0 ? reasoningTexts.join('\n') : undefined;
+    // Extract tool calls
+    const toolCalls = [];
+    for (const item of output) {
+        const itemRec = asRecord(item);
+        if (itemRec?.type === 'function_call') {
+            const name = stringValue(itemRec.name);
+            const args = stringValue(itemRec.arguments) ?? '{}';
+            toolCalls.push({
+                id: stringValue(itemRec.call_id) ?? stringValue(itemRec.id),
+                type: 'function',
+                function: {
+                    ...(name !== undefined ? { name } : {}),
+                    arguments: args,
+                },
+            });
+        }
+    }
+    const payload = {
+        choices: [
+            {
+                delta: {
+                    ...(text !== undefined ? { content: text } : {}),
+                    ...(reasoning !== undefined ? { reasoning } : {}),
+                    ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+                },
+            },
+        ],
+    };
+    const responseId = stringValue(effectiveRecord.id);
+    if (responseId) {
+        payload.id = responseId;
+    }
+    if (effectiveRecord.usage) {
+        payload.usage = effectiveRecord.usage;
+    }
+    return {
+        transport: 'websocket',
+        status: 200,
+        errorFrames: [],
+        malformedFrames: [],
+        unknownFrames: [],
+        payload,
+        ...(text ? { text } : {}),
+        ...(responseId ? { responseId } : {}),
+    };
+}
+export class ProviderTraffic {
+    loggingService;
+    sessionContextService;
+    store;
+    #artifactStoreFailureReported = false;
+    constructor(loggingService, sessionContextService, store) {
+        this.loggingService = loggingService;
+        this.sessionContextService = sessionContextService;
+        this.store = store;
+    }
+    /**
+     * Runs a diagnostic artifact-store operation, converting any store failure
+     * into exactly one structured warning so the primary provider operation
+     * proceeds unimpeded (Contract 07, C7.1). The warning itself must never
+     * throw back into the caller, so it carries its own residual boundary.
+     */
+    #runArtifactStoreOperation(operation, requestId, run) {
+        try {
+            run();
+        }
+        catch (error) {
+            if (this.#artifactStoreFailureReported)
+                return;
+            this.#artifactStoreFailureReported = true;
+            try {
+                this.loggingService.warn('Provider traffic artifact write failed', {
+                    eventType: 'provider.traffic.artifact_write_failed',
+                    category: 'provider',
+                    phase: 'artifact_write',
+                    operation,
+                    requestId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+            catch {
+                // Residual error boundary: if even the warning cannot be logged, the
+                // primary operation still must not fail.
+            }
+        }
+    }
+    recordRequestStart(input) {
+        const trafficContext = this.sessionContextService.getContext() ?? null;
+        const isEvaluator = trafficContext?.evaluator === true;
+        const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+        const timestamp = new Date().toISOString();
+        const sessionId = trafficContext?.sessionId ?? 'unknown';
+        const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
+        const mode = trafficContext?.mode ?? 'unknown';
+        const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+        const promptCacheKey = input.promptCacheKey ?? trafficContext?.promptCacheKey;
+        const providerHistoryKey = input.providerHistoryKey ?? trafficContext?.providerHistoryKey;
+        const requestFingerprint = buildProviderRequestFingerprint(input.sentBody);
+        // 1. Write the sent request to artifact store directly
+        this.#runArtifactStoreOperation('recordRequestStart', input.requestId, () => {
+            this.store.recordRequestStart({
+                requestId: input.requestId,
+                timestamp,
+                provider: input.provider,
+                model: input.model,
+                modelClass: input.modelClass,
+                modelWrapperClass: input.modelWrapperClass,
+                sessionId,
+                sessionStartedAt,
+                mode,
+                firstUserMessagePreview,
+                promptCacheKey,
+                providerHistoryKey,
+                transportDiagnostics: input.transportDiagnostics,
+                requestFingerprint,
+                sentBody: input.sentBody,
+                headers: input.headers,
+                evaluator: isEvaluator,
+            });
+        });
+        const baseMeta = {
+            requestId: input.requestId,
+            traceId: trafficContext?.traceId ?? this.loggingService.getCorrelationId?.(),
+            sessionId,
+            sessionStartedAt,
+            firstUserMessagePreview,
+            mode,
+            provider: input.provider,
+            model: input.model,
+            modelClass: input.modelClass,
+            modelWrapperClass: input.modelWrapperClass,
+            promptCacheKey,
+            providerHistoryKey,
+            requestFingerprint,
+            transportDiagnostics: input.transportDiagnostics,
+        };
+        // 2. Log request start via logging service for winston
+        this.loggingService.debug(`${input.provider} request start`, {
+            eventType: `${eventPrefix}.request.started`,
+            category: 'provider',
+            phase: 'request_start',
+            direction: 'sent',
+            ...baseMeta,
+            messageCount: Array.isArray(input.sentBody?.messages) ? input.sentBody.messages.length : undefined,
+            messages: input.sentBody?.messages,
+            toolsCount: Array.isArray(input.sentBody?.tools) ? input.sentBody.tools.length : undefined,
+            payload: input.sentBody,
+            headers: input.headers,
+        });
+    }
+    async recordResponseReceived(input) {
+        const trafficContext = this.sessionContextService.getContext() ?? null;
+        const isEvaluator = trafficContext?.evaluator === true;
+        const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+        const timestamp = new Date().toISOString();
+        const sessionId = trafficContext?.sessionId ?? 'unknown';
+        const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
+        const mode = trafficContext?.mode ?? 'unknown';
+        const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+        const promptCacheKey = trafficContext?.promptCacheKey;
+        const providerHistoryKey = trafficContext?.providerHistoryKey;
+        const baseMeta = {
+            requestId: input.requestId,
+            traceId: trafficContext?.traceId ?? this.loggingService.getCorrelationId?.(),
+            sessionId,
+            sessionStartedAt,
+            firstUserMessagePreview,
+            mode,
+            provider: input.provider,
+            model: input.model,
+            modelClass: input.modelClass,
+            modelWrapperClass: input.modelWrapperClass,
+            promptCacheKey,
+            providerHistoryKey,
+            transportDiagnostics: input.transportDiagnostics,
+        };
+        if (input.error) {
+            // 1. Write failure to artifact store
+            this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
+                this.store.recordRequestComplete({
+                    requestId: input.requestId,
+                    timestamp,
+                    provider: input.provider,
+                    model: input.model,
+                    modelClass: input.modelClass,
+                    modelWrapperClass: input.modelWrapperClass,
+                    sessionId,
+                    sessionStartedAt,
+                    mode,
+                    error: input.error,
+                    evaluator: isEvaluator,
+                });
+            });
+            // 2. Log failure to winston. A body read can be interrupted by the same
+            // user cancellation that stopped the provider stream; keep that expected
+            // outcome out of the error channel without dropping the artifact above.
+            const classification = classifyProviderFailure(input.error);
+            const cancelled = isClassifiedCancellation(input.error);
+            const log = cancelled ? this.loggingService.debug : this.loggingService.error;
+            log.call(this.loggingService, cancelled ? `${input.provider} response aborted` : `${input.provider} request failed`, {
+                eventType: cancelled ? 'stream.aborted' : 'provider.response.failed',
+                category: cancelled ? 'stream' : 'provider',
+                phase: cancelled ? 'abort' : 'provider_response',
+                ...baseMeta,
+                error: input.error,
+                errorKind: classification.errorKind,
+            });
+            return;
+        }
+        // Process response
+        let summary;
+        if (input.response instanceof Response) {
+            summary = await summarizeReceivedTraffic(input.response.clone());
+            // Override transport if explicit value was provided
+            if (input.transport) {
+                summary = { ...summary, transport: input.transport };
+            }
+        }
+        else if (input.transport === 'websocket') {
+            summary = summarizeWebsocketResponse(input.response);
+        }
+        else {
+            // It's a WS/JSON response payload, let's summarize it
+            let payload = input.response ?? {};
+            let text;
+            if (payload && typeof payload === 'object' && 'providerData' in payload && payload.providerData) {
+                const modelResponse = payload;
+                if (Array.isArray(modelResponse.output)) {
+                    const firstOutput = modelResponse.output[0];
+                    if (firstOutput?.type === 'message' && Array.isArray(firstOutput.content)) {
+                        const firstContent = firstOutput.content[0];
+                        if (firstContent?.type === 'output_text' && typeof firstContent.text === 'string') {
+                            text = firstContent.text;
+                        }
+                    }
+                }
+                payload = modelResponse.providerData;
+            }
+            else {
+                const summaryPayload = asRecord(payload);
+                const output = summaryPayload?.output;
+                text = Array.isArray(output) && output[0]?.type === 'message' ? output[0]?.content?.[0]?.text : undefined;
+            }
+            summary = {
+                transport: 'json',
+                status: input.status,
+                errorFrames: [],
+                malformedFrames: [],
+                unknownFrames: [],
+                payload: redactEncryptedContent(payload),
+                ...(text ? { text } : {}),
+            };
+        }
+        // The receive timing describes the exchange, not the payload, so it rides
+        // on the summary rather than being folded into any transport's parse.
+        if (input.receiveTiming) {
+            summary = { ...summary, receiveTiming: input.receiveTiming };
+        }
+        if (input.transportDiagnostics) {
+            summary = { ...summary, transportDiagnostics: input.transportDiagnostics };
+        }
+        // 1. Write complete payload to artifact store
+        this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
+            this.store.recordRequestComplete({
+                requestId: input.requestId,
+                timestamp,
+                provider: input.provider,
+                model: input.model,
+                modelClass: input.modelClass,
+                modelWrapperClass: input.modelWrapperClass,
+                sessionId,
+                sessionStartedAt,
+                mode,
+                receivedSummary: summary,
+                evaluator: isEvaluator,
+            });
+        });
+        // 2. Log response received via logging service for winston
+        const summaryPayload = asRecord(summary.payload);
+        const responseText = summaryPayload
+            ? extractResponseText(summaryPayload)
+            : typeof summary.fallbackBody === 'string'
+                ? summary.fallbackBody
+                : undefined;
+        const toolCalls = extractToolCalls(summaryPayload);
+        this.loggingService.debug(`${input.provider} response received`, {
+            eventType: `${eventPrefix}.response.received`,
+            category: 'provider',
+            phase: 'provider_response',
+            direction: 'received',
+            ...baseMeta,
+            status: input.status,
+            text: responseText,
+            toolCalls,
+            payload: summary,
+        });
+    }
+    recordResponseClosed(input) {
+        const trafficContext = this.sessionContextService.getContext() ?? null;
+        const isEvaluator = trafficContext?.evaluator === true;
+        const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+        const timestamp = new Date().toISOString();
+        const sessionId = trafficContext?.sessionId ?? 'unknown';
+        const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
+        const mode = trafficContext?.mode ?? 'unknown';
+        const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+        const summary = {
+            outcome: input.outcome,
+            eventCount: input.eventCount,
+            ...(input.diagnostics ? input.diagnostics : {}),
+            ...(input.transportDiagnostics ? { transportDiagnostics: input.transportDiagnostics } : {}),
+        };
+        this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
+            this.store.recordRequestComplete({
+                requestId: input.requestId,
+                timestamp,
+                provider: input.provider,
+                model: input.model,
+                modelClass: input.modelClass,
+                modelWrapperClass: input.modelWrapperClass,
+                sessionId,
+                sessionStartedAt,
+                mode,
+                receivedSummary: summary,
+                evaluator: isEvaluator,
+            });
+        });
+        // The retained transcript belongs in the traffic artifact, not the app log.
+        const { events: _events, ...logSummary } = summary;
+        const logClosed = input.outcome === 'aborted' || input.outcome === 'failed' ? this.loggingService.warn : this.loggingService.debug;
+        logClosed.call(this.loggingService, `${input.provider} response closed`, {
+            eventType: `${eventPrefix}.response.closed`,
+            category: 'provider',
+            phase: 'provider_response',
+            direction: 'received',
+            requestId: input.requestId,
+            traceId: trafficContext?.traceId ?? this.loggingService.getCorrelationId?.(),
+            sessionId,
+            sessionStartedAt,
+            firstUserMessagePreview,
+            mode,
+            transportDiagnostics: input.transportDiagnostics,
+            provider: input.provider,
+            model: input.model,
+            modelClass: input.modelClass,
+            modelWrapperClass: input.modelWrapperClass,
+            ...logSummary,
+        });
+    }
+    recordRequestFailed(input) {
+        const trafficContext = this.sessionContextService.getContext() ?? null;
+        const isEvaluator = trafficContext?.evaluator === true;
+        const timestamp = new Date().toISOString();
+        const sessionId = trafficContext?.sessionId ?? 'unknown';
+        const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
+        const mode = trafficContext?.mode ?? 'unknown';
+        const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+        const baseMeta = {
+            requestId: input.requestId,
+            traceId: trafficContext?.traceId ?? this.loggingService.getCorrelationId?.(),
+            sessionId,
+            sessionStartedAt,
+            firstUserMessagePreview,
+            mode,
+            provider: input.provider,
+            model: input.model,
+            modelClass: input.modelClass,
+            modelWrapperClass: input.modelWrapperClass,
+        };
+        const classification = classifyProviderFailure(input.error);
+        const errorDetails = {
+            errorKind: classification.errorKind,
+            message: classification.message,
+            retryable: classification.retryable,
+            ...(classification.code ? { code: classification.code } : {}),
+            ...(classification.status !== undefined ? { status: classification.status } : {}),
+            ...(classification.retryAfterMs !== undefined ? { retryAfterMs: classification.retryAfterMs } : {}),
+            ...(input.host ? { host: input.host } : {}),
+            ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+            phase: input.phase ?? 'request',
+            ...(input.physicalAttempt !== undefined ? { physicalAttempt: input.physicalAttempt } : {}),
+        };
+        if (input.wsAttempt !== undefined) {
+            errorDetails.wsAttempt = input.wsAttempt;
+        }
+        if (input.wsMaxAttempts !== undefined) {
+            errorDetails.wsMaxAttempts = input.wsMaxAttempts;
+        }
+        // A transport-liveness timeout is only interpretable next to the budget it
+        // expired on, and the budget is user-configurable.
+        if (input.receiveTiming !== undefined) {
+            errorDetails.receiveTiming = input.receiveTiming;
+        }
+        // Bounded progress evidence (category/counter/timing, no raw frame
+        // payload) from any frames observed before the failure, so a failed
+        // artifact can distinguish a stall from a runaway generation without
+        // retaining the transcript. See docs on ProviderTrafficBoundedStreamDiagnostics.
+        if (input.diagnostics !== undefined) {
+            errorDetails.diagnostics = input.diagnostics;
+        }
+        if (input.transportDiagnostics !== undefined) {
+            errorDetails.transportDiagnostics = input.transportDiagnostics;
+        }
+        // 1. Write failure to artifact store
+        this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
+            this.store.recordRequestComplete({
+                requestId: input.requestId,
+                timestamp,
+                provider: input.provider,
+                model: input.model,
+                modelClass: input.modelClass,
+                modelWrapperClass: input.modelWrapperClass,
+                sessionId,
+                sessionStartedAt,
+                mode,
+                error: errorDetails,
+                evaluator: isEvaluator,
+            });
+        });
+        // 2. Log failure to winston. Cancellation remains a retained provider
+        // artifact, but is an expected stream outcome rather than an error.
+        const cancelled = isClassifiedCancellation(input.error);
+        const log = cancelled ? this.loggingService.debug : this.loggingService.error;
+        log.call(this.loggingService, cancelled ? `${input.provider} request aborted` : `${input.provider} request failed`, {
+            eventType: cancelled ? 'stream.aborted' : 'provider.response.failed',
+            category: cancelled ? 'stream' : 'provider',
+            phase: cancelled ? 'abort' : 'provider_response',
+            ...baseMeta,
+            error: errorDetails.message,
+            errorKind: errorDetails.errorKind,
+            code: errorDetails.code,
+            status: errorDetails.status,
+            retryAfterMs: errorDetails.retryAfterMs,
+            retryable: errorDetails.retryable,
+            host: errorDetails.host,
+            timeoutMs: errorDetails.timeoutMs,
+            physicalAttempt: errorDetails.physicalAttempt,
+            wsAttempt: input.wsAttempt,
+            wsMaxAttempts: input.wsMaxAttempts,
+            diagnostics: input.diagnostics,
+        });
+    }
+}
+//# sourceMappingURL=provider-traffic.js.map

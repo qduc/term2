@@ -1,0 +1,164 @@
+import { SETTING_KEYS } from '../../services/settings/settings-schema.js';
+import { decodeStoredCustomProviderConfigs, normalizeProviderIdentifier, } from '../../services/settings/custom-provider-normalization.js';
+import { getProvider } from '../../providers/registry.js';
+import { readStoredCodexTokens, resolveCodexTokenPath, resolveTerm2CodexAuthPath } from '../../providers/codex-auth.js';
+import { hasGrokLogin } from '../../providers/grok-auth.js';
+const hasConfiguredCredential = (value) => typeof value === 'string' && value.trim().length > 0;
+export const PROVIDER_CREDENTIAL_SETTING_KEYS = {
+    openai: 'agent.openai.apiKey',
+    openrouter: 'agent.openrouter.apiKey',
+};
+export const getProviderCredentialSettingKey = (providerId) => PROVIDER_CREDENTIAL_SETTING_KEYS[providerId];
+export const getProviderIdForCredentialSettingKey = (settingKey) => {
+    if (!settingKey)
+        return undefined;
+    return Object.entries(PROVIDER_CREDENTIAL_SETTING_KEYS).find(([, key]) => key === settingKey)?.[0];
+};
+const CUSTOM_PROVIDER_ENV_KEYS = {
+    anthropic: 'ANTHROPIC_API_KEY',
+    google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    opencode: 'OPENCODE_API_KEY',
+};
+const isConfigured = hasConfiguredCredential;
+const isLoopbackBaseUrl = (baseUrl) => {
+    if (!baseUrl)
+        return false;
+    try {
+        const hostname = new URL(baseUrl).hostname.toLowerCase();
+        return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+    }
+    catch {
+        return false;
+    }
+};
+const getStoredCustomProvider = (settingsService, providerId) => {
+    const raw = settingsService.getDynamic('providers');
+    const normalizedProviderId = normalizeProviderIdentifier(providerId);
+    return decodeStoredCustomProviderConfigs(raw).find((provider) => provider.id === providerId ||
+        provider.name === providerId ||
+        provider.id === normalizedProviderId ||
+        provider.name === normalizedProviderId);
+};
+const resolveCredentialSources = (settingsService, settingKey, storedKey, environmentKey) => {
+    if (settingKey && isConfigured(settingsService.getDynamic(settingKey))) {
+        return { required: true, configured: true, source: 'setting', settingKey, environmentKey };
+    }
+    if (isConfigured(storedKey)) {
+        return { required: true, configured: true, source: 'stored', settingKey, environmentKey };
+    }
+    if (environmentKey && isConfigured(process.env[environmentKey])) {
+        return { required: true, configured: true, source: 'environment', settingKey, environmentKey };
+    }
+    return {
+        required: true,
+        configured: false,
+        source: 'missing',
+        unavailableReason: 'missing-credentials',
+        settingKey,
+        environmentKey,
+    };
+};
+/**
+ * Resolve provider readiness from the same credential sources the provider
+ * runtime consumes. Local loopback custom providers and llama.cpp are
+ * explicitly no-auth; remote custom providers require a stored or type-level
+ * environment credential. Codex uses its local auth file as a presence-only
+ * credential. Unknown registered providers retain their external auth contract
+ * and are not blocked by this API-key predicate.
+ */
+export const resolveProviderCredentials = (settingsService, providerId) => {
+    if (providerId === 'codex') {
+        // term2's own store wins; the codex CLI's file still counts as readiness
+        // because we can import its access token for one grace period.
+        const term2Path = resolveTerm2CodexAuthPath();
+        const credentialPath = readStoredCodexTokens(term2Path) ? term2Path : resolveCodexTokenPath();
+        return {
+            required: true,
+            configured: credentialPath !== null,
+            source: credentialPath ? 'token-file' : 'missing',
+            unavailableReason: credentialPath ? undefined : 'missing-codex-login',
+            credentialPath,
+        };
+    }
+    if (providerId === 'grok') {
+        // Grok authenticates with an OAuth token file this app writes at login, so
+        // presence of that credential is the readiness signal — there is no key to
+        // paste into settings.
+        const configured = hasGrokLogin();
+        return {
+            required: true,
+            configured,
+            source: configured ? 'token-file' : 'missing',
+            unavailableReason: configured ? undefined : 'missing-grok-login',
+        };
+    }
+    const settingKey = getProviderCredentialSettingKey(providerId);
+    if (settingKey) {
+        const environmentKey = providerId === 'openai' ? 'OPENAI_API_KEY' : 'OPENROUTER_API_KEY';
+        return resolveCredentialSources(settingsService, settingKey, undefined, environmentKey);
+    }
+    const custom = getStoredCustomProvider(settingsService, providerId);
+    if (!custom) {
+        const definition = getProvider(providerId);
+        return definition?.isRuntimeDefined
+            ? { required: true, configured: false, source: 'missing', unavailableReason: 'missing-credentials' }
+            : { required: false, configured: true, source: 'external' };
+    }
+    if (custom.type === 'llama.cpp' || isLoopbackBaseUrl(custom.baseUrl)) {
+        return { required: false, configured: true, source: 'local' };
+    }
+    return resolveCredentialSources(settingsService, undefined, custom.apiKey, CUSTOM_PROVIDER_ENV_KEYS[custom.type]);
+};
+/** Resolve the actual credential value for runtime-compatible provider setup. */
+export const resolveProviderCredentialValue = (settingsService, providerId) => {
+    const custom = getStoredCustomProvider(settingsService, providerId);
+    const resolution = resolveProviderCredentials(settingsService, providerId);
+    if (custom?.apiKey && resolution.source === 'local') {
+        return custom.apiKey;
+    }
+    if (resolution.source === 'setting' && resolution.settingKey) {
+        const value = settingsService.getDynamic(resolution.settingKey);
+        return typeof value === 'string' ? value : undefined;
+    }
+    if (resolution.source === 'environment' && resolution.environmentKey) {
+        return process.env[resolution.environmentKey];
+    }
+    if (resolution.source === 'stored') {
+        return custom?.apiKey;
+    }
+    return undefined;
+};
+/**
+ * Check credential presence only. This deliberately does not contact a
+ * provider or validate the credential; invalid credentials fail at request
+ * time where the provider can report the real error.
+ */
+export const hasProviderCredentials = (settingsService, providerId) => {
+    const resolution = resolveProviderCredentials(settingsService, providerId);
+    return !resolution.required || resolution.configured;
+};
+/**
+ * Get provider IDs that are locally runnable according to credential
+ * presence. The name is retained for compatibility with existing callers.
+ */
+export const getAvailableProviderIds = (settingsService, allProviderIds) => {
+    return allProviderIds.filter((id) => hasProviderCredentials(settingsService, id));
+};
+/**
+ * Providers the user disabled (agent.disabledProviders). Disabling is a
+ * picker/catalog visibility choice, not a teardown: the provider stays
+ * configured and can be re-enabled in provider management.
+ */
+export const getDisabledProviderIds = (settingsService) => {
+    const raw = settingsService?.get(SETTING_KEYS.AGENT_DISABLED_PROVIDERS);
+    return new Set(Array.isArray(raw) ? raw.filter((id) => typeof id === 'string') : []);
+};
+export const isProviderDisabled = (settingsService, providerId) => getDisabledProviderIds(settingsService).has(providerId);
+export const setProviderDisabled = (settingsService, providerId, disabled) => {
+    const current = getDisabledProviderIds(settingsService);
+    if (current.has(providerId) === disabled)
+        return;
+    const next = disabled ? [...current, providerId] : [...current].filter((id) => id !== providerId);
+    settingsService?.setPersistent(SETTING_KEYS.AGENT_DISABLED_PROVIDERS, next);
+};
+//# sourceMappingURL=provider-credentials.js.map

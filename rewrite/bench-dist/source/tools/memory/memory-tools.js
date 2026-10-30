@@ -1,0 +1,471 @@
+import { z } from 'zod';
+import { createBaseMessage, getCallIdFromItem, getOutputText, isSuccessOutput, normalizeToolArguments, } from '../format-helpers.js';
+import { InvalidMemoryError, MemoryAlreadyExistsError, MemoryNotFoundError, MemoryStorageError, } from '../../services/memory/memory-store.js';
+import { contentSnippet, queryTerms, rankMemorySearchResults, } from '../../services/memory/memory-search.js';
+import { boundedJsonFailure, fitSerializedEnvelope, fitsSerializedText } from '../../utils/output/bounded-json.js';
+import { resolveToolResultMaxBytes } from '../../utils/output/bound-tool-result.js';
+const scope = z.enum(['global', 'project']).describe('Memory scope to write to.');
+const MIN_TOOL_OUTPUT_CHARS = 512;
+// Matches the default tool-result byte cap (output trim maxCharacters); a larger
+// budget would only produce a bounded-failure envelope for non-scripted calls.
+const MAX_TOOL_OUTPUT_CHARS = 40_000;
+const DEFAULT_INDEX_OUTPUT_CHARS = 12_000;
+const DEFAULT_DOCUMENT_OUTPUT_CHARS = 12_000;
+const DEFAULT_RESULT_LIMIT = 10;
+const MAX_RESULT_LIMIT = 50;
+const maxChars = z.number().int().min(MIN_TOOL_OUTPUT_CHARS).max(MAX_TOOL_OUTPUT_CHARS).optional();
+const resultLimit = z.number().int().min(1).max(MAX_RESULT_LIMIT).optional();
+function normalizeStores(stores) {
+    return 'list' in stores ? { global: stores, project: stores } : stores;
+}
+class MemoryCursorError extends Error {
+}
+class StaleMemoryCursorError extends Error {
+}
+class OutputBudgetExceededError extends Error {
+}
+function metadata(memory) {
+    return {
+        id: memory.id,
+        title: memory.title,
+        summary: memory.summary,
+        tags: memory.tags,
+        createdAt: memory.createdAt,
+        updatedAt: memory.updatedAt,
+        ...(memory.provenance ? { provenance: memory.provenance } : {}),
+        ...('supersededBy' in memory ? { supersededBy: memory.supersededBy } : {}),
+    };
+}
+function output(maxChars, build) {
+    const fitted = fitSerializedEnvelope(build, { maxChars });
+    if (!fitted)
+        throw new OutputBudgetExceededError();
+    return fitted.value;
+}
+function boundedError(code, message, maxChars) {
+    const result = { error: { code, message } };
+    const serialized = JSON.stringify(result);
+    return fitsSerializedText(serialized, { maxChars, maxBytes: resolveToolResultMaxBytes() })
+        ? serialized
+        : boundedJsonFailure({ maxChars, maxBytes: resolveToolResultMaxBytes() });
+}
+const makeFormat = (toolName) => (item, index, calls) => {
+    const callId = getCallIdFromItem(item);
+    const args = normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ??
+        (callId ? normalizeToolArguments(calls.get(callId)) : {}) ??
+        {};
+    const outputText = getOutputText(item);
+    const commandLabel = toolName.replace(/^memory_/, '');
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command: `memory_${commandLabel}: ${String(args.id ?? args.query ?? '')}`,
+            output: outputText,
+            success: isSuccessOutput(outputText),
+            toolName,
+            toolArgs: args,
+        }),
+    ];
+};
+const id = z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .describe('Stable lowercase memory identifier.');
+/**
+ * Scripted-path return contracts. Every memory tool serializes its structured
+ * envelope to a JSON string on every path (the envelope's `charsUsed` field
+ * exists to fit the model-context budget), so a script must JSON.parse a
+ * result before reading its fields. Keyed by tool name; the run_code
+ * registry-completeness test fails when a new memory tool has no entry here.
+ */
+const MEMORY_SCRIPTED_RETURN_SHAPES = {
+    memory_list: 'JSON string (JSON.parse first): { scope: "all", global: { id, title, summary, tags, createdAt, updatedAt }[], project: { id, title, summary, tags, createdAt, updatedAt }[], omitted: { global: number, project: number }, charsUsed: number }',
+    memory_get: 'JSON string (JSON.parse first): { scope, memory: { id, title, summary, content, tags, createdAt, updatedAt, provenance? }, historyCount?, version?, charsUsed }; version 1..historyCount loads a superseded version with supersededBy; oversized content pages carry content: { offset, totalChars, text, nextCursor? } beside memory metadata',
+    memory_search: 'JSON string (JSON.parse first): { results: { scope, memory: { id, title, summary, tags, createdAt, updatedAt }, matchedFields: string[], available: boolean, contentSnippet?: string }[], omitted: number, charsUsed: number }',
+    memory_retrieve: 'JSON string (JSON.parse first): { memories: { scope, memory: { id, title, summary, content, tags, createdAt, updatedAt } }[], unavailableIds: { scope, id }[], omittedIds: { scope, id }[], omittedIdCount: number, unavailableIdCount: number, charsUsed: number }',
+    memory_create: 'JSON string (JSON.parse first): { scope, memory }',
+    memory_update: 'JSON string (JSON.parse first): { scope, memory }; supersede requires a reason and retains the old version with runtime session provenance when available',
+    memory_delete: 'JSON string (JSON.parse first): { scope, deleted: boolean }',
+};
+const fields = {
+    title: z.string().optional(),
+    summary: z.string().optional(),
+    content: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+};
+function safe(operation, maxChars) {
+    return operation()
+        .then((value) => JSON.stringify(value))
+        .catch((error) => error instanceof MemoryNotFoundError
+        ? boundedError('not_found', 'Memory was not found.', maxChars)
+        : error instanceof MemoryAlreadyExistsError
+            ? boundedError('already_exists', 'A memory with this ID already exists.', maxChars)
+            : error instanceof InvalidMemoryError
+                ? boundedError('invalid_memory', error.message || 'Memory input is invalid.', maxChars)
+                : error instanceof MemoryStorageError
+                    ? boundedError('storage_error', 'Memory storage is unavailable or corrupted.', maxChars)
+                    : error instanceof MemoryCursorError
+                        ? boundedError('invalid_cursor', 'The memory cursor is invalid.', maxChars)
+                        : error instanceof StaleMemoryCursorError
+                            ? boundedError('stale_cursor', 'The memory cursor is stale.', maxChars)
+                            : error instanceof OutputBudgetExceededError
+                                ? boundedError('output_budget_exceeded', 'The requested result cannot fit in the output budget.', maxChars)
+                                : boundedError('memory_error', 'Memory operation failed.', maxChars));
+}
+function definition(name, description, parameters, execute, needsApproval = false) {
+    return {
+        name,
+        description,
+        scriptedReturnShape: MEMORY_SCRIPTED_RETURN_SHAPES[name],
+        // Every memory tool serializes its envelope to a JSON string on every path,
+        // success or failure, so the script-visible value is a string and the
+        // envelope above stays guidance rather than a machine-readable contract.
+        scriptedReturnSchema: z.string(),
+        parameters,
+        preserveSerializedOutput: ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'].includes(name),
+        needsApproval: typeof needsApproval === 'function' ? needsApproval : () => needsApproval,
+        execute: (params, context) => safe(() => execute(params, context), params.maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
+        formatCommandMessage: makeFormat(name),
+    };
+}
+export function createMemoryToolDefinitions(input, options) {
+    const stores = normalizeStores(input);
+    const configuredLimits = stores.global.searchLimits?.() ?? {
+        defaultLimit: DEFAULT_RESULT_LIMIT,
+        maxLimit: MAX_RESULT_LIMIT,
+    };
+    const effectiveLimit = (requested) => Math.min(requested ?? configuredLimits.defaultLimit, configuredLimits.maxLimit, MAX_RESULT_LIMIT);
+    const rankedSearch = async (query, limit) => {
+        const options = { limit: Math.min(configuredLimits.maxLimit, MAX_RESULT_LIMIT) };
+        const [global, project] = await Promise.all([
+            stores.global.search(query, options),
+            stores.project.search(query, options),
+        ]);
+        return rankMemorySearchResults([
+            ...global.map((result) => ({ ...result, scope: 'global' })),
+            ...project.map((result) => ({ ...result, scope: 'project' })),
+        ]).slice(0, limit);
+    };
+    return [
+        definition('memory_list', 'List persistent-memory summaries from both the global and project scopes.', z.object({ limit: resultLimit, maxChars }).strict(), async ({ limit, maxChars: requestedMaxChars }) => {
+            const selectedLimit = effectiveLimit(limit);
+            const [globalCandidates, projectCandidates] = await Promise.all([
+                stores.global.list({ limit: selectedLimit }),
+                stores.project.list({ limit: selectedLimit }),
+            ]);
+            const result = {
+                scope: 'all',
+                global: [],
+                project: [],
+                omitted: { global: 0, project: 0 },
+            };
+            const budget = requestedMaxChars ?? DEFAULT_INDEX_OUTPUT_CHARS;
+            // Admit each record against the largest possible final count so later
+            // omissions cannot invalidate an already admitted envelope.
+            const reservedOmitted = { global: globalCandidates.length, project: projectCandidates.length };
+            for (const [entryScope, candidate] of [
+                ...globalCandidates.map((memory) => ['global', memory]),
+                ...projectCandidates.map((memory) => ['project', memory]),
+            ]) {
+                const admitted = fitSerializedEnvelope((charsUsed) => ({
+                    ...result,
+                    [entryScope]: [...result[entryScope], metadata(candidate)],
+                    omitted: reservedOmitted,
+                    charsUsed,
+                }), { maxChars: budget });
+                if (admitted) {
+                    result[entryScope] = admitted.value[entryScope];
+                    continue;
+                }
+                result.omitted[entryScope]++;
+            }
+            return output(budget, (charsUsed) => ({ ...result, charsUsed }));
+        }),
+        definition('memory_get', 'Load a current memory by ID, or inspect a superseded version using version (1-based).', z.object({ id, version: z.number().int().min(1).optional(), cursor: z.string().optional(), maxChars }).strict(), async ({ id, version, cursor, maxChars: requestedMaxChars }) => {
+            const budget = requestedMaxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS;
+            for (const scope of ['global', 'project']) {
+                const current = await stores[scope].get(id);
+                if (!current)
+                    continue;
+                const history = (await stores[scope].history?.(id)) ?? [];
+                const memory = version === undefined ? current : history[version - 1];
+                if (!memory)
+                    throw new InvalidMemoryError('Requested memory version does not exist.');
+                const extra = {
+                    ...(history.length ? { historyCount: history.length } : {}),
+                    ...(version ? { version } : {}),
+                };
+                const offset = cursor ? decodeMemoryCursor(cursor, id, scope, memory, version) : 0;
+                if (cursor)
+                    return memoryPage(scope, memory, offset, budget, extra, version);
+                const complete = fitSerializedEnvelope((charsUsed) => ({ scope, memory, ...extra, charsUsed }), {
+                    maxChars: budget,
+                });
+                if (complete)
+                    return complete.value;
+                return memoryPage(scope, memory, offset, budget, extra, version);
+            }
+            throw new MemoryNotFoundError(id);
+        }),
+        definition('memory_search', 'Search both the global and project memory scopes using deterministic local text matching.', z.object({ query: z.string().refine((value) => /\S/.test(value)), limit: resultLimit, maxChars }).strict(), async ({ query, limit, maxChars: requestedMaxChars }) => {
+            const budget = requestedMaxChars ?? DEFAULT_INDEX_OUTPUT_CHARS;
+            const candidates = await rankedSearch(query, effectiveLimit(limit));
+            const result = { results: [], omitted: 0 };
+            const terms = queryTerms(query);
+            for (const candidate of candidates) {
+                const item = {
+                    scope: candidate.scope,
+                    memory: metadata(candidate.memory),
+                    matchedFields: candidate.matchedFields,
+                    available: candidate.available,
+                    ...(candidate.matchedFields.includes('content') && candidate.content !== undefined
+                        ? { contentSnippet: contentSnippet(candidate.content, terms) }
+                        : {}),
+                };
+                const prospective = fitSerializedEnvelope(
+                // The eventual count is bounded by candidates.length; reserve its
+                // digit width before admitting a result.
+                (charsUsed) => ({ ...result, results: [...result.results, item], omitted: candidates.length, charsUsed }), { maxChars: budget });
+                if (prospective)
+                    result.results = prospective.value.results;
+                else {
+                    const omitted = fitSerializedEnvelope((charsUsed) => ({ ...result, omitted: result.omitted + 1, charsUsed }), {
+                        maxChars: budget,
+                    });
+                    if (!omitted)
+                        throw new OutputBudgetExceededError();
+                    result.omitted++;
+                }
+            }
+            return output(budget, (charsUsed) => ({ ...result, charsUsed }));
+        }),
+        definition('memory_retrieve', 'Search and load relevant memories across both the global and project scopes.', z.object({ query: z.string().refine((value) => /\S/.test(value)), limit: resultLimit, maxChars }).strict(), async ({ query, limit, maxChars: requestedMaxChars }) => {
+            const budget = requestedMaxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS;
+            const candidates = await rankedSearch(query, effectiveLimit(limit));
+            const loaded = [];
+            for (const candidate of candidates) {
+                if (!candidate.available) {
+                    loaded.push({ scope: candidate.scope, id: candidate.memory.id, unavailable: true });
+                    continue;
+                }
+                try {
+                    const memory = await stores[candidate.scope].get(candidate.memory.id);
+                    loaded.push({
+                        scope: candidate.scope,
+                        id: candidate.memory.id,
+                        memory: memory ?? undefined,
+                        unavailable: !memory,
+                    });
+                }
+                catch (error) {
+                    if (!(error instanceof MemoryStorageError) && !(error instanceof MemoryNotFoundError))
+                        throw error;
+                    loaded.push({ scope: candidate.scope, id: candidate.memory.id, unavailable: true });
+                }
+            }
+            const result = {
+                memories: [],
+                unavailableIds: [],
+                omittedIds: [],
+                omittedIdCount: 0,
+                unavailableIdCount: 0,
+            };
+            const unavailable = loaded.filter((entry) => entry.unavailable);
+            const available = loaded.filter((entry) => !entry.unavailable && !!entry.memory);
+            // References and memories are admitted against both terminal count
+            // widths, so neither count can overflow a previously valid result.
+            const reservedCounts = () => ({
+                omittedIdCount: available.length,
+                unavailableIdCount: unavailable.length,
+            });
+            result.unavailableIdCount = unavailable.length;
+            for (const candidate of unavailable) {
+                const reference = { scope: candidate.scope, id: candidate.id };
+                const prospective = fitSerializedEnvelope((charsUsed) => ({
+                    ...result,
+                    ...reservedCounts(),
+                    unavailableIds: [...result.unavailableIds, reference],
+                    charsUsed,
+                }), { maxChars: budget });
+                if (prospective)
+                    result.unavailableIds = prospective.value.unavailableIds;
+            }
+            for (const candidate of available) {
+                const memory = { scope: candidate.scope, memory: candidate.memory };
+                const prospective = fitSerializedEnvelope((charsUsed) => ({ ...result, ...reservedCounts(), memories: [...result.memories, memory], charsUsed }), { maxChars: budget });
+                if (prospective) {
+                    result.memories = prospective.value.memories;
+                    continue;
+                }
+                result.omittedIdCount++;
+                const reference = { scope: candidate.scope, id: candidate.id };
+                const omission = fitSerializedEnvelope((charsUsed) => ({
+                    ...result,
+                    ...reservedCounts(),
+                    omittedIds: [...result.omittedIds, reference],
+                    charsUsed,
+                }), { maxChars: budget });
+                if (omission)
+                    result.omittedIds = omission.value.omittedIds;
+            }
+            return output(budget, (charsUsed) => ({ ...result, charsUsed }));
+        }),
+        definition('memory_create', 'Save durable information to the selected global or project memory scope.', z.object({
+            scope,
+            id,
+            title: z.string(),
+            summary: z.string(),
+            content: z.string(),
+            tags: z.array(z.string()).optional(),
+        }), async ({ scope, ...params }) => {
+            const memory = await stores[scope].create(params);
+            return { scope, memory };
+        }),
+        definition('memory_update', 'Update a memory in the selected scope. For a factual correction, provide supersede with a short reason; this retains the prior version for memory_get and records the runtime session ID when available.', z
+            .object({
+            scope,
+            id,
+            ...fields,
+            supersede: z
+                .object({ reason: z.string().trim().min(1) })
+                .strict()
+                .optional(),
+        })
+            .refine(({ id: _, scope: __, supersede: ___, ...input }) => Object.values(input).some((value) => value !== undefined), {
+            message: 'At least one field must be provided for a memory update.',
+        }), async ({ scope, id, ...input }, context) => {
+            const runContext = context && typeof context === 'object' ? context.context : undefined;
+            const sessionId = runContext && typeof runContext === 'object' ? runContext.sessionId : undefined;
+            const memory = await stores[scope].update(id, input, {
+                sessionId: typeof sessionId === 'string' && sessionId.trim() ? sessionId : undefined,
+            });
+            return { scope, memory };
+        }, () => {
+            const mode = options?.settingsService?.get('shell.autoApproveMode');
+            return mode !== 'auto' && mode !== 'always';
+        }),
+        definition('memory_delete', 'Delete a memory from the selected global or project scope.', z.object({ scope, id }), async ({ scope, id }) => {
+            const deleted = await stores[scope].remove(id);
+            return { scope, deleted };
+        }, () => {
+            const mode = options?.settingsService?.get('shell.autoApproveMode');
+            return mode !== 'auto' && mode !== 'always';
+        }),
+    ];
+}
+function decodeMemoryCursor(cursor, id, scope, memory, version) {
+    if (!/^[A-Za-z0-9_-]+$/.test(cursor))
+        throw new MemoryCursorError();
+    let decoded;
+    let value;
+    try {
+        decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+        if (Buffer.from(decoded, 'utf8').toString('base64url') !== cursor)
+            throw new Error();
+        value = JSON.parse(decoded);
+    }
+    catch {
+        throw new MemoryCursorError();
+    }
+    const parsed = value;
+    if (!parsed ||
+        parsed.v !== 1 ||
+        parsed.scope !== scope ||
+        parsed.id !== id ||
+        !isUtcTimestamp(parsed.updatedAt) ||
+        typeof parsed.nextOffset !== 'number' ||
+        !Number.isSafeInteger(parsed.nextOffset) ||
+        parsed.nextOffset < 0 ||
+        Object.keys(parsed).join(',') !==
+            (version === undefined ? 'v,scope,id,updatedAt,nextOffset' : 'v,scope,id,updatedAt,nextOffset,version') ||
+        parsed.version !== version ||
+        JSON.stringify(parsed) !== decoded)
+        throw new MemoryCursorError();
+    const validated = parsed;
+    if (validated.updatedAt !== memory.updatedAt)
+        throw new StaleMemoryCursorError();
+    if ((memory.content.length === 0 && validated.nextOffset !== 0) ||
+        (memory.content.length > 0 && validated.nextOffset >= memory.content.length))
+        throw new MemoryCursorError();
+    if (validated.nextOffset > 0 &&
+        validated.nextOffset < memory.content.length &&
+        isHighSurrogate(memory.content.charCodeAt(validated.nextOffset - 1)) &&
+        isLowSurrogate(memory.content.charCodeAt(validated.nextOffset)))
+        throw new MemoryCursorError();
+    return validated.nextOffset;
+}
+function memoryPage(scope, memory, offset, maxChars, extra = {}, version) {
+    const totalChars = memory.content.length;
+    const page = (end) => {
+        const text = safePageSlice(memory.content, offset, end);
+        if (!text && totalChars > offset)
+            return null;
+        const nextOffset = offset + text.length;
+        const content = {
+            offset,
+            totalChars,
+            text,
+            ...(nextOffset < totalChars
+                ? {
+                    nextCursor: encodeMemoryCursor({
+                        v: 1,
+                        scope,
+                        id: memory.id,
+                        updatedAt: memory.updatedAt,
+                        nextOffset,
+                        ...(version ? { version } : {}),
+                    }),
+                }
+                : {}),
+        };
+        return fitSerializedEnvelope((charsUsed) => ({ scope, memory: metadata(memory), content, ...extra, charsUsed }), {
+            maxChars,
+        });
+    };
+    if (totalChars === 0) {
+        const empty = page(0);
+        if (empty)
+            return empty.value;
+        throw new OutputBudgetExceededError();
+    }
+    let lower = offset + 1;
+    let upper = totalChars;
+    let best = null;
+    while (lower <= upper) {
+        const middle = Math.floor((lower + upper) / 2);
+        const candidate = page(middle);
+        if (candidate) {
+            best = candidate;
+            lower = middle + 1;
+        }
+        else {
+            upper = middle - 1;
+        }
+    }
+    if (!best || !best.value.content.text)
+        throw new OutputBudgetExceededError();
+    return best.value;
+}
+function safePageSlice(content, start, end) {
+    let safeEnd = end;
+    if (safeEnd > start &&
+        safeEnd < content.length &&
+        isHighSurrogate(content.charCodeAt(safeEnd - 1)) &&
+        isLowSurrogate(content.charCodeAt(safeEnd)))
+        safeEnd--;
+    return content.slice(start, safeEnd);
+}
+function encodeMemoryCursor(cursor) {
+    return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+function isUtcTimestamp(value) {
+    return (typeof value === 'string' &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+        !Number.isNaN(Date.parse(value)));
+}
+function isHighSurrogate(value) {
+    return value >= 0xd800 && value <= 0xdbff;
+}
+function isLowSurrogate(value) {
+    return value >= 0xdc00 && value <= 0xdfff;
+}
+//# sourceMappingURL=memory-tools.js.map

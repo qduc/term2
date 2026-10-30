@@ -1,0 +1,279 @@
+import { scoreSubsequence } from './subsequence-filter.js';
+import { getSettingMetadata, isSecretSetting, isStringSetting, isNumberSetting, isBooleanSetting, } from '../services/settings/settings-ui-metadata.js';
+import { fetchDecisionModels, isDecisionModelKey } from '../services/models/decision-model-listing.js';
+export { isSecretSetting, isStringSetting, isNumberSetting };
+const MAX_RESULTS = 10;
+export const AUTO_APPROVE_MODE_DESCRIPTIONS = {
+    off: 'Show approval prompts for tool calls; in-workspace apply-patch edits remain automatic.',
+    advisory: 'Use an LLM to assess shell-command risk, but do not auto-approve based on that assessment; in-workspace apply-patch edits remain automatic.',
+    auto: 'Auto-approve explicitly or implicitly authorized shell commands rated low or medium risk with high confidence by the LLM; in-workspace apply-patch edits remain automatic.',
+    always: 'Bypass tool approval prompts; ask_user still pauses for your answer. In-workspace apply-patch edits are automatic in every mode.',
+};
+// Curated suggestions for settings where the schema alone can't express them:
+// - Temperature have opinionated presets, not enum values.
+// - Some enum/boolean fields carry custom descriptions that enrich the UX.
+const VALUE_SUGGESTIONS_BY_KEY = {
+    'logging.logLevel': [{ value: 'debug' }, { value: 'info' }, { value: 'warn' }, { value: 'error' }],
+    'agent.useFlexServiceTier': [
+        { value: 'true', description: 'Enable Flex Service Tier (lower cost)' },
+        { value: 'false', description: 'Use standard service tier' },
+    ],
+    // Fallback while the live decisions-catalog fetch (see
+    // fetchLiveSettingValueSuggestions) is in flight or fails.
+    'agent.decisionModel': [
+        { value: '~typesafe/jev-latest', description: 'OpenRouter Jev (tracks latest)' },
+        { value: 'typesafe/jev-1.13', description: 'OpenRouter Jev 1.13 (pinned)' },
+    ],
+    'agent.temperature': [
+        { value: '0', description: 'Deterministic' },
+        { value: '0.2' },
+        { value: '0.7' },
+        { value: '1' },
+        { value: '1.2' },
+        { value: '2', description: 'Most random' },
+    ],
+    'shell.timeout': [
+        { value: '60000', description: '1m' },
+        { value: '120000', description: '2m' },
+        { value: '300000', description: '5m' },
+    ],
+    'shell.backgroundTimeout': [
+        { value: '600000', description: '10m' },
+        { value: '1800000', description: '30m (default)' },
+        { value: '3600000', description: '1h' },
+    ],
+    'shell.maxOutputLines': [{ value: '200' }, { value: '500' }, { value: '1000' }],
+    'shell.maxOutputChars': [{ value: '20000' }, { value: '50000' }, { value: '100000' }],
+    'ui.historySize': [{ value: '50' }, { value: '100' }, { value: '200' }],
+    'ui.displayMode': [
+        { value: 'standard', description: 'Standard output (full details)' },
+        { value: 'concise', description: 'Concise output (no reasoning, one-line tool calls)' },
+    ],
+    'ui.theme': [
+        { value: 'auto', description: 'Follow the terminal background (default)' },
+        { value: 'dark', description: 'For dark terminals' },
+        { value: 'light', description: 'For light terminals' },
+        { value: 'high-contrast', description: 'Maximum contrast on a dark terminal' },
+        { value: 'mono', description: 'No colour (also used for NO_COLOR)' },
+    ],
+    'ui.skin': [
+        { value: 'classic', description: 'The original layout (default)' },
+        { value: 'rail', description: 'Quiet and typographic: one-line tools, a thin rail, no boxes' },
+        { value: 'cards', description: 'Bordered cards for messages and tool calls, pill status bar' },
+        { value: 'ledger', description: 'Dense: a tool table, gauges, header and footer bars' },
+        { value: 'zen', description: 'Conversation first: tool calls collapsed, minimal status' },
+    ],
+    'agent.maxTurns': [{ value: '10' }, { value: '20' }, { value: '50' }],
+    'agent.runBudget.maxUsdMicros': [
+        { value: '$1' },
+        { value: '$5', description: 'default' },
+        { value: '$10' },
+        { value: '$25' },
+    ],
+    'agent.runBudget.maxUnpricedTokens': [
+        { value: '100000', description: '100k tokens' },
+        { value: '500000', description: '500k tokens (default)' },
+        { value: '1000000', description: '1m tokens' },
+    ],
+    'agent.runBudget.maxActiveTimeMs': [
+        { value: '1800000', description: '30m' },
+        { value: '3600000', description: '1h (default)' },
+        { value: '7200000', description: '2h' },
+    ],
+    'agent.runBudget.warningHeadroomUsdMicros': [
+        { value: '$0.50' },
+        { value: '$1', description: 'default' },
+        { value: '$2' },
+    ],
+    'agent.runBudget.warningHeadroomUnpricedTokens': [
+        { value: '50000', description: '50k tokens' },
+        { value: '100000', description: '100k tokens (default)' },
+        { value: '200000', description: '200k tokens' },
+    ],
+    'agent.runBudget.warningHeadroomActiveTimeMs': [
+        { value: '300000', description: '5m' },
+        { value: '900000', description: '15m (default)' },
+        { value: '1800000', description: '30m' },
+    ],
+    'agent.runBudget.softHeadroomUsdMicros': [
+        { value: '$0.10' },
+        { value: '$0.25', description: 'default' },
+        { value: '$0.50' },
+    ],
+    'agent.runBudget.softHeadroomUnpricedTokens': [
+        { value: '10000', description: '10k tokens' },
+        { value: '25000', description: '25k tokens (default)' },
+        { value: '50000', description: '50k tokens' },
+    ],
+    'agent.runBudget.softHeadroomActiveTimeMs': [
+        { value: '120000', description: '2m' },
+        { value: '300000', description: '5m (default)' },
+        { value: '600000', description: '10m' },
+    ],
+    'agent.runBudget.turnBackstop': [{ value: '100' }, { value: '150', description: 'default' }, { value: '200' }],
+    'agent.runBudget.extensionPercent': [
+        { value: '25', description: 'quarter budget' },
+        { value: '50', description: 'half budget (default)' },
+        { value: '100', description: 'full budget' },
+    ],
+    'agent.runBudget.maxParentExtensions': [{ value: '1' }, { value: '2', description: 'default' }, { value: '3' }],
+    'agent.runBudget.escalation': [
+        { value: 'warn', description: 'status-bar warning only (default)' },
+        { value: 'contain', description: 'pause only when the budget is exhausted' },
+        { value: 'pause', description: 'hold the run for a human decision' },
+        { value: 'disabled', description: 'disable budget warnings and pauses' },
+    ],
+    'agent.runBudget.identicalToolCallThreshold': [
+        { value: '2' },
+        { value: '3', description: 'default' },
+        { value: '5' },
+    ],
+    'agent.retryAttempts': [{ value: '1' }, { value: '2' }, { value: '3' }],
+    'agent.transport': [
+        { value: 'websocket', description: 'WebSocket transport with response chaining' },
+        { value: 'http', description: 'HTTP transport with full-history requests' },
+    ],
+    'ssh.port': [{ value: '22', description: 'Default SSH port' }],
+    'shell.autoApproveMode': [
+        { value: 'off', description: AUTO_APPROVE_MODE_DESCRIPTIONS.off },
+        { value: 'advisory', description: AUTO_APPROVE_MODE_DESCRIPTIONS.advisory },
+        { value: 'auto', description: AUTO_APPROVE_MODE_DESCRIPTIONS.auto },
+        { value: 'always', description: AUTO_APPROVE_MODE_DESCRIPTIONS.always },
+    ],
+    'sandbox.readPolicy': [
+        {
+            value: 'standard',
+            description: 'Sandboxed commands can read anywhere except known credential paths (~/.ssh, ~/.aws, ~/.kube, etc.)',
+        },
+        {
+            value: 'strict',
+            description: 'Sandboxed commands can only read the workspace, temp dir, and system tooling paths (cannot read home dir, /etc, /var)',
+        },
+    ],
+    'webSearch.provider': [
+        { value: 'tavily', description: 'Tavily Search API' },
+        { value: 'exa', description: 'Exa (formerly Metaphor) Search API' },
+        { value: 'firecrawl', description: 'Firecrawl web search API' },
+        { value: 'searxng', description: 'Self-hosted SearXNG metasearch' },
+    ],
+    'app.searchViaShell': [
+        { value: 'auto', description: 'Default; currently identical to off (built-in search tools)' },
+        { value: 'on', description: 'Always use shell commands (ripgrep/find) for search' },
+        { value: 'off', description: 'Always use built-in search tools' },
+    ],
+};
+/**
+ * Auto-generate value suggestions by introspecting the Zod schema metadata for a setting.
+ *
+ * - `z.enum([...])` → one suggestion per enum value
+ * - `z.boolean()` → true/false
+ * - Other types → empty array (no auto-suggestion)
+ */
+function autoSuggestFromSchema(key) {
+    const meta = getSettingMetadata(key);
+    if (!meta)
+        return [];
+    if (meta.type === 'enum' && meta.enumOptions) {
+        return meta.enumOptions.map((value) => ({ value }));
+    }
+    if (meta.type === 'boolean') {
+        return [{ value: 'true' }, { value: 'false' }];
+    }
+    return [];
+}
+/**
+ * Build value suggestions for a setting key.
+ *
+ * Returns curated hardcoded suggestions when available, otherwise falls back to
+ * auto-generated suggestions derived from the Zod schema (enum values, boolean).
+ */
+export function buildSettingValueSuggestions(key) {
+    if (key === 'agent.reasoningEffort') {
+        return [
+            { value: 'none', description: 'No reasoning tokens' },
+            { value: 'minimal', description: 'Use the least reasoning effort' },
+            { value: 'low', description: 'Use low reasoning effort' },
+            { value: 'medium', description: 'Use medium reasoning effort' },
+            { value: 'high', description: 'Use high reasoning effort' },
+            { value: 'xhigh', description: 'Use extra-high reasoning effort' },
+            { value: 'default', description: 'Use the model default' },
+        ];
+    }
+    // If we have curated suggestions, use them (they may include descriptions,
+    // custom ordering, or non-schema data like known provider list).
+    if (VALUE_SUGGESTIONS_BY_KEY[key]) {
+        return VALUE_SUGGESTIONS_BY_KEY[key];
+    }
+    // Otherwise derive from schema: enum values → suggestions, boolean → true/false.
+    return autoSuggestFromSchema(key);
+}
+/**
+ * Live suggestion source for settings whose values come from a remote
+ * catalog. Returns null when the key has no live source or the fetch fails;
+ * callers keep the curated/sync suggestions in that case.
+ */
+export async function fetchLiveSettingValueSuggestions(key, opts) {
+    if (!isDecisionModelKey(key))
+        return null;
+    const models = await fetchDecisionModels(opts?.fetchImpl ? { fetchImpl: opts.fetchImpl } : undefined);
+    if (models === null)
+        return null;
+    return models.map((m) => ({ value: m.id, ...(m.name ? { description: m.name } : {}) }));
+}
+/**
+ * Merge live suggestions over the sync/curated list: live entries win on
+ * duplicate values and lead the list; an empty or failed live fetch (null)
+ * leaves the curated list untouched.
+ */
+export function mergeSettingValueSuggestions(curated, live) {
+    if (!live || live.length === 0)
+        return curated;
+    const curatedOnly = curated.filter((c) => !live.some((l) => l.value === c.value));
+    return [...live, ...curatedOnly];
+}
+export function filterSettingValueSuggestionsByQuery(suggestions, query, maxResults = MAX_RESULTS, key) {
+    const trimmed = query.trim();
+    if (!trimmed) {
+        return suggestions.slice(0, maxResults);
+    }
+    const scoredResults = suggestions
+        .map((item) => {
+        // Booleans are shown as ON/OFF, so "on"/"off" must find them too.
+        const booleanAlias = key && isBooleanSetting(key) ? (item.value === 'true' ? 'on' : item.value === 'false' ? 'off' : '') : '';
+        const valueScore = Math.max(scoreSubsequence(trimmed, item.value), booleanAlias ? scoreSubsequence(trimmed, booleanAlias) : -Infinity);
+        const descriptionScore = item.description ? scoreSubsequence(trimmed, item.description) : -Infinity;
+        // Reward value match more than description match
+        const weightedValue = valueScore === -Infinity ? -Infinity : valueScore * 2;
+        const weightedDescription = descriptionScore === -Infinity ? -Infinity : descriptionScore;
+        const score = Math.max(weightedValue, weightedDescription);
+        return { item, score };
+    })
+        .filter(({ score }) => score !== -Infinity)
+        .sort((a, b) => b.score - a.score);
+    const results = scoredResults.map((r) => r.item);
+    // For number settings, if the query itself is a valid number and not already
+    // in the results as an exact match, add it as a "Custom value" option.
+    if (key && isNumberSetting(key) && trimmed && !results.some((r) => r.value === trimmed)) {
+        const numValue = Number(trimmed);
+        if (!isNaN(numValue)) {
+            // Add to the START of results so it's the default choice
+            // when typing a custom value.
+            results.unshift({
+                value: trimmed,
+                description: 'Custom value',
+            });
+        }
+    }
+    // For string settings, typed text that matches no suggestion is a custom
+    // value. This holds whether or not the key has curated suggestions: Enter
+    // applies the typed text for any string setting, so the row must exist (and
+    // the list must never look like a dead end) even when curated values exist.
+    if (key && isStringSetting(key) && trimmed && !results.some((r) => r.value === trimmed)) {
+        results.unshift({
+            value: trimmed,
+            description: 'Custom value',
+        });
+    }
+    return results.slice(0, maxResults);
+}
+//# sourceMappingURL=value-suggestions.js.map

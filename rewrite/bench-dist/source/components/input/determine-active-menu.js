@@ -1,0 +1,94 @@
+import { MODEL_SETTING_TRIGGERS } from '../../utils/ai/model-settings.js';
+import { isKnownSettingKey } from '../../services/settings/settings-ui-metadata.js';
+import { findPathTrigger } from './triggers.js';
+const hasCompletion = (completion) => completion !== undefined;
+const getCommandCompletions = (commands = []) => commands.map((command) => command.completion).filter(hasCompletion);
+export const determineActiveMenu = (value, cursorOffset, commands = []) => {
+    const commandCompletions = getCommandCompletions(commands);
+    // Priority 0: model selection. Settings-backed model keys stay in model-settings;
+    // command-backed model triggers are declared on slash commands. The two
+    // loops preserve the original combined-array iteration order (settings-
+    // backed triggers win ties) while tagging which graph the match belongs to.
+    const commandModelTriggers = commandCompletions
+        .filter((completion) => completion.type === 'model')
+        .map((completion) => completion.trigger);
+    for (const trigger of MODEL_SETTING_TRIGGERS) {
+        if (value.startsWith(trigger) && cursorOffset >= trigger.length) {
+            return { type: 'model', startIndex: trigger.length, origin: 'settings-backed' };
+        }
+    }
+    for (const trigger of commandModelTriggers) {
+        if (value.startsWith(trigger) && cursorOffset >= trigger.length) {
+            return { type: 'model', startIndex: trigger.length, origin: 'direct-trigger' };
+        }
+    }
+    // Priority 1: settings (reset variant first because it's a prefix-extension),
+    // then static setting-value command triggers.
+    for (const completion of commandCompletions) {
+        if (completion.type !== 'settings')
+            continue;
+        if (value.startsWith(completion.resetTrigger)) {
+            if (cursorOffset >= completion.resetTrigger.length) {
+                return { type: 'settings', startIndex: completion.resetTrigger.length };
+            }
+            continue;
+        }
+        if (value.startsWith(completion.trigger)) {
+            const end = Math.min(cursorOffset, value.length);
+            const afterPrefix = value.slice(completion.trigger.length, end);
+            // `/settings <key> <value>` only when the first word is a real setting
+            // key. Otherwise the space belongs to a multi-word search ("log level"),
+            // which must keep filtering the list instead of editing a key named "log".
+            const keyAndSpaceMatch = afterPrefix.match(/^(\S+)\s+/);
+            if (keyAndSpaceMatch && isKnownSettingKey(keyAndSpaceMatch[1] ?? '')) {
+                const key = keyAndSpaceMatch[1] ?? '';
+                const startIndex = completion.trigger.length + (keyAndSpaceMatch[0]?.length ?? 0);
+                return { type: 'settings_value', key, startIndex, origin: 'settings-list' };
+            }
+            if (cursorOffset >= completion.trigger.length) {
+                return { type: 'settings', startIndex: completion.trigger.length };
+            }
+        }
+    }
+    for (const completion of commandCompletions) {
+        if (completion.type !== 'setting-value')
+            continue;
+        if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
+            return {
+                type: 'settings_value',
+                key: completion.settingKey,
+                startIndex: completion.trigger.length,
+                origin: 'direct-trigger',
+            };
+        }
+    }
+    // Priority 2: skills, resume, and profile selection (after settings triggers, before slash).
+    for (const completion of commandCompletions) {
+        if (completion.type === 'skills') {
+            if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
+                return { type: 'skills', startIndex: completion.trigger.length };
+            }
+        }
+        else if (completion.type === 'resume') {
+            if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
+                return { type: 'resume', startIndex: completion.trigger.length };
+            }
+        }
+        else if (completion.type === 'profile') {
+            if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
+                return { type: 'profile', startIndex: completion.trigger.length };
+            }
+        }
+    }
+    // Priority 3: slash command (only when no space typed yet and cursor has moved past '/').
+    if (value.startsWith('/') && !value.slice(1).includes(' ') && cursorOffset > 0) {
+        return { type: 'slash' };
+    }
+    // Priority 4: @path completion.
+    const pathTrigger = findPathTrigger(value, cursorOffset);
+    if (pathTrigger) {
+        return { type: 'path', trigger: pathTrigger };
+    }
+    return { type: 'none' };
+};
+//# sourceMappingURL=determine-active-menu.js.map

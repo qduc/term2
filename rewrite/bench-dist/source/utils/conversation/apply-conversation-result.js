@@ -1,0 +1,116 @@
+/**
+ * Pure helper that applies a {@link ConversationTerminal} result to a messages
+ * list. Extracted from `use-conversation.ts` so it can be unit tested.
+ *
+ * The non-trivial branch handles text duplication. The streaming event handler
+ * pushes a `status: 'streaming'` bot message into the UI as `text_delta`
+ * events arrive. The terminal result also carries `finalText`, which is the
+ * authoritative accumulated output. When the streaming tail never crosses a
+ * safe markdown boundary, the live bot message remains in the list with its
+ * streamed text; appending a second finalized message with the same text
+ * would render the assistant's reply twice (once bold/streaming, once again
+ * with the raw markdown asterisks intact, see the reproduction in the
+ * "duplicate bot text" test). We finalize the streaming message in place
+ * instead.
+ *
+ * The function never mutates the input `prev` array. It returns a fresh array
+ * (possibly equal to `prev` when nothing changed) so the caller can rely on
+ * React's referential equality to skip re-renders.
+ */
+import { mergeCommandMessages } from './message-utils.js';
+export const isStreamingBotMessageId = (streamingState, messages) => {
+    if (streamingState.currentBotMessageId === null) {
+        return null;
+    }
+    const id = streamingState.currentBotMessageId;
+    return messages.some((m) => m.id === id && m.sender === 'bot') ? id : null;
+};
+const finalizeStreamingBotMessage = (messages, botMessageId, finalText) => {
+    const index = messages.findIndex((m) => m.id === botMessageId);
+    if (index === -1) {
+        return messages;
+    }
+    const current = messages[index];
+    if (current.sender !== 'bot') {
+        return messages;
+    }
+    const next = messages.slice();
+    const updated = { ...current, status: 'finalized', text: finalText };
+    next[index] = updated;
+    return next;
+};
+const appendFinalizedBotMessage = (messages, finalText, createMessageId) => {
+    const botMessage = {
+        id: createMessageId(),
+        sender: 'bot',
+        status: 'finalized',
+        text: finalText,
+    };
+    return [...messages, botMessage];
+};
+/**
+ * Pure function: given the previous messages and a terminal response result,
+ * compute the next messages list. When a live streaming bot message exists it
+ * is finalized in place; otherwise the final text is appended as a new
+ * finalized message (sync provider path).
+ *
+ * The caller is responsible for clearing the streaming state's bookkeeping
+ * (e.g. `currentBotMessageId`) when `finalizedStreamingMessage` is true.
+ */
+export const computeNextMessages = ({ prev, result, streamingState, createMessageId, trimMessages, annotateCommandMessage, }) => {
+    if (result.type !== 'response') {
+        return { next: prev, finalizedStreamingMessage: false };
+    }
+    const annotatedCommands = result.commandMessages.map(annotateCommandMessage);
+    const merged = mergeCommandMessages(prev, annotatedCommands);
+    const finalText = result.finalText;
+    if (!finalText || !finalText.trim()) {
+        // An empty finalText must not orphan a live streaming message: a message
+        // still in status 'streaming' after the terminal settle blocks static
+        // commit for the rest of the session. Promote it in place with the text
+        // already rendered so the list is settled either way.
+        const liveBotMessageId = isStreamingBotMessageId(streamingState, merged);
+        if (liveBotMessageId !== null) {
+            const live = merged.find((message) => message.id === liveBotMessageId);
+            const liveText = live?.sender === 'bot' ? live.text : '';
+            return {
+                next: trimMessages(finalizeStreamingBotMessage(merged, liveBotMessageId, liveText)),
+                finalizedStreamingMessage: true,
+            };
+        }
+        return { next: trimMessages(merged), finalizedStreamingMessage: false };
+    }
+    const liveBotMessageId = isStreamingBotMessageId(streamingState, merged);
+    if (liveBotMessageId !== null) {
+        // The streaming message represents only the un-flushed tail of the
+        // streamed output. Earlier text that crossed a safe boundary was already
+        // promoted to a finalized message, so the tail should be the slice of
+        // `finalText` from `flushedTextLength` onward, not the full text.
+        const tailText = finalText.slice(streamingState.flushedTextLength);
+        const finalized = finalizeStreamingBotMessage(merged, liveBotMessageId, tailText);
+        return { next: trimMessages(finalized), finalizedStreamingMessage: true };
+    }
+    // No live streaming message exists. `textWasFlushed` is the streaming event
+    // handler's boundary-detection flag; when true, some earlier text was
+    // already promoted to a finalized message, so `finalText` is the tail that
+    // is already represented in the live stream and must not be appended again.
+    if (streamingState.textWasFlushed) {
+        return { next: trimMessages(merged), finalizedStreamingMessage: false };
+    }
+    return {
+        next: trimMessages(appendFinalizedBotMessage(merged, finalText, createMessageId)),
+        finalizedStreamingMessage: false,
+    };
+};
+/**
+ * Clears the streaming state bookkeeping once a live bot message has been
+ * promoted to finalized by {@link computeNextMessages}. Idempotent; safe to
+ * call when no live message exists.
+ */
+export const clearStreamingBotMessage = (streamingState) => {
+    streamingState.currentBotMessageId = null;
+    streamingState.accumulatedText = '';
+    streamingState.flushedTextLength = 0;
+    streamingState.textWasFlushed = true;
+};
+//# sourceMappingURL=apply-conversation-result.js.map

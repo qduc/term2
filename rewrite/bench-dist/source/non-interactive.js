@@ -1,0 +1,715 @@
+import { getProfileMetadata } from './services/profiles/active-profile.js';
+import { createConversationRuntime } from './services/conversation/conversation-runtime-factory.js';
+import { SessionContextService } from './services/session/session-context-service.js';
+import { createCallerOwnedSessionClientFactory, } from './services/session/session-client-factory.js';
+import { randomUUID } from 'node:crypto';
+import { NonInteractiveApprovalPolicy } from './services/approval/non-interactive-approval-policy.js';
+import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
+import { primeActiveProfileNoticeIfActive } from './services/mode-notices.js';
+import { formatBackgroundSubagentNotifications } from './services/conversation/conversation-orchestrator.js';
+import { mcpMemberName } from './tools/system/run-code/mcp-script-surface.js';
+import { createConversationLogWriter } from './services/logging/conversation-log-writer.js';
+import { getConversationsDir } from './services/conversation/conversation-persistence.js';
+import { formatGoalClosedByCheck } from './services/conversation/durable-goal.js';
+import { GOAL_CHECK_UNRESOLVED_CAUSE, GOAL_CHECK_UNRESOLVED_NOTICE, } from './services/conversation/durable-goal-stop-check.js';
+const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 60 * 60 * 1000;
+const MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
+let nonInteractivePersistenceFactory = null;
+/** Install a process-local C2 proof composition; legacy CLI callers never install this. */
+export function installNonInteractivePersistenceFactory(factory) {
+    if (nonInteractivePersistenceFactory)
+        throw new Error('A non-interactive persistence factory is already installed.');
+    nonInteractivePersistenceFactory = factory;
+    return () => {
+        if (nonInteractivePersistenceFactory === factory)
+            nonInteractivePersistenceFactory = null;
+    };
+}
+export const createNonInteractiveSessionId = () => `non-interactive-${randomUUID()}`;
+const normalizeBackgroundWaitTimeout = (value) => {
+    if (value === undefined)
+        return DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS;
+    if (!Number.isFinite(value))
+        return DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS;
+    return Math.min(MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS, Math.max(1, Math.floor(value)));
+};
+const safePreview = (value, maxLen = 500) => {
+    try {
+        if (typeof value === 'string') {
+            return value.length > maxLen ? value.slice(0, maxLen) + '…' : value;
+        }
+        const json = JSON.stringify(value);
+        if (!json) {
+            return '';
+        }
+        return json.length > maxLen ? json.slice(0, maxLen) + '…' : json;
+    }
+    catch {
+        return '';
+    }
+};
+const formatToolSummary = (toolName, args) => {
+    if (!args || typeof args !== 'object') {
+        return `[tool] ${toolName}`;
+    }
+    const obj = args;
+    if (toolName === 'shell' || toolName === 'bash') {
+        if (typeof obj.command === 'string') {
+            return `[tool] ${toolName}: ${safePreview(obj.command, 80)}`;
+        }
+    }
+    if (toolName === 'read_file' ||
+        toolName === 'create_file' ||
+        toolName === 'write_to_file' ||
+        toolName === 'replace_file_content' ||
+        toolName === 'search_replace' ||
+        toolName === 'apply_patch') {
+        const file = obj.TargetFile || obj.targetFile || obj.path || obj.filePath || obj.file;
+        if (typeof file === 'string') {
+            return `[tool] ${toolName}: ${file}`;
+        }
+    }
+    if (toolName === 'grep_search' || toolName === 'search_web') {
+        const q = obj.Query || obj.query;
+        if (typeof q === 'string') {
+            return `[tool] ${toolName}: ${safePreview(q, 60)}`;
+        }
+    }
+    if (toolName === 'find_by_name' || toolName === 'list_dir') {
+        const dirOrPattern = obj.Pattern || obj.DirectoryPath || obj.path || obj.SearchPath;
+        if (typeof dirOrPattern === 'string') {
+            return `[tool] ${toolName}: ${dirOrPattern}`;
+        }
+    }
+    const firstStr = Object.values(obj).find((v) => typeof v === 'string');
+    if (firstStr) {
+        return `[tool] ${toolName}: ${safePreview(firstStr, 60)}`;
+    }
+    return `[tool] ${toolName}`;
+};
+const formatEventForStderr = (event, quiet = false) => {
+    if (event.type === 'error') {
+        return `error ${event.message}\n`;
+    }
+    if (quiet) {
+        return null;
+    }
+    switch (event.type) {
+        case 'memory_injected':
+            return `[memory] Loaded ${event.memories.length}: ${event.memories
+                .map(({ scope, id, title }) => `${scope}/${id} (${title})`)
+                .join(', ')}\n`;
+        case 'tool_started':
+            return `${formatToolSummary(event.toolName, event.arguments)}\n`;
+        case 'subagent_tool_started':
+            return `[subagent: ${event.role}] ${formatToolSummary(event.toolName, event.arguments).replace(/^\[tool\]\s*/, '')}\n`;
+        case 'command_message':
+            return null;
+        case 'approval_required':
+            return `[approval required] ${event.approval.toolName}\n`;
+        case 'retry':
+            if (event.retryType === 'flex_service_tier') {
+                return `[retry] service_tier: ${event.errorMessage}\n`;
+            }
+            return `[retry] ${event.toolName} (${event.attempt}/${event.maxRetries}): ${event.errorMessage}\n`;
+        case 'subagent_retry':
+            return `[subagent ${event.agentId} retry] ${event.toolName} (${event.attempt}/${event.maxRetries}): ${event.errorMessage}\n`;
+        default:
+            return null;
+    }
+};
+export async function runWithSession(session, config) {
+    const stdout = config.stdout ?? process.stdout;
+    const stderr = config.stderr ?? process.stderr;
+    const sessionContextService = config.sessionContextService ?? new SessionContextService();
+    const approvalPolicy = new NonInteractiveApprovalPolicy({
+        settingsService: config.settingsService,
+        agentClient: config.agentClient,
+        logger: config.logger,
+        sessionContextService,
+        mcpAllowlist: config.mcpAllowlist,
+        isMcpTool: config.mcpToolSource
+            ? (name) => config
+                .mcpToolSource.snapshot()
+                .some((server) => server.tools.some((tool) => `${server.name}__${tool.name}` === name))
+            : undefined,
+        isMcpAllowed: config.mcpToolSource
+            ? (name, allowlist) => allowlist.some((entry) => {
+                const parts = entry.split('/');
+                if (parts.length !== 2 || !parts[0] || !parts[1])
+                    return false;
+                return config
+                    .mcpToolSource.snapshot()
+                    .some((server) => server.tools.some((tool) => mcpMemberName(server.name, tool.name) === name &&
+                    server.name === parts[0] &&
+                    (parts[1] === '*' || tool.name === parts[1])));
+            })
+            : undefined,
+    });
+    let streamedTextLength = 0;
+    const onEvent = (event) => {
+        if (config.json) {
+            stdout.write(JSON.stringify(event) + '\n');
+            return;
+        }
+        if (event.type === 'text_delta') {
+            streamedTextLength += event.delta.length;
+            stdout.write(event.delta);
+            return;
+        }
+        if (event.type === 'reasoning_delta') {
+            if (config.showReasoning) {
+                stderr.write(event.delta);
+            }
+            return;
+        }
+        if (event.type === 'final') {
+            // Some completion paths (e.g. tool-only turns, or providers that don't
+            // stream token deltas) deliver the response text solely via `finalText`
+            // rather than `text_delta`. Write whatever wasn't already streamed so
+            // the response isn't silently dropped.
+            if (event.finalText && event.finalText.length > streamedTextLength) {
+                stdout.write(event.finalText.slice(streamedTextLength));
+            }
+            if (event.terminalCause === GOAL_CHECK_UNRESOLVED_CAUSE)
+                stderr.write(`${GOAL_CHECK_UNRESOLVED_NOTICE}\n`);
+            return;
+        }
+        const line = formatEventForStderr(event, config.quiet);
+        if (line) {
+            stderr.write(line);
+        }
+    };
+    const activeProfileId = config.settingsService?.get('app.activeProfileId') ?? 'builtin:standard';
+    const profileMetadata = getProfileMetadata(activeProfileId);
+    if (config.json)
+        stdout.write(JSON.stringify({ type: 'session_start', ...profileMetadata }) + '\n');
+    config.logger?.info('Headless session started', { eventType: 'session.start', ...profileMetadata });
+    const backgroundWork = config.backgroundWork;
+    const backgroundWaitTimeoutMs = normalizeBackgroundWaitTimeout(config.backgroundWaitTimeoutMs ?? config.settingsService?.get('agent.backgroundWaitTimeoutMs'));
+    let receivedSignal = null;
+    let backgroundCancellationRequested = false;
+    let wakeBackgroundWaiter = null;
+    const cancelBackgroundWork = () => {
+        config.abort?.();
+        if (backgroundWork && !backgroundCancellationRequested) {
+            backgroundCancellationRequested = true;
+            backgroundWork.cancel();
+        }
+    };
+    const onSignal = (signal) => {
+        if (receivedSignal)
+            return;
+        receivedSignal = signal;
+        cancelBackgroundWork();
+        wakeBackgroundWaiter?.();
+    };
+    const onSigint = () => onSignal('SIGINT');
+    const onSigterm = () => onSignal('SIGTERM');
+    if (backgroundWork) {
+        process.once('SIGINT', onSigint);
+        process.once('SIGTERM', onSigterm);
+        backgroundWork.notifications.setObserver?.(() => wakeBackgroundWaiter?.());
+    }
+    const reportBackgroundFailure = (code, outstanding) => {
+        const signal = receivedSignal ?? undefined;
+        const message = signal
+            ? 'Background work interrupted by ' + signal + '; unfinished work was cancelled.'
+            : 'Background work did not finish within ' + backgroundWaitTimeoutMs + 'ms; unfinished work was cancelled.';
+        const payload = {
+            type: 'error',
+            code,
+            error: message,
+            ...(signal ? { signal } : {}),
+            outstanding,
+            pendingNotifications: backgroundWork?.notifications.pendingCount ?? 0,
+        };
+        config.logger?.warn('Non-interactive background work did not finish', {
+            eventType: code,
+            category: 'subagent',
+            ...payload,
+        });
+        if (config.json) {
+            stdout.write(JSON.stringify(payload) + '\n');
+        }
+        else {
+            const details = outstanding
+                .map((work) => work.kind + ' ' + (work.name ?? work.task ?? work.id) + ' [' + work.id + '] (' + work.status + ')')
+                .join(', ');
+            stderr.write('error ' + message + ' Outstanding: ' + (details || 'none') + '\n');
+        }
+        return 1;
+    };
+    try {
+        const supportsPersistentEventSink = typeof session.setEventSink === 'function';
+        if (supportsPersistentEventSink) {
+            session.setEventSink(onEvent);
+        }
+        const sendTurn = async (input, suppressUserMessageDisplay = false) => {
+            streamedTextLength = 0;
+            return supportsPersistentEventSink
+                ? await session.sendMessage(input, suppressUserMessageDisplay ? { suppressUserMessageDisplay } : undefined)
+                : await session.sendMessage(input, { onEvent, suppressUserMessageDisplay });
+        };
+        const sendTurnAndResolveApprovals = async (input, suppressUserMessageDisplay = false) => {
+            let result = await sendTurn(input, suppressUserMessageDisplay);
+            while (result?.type === 'approval_required') {
+                // Every run-budget check-in parks, whatever escalation raised it
+                // ('pause' or 'contain'): --auto-approve approves tools, never budget.
+                if (result.approval.checkIn === 'run_budget') {
+                    const diagnostic = {
+                        type: 'run_budget_paused',
+                        code: 'run_budget_paused',
+                        sessionId: config.recoverySessionId,
+                        evidence: result.approval.runBudgetEvent,
+                        recovery: `Work and completed results are retained. Resume ${config.recoverySessionId ? 'with --resume ' + config.recoverySessionId : 'this session'} interactively to review the budget before continuing; --auto-approve only approves tools.`,
+                    };
+                    if (config.json)
+                        stdout.write(JSON.stringify(diagnostic) + '\n');
+                    else
+                        stderr.write(diagnostic.recovery + '\n');
+                    return result;
+                }
+                const decision = await approvalPolicy.decide({
+                    autoApprove: config.autoApprove,
+                    approval: result.approval,
+                    getHistory: () => config.getApprovalHistory?.() ?? session.exportState?.().history ?? [],
+                });
+                const rejectionReason = decision.answer === 'n' ? decision.rejectionReason : undefined;
+                if (decision.answer === 'n' && decision.reportRejection) {
+                    if (config.json) {
+                        stdout.write(JSON.stringify({ type: 'approval_rejected', reason: rejectionReason }) + '\n');
+                    }
+                    else {
+                        stderr.write('Approval Rejected: ' + rejectionReason + '\n');
+                    }
+                }
+                result = supportsPersistentEventSink
+                    ? await session.handleApprovalDecision(decision.answer, rejectionReason)
+                    : await session.handleApprovalDecision(decision.answer, rejectionReason, { onEvent });
+                if (result === null) {
+                    if (config.json) {
+                        stdout.write(JSON.stringify({
+                            type: 'error',
+                            error: 'No pending approval context (unexpected in non-interactive mode).',
+                        }) + '\n');
+                    }
+                    else {
+                        stderr.write('error No pending approval context (unexpected in non-interactive mode).\n');
+                    }
+                    return null;
+                }
+            }
+            return result;
+        };
+        let result = await sendTurnAndResolveApprovals(config.prompt);
+        if (result === null)
+            return 1;
+        if (result.type === 'approval_required' && result.approval.checkIn === 'run_budget')
+            return 2;
+        if (result?.type === 'response') {
+            if (result.terminalCause === 'completion_verification_blocked' ||
+                result.terminalCause === GOAL_CHECK_UNRESOLVED_CAUSE)
+                return 2;
+            if (backgroundWork) {
+                const deadline = Date.now() + backgroundWaitTimeoutMs;
+                while (true) {
+                    if (receivedSignal) {
+                        const outstanding = backgroundWork.getOutstanding();
+                        cancelBackgroundWork();
+                        return reportBackgroundFailure('background_work_interrupted', outstanding);
+                    }
+                    const outstanding = backgroundWork.getOutstanding();
+                    if (backgroundWork.notifications.pendingCount > 0) {
+                        const notifications = backgroundWork.notifications.drain();
+                        if (notifications.length > 0) {
+                            const remainingForTurn = deadline - Date.now();
+                            if (remainingForTurn <= 0) {
+                                cancelBackgroundWork();
+                                return reportBackgroundFailure('background_work_timeout', outstanding);
+                            }
+                            let timeoutHandle;
+                            const notificationResult = await Promise.race([
+                                sendTurnAndResolveApprovals(formatBackgroundSubagentNotifications(notifications), true).then((value) => ({ timedOut: false, value })),
+                                new Promise((resolve) => {
+                                    timeoutHandle = setTimeout(() => resolve({ timedOut: true }), remainingForTurn);
+                                }),
+                            ]);
+                            if (timeoutHandle)
+                                clearTimeout(timeoutHandle);
+                            if (notificationResult.timedOut) {
+                                cancelBackgroundWork();
+                                return reportBackgroundFailure('background_work_timeout', backgroundWork.getOutstanding());
+                            }
+                            result = notificationResult.value;
+                            if (result === null)
+                                return 1;
+                            if (result.type === 'approval_required' && result.approval.checkIn === 'run_budget')
+                                return 2;
+                            if (result?.type !== 'response') {
+                                if (config.json) {
+                                    stdout.write(JSON.stringify({ type: 'error', error: 'Unexpected conversation result.' }) + '\n');
+                                }
+                                else {
+                                    stderr.write('error Unexpected conversation result.\n');
+                                }
+                                return 1;
+                            }
+                            if (result.terminalCause === 'completion_verification_blocked' ||
+                                result.terminalCause === GOAL_CHECK_UNRESOLVED_CAUSE)
+                                return 2;
+                            continue;
+                        }
+                    }
+                    if (outstanding.length === 0)
+                        break;
+                    const remainingMs = deadline - Date.now();
+                    if (remainingMs <= 0) {
+                        cancelBackgroundWork();
+                        return reportBackgroundFailure('background_work_timeout', outstanding);
+                    }
+                    const woke = await new Promise((resolve) => {
+                        let settled = false;
+                        const timer = setTimeout(() => {
+                            if (settled)
+                                return;
+                            settled = true;
+                            wakeBackgroundWaiter = null;
+                            resolve('deadline');
+                        }, remainingMs);
+                        wakeBackgroundWaiter = () => {
+                            if (settled)
+                                return;
+                            settled = true;
+                            clearTimeout(timer);
+                            wakeBackgroundWaiter = null;
+                            resolve('woke');
+                        };
+                    });
+                    if (woke === 'deadline') {
+                        const stillOutstanding = backgroundWork.getOutstanding();
+                        cancelBackgroundWork();
+                        return reportBackgroundFailure('background_work_timeout', stillOutstanding);
+                    }
+                }
+            }
+            if (config.json) {
+                stdout.write(JSON.stringify({ type: 'completed', finalText: result.finalText }) + '\n');
+            }
+            else {
+                stdout.write('\n');
+            }
+            return 0;
+        }
+        if (config.json) {
+            stdout.write(JSON.stringify({ type: 'error', error: 'Unexpected conversation result.' }) + '\n');
+        }
+        else {
+            stderr.write('error Unexpected conversation result.\n');
+        }
+        return 1;
+    }
+    catch (error) {
+        if (receivedSignal && backgroundWork) {
+            return reportBackgroundFailure('background_work_interrupted', backgroundWork.getOutstanding());
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
+        const recoverable = code === 'request_input_limit' || code === 'context_compaction_hard_fit' || code === 'provider_context_overflow';
+        const recovery = recoverable && config.recoverySessionId
+            ? `Work is retained. Resume with --resume ${config.recoverySessionId} after reviewing the context limit.`
+            : undefined;
+        if (config.json) {
+            stdout.write(JSON.stringify({
+                type: recoverable ? 'context_paused' : 'error',
+                error: message,
+                code,
+                ...(recoverable ? { sessionId: config.recoverySessionId, recovery } : {}),
+            }) + '\n');
+        }
+        else {
+            stderr.write(`error ${message}${recovery ? '\n' + recovery : ''}\n`);
+        }
+        return recoverable ? 2 : 1;
+    }
+    finally {
+        if (backgroundWork) {
+            backgroundWork.notifications.setObserver?.(null);
+            process.removeListener('SIGINT', onSigint);
+            process.removeListener('SIGTERM', onSigterm);
+        }
+        if (typeof session.setEventSink === 'function') {
+            session.setEventSink(null);
+        }
+    }
+}
+export async function runNonInteractive(config) {
+    const sessionContextService = config.sessionContextService ?? new SessionContextService();
+    if (!config.sessionClientFactory && !config.agentClient) {
+        throw new Error('runNonInteractive requires an agentClient or sessionClientFactory');
+    }
+    if (!config.sessionClientFactory && !config.toolOwnership) {
+        throw new Error('runNonInteractive requires toolOwnership with an agentClient');
+    }
+    // Non-blocking sweep of dead-PID and stale temp artifacts from prior sessions.
+    void pruneStaleTempArtifacts().catch(() => { });
+    const clientFactory = config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient, config.toolOwnership);
+    const sessionId = config.resumedConversation?.id ?? createNonInteractiveSessionId();
+    const clientHandle = clientFactory.create(sessionId, { allowBackgroundShell: false, allowAskUser: false });
+    const removeBackgroundShellInterceptor = clientHandle.agentClient.addToolInterceptor(async (name, params) => {
+        if (name === 'shell' &&
+            params !== null &&
+            typeof params === 'object' &&
+            !Array.isArray(params) &&
+            params.background === true) {
+            return 'Error: Background shell execution is unavailable in non-interactive mode.';
+        }
+        // run_subagent expresses the supported background capability through its
+        // execution parameter. It is deliberately allowed here; runWithSession
+        // owns the wait/notification lifecycle instead of rejecting the launch.
+        if (name === 'run_subagent') {
+            const execution = params !== null && typeof params === 'object' && !Array.isArray(params)
+                ? params.execution
+                : undefined;
+            if (execution === 'background')
+                return null;
+            // Foreground is also governed by the tool schema/capability; neither
+            // parameterized execution mode is rejected by this lifecycle guard.
+            return null;
+        }
+        // This is the legacy standalone async tool name, not the parameterized
+        // run_subagent capability above, and remains unavailable headlessly.
+        if (name === 'run_subagent_async') {
+            return 'Error: Asynchronous subagent execution is unavailable in non-interactive mode. Use synchronous run_subagent instead.';
+        }
+        if (name === 'ask_user') {
+            return 'Error: ask_user is unavailable in non-interactive mode.';
+        }
+        return null;
+    });
+    let runtime;
+    let persistence;
+    let logWriter;
+    let fatal = false;
+    let runFailure;
+    try {
+        const createdRuntime = createConversationRuntime({
+            sessionId,
+            sessionStartedAt: config.resumedConversation?.createdAt,
+            enableNestedApproval: false,
+            agentClient: clientHandle.agentClient,
+            toolOwnership: clientHandle.toolOwnership,
+            deps: {
+                logger: config.logger,
+                settingsService: config.settingsService,
+                sessionContextService,
+            },
+            hookLifecycle: config.hookLifecycle ?? clientHandle.hookLifecycle,
+            hookEvents: config.hookEvents ?? clientHandle.hookEvents,
+            ...(nonInteractivePersistenceFactory
+                ? {
+                    awaitLogBoundary: async (event) => {
+                        await persistence?.eventBoundary(event);
+                    },
+                }
+                : {}),
+        });
+        runtime = createdRuntime.runtime;
+        if (config.resumedConversation) {
+            const restored = config.resumedConversation;
+            const selection = config.settingsService.get('agent.modelSelection');
+            runtime.state.importState({
+                history: restored.history,
+                previousResponseId: (!restored.provider || restored.provider === selection.provider) &&
+                    (!restored.model || restored.model === selection.model)
+                    ? restored.previousResponseId
+                    : null,
+                toolLedger: restored.toolLedger,
+                updatedAt: restored.updatedAt,
+            });
+            for (const warning of restored.replayWarnings) {
+                (config.stderr ?? process.stderr).write(`Conversation replay: ${warning}\n`);
+            }
+        }
+        {
+            const metadata = {
+                projectPath: process.cwd(),
+                ...getProfileMetadata(config.settingsService.get('app.activeProfileId')),
+                model: config.settingsService.get('agent.modelSelection').model,
+                provider: config.settingsService.get('agent.modelSelection').provider,
+                ...(config.settingsService.get('agent.reasoningEffort')
+                    ? { reasoningEffort: config.settingsService.get('agent.reasoningEffort') }
+                    : {}),
+                ...(config.resumedConversation?.forkedFrom ? { forkedFrom: config.resumedConversation.forkedFrom } : {}),
+                ...(config.resumedConversation?.rolloverFrom ? { rolloverFrom: config.resumedConversation.rolloverFrom } : {}),
+            };
+            if (nonInteractivePersistenceFactory) {
+                persistence = await nonInteractivePersistenceFactory({
+                    sessionId,
+                    resumedConversation: config.resumedConversation,
+                    metadata: { ...metadata, createdAt: createdRuntime.runtime.sessionStartedAt },
+                    settingsService: config.settingsService,
+                    logger: config.logger,
+                    runtime: createdRuntime.runtime,
+                    adapter: createdRuntime.adapter,
+                });
+                createdRuntime.runtime.logs.setLogSink((event) => persistence.capture(event));
+                if (config.initialGoal) {
+                    persistence.capture({ type: 'goal_changed', version: 1, goal: config.initialGoal });
+                    await persistence.flush();
+                    config.onGoalPersisted?.(config.initialGoal);
+                }
+            }
+            else {
+                logWriter = createConversationLogWriter({
+                    sessionId,
+                    dir: getConversationsDir(),
+                    logger: config.logger,
+                });
+                logWriter.init({
+                    id: sessionId,
+                    createdAt: createdRuntime.runtime.sessionStartedAt,
+                    ...metadata,
+                });
+                if (config.initialGoal) {
+                    logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });
+                    config.onGoalPersisted?.(config.initialGoal);
+                }
+                createdRuntime.runtime.logs.setLogSink((event) => logWriter.append(event));
+            }
+            if (config.goalAchievedSlot) {
+                // Same write as the launch goal above: append, then publish to prompt readers.
+                const goalStderr = config.stderr ?? process.stderr;
+                config.goalAchievedSlot.handler = (goal) => {
+                    try {
+                        if (persistence)
+                            persistence.capture({ type: 'goal_changed', version: 1, goal, source: 'goal_check' });
+                        else
+                            logWriter.append({ type: 'goal_changed', version: 1, goal, source: 'goal_check' });
+                    }
+                    catch (error) {
+                        goalStderr.write(`Goal update failed: ${error instanceof Error ? error.message : String(error)}\n`);
+                        throw error;
+                    }
+                    config.onGoalPersisted?.(goal);
+                    goalStderr.write(`${formatGoalClosedByCheck(goal)}\n`);
+                };
+            }
+            // Headless turns have no UI message writer. Commit the accepted request
+            // before dispatch so a context/budget pause can actually be resumed.
+            if (persistence) {
+                await persistence.admit({ prompt: config.prompt, userMessageId: randomUUID() });
+            }
+            else {
+                logWriter.append({ type: 'user_message', message: { id: randomUUID(), sender: 'user', text: config.prompt } });
+            }
+        }
+        if (config.settingsService) {
+            primeActiveProfileNoticeIfActive(config.settingsService, (text) => {
+                createdRuntime.runtime.state.queueModeNotice(text);
+            });
+        }
+        if (config.hookLifecycle && clientHandle.hookEvents) {
+            await config.hookLifecycle.emit(clientHandle.hookEvents.create('session.start', {
+                cwd: process.cwd(),
+                mode: 'non-interactive',
+                providerName: clientHandle.agentClient.getProvider?.() ?? config.settingsService.get('agent.modelSelection').provider,
+                modelName: config.settingsService.get('agent.modelSelection').model,
+            }));
+        }
+        let firstSend = true;
+        const session = persistence
+            ? {
+                sendMessage: async (input, options) => {
+                    persistence.assertHealthy();
+                    if (firstSend)
+                        firstSend = false;
+                    else
+                        await persistence.admit({
+                            prompt: typeof input === 'string' ? input : input.text,
+                            userMessageId: randomUUID(),
+                        });
+                    const result = await createdRuntime.adapter.sendMessage(input, options);
+                    persistence.assertHealthy();
+                    return result;
+                },
+                handleApprovalDecision: async (answer, rejectionReason, options) => {
+                    persistence.assertHealthy();
+                    await persistence.beforeDecision({ answer, rejectionReason, approvalAnswer: options?.approvalAnswer });
+                    const result = await createdRuntime.adapter.handleApprovalDecision(answer, rejectionReason, options);
+                    persistence.assertHealthy();
+                    return result;
+                },
+                setEventSink: (sink) => createdRuntime.adapter.setEventSink(sink),
+                exportState: () => createdRuntime.runtime.state.exportState(),
+            }
+            : createdRuntime.adapter;
+        return await runWithSession(session, {
+            ...config,
+            recoverySessionId: sessionId,
+            agentClient: clientHandle.agentClient,
+            sessionContextService,
+            getApprovalHistory: () => createdRuntime.runtime.state.exportState().history,
+            abort: () => clientHandle.agentClient.abort(),
+            backgroundWork: {
+                notifications: createdRuntime.runtime.backgroundSubagentNotifications,
+                getOutstanding: () => createdRuntime.runtime.backgroundTaskControl
+                    .listDetails()
+                    .filter((details) => details.status === 'running' || details.status === 'cancelling')
+                    .map((details) => details.kind === 'subagent'
+                    ? {
+                        id: details.id,
+                        kind: details.kind,
+                        status: details.status,
+                        ...(details.name === undefined ? {} : { name: details.name }),
+                        role: details.role,
+                        task: details.task,
+                    }
+                    : { id: details.id, kind: details.kind, status: details.status }),
+                cancel: () => {
+                    clientHandle.agentClient.cancelBackgroundRuns?.();
+                    clientHandle.agentClient.cancelBackgroundShellJobs?.();
+                },
+            },
+        });
+    }
+    catch (error) {
+        fatal = true;
+        runFailure = error;
+        throw error;
+    }
+    finally {
+        removeBackgroundShellInterceptor();
+        if (config.hookLifecycle && clientHandle.hookEvents) {
+            await config.hookLifecycle.emit(clientHandle.hookEvents.create('session.end', {
+                reason: fatal ? 'fatal_error' : 'normal',
+                sessionDuration: runtime ? Math.max(0, Date.now() - Date.parse(runtime.sessionStartedAt)) : 0,
+            }));
+        }
+        await runtime?.shutdown();
+        if (config.goalAchievedSlot)
+            config.goalAchievedSlot.handler = undefined;
+        runtime?.logs.setLogSink(null);
+        if (persistence) {
+            try {
+                persistence.assertHealthy();
+                await persistence.flush();
+            }
+            catch (error) {
+                if (runFailure === undefined) {
+                    fatal = true;
+                    runFailure = error;
+                }
+            }
+            finally {
+                await persistence.dispose();
+            }
+        }
+        else
+            await logWriter?.close();
+        clientHandle.dispose();
+    }
+    if (runFailure !== undefined)
+        throw runFailure;
+}
+//# sourceMappingURL=non-interactive.js.map

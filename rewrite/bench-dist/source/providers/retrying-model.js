@@ -1,0 +1,153 @@
+import { describeError, isAbortLikeError } from '../utils/error-helpers.js';
+import { isNetworkProtocolError, isTerminatedError, isTransientRetryableError, } from '../services/retry/retry-error-classification.js';
+import { classifyUpstreamRetryableError, computeUpstreamRetryDelayMs, } from '../services/retry/upstream-retry-policy.js';
+import { RetryRecoveryBudgetExhaustedError, } from '../services/retry/retry-recovery-budget.js';
+/** Watches a signal and rejects with an AbortError when it fires. */
+function abortError() {
+    return Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
+}
+/**
+ * Resolves when `sleep` settles, or rejects with an AbortError the moment
+ * `signal` fires. Lets a user interrupt a turn even while it sits in retry
+ * backoff, instead of waiting out the remainder of the delay.
+ */
+async function sleepOrAbort(sleep, delayMs, signal) {
+    if (signal?.aborted)
+        throw abortError();
+    if (!signal) {
+        await sleep(delayMs);
+        return;
+    }
+    await new Promise((resolve, reject) => {
+        const onAbort = () => reject(abortError());
+        signal.addEventListener('abort', onAbort, { once: true });
+        sleep(delayMs).then(() => {
+            signal.removeEventListener('abort', onAbort);
+            resolve();
+        }, (error) => {
+            signal.removeEventListener('abort', onAbort);
+            reject(error);
+        });
+    });
+}
+/** Decorates one application-owned streamed turn with pre-event retries. */
+export class RetryingModel {
+    model;
+    options;
+    #sleep;
+    #random;
+    constructor(model, options) {
+        this.model = model;
+        this.options = options;
+        this.#sleep =
+            options.sleep ??
+                ((delayMs) => new Promise((resolve) => {
+                    setTimeout(resolve, delayMs);
+                }));
+        this.#random = options.random ?? Math.random;
+    }
+    get wrappedModel() {
+        return this.model;
+    }
+    resetConversationState(options) {
+        this.model.resetConversationState?.(options);
+    }
+    /** Rebind the request-scoped retry observer when a cached provider is reused. */
+    setRetryCallback(callback) {
+        this.options.onRetry = callback;
+    }
+    async *stream(request) {
+        let lastError;
+        for (let attempt = 0;; attempt++) {
+            let committed = false;
+            try {
+                // The first dispatch is ordinary turn/tool-loop work. The recovery
+                // envelope accounts only for a provider retry after a failed dispatch;
+                // session-level fresh replays claim their dispatch at the recovery
+                // boundary before entering this wrapper.
+                if (attempt > 0 && request.recoveryBudget && !request.recoveryBudget.claimPhysicalAttempt()) {
+                    throw new RetryRecoveryBudgetExhaustedError(lastError);
+                }
+                for await (const event of this.model.stream(request)) {
+                    if (event.type !== 'reasoning_started') {
+                        committed = true;
+                    }
+                    yield event;
+                }
+                return;
+            }
+            catch (error) {
+                if (committed || isAbortLikeError(error) || !this.#canRetry(error, attempt)) {
+                    this.#logExhaustion(error, attempt);
+                    throw error;
+                }
+                lastError = error;
+                const budget = request.recoveryBudget;
+                budget?.noteRetryableFailure();
+                const retryAttempt = attempt + 1;
+                await this.#backoff(request.signal, error, retryAttempt, budget);
+                if (request.signal?.aborted)
+                    throw abortError();
+            }
+        }
+    }
+    async close() {
+        await this.model.close?.();
+    }
+    compactHistory(request) {
+        if (!this.model.compactHistory) {
+            return Promise.reject(new Error('Underlying model does not support compactHistory'));
+        }
+        return this.model.compactHistory(request);
+    }
+    #canRetry(error, attempt) {
+        return attempt < this.options.retryAttempts && this.#isRetryable(error);
+    }
+    async #backoff(signal, error, attemptNumber, budget) {
+        const upstream = classifyUpstreamRetryableError(error);
+        const delayMs = computeUpstreamRetryDelayMs({
+            retryAfterMs: upstream.retryAfterMs,
+            attemptIndex: attemptNumber - 1,
+            random: this.#random,
+        });
+        const remainingMs = budget?.remainingMs();
+        if (remainingMs !== undefined && delayMs > remainingMs) {
+            this.#logExhaustion(error, attemptNumber - 1);
+            throw error;
+        }
+        this.options.loggingService?.warn('Retrying model request after upstream failure', {
+            eventType: 'retry.model_transport',
+            category: 'retry',
+            attempt: attemptNumber,
+            maxRetries: this.options.retryAttempts,
+            delayMs,
+            error: describeError(error),
+        });
+        this.options.onRetry?.({ attempt: attemptNumber, maxRetries: this.options.retryAttempts, delayMs, error });
+        await sleepOrAbort(this.#sleep, delayMs, signal);
+    }
+    #logExhaustion(error, attempt) {
+        if (!this.#isRetryable(error))
+            return;
+        this.options.loggingService?.warn('Model transport retries exhausted', {
+            eventType: 'retry.model_transport_exhausted',
+            category: 'retry',
+            attempts: attempt + 1,
+            maxRetries: this.options.retryAttempts,
+            error: describeError(error),
+        });
+    }
+    #isRetryable(error) {
+        // AI-SDK/undici can surface a mid-body socket reset as the
+        // otherwise-uninformative `TypeError: terminated`. The existing network
+        // classifier handles coded causes; the explicit terminated shape covers
+        // wrappers that lose those codes. Do not reuse the whole transient policy
+        // here: incomplete-stream and parse failures have separate session-level
+        // recovery semantics. `committed` is checked by stream() before this
+        // method, so this cannot replay visible model output.
+        return (isNetworkProtocolError(error) ||
+            (isTerminatedError(error) && isTransientRetryableError(error)) ||
+            classifyUpstreamRetryableError(error).retryable);
+    }
+}
+//# sourceMappingURL=retrying-model.js.map

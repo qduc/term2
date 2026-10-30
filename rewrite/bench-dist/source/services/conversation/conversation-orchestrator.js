@@ -1,0 +1,1636 @@
+import { describeError } from '../../utils/error-helpers.js';
+import { createMessageIdFactory } from '../../utils/message-id-factory.js';
+import { isCommandMessage, isUserMessage } from '../../types/message.js';
+import { classifyStaticCommitBlocker, turnEndSettlement, } from '../../utils/conversation/static-commit-policy.js';
+import { CHECK_IN_TOOL_NAME, isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
+import { createStreamingSession } from '../../utils/streaming/streaming-session-factory.js';
+import { DEFAULT_CHARS_PER_TOKEN } from '../../utils/streaming/streaming-speed-tracker.js';
+import { enhanceApiKeyError, isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
+import { insertBeforeStreamingTail } from '../../utils/conversation/message-buffer.js';
+import { clearStreamingBotMessage, computeNextMessages } from '../../utils/conversation/apply-conversation-result.js';
+import { trimTrailingAssistantMessages, findLastUndoableUserMessage } from '../../utils/conversation/message-utils.js';
+import { ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
+import { annotateApprovedCommandMessage, filterPendingCommandMessagesForApproval, } from '../approval/approval-presentation-policy.js';
+import { formatUserTurnForDisplay, hasUserTurnContent, normalizeUserTurn, } from '../../types/user-turn.js';
+import { formatBackgroundTaskLiveness } from '../background-task-activity.js';
+import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
+const REASONING_RESPONSE_THROTTLE_MS = 200;
+/**
+ * Prefix attached to the first turn the orchestrator starts on its own right
+ * after the user Escape-cancelled an `ask_user` question.
+ *
+ * The cancelled turn ends with the question recorded and no answer, but input
+ * that had already been offered to it (a steer, a settled background run) is
+ * released at run end and delivered as a fresh turn. Without this notice the
+ * model reads that released input as permission to resume the plan the user
+ * just abandoned. It is committed to history with the turn, so later turns in
+ * the same burst already see it.
+ */
+const ASK_USER_CANCEL_NOTICE = '<system-notice>\n' +
+    'The user cancelled the pending question without answering (they pressed Escape). ' +
+    'Do not resume, continue, or restate the plan or work that was in progress when you asked; treat it as dropped. ' +
+    'Act only on the genuinely new input in this turn.\n' +
+    '</system-notice>';
+/** Prefix a delivered turn's text with the ask_user cancellation notice, if any. */
+function withAskUserCancelNotice(notice, text) {
+    return notice ? `${notice}\n\n${text}` : text;
+}
+function formatRunBudgetEvidence(event) {
+    if (event.type === 'tool_stall') {
+        return `Repeated tool call: ${event.toolName} (${event.count}/${event.threshold})\narguments: ${event.argumentsText}`;
+    }
+    const { evidence } = event;
+    return `${event.stage} budget stage: ${evidence.dimension}; used ${evidence.used}/${evidence.limit}; headroom ${evidence.headroom}`;
+}
+/**
+ * Render settled background runs as one instruction to the main agent. Previews
+ * are already capped by the notification store, so the full output is offered
+ * by reference rather than inlined.
+ */
+export function formatBackgroundSubagentNotifications(notifications) {
+    const completions = notifications.filter((notification) => notification.kind === 'completion');
+    const questions = notifications.filter((notification) => notification.kind === 'question');
+    const budgets = notifications.filter((notification) => notification.kind === 'budget');
+    const shellCompletions = notifications.filter((notification) => notification.kind === 'shell_completion');
+    const shellOutputs = notifications.filter((notification) => notification.kind === 'shell_output');
+    const userControls = notifications.filter((notification) => notification.kind === 'user_control');
+    const checkIns = notifications.filter((notification) => notification.kind === 'check_in');
+    const sections = [];
+    if (completions.length > 0) {
+        const noun = completions.length === 1 ? 'run' : 'runs';
+        const entries = completions.map((notification) => {
+            const lines = [
+                `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
+                ...(notification.error ? [`  error: ${notification.error}`] : []),
+                '  result:',
+                notification.formattedResult
+                    .split('\n')
+                    .map((line) => `    ${line}`)
+                    .join('\n'),
+            ];
+            return lines.join('\n');
+        });
+        sections.push([
+            `Background subagent ${noun} finished (${completions.length}). This is an automatic system notification, not a user message.`,
+            '',
+            ...entries,
+            '',
+            'The full result is inlined above; you do not need to call tools.get_subagent_result(...) inside run_code. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
+        ].join('\n'));
+    }
+    if (questions.length > 0) {
+        const entries = questions.map((notification) => {
+            const target = notification.name ?? notification.runId;
+            return [
+                `- messageId: ${notification.messageId} | target: ${target} | runId: ${notification.runId} | role: ${notification.role}`,
+                `  question: ${notification.question}`,
+            ].join('\n');
+        });
+        sections.push([
+            `Background subagent question${questions.length === 1 ? '' : 's'} pending (${questions.length}). This is an automatic system notification, not a user message.`,
+            '',
+            ...entries,
+            '',
+            'Decide the answer, investigate it yourself, or escalate to the user if needed. To answer a specific waiting subagent, use run_code with tools.send_message({ target, reply_to: messageId, message }). The subagent has no direct user channel; an answer resumes only its waiting tool call.',
+        ].join('\n'));
+    }
+    if (budgets.length > 0) {
+        const entries = budgets.map((notification) => {
+            const target = notification.name ?? notification.runId;
+            return `- target: ${target} | runId: ${notification.runId} | role: ${notification.role}\n  ${formatRunBudgetEvidence(notification.event)}`;
+        });
+        sections.push([
+            `Background subagent budget/stall evidence (${budgets.length}). This is an automatic system notification, not a user message.`,
+            '',
+            ...entries,
+            '',
+            // Do not offer continue-with-extension: no child-targeted grant API
+            // exists, so the run keeps going inside its own envelope regardless.
+            // Promising an action the parent cannot take produces confident,
+            // ineffective replies and teaches it to ignore this lane.
+            'Judge the evidence and act only if the run is going wrong: steer it with specific corrective guidance via run_code with tools.send_message({ target, message }), or stop it with the background task controls. Doing nothing is a valid judgement — the run continues within its own budget and, at critical, ends itself with a summary of what it completed.',
+        ].join('\n'));
+    }
+    if (shellCompletions.length > 0) {
+        const noun = shellCompletions.length === 1 ? 'job' : 'jobs';
+        const entries = shellCompletions.map((notification) => [
+            `- jobId: ${notification.jobId} | command: ${notification.command} | status: ${notification.status}`,
+            ...(notification.error ? [`  error: ${notification.error}`] : []),
+            '  output:',
+            notification.output
+                .split('\n')
+                .map((line) => `    ${line}`)
+                .join('\n'),
+        ].join('\n'));
+        sections.push([
+            `Background shell ${noun} finished (${shellCompletions.length}). This is an automatic system notification, not a user message.`,
+            '',
+            ...entries,
+            '',
+            'Assess the command result against the task and continue through the next necessary steps. Tell the user concisely, in your own words, what you concluded.',
+        ].join('\n'));
+    }
+    if (shellOutputs.length > 0) {
+        const noun = shellOutputs.length === 1 ? 'watch' : 'watches';
+        const entries = shellOutputs.map((notification) => [
+            `- jobId: ${notification.jobId} | command: ${notification.command} | watchId: ${notification.watchId} | seq: ${notification.seq}`,
+            ...(notification.droppedBytes !== undefined ? [`  droppedBytes: ${notification.droppedBytes}`] : []),
+            '  matchedLines:',
+            notification.matchedLines
+                .split('\n')
+                .map((line) => `    ${line}`)
+                .join('\n'),
+        ].join('\n'));
+        sections.push([
+            `Background shell ${noun} matched output (${shellOutputs.length}). This is an automatic system notification, not a user message.`,
+            '',
+            ...entries,
+            '',
+            'Assess whether the matched output changes what you should do next and continue through the next necessary steps yourself, telling the user concisely, in your own words, what you concluded.',
+        ].join('\n'));
+    }
+    if (checkIns.length > 0) {
+        const noun = checkIns.length === 1 ? 'task' : 'tasks';
+        const entries = checkIns.map((notification) => {
+            const { details } = notification;
+            const elapsedSeconds = Math.round(notification.elapsedMs / 1000);
+            if (details.kind === 'subagent') {
+                const nameLabel = details.name ? `${details.name} (${details.id})` : details.id;
+                const header = `- background subagent ${nameLabel} | role: ${details.role} | task: ${details.task}`;
+                const lines = [header];
+                const activityParts = [];
+                if (details.activityState) {
+                    if (details.activityState === 'waiting' && details.waitingReason) {
+                        activityParts.push(`waiting (${details.waitingReason})`);
+                    }
+                    else {
+                        activityParts.push(details.activityState);
+                    }
+                }
+                const activityDesc = activityParts.length > 0 ? `status: ${activityParts.join(', ')} | ` : '';
+                lines.push(`  ${activityDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`);
+                if (details.activity)
+                    lines.push(`  liveness: ${formatBackgroundTaskLiveness(details.activity)}`);
+                if (details.latestNarrative) {
+                    lines.push(`  latest narrative: "${details.latestNarrative}"`);
+                }
+                if (details.toolCounts && Object.keys(details.toolCounts).length > 0) {
+                    const countsStr = Object.entries(details.toolCounts)
+                        .map(([tool, count]) => `${tool} (${count})`)
+                        .join(', ');
+                    lines.push(`  tools used: ${countsStr}`);
+                }
+                if (details.lastToolName) {
+                    lines.push(`  last tool: ${details.lastToolName}`);
+                }
+                else if (details.lastObservation?.kind === 'tool_started') {
+                    lines.push(`  last tool: ${details.lastObservation.toolName} [running]`);
+                }
+                return lines.join('\n');
+            }
+            const header = `- background shell | jobId: ${details.id} | command: ${details.command}`;
+            const lines = [header];
+            const statusDesc = details.status ? `status: ${details.status} | ` : '';
+            lines.push(`  ${statusDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`);
+            if (details.activity)
+                lines.push(`  liveness: ${formatBackgroundTaskLiveness(details.activity)}`);
+            if (details.outputTail) {
+                lines.push('  recent output:');
+                const tailLines = details.outputTail.split('\n').map((line) => `    ${line}`);
+                lines.push(...tailLines);
+            }
+            return lines.join('\n');
+        });
+        sections.push([
+            `Periodic check-in on ${checkIns.length} still-running background ${noun}. This is an automatic system notification, not a user message, and does not by itself mean anything is wrong.`,
+            '',
+            ...entries,
+            '',
+            'Decide freely: doing nothing and letting it keep running is a valid choice. Scope that silence instruction to this check-in acknowledgement: only if this check-in is the sole reason for the turn and nothing remains actionable should you end this check-in turn silently: produce no assistant prose, acknowledgement, or filler. If ongoing authorized work is already in progress when this notification arrives, continue that work; do not end the turn merely because this check-in needs no action or update. To adjust check-in frequency or silence future check-ins for a task, use run_code with tools.configure_task_check_in(...). Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
+        ].join('\n'));
+    }
+    if (userControls.length > 0) {
+        const stopControls = userControls.filter((notification) => notification.action === 'stop');
+        const backgroundMoves = userControls.filter((notification) => notification.action === 'background');
+        const entriesFor = (notifications, verb) => notifications.map((notification) => {
+            const details = notification.details;
+            return details.kind === 'subagent'
+                ? `- ${verb} background subagent ${details.name ?? details.id} | runId: ${details.id} | role: ${details.role} | task: ${details.task}`
+                : `- ${verb} background shell | jobId: ${details.id} | command: ${details.command}`;
+        });
+        if (stopControls.length > 0) {
+            sections.push([
+                `The user requested that ${stopControls.length === 1 ? 'a background task be stopped' : 'background tasks be stopped'}. This is an automatic user control notification, not a user message.`,
+                '',
+                ...entriesFor(stopControls, 'stop requested for'),
+                '',
+                'Plan the next step around the requested stop. The task may settle later with a cancelled completion notification; do not assume its result is available yet.',
+            ].join('\n'));
+        }
+        if (backgroundMoves.length > 0) {
+            const movedSubagents = backgroundMoves.filter((notification) => notification.details.kind === 'subagent').length;
+            const movedShells = backgroundMoves.length - movedSubagents;
+            const movedWhat = movedSubagents > 0 && movedShells === 0
+                ? movedSubagents === 1
+                    ? 'a foreground subagent into the background'
+                    : 'foreground subagents into the background'
+                : movedShells > 0 && movedSubagents === 0
+                    ? movedShells === 1
+                        ? 'a foreground shell into the background'
+                        : 'foreground shells into the background'
+                    : 'foreground work into the background';
+            sections.push([
+                `The user moved ${movedWhat}. This is an automatic user control notification, not a user message.`,
+                '',
+                ...entriesFor(backgroundMoves, 'moved to'),
+                '',
+                'The same execution continues running in the background. The user moved it here so you are not stuck waiting on this task. If other work remains, continue with it; otherwise ending the turn is fine. Do not stop or relaunch the moved task, and do not treat it as finished — it will notify you when it settles.',
+            ].join('\n'));
+        }
+    }
+    return sections.join('\n\n');
+}
+/** The user-facing companion to the model-only background notification instruction. */
+function formatBackgroundSubagentNotificationDisplay(notifications) {
+    return notifications
+        .map((notification) => {
+        if (notification.kind === 'question') {
+            const target = notification.name ?? notification.runId;
+            return [
+                `messageId: ${notification.messageId} | target: ${target} | runId: ${notification.runId} | role: ${notification.role}`,
+                `question: ${notification.question}`,
+            ].join('\n');
+        }
+        if (notification.kind === 'budget') {
+            return [
+                `- runId: ${notification.runId} | role: ${notification.role}`,
+                `  ${formatRunBudgetEvidence(notification.event)}`,
+            ].join('\n');
+        }
+        if (notification.kind === 'shell_completion') {
+            return [
+                `- jobId: ${notification.jobId} | command: ${notification.command} | status: ${notification.status}`,
+                ...(notification.error ? [`  error: ${notification.error}`] : []),
+                ...(notification.output ? [`  output: ${notification.output}`] : []),
+            ].join('\n');
+        }
+        if (notification.kind === 'shell_output') {
+            return [
+                `- jobId: ${notification.jobId} | command: ${notification.command} | watchId: ${notification.watchId} | seq: ${notification.seq}`,
+                ...(notification.droppedBytes !== undefined ? [`  droppedBytes: ${notification.droppedBytes}`] : []),
+                ...(notification.matchedLines ? [`  matchedLines: ${notification.matchedLines}`] : []),
+            ].join('\n');
+        }
+        if (notification.kind === 'check_in') {
+            const { details } = notification;
+            const elapsedSeconds = Math.round(notification.elapsedMs / 1000);
+            const label = details.kind === 'subagent'
+                ? `background subagent ${details.name ?? details.id} (${details.role})`
+                : `background shell ${details.command}`;
+            return `Check-in #${notification.checkInIndex}: ${label} still running, elapsed ${elapsedSeconds}s`;
+        }
+        if (notification.kind === 'user_control') {
+            const details = notification.details;
+            if (notification.action === 'background') {
+                return details.kind === 'subagent'
+                    ? `Moved to background: ${details.name ?? details.id} (${details.role})`
+                    : `Moved to background: shell ${details.command}`;
+            }
+            return details.kind === 'subagent'
+                ? `Stop requested: background ${details.name ?? details.id} (${details.role})`
+                : `Stop requested: shell ${details.command}`;
+        }
+        const lines = [
+            `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
+            ...(notification.error ? [`  error: ${notification.error}`] : []),
+            ...(notification.preview ? [`  preview: ${notification.preview}`] : []),
+        ];
+        return lines.join('\n');
+    })
+        .join('\n\n');
+}
+/**
+ * Render a provider error envelope (`{"error":{"type","message"}}`), bare or
+ * after a prefix such as an HTTP status, as `type: message`. Anything else is
+ * returned unchanged.
+ */
+function readableProviderError(errorMessage) {
+    const jsonStart = errorMessage.indexOf('{');
+    if (jsonStart === -1)
+        return errorMessage;
+    try {
+        const parsed = JSON.parse(errorMessage.slice(jsonStart));
+        const error = parsed && typeof parsed === 'object' ? parsed.error : undefined;
+        if (!error || typeof error !== 'object')
+            return errorMessage;
+        const { type, message } = error;
+        if (typeof message !== 'string' || !message.trim())
+            return errorMessage;
+        const readable = `${typeof type === 'string' && type.trim() ? `${type}: ` : ''}${message}`;
+        return `${errorMessage.slice(0, jsonStart)}${readable}`;
+    }
+    catch {
+        return errorMessage;
+    }
+}
+export class ConversationOrchestrator {
+    config;
+    createMessageId;
+    #directlyAppendedMessageIds = new Set();
+    #displayedBackgroundNotificationMessageIds = new Set();
+    /**
+     * Deferred queue submissions register an activator here. The orchestrator does
+     * not count them as active turns until the queue actually starts executing
+     * them — remove/discard/reject must not require a matching `#endTurn`.
+     */
+    #deferredTurnActivators = new Map();
+    /**
+     * Turns this orchestrator currently owns. Count only executions that have
+     * actually started (direct submit or queue-start activation), never merely
+     * queued awaits.
+     */
+    #activeTurns = 0;
+    #outstandingSubmissions = new Map();
+    /** Bumped by every presentation reset; pre-reset in-flight submissions are dead. */
+    #lifecycleGeneration = 0;
+    /** True while {@link stopProcessing} is tearing the conversation down. */
+    #stoppingByUser = false;
+    /**
+     * Set by {@link cancelAskUser}, consumed by the first turn this orchestrator
+     * starts on its own afterwards so the model knows the user abandoned the
+     * pending question rather than inviting a resumption of the cancelled plan.
+     */
+    #askUserCancelPending = false;
+    /** Stranded rows already reported, so the warning stays one per occurrence. */
+    #reportedStrandedCallIds = new Set();
+    /** Live tok/s char ratio, calibrated from completed requests in this conversation. */
+    #charsPerToken = DEFAULT_CHARS_PER_TOKEN;
+    constructor(config) {
+        this.config = config;
+        this.createMessageId = config.createMessageId ?? createMessageIdFactory(config.now);
+        // Wire queue state observer from the adapter through to the UI.
+        if (typeof config.conversationService.setQueueStateObserver === 'function') {
+            config.conversationService.setQueueStateObserver((snapshot) => {
+                config.ui.onQueueStateChange(snapshot);
+            });
+        }
+        // When the queue has actually popped the next head and is about to start
+        // its turn, the orchestrator appends the user message to the message list
+        // (with the timeline the turn actually started at) and clears the pending
+        // indicator above the input box.
+        if (typeof config.conversationService.setQueuedTurnStartObserver === 'function') {
+            config.conversationService.setQueuedTurnStartObserver((execution) => {
+                if (execution.suppressUserMessageDisplay) {
+                    // Still retire any matching pending row. A suppressed start is a
+                    // real delivery; leaving the queued indicator would lie.
+                    this.#outstandingSubmissions.delete(execution.requestId);
+                    this.config.ui.onQueuedMessageStarted?.(execution.requestId);
+                    return;
+                }
+                // Deferred submissions activate their orchestrator turn here — the only
+                // moment a queued await becomes an owned execution.
+                const activateDeferred = this.#deferredTurnActivators.get(execution.requestId);
+                if (activateDeferred) {
+                    activateDeferred();
+                }
+                const wasAlreadyStarted = this.moveQueuedMessageIntoList(execution.requestId, execution.input);
+                if (!wasAlreadyStarted && !activateDeferred) {
+                    // Recovered or test-only starts without a deferred activator still need
+                    // the processing indicator when the message enters the transcript.
+                    config.ui.onTurnStart();
+                }
+            });
+        }
+        // A background subagent run can settle at any time, including while the
+        // conversation is idle and nothing would otherwise wake the agent.
+        if (typeof config.conversationService.setBackgroundSubagentNotificationObserver === 'function') {
+            config.conversationService.setBackgroundSubagentNotificationObserver(() => {
+                void this.#deliverBackgroundSubagentNotifications();
+            });
+        }
+    }
+    updateCallbacks({ onRestoreInput, onClear, }) {
+        this.config.onRestoreInput = onRestoreInput;
+        this.config.onClear = onClear;
+    }
+    getSubagentUsage() {
+        return this.config.subagentUsageAccumulator?.get() ?? null;
+    }
+    getCostSummary() {
+        return this.config.costAccumulator?.getSummary() ?? null;
+    }
+    isTurnActive() {
+        return this.#activeTurns > 0;
+    }
+    listOutstandingSubmissions() {
+        return [...this.#outstandingSubmissions.values()].map((item) => ({
+            id: item.message.id,
+            text: item.message.text.slice(0, 500),
+            stage: item.stage,
+        }));
+    }
+    goToPreviousQuestion() {
+        this.config.conversationService.goToPreviousPendingInteractionQuestion?.();
+    }
+    goToNextQuestion() {
+        this.config.conversationService.goToNextPendingInteractionQuestion?.();
+    }
+    async clearConversation() {
+        // Invalidate submissions already in flight before the service is replaced:
+        // a steer released by the reset must not fall through to a fresh send.
+        this.#lifecycleGeneration += 1;
+        if (this.config.onClear) {
+            await this.config.onClear();
+        }
+        else {
+            this.config.conversationService.resetWithNewId(crypto.randomUUID());
+        }
+        this.resetPresentation();
+    }
+    /** Reset only the UI projection after an in-place session rollover. */
+    resetPresentation(options = {}) {
+        if (!options.preserveQueued)
+            this.#lifecycleGeneration += 1;
+        this.config.messages.setMessages(() => []);
+        this.config.approvedContext.current = null;
+        this.config.conversationService.clearPendingInteraction?.();
+        this.config.ui.onResetAll({ preserveQueued: options.preserveQueued });
+        this.config.usageAccumulator?.reset();
+        this.config.subagentUsageAccumulator?.reset();
+        this.config.costAccumulator?.reset();
+        this.#directlyAppendedMessageIds.clear();
+        if (!options.preserveBackgroundNotificationDedup) {
+            this.#displayedBackgroundNotificationMessageIds.clear();
+        }
+        if (options.preserveQueued) {
+            // These inputs were journaled before writer rotation. Their executable
+            // ownership survives rollover. Transfer their accepted user records just
+            // after the successor briefing's record, before newer submissions can be
+            // journaled there; ordinary same-session starts must not log them again.
+            for (const submission of this.#outstandingSubmissions.values()) {
+                // Unsettled steers are first journaled by their admission callback.
+                if (submission.stage === 'queued')
+                    submission.needsJournalRecord = true;
+            }
+        }
+        else {
+            this.#outstandingSubmissions.clear();
+        }
+        this.#reportedStrandedCallIds.clear();
+    }
+    /**
+     * Replace the live UI projection with a persisted conversation after the
+     * caller has moved the service to the restored session id.
+     */
+    restoreConversation(restored) {
+        this.config.conversationService.importState({
+            history: restored.history,
+            previousResponseId: restored.previousResponseId,
+            toolLedger: restored.toolLedger,
+            updatedAt: restored.updatedAt,
+        });
+        this.config.messages.setMessages(() => [...restored.messages]);
+        this.config.approvedContext.current = null;
+        this.config.conversationService.clearPendingInteraction?.();
+        this.config.ui.onResetAll();
+        this.config.usageAccumulator?.reset();
+        this.config.subagentUsageAccumulator?.reset();
+        this.config.costAccumulator?.reset();
+        if (restored.usage) {
+            this.config.usageAccumulator?.add(restored.usage, { alreadyBillable: true });
+            this.config.ui.onUsageUpdate(restored.usage);
+        }
+        if (restored.subagentUsage) {
+            this.config.subagentUsageAccumulator?.add(restored.subagentUsage, { alreadyBillable: true });
+        }
+        if (restored.costRecords?.length) {
+            const costAccumulator = this.config.costAccumulator;
+            costAccumulator?.addRecords(restored.costRecords);
+            if (costAccumulator)
+                this.config.ui.onCostUpdate?.(costAccumulator.getSummary());
+        }
+        this.#directlyAppendedMessageIds.clear();
+        this.#displayedBackgroundNotificationMessageIds.clear();
+        this.#reportedStrandedCallIds.clear();
+    }
+    stopProcessing() {
+        // The user asked everything to stop, so background subagent runs go too.
+        // Undo and retry, by contrast, only abort the turn.
+        //
+        // Cancelling those runs makes each of them emit its own completion event,
+        // so the notification queue must be suppressed and then dropped: the user
+        // already knows the runs stopped, and waking the agent to say so is the
+        // opposite of what they asked for.
+        this.#stoppingByUser = true;
+        try {
+            this.config.conversationService.interruptFromUser();
+            this.config.messages.setMessages((messages) => messages.map((message) => message.sender === 'command' && (message.status === 'running' || message.status === 'pending')
+                ? { ...message, status: 'aborted' }
+                : message));
+            this.config.approvedContext.current = null;
+            this.config.conversationService.clearPendingInteraction?.();
+            this.config.ui.onResetTransient();
+            this.#directlyAppendedMessageIds.clear();
+            this.#displayedBackgroundNotificationMessageIds.clear();
+            this.config.conversationService.backgroundSubagentNotifications?.drain();
+        }
+        finally {
+            this.#stoppingByUser = false;
+        }
+    }
+    /**
+     * Rewind through an opaque store target. `uiIndex` is used only to trim the
+     * rendered projection after the domain operation accepted the same target.
+     */
+    rewindToTarget(targetId, uiIndex) {
+        const restored = this.config.conversationService.rewindToTarget(targetId);
+        if (restored === null)
+            return null;
+        // Keep rewind's historical foreground-only cancellation behavior, but do
+        // not abort an active turn for a stale picker target that the store rejects.
+        this.config.conversationService.abort();
+        this.config.messages.setMessages((prev) => prev.slice(0, uiIndex));
+        this.config.approvedContext.current = null;
+        this.config.conversationService.clearPendingInteraction?.();
+        this.config.ui.onResetTransient();
+        this.#directlyAppendedMessageIds.clear();
+        this.#displayedBackgroundNotificationMessageIds.clear();
+        return restored;
+    }
+    async retractPendingSubmission(id) {
+        const service = this.config.conversationService;
+        if (typeof service.retractSubmission !== 'function')
+            return { kind: 'unknown_id' };
+        const result = await service.retractSubmission(id);
+        if (result.kind === 'applied') {
+            this.#outstandingSubmissions.delete(id);
+            this.config.ui.onQueuedMessageRemoved?.(id);
+        }
+        return result;
+    }
+    async editPendingSubmission(id, turn) {
+        const service = this.config.conversationService;
+        if (typeof service.editSubmission !== 'function')
+            return { kind: 'unknown_id' };
+        const editedTurn = normalizeUserTurn(turn);
+        const result = await service.editSubmission(id, editedTurn);
+        if (result.kind === 'applied') {
+            const outstanding = this.#outstandingSubmissions.get(id);
+            if (outstanding)
+                this.#outstandingSubmissions.set(id, {
+                    ...outstanding,
+                    message: { ...outstanding.message, text: formatUserTurnForDisplay(editedTurn), skill: editedTurn.skill },
+                });
+            this.config.ui.onQueuedMessageEdited?.(id, editedTurn);
+        }
+        return result;
+    }
+    async retryLastToolOutput() {
+        this.config.conversationService.abort();
+        this.config.approvedContext.current = null;
+        this.config.conversationService.clearPendingInteraction?.();
+        this.config.ui.onResetTransient();
+        if (!this.config.conversationService.peekLastToolOutput()) {
+            return false;
+        }
+        this.config.messages.setMessages((prev) => trimTrailingAssistantMessages(prev));
+        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = this.#beginTurn('retryLastToolOutput');
+        try {
+            const result = await this.config.conversationService.retryLastToolOutput({
+                onEvent: this.createOnEventHandler(applyConversationEvent),
+            });
+            if (!result) {
+                return false;
+            }
+            this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
+            return true;
+        }
+        catch (error) {
+            this.logError('Error in retryLastToolOutput', error);
+            if (isClassifiedCancellation(error)) {
+                this.config.loggingService.debug('Suppressing abort error in retryLastToolOutput');
+                return true;
+            }
+            const errorMessage = enhanceApiKeyError(describeError(error));
+            this.appendBotError(errorMessage);
+            return true;
+        }
+        finally {
+            this.config.loggingService.debug('retryLastToolOutput finally block - resetting state');
+            reasoningUpdater.flush();
+            botResponseUpdater.cancel();
+            this.#endTurn();
+        }
+    }
+    /** Replace the latest user turn's attempt, including its tool transcript. */
+    async retryLastFailedTurn() {
+        if (!this.config.conversationService.listUserTurns()?.length)
+            return false;
+        this.config.conversationService.abort();
+        this.config.approvedContext.current = null;
+        this.config.conversationService.clearPendingInteraction?.();
+        this.config.ui.onResetTransient();
+        this.config.messages.setMessages((prev) => {
+            const anchor = findLastUndoableUserMessage(prev);
+            return anchor === -1 ? prev : prev.slice(0, anchor + 1);
+        });
+        this.#directlyAppendedMessageIds.clear();
+        this.#displayedBackgroundNotificationMessageIds.clear();
+        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = this.#beginTurn('retryLastFailedTurn');
+        try {
+            const result = await this.config.conversationService.retryLastFailedTurn({
+                onEvent: this.createOnEventHandler(applyConversationEvent),
+                replayFromHistory: true,
+            });
+            this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
+            return result !== null;
+        }
+        catch (error) {
+            this.logError('Error in retryLastFailedTurn', error);
+            if (!isClassifiedCancellation(error)) {
+                this.appendBotError(enhanceApiKeyError(describeError(error)));
+            }
+            return false;
+        }
+        finally {
+            reasoningUpdater.flush();
+            botResponseUpdater.cancel();
+            this.#endTurn();
+        }
+    }
+    async compactContext() {
+        this.#activeTurns += 1;
+        this.config.ui.onTurnStart();
+        try {
+            return await this.config.conversationService.compactContext();
+        }
+        finally {
+            this.#endTurn();
+        }
+    }
+    async sendUserMessage(input, options) {
+        let remoteTerminal = null;
+        const turn = normalizeUserTurn(input);
+        if (!hasUserTurnContent(turn)) {
+            return;
+        }
+        // A message the user types as a normal turn closes the post-cancel window:
+        // they are speaking deliberately, so a later automatic turn must not keep
+        // claiming they just cancelled. A steer is left armed because it may itself
+        // be the released input this notice exists for.
+        if (options?.busyMode !== 'steer')
+            this.#askUserCancelPending = false;
+        let userMessage = {
+            id: this.createMessageId(),
+            sender: 'user',
+            text: formatUserTurnForDisplay(turn),
+            ...(turn.skill ? { skill: turn.skill } : {}),
+            ...(options?.presentation ? { presentation: options.presentation } : {}),
+        };
+        let admissionReported = false;
+        const steering = options?.busyMode === 'steer';
+        const reportAdmission = (delivery) => {
+            if (admissionReported)
+                return;
+            admissionReported = true;
+            options?.onAdmitted?.(userMessage.id, delivery);
+        };
+        // When no turn is in flight, append the user message directly to the
+        // message list. The queue observer will still fire when the turn starts,
+        // but the dedup guard in moveQueuedMessageIntoList will swallow the
+        // second append. When a turn is already in flight, show the message
+        // above the input box until the queue actually starts processing it; the
+        // message list will be updated when the queue pops this turn.
+        const queueOwnsSubmission = this.config.conversationService.isQueueOwningSubmissions?.() ??
+            this.config.conversationService.isQueueActive?.() ??
+            false;
+        // Logged before the branch below, not inside it. "Steer attempt resolved"
+        // only exists on the path that actually tries to steer, so a submission
+        // that never enters that path — because it arrived without busyMode
+        // 'steer', or because the queue did not claim it — is indistinguishable in
+        // the logs from one that was never submitted at all. That gap hid a real
+        // report of a steer silently queueing: the queue file held the message and
+        // the transcript held the user_message, and nothing recorded the decision
+        // in between. These four fields name that decision.
+        this.config.loggingService.info('Submission routing decided', {
+            busyMode: options?.busyMode ?? 'none',
+            queueOwnsSubmission,
+            queueStateKind: this.config.conversationService.queueStateKind?.() ?? 'unknown',
+            canSteer: Boolean(this.config.conversationService.steerActiveTurn),
+            messageId: userMessage.id,
+        });
+        if (queueOwnsSubmission) {
+            const delivery = options?.busyMode === 'steer' ? 'steer' : 'follow_up';
+            this.#outstandingSubmissions.set(userMessage.id, {
+                message: userMessage,
+                stage: delivery === 'steer' ? 'pending_steer' : 'queued',
+            });
+            this.config.ui.onQueuedMessagePending?.(userMessage.id, turn, delivery);
+            reportAdmission(steering ? 'steering' : 'queued');
+        }
+        else {
+            // No turn is in flight — append directly. The queue observer will also
+            // fire when the turn starts, but the dedup guard in
+            // moveQueuedMessageIntoList prevents a double-append.
+            this.config.messages.appendMessages([userMessage]);
+            this.#directlyAppendedMessageIds.add(userMessage.id);
+        }
+        if (!queueOwnsSubmission || !steering) {
+            this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
+        }
+        if (options?.presentation === 'session_rollover') {
+            // Writer rotation is already committed. Preserve submission-time journal
+            // semantics: retained input follows the briefing, before input accepted
+            // during that briefing. Queue starts still only project the user message.
+            for (const submission of this.#outstandingSubmissions.values()) {
+                if (!submission.needsJournalRecord)
+                    continue;
+                this.config.logWriter?.append({ type: 'user_message', message: { ...submission.message } });
+                submission.needsJournalRecord = false;
+            }
+        }
+        // Streaming callbacks are bound at submit time, but deferred submissions
+        // must not count as active turns until the queue starts them. Otherwise
+        // remove/discard would need a matching endTurn for work that never ran.
+        let completionDeferred = false;
+        let turnActivated = !queueOwnsSubmission;
+        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = queueOwnsSubmission
+            ? this.createTurnSession('sendUserMessage')
+            : this.#beginTurn('sendUserMessage');
+        if (queueOwnsSubmission) {
+            this.#deferredTurnActivators.set(userMessage.id, () => {
+                if (turnActivated)
+                    return;
+                turnActivated = true;
+                this.#activeTurns += 1;
+                this.config.ui.onTurnStart();
+            });
+        }
+        else if (options?.onAdmitted) {
+            // An idle remote submit must release its admission lock when the real
+            // queue starts it, not after the model finishes (which blocks interrupt).
+            this.#deferredTurnActivators.set(userMessage.id, () => reportAdmission('started'));
+        }
+        try {
+            const submissionGeneration = this.#lifecycleGeneration;
+            const result = await this.config.conversationService.submitMessage(turn, {
+                onEvent: this.createOnEventHandler(applyConversationEvent),
+                inputSurgeApproval: options?.inputSurgeApproval,
+                busyMode: options?.busyMode,
+                preferredMessageId: userMessage.id,
+                rolloverBrief: options?.presentation === 'session_rollover',
+            }, {
+                onSteerSettled: (admitted, latestInput) => {
+                    if (submissionGeneration !== this.#lifecycleGeneration)
+                        return;
+                    options?.onSteerSettled?.(admitted);
+                    const latest = normalizeUserTurn(latestInput);
+                    userMessage = {
+                        ...userMessage,
+                        text: formatUserTurnForDisplay(latest),
+                        skill: latest.skill,
+                    };
+                    this.config.loggingService.info('Steer attempt resolved', {
+                        steered: admitted,
+                        messageId: userMessage.id,
+                    });
+                    if (admitted) {
+                        this.#outstandingSubmissions.delete(userMessage.id);
+                        this.config.ui.onQueuedMessageStarted?.(userMessage.id);
+                        this.config.messages.appendMessages([userMessage]);
+                    }
+                    else {
+                        this.#outstandingSubmissions.set(userMessage.id, {
+                            message: userMessage,
+                            stage: 'queued',
+                        });
+                        this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
+                    }
+                    this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
+                },
+                prepareFollowUp: (latestInput) => {
+                    const latest = normalizeUserTurn(latestInput);
+                    return { ...latest, text: withAskUserCancelNotice(this.#takeAskUserCancelNotice(), latest.text) };
+                },
+            });
+            reportAdmission(queueOwnsSubmission ? 'queued' : 'started');
+            if (result.kind === 'steered') {
+                if (options?.onCompleted) {
+                    completionDeferred = true;
+                    void result.completion.then(options.onCompleted);
+                }
+                return;
+            }
+            remoteTerminal = result.terminal ?? null;
+            this.#settleTurn(applyConversationEvent, botResponseUpdater, result.terminal, streamingState);
+        }
+        catch (error) {
+            this.logError('Error in sendUserMessage', error);
+            // The rollover owner must observe bootstrap failure, not release retained
+            // input as though the successor had received its handoff. Ordinary sends
+            // retain their existing rendered-error contract.
+            if (options?.presentation === 'session_rollover')
+                throw error;
+            if (queueOwnsSubmission) {
+                this.#outstandingSubmissions.delete(userMessage.id);
+                this.config.ui.onQueuedMessageRemoved?.(userMessage.id);
+            }
+            if (isClassifiedCancellation(error)) {
+                this.config.loggingService.debug('Suppressing abort error in sendUserMessage');
+                return;
+            }
+            // A submission that never left the pending queue produced no turn to
+            // report on, but it also produced no answer: the pending indicator has
+            // just been cleared, so saying nothing would make the user's text vanish
+            // without explanation. Report the rejection and hand the text back.
+            if (queueOwnsSubmission && !turnActivated) {
+                // No turn exists to retry: the text is handed back instead.
+                this.appendBotError(`${enhanceApiKeyError(describeError(error))}\n\nThis message was not sent: ${userMessage.text}`, { retryHint: false });
+                return;
+            }
+            const rawErrorMessage = describeError(error);
+            const errorMessage = enhanceApiKeyError(rawErrorMessage);
+            const dropped = error?.rawEvent?.droppedUserMessage;
+            if (dropped) {
+                this.config.messages.setMessages((prev) => {
+                    for (let i = prev.length - 1; i >= 0; i--) {
+                        if (prev[i].sender === 'user') {
+                            return prev.slice(0, i);
+                        }
+                    }
+                    return prev;
+                });
+                this.config.onRestoreInput?.(dropped.text);
+            }
+            if (isMaxTurnsError(errorMessage)) {
+                const pendingApproval = {
+                    agentName: 'System',
+                    toolName: CHECK_IN_TOOL_NAME,
+                    argumentsText: errorMessage,
+                    rawInterruption: null,
+                    checkIn: 'max_turns',
+                };
+                this.config.conversationService.presentPendingInteraction?.(pendingApproval);
+                this.config.ui.onApprovalRequested(pendingApproval);
+            }
+            else {
+                this.appendBotError(errorMessage);
+            }
+        }
+        finally {
+            this.config.loggingService.debug('sendUserMessage finally block - resetting state');
+            this.#deferredTurnActivators.delete(userMessage.id);
+            reasoningUpdater.flush();
+            botResponseUpdater.cancel();
+            // The start observer is the normal way a queued row leaves the pending
+            // list. If that callback is skipped — recovered snapshot, suppressed
+            // display, or a test/service path that settles sendMessage without
+            // starting — the submission has still left the queue. Drop the row
+            // here so a delivered message cannot stay painted as queued.
+            if (queueOwnsSubmission) {
+                this.config.ui.onQueuedMessageStarted?.(userMessage.id);
+            }
+            if (turnActivated) {
+                this.#endTurn();
+            }
+            if (!completionDeferred)
+                options?.onCompleted?.(remoteTerminal);
+        }
+    }
+    async handleApprovalDecision(answer, rejectionReason, approvalAnswer, expectedInteractionId, options = {}) {
+        const resolution = this.config.conversationService.resolvePendingInteraction?.({
+            expectedInteractionId,
+            answer,
+            rejectionReason,
+            approvalAnswer,
+        });
+        if (!resolution || resolution.kind === 'none' || resolution.kind === 'stale_interaction') {
+            return;
+        }
+        if (resolution.kind === 'awaiting_next_question')
+            return;
+        const pendingApproval = resolution.approval;
+        const isMaxTurnsPrompt = pendingApproval.checkIn === 'max_turns';
+        const runBudgetEvent = pendingApproval.runBudgetEvent;
+        this.config.ui.onApprovalResolved();
+        if (answer === 'y' || isDeniedReadApproveAnswer(answer)) {
+            this.config.approvedContext.current = {
+                callId: pendingApproval.callId,
+                toolName: pendingApproval.toolName,
+            };
+        }
+        if (isMaxTurnsPrompt && !runBudgetEvent && answer === 'n') {
+            this.#endTurn();
+            return;
+        }
+        if (isMaxTurnsPrompt && !runBudgetEvent && answer === 'y') {
+            const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = this.#beginTurn('maxTurnsContinuation');
+            try {
+                const result = await this.config.conversationService.sendMessage('Please continue with your previous task.', {
+                    onEvent: this.createOnEventHandler(applyConversationEvent),
+                });
+                this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
+            }
+            catch (error) {
+                this.logError('Error in continuation after max turns', error);
+                if (isClassifiedCancellation(error)) {
+                    this.config.loggingService.debug('Suppressing abort error in max turns continuation');
+                    return;
+                }
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.appendBotError(errorMessage);
+            }
+            finally {
+                reasoningUpdater.flush();
+                botResponseUpdater.cancel();
+                this.#endTurn();
+            }
+            return;
+        }
+        // Steer is part of the judge's vocabulary, but no human surface produces it
+        // here: the prompt offers Continue and Stop only, and collecting corrective
+        // text would need an input surface this prompt does not own. A human steers
+        // by continuing and then typing. Parent agents steer with run_code and tools.send_message(...).
+        if (runBudgetEvent && answer === 'y') {
+            // Take the grant here rather than leaving it to the resume, because a
+            // refusal has to be shown to the human instead of silently stopping.
+            const grant = this.config.conversationService.grantRunBudgetExtension?.() ?? {
+                granted: false,
+                extensionsGranted: 0,
+            };
+            if (!grant.granted) {
+                this.#presentRunBudgetInteraction(runBudgetEvent, 'No further budget extension is available.');
+                return;
+            }
+        }
+        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = this.#beginTurn('approvalDecision');
+        try {
+            const result = await this.config.conversationService.handleApprovalDecision(answer, rejectionReason, {
+                onEvent: this.createOnEventHandler(applyConversationEvent),
+                approvalAnswer: resolution.approvalAnswer,
+                ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
+            });
+            this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
+        }
+        catch (error) {
+            this.logError('Error in handleApprovalDecision', error);
+            if (isClassifiedCancellation(error)) {
+                this.config.loggingService.debug('Suppressing abort error in handleApprovalDecision');
+                return;
+            }
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.appendBotError(errorMessage);
+        }
+        finally {
+            this.config.loggingService.debug('handleApprovalDecision finally block - resetting state');
+            reasoningUpdater.flush();
+            botResponseUpdater.cancel();
+            this.#endTurn();
+        }
+    }
+    /**
+     * Escape on an `ask_user` prompt. The tool still returns
+     * {@link ASK_USER_NO_ANSWER_RESULT}, so the question and the fact that it
+     * went unanswered are committed to history and travel with the user's next
+     * message. The turn then ends instead of handing the model another turn:
+     * cancelling means the user speaks next.
+     */
+    async cancelAskUser(expectedInteractionId) {
+        // Arm the one-shot cancellation context before the turn resolves: the
+        // release it triggers happens inside this call, and the released input is
+        // delivered as a fresh turn immediately after.
+        this.#askUserCancelPending = true;
+        return this.handleApprovalDecision('y', undefined, ASK_USER_NO_ANSWER_RESULT, expectedInteractionId, {
+            stopAfterApprovalResolution: true,
+        });
+    }
+    /** Consume the one-shot "user just Escape-cancelled ask_user" flag. */
+    #takeAskUserCancelNotice() {
+        if (!this.#askUserCancelPending)
+            return null;
+        this.#askUserCancelPending = false;
+        return ASK_USER_CANCEL_NOTICE;
+    }
+    /** Open a turn this orchestrator owns, and its streaming session. */
+    #beginTurn(label) {
+        this.#activeTurns += 1;
+        this.config.ui.onTurnStart();
+        return this.createTurnSession(label);
+    }
+    /**
+     * Close a turn this orchestrator owns. `flushNotifications` is false only for
+     * the background-notification turn itself, which decides for itself whether
+     * another delivery attempt is safe.
+     */
+    #endTurn(flushNotifications = true) {
+        this.#activeTurns = Math.max(0, this.#activeTurns - 1);
+        this.config.ui.onTurnEnd();
+        this.#settleStrandedRows();
+        if (flushNotifications) {
+            void this.#deliverBackgroundSubagentNotifications();
+        }
+    }
+    /**
+     * Settle rows that still block static commit once a turn this orchestrator
+     * owns has ended. What blocks and what a closing turn may do about it are
+     * owned entirely by the static-commit policy (classifyStaticCommitBlocker +
+     * turnEndSettlement); this method owns only the guards and the reporting.
+     * That keeps a new Message variant or status from being added to the
+     * renderer's blocker list without also getting a settlement rule — the drift
+     * that left bot/reasoning rows stranded after command rows were covered.
+     *
+     * History: command rows were netted first after one incident, and a later
+     * abort still stranded streaming bot/reasoning rows for a whole session —
+     * the status bar's "Static blocked: ..." warning. The warning is half the
+     * point: a silent net would hide the next row type that strands.
+     */
+    #settleStrandedRows() {
+        // A turn that parks on an approval closes and reopens around the prompt, so
+        // reaching here does not mean the work finished. Anything still running is
+        // legitimately in flight until the user decides.
+        if (this.#activeTurns > 0)
+            return;
+        if (this.config.conversationService.getPendingInteractionSnapshot?.())
+            return;
+        // Classify inside the updater, not from getMessages(): the settle that
+        // just ran queued the `final` flush and the terminal command rows as
+        // React updates, so the rendered snapshot still shows rows those updates
+        // are about to close. Judging that snapshot reported nearly every turn as
+        // stranded and aborted commands whose completion was merely queued.
+        this.config.messages.setMessages((messages) => {
+            const stranded = messages
+                .map((message) => {
+                const reason = classifyStaticCommitBlocker(message);
+                return { message, settlement: reason === null ? null : turnEndSettlement(reason) };
+            })
+                .filter((entry) => entry.settlement !== null);
+            if (stranded.length === 0)
+                return messages;
+            this.#reportStrandedRows(stranded);
+            const settled = new Map(stranded.map((entry) => [entry.message.id, entry.settlement]));
+            return messages.map((message) => {
+                const settlement = settled.get(message.id);
+                if (settlement === 'finalize')
+                    return { ...message, status: 'finalized' };
+                if (settlement === 'abort')
+                    return { ...message, status: 'aborted' };
+                return message;
+            });
+        });
+    }
+    #reportStrandedRows(stranded) {
+        // Turn-owned streaming rows (bot/reasoning tails) can never legitimately
+        // outlive their turn: the `final` flush closes them on every settle, and
+        // an approval pause finalizes them through computeNextMessages before the
+        // turn ends. A live row at this point was abandoned by its producer.
+        const finalizeEntries = stranded.filter((entry) => entry.settlement === 'finalize');
+        if (finalizeEntries.length > 0) {
+            this.config.loggingService.warn('Streaming rows left live at turn end; finalizing them', {
+                ids: finalizeEntries.map((entry) => entry.message.id),
+                sessionId: this.config.conversationService.sessionId,
+                rows: finalizeEntries.map(({ message, settlement }) => ({
+                    id: message.id,
+                    sender: message.sender,
+                    status: 'status' in message ? message.status : undefined,
+                    settlement,
+                })),
+            });
+        }
+        const abortEntries = stranded.filter((entry) => entry.settlement === 'abort');
+        if (abortEntries.length === 0)
+            return;
+        const callKey = (entry) => (isCommandMessage(entry.message) ? entry.message.callId : undefined) ?? entry.message.id;
+        const unreported = abortEntries.filter((entry) => !this.#reportedStrandedCallIds.has(callKey(entry)));
+        if (unreported.length === 0)
+            return;
+        for (const entry of unreported) {
+            this.#reportedStrandedCallIds.add(callKey(entry));
+        }
+        this.config.loggingService.warn('Command rows left running at turn end; aborting them', {
+            tools: unreported.map((entry) => isCommandMessage(entry.message) ? entry.message.toolName ?? 'unknown' : 'unknown'),
+            callIds: unreported.map(callKey),
+        });
+    }
+    /**
+     * Announce settled runs in the transcript, once each.
+     *
+     * Display is deliberately not tied to the agent receiving them: the user
+     * should see a run land the moment it does, whether the report reaches the
+     * agent at the next request boundary or waits for a turn of its own.
+     */
+    #announceBackgroundSubagentNotifications(notifications) {
+        const newlyDisplayed = notifications.filter((notification) => !this.#displayedBackgroundNotificationMessageIds.has(notification.messageId));
+        if (newlyDisplayed.length === 0)
+            return;
+        for (const notification of newlyDisplayed) {
+            this.#displayedBackgroundNotificationMessageIds.add(notification.messageId);
+        }
+        const subagentNotifications = newlyDisplayed.filter((notification) => notification.kind === 'completion' || notification.kind === 'question' || notification.kind === 'budget');
+        const runs = subagentNotifications
+            .filter((notification) => notification.kind === 'completion')
+            .map(({ name, role, status, error }) => ({
+            ...(name !== undefined ? { name } : {}),
+            role,
+            status,
+            ...(error ? { error } : {}),
+        }));
+        const shellJobs = newlyDisplayed.filter((notification) => notification.kind === 'shell_completion');
+        const shellOutputs = newlyDisplayed.filter((notification) => notification.kind === 'shell_output');
+        const userControls = newlyDisplayed.filter((notification) => notification.kind === 'user_control');
+        const checkIns = newlyDisplayed.filter((notification) => notification.kind === 'check_in');
+        // Settled background rows go above the live streaming slots. Appending
+        // them puts the row under the moving text, where it visibly jumps back up
+        // once the stream finalizes.
+        this.#appendAboveStreamingTail([
+            ...(subagentNotifications.length > 0
+                ? [
+                    {
+                        id: this.createMessageId(),
+                        sender: 'command',
+                        status: 'completed',
+                        command: 'background_subagent_notification',
+                        output: formatBackgroundSubagentNotificationDisplay(subagentNotifications),
+                        success: true,
+                        toolName: 'background_subagent_notification',
+                        toolArgs: { runs },
+                    },
+                ]
+                : []),
+            ...(shellJobs.length > 0
+                ? [
+                    {
+                        id: this.createMessageId(),
+                        sender: 'command',
+                        status: 'completed',
+                        command: 'background_shell_notification',
+                        output: formatBackgroundSubagentNotificationDisplay(shellJobs),
+                        success: true,
+                        toolName: 'background_shell_notification',
+                        toolArgs: {
+                            jobs: shellJobs.map(({ jobId, command, status, error }) => ({
+                                jobId,
+                                command,
+                                status,
+                                ...(error ? { error } : {}),
+                            })),
+                        },
+                    },
+                ]
+                : []),
+            ...(shellOutputs.length > 0
+                ? [
+                    {
+                        id: this.createMessageId(),
+                        sender: 'command',
+                        status: 'completed',
+                        command: 'background_shell_output_notification',
+                        output: formatBackgroundSubagentNotificationDisplay(shellOutputs),
+                        success: true,
+                        toolName: 'background_shell_output_notification',
+                        toolArgs: {
+                            firings: shellOutputs.map(({ jobId, command, watchId, seq, matchedLines, coalescedCount, seqRange, droppedBytes }) => ({
+                                jobId,
+                                command,
+                                watchId,
+                                seq,
+                                matchedLines,
+                                ...(coalescedCount !== undefined ? { coalescedCount } : {}),
+                                ...(seqRange !== undefined ? { seqRange } : {}),
+                                ...(droppedBytes !== undefined ? { droppedBytes } : {}),
+                            })),
+                        },
+                    },
+                ]
+                : []),
+            ...(userControls.length > 0
+                ? [
+                    {
+                        id: this.createMessageId(),
+                        sender: 'command',
+                        status: 'completed',
+                        command: 'background_task_control_notification',
+                        output: formatBackgroundSubagentNotificationDisplay(userControls),
+                        success: true,
+                        toolName: 'background_task_control_notification',
+                        toolArgs: {
+                            actions: userControls.map(({ action, target }) => ({ action, target })),
+                        },
+                    },
+                ]
+                : []),
+            ...(checkIns.length > 0
+                ? [
+                    {
+                        id: this.createMessageId(),
+                        sender: 'command',
+                        status: 'completed',
+                        command: 'background_check_in_notification',
+                        output: formatBackgroundSubagentNotificationDisplay(checkIns),
+                        success: true,
+                        toolName: 'background_check_in_notification',
+                        toolArgs: {
+                            checkIns: checkIns.map(({ target, checkInIndex, elapsedMs }) => ({
+                                target,
+                                checkInIndex,
+                                elapsedMs,
+                            })),
+                        },
+                    },
+                ]
+                : []),
+        ]);
+    }
+    /**
+     * Adds already-settled rows just above any live streaming bot/reasoning
+     * slots, so the row keeps one stable position for its whole life.
+     */
+    #appendAboveStreamingTail(additions) {
+        if (additions.length === 0)
+            return;
+        this.config.messages.setMessages((prev) => this.config.messages.trimMessages(insertBeforeStreamingTail(prev, additions, Number.POSITIVE_INFINITY)));
+    }
+    /**
+     * Offer settled runs to the turn already in flight.
+     *
+     * Taken as one report at that turn's next request boundary. If the turn will
+     * not take them they go back to the store unchanged, so the idle path still
+     * delivers them and the agent never sees the same run twice.
+     */
+    async #injectBackgroundSubagentNotifications(pending) {
+        if (!this.config.conversationService.injectIntoActiveTurn)
+            return;
+        const notifications = pending.drain();
+        if (notifications.length === 0)
+            return;
+        this.#announceBackgroundSubagentNotifications(notifications);
+        const injected = await this.config.conversationService
+            .injectIntoActiveTurn([
+            {
+                type: 'message',
+                role: 'user',
+                content: withAskUserCancelNotice(this.#takeAskUserCancelNotice(), formatBackgroundSubagentNotifications(notifications)),
+            },
+        ])
+            .catch((error) => {
+            this.logError('Error delivering background subagent notifications', error);
+            return false;
+        });
+        if (!injected)
+            pending.retain(notifications);
+    }
+    /**
+     * Hand every settled background subagent run to the main agent.
+     *
+     * The agent that launched these runs is usually still working when they
+     * settle, so delivery goes into that turn at its next request boundary. Only
+     * when no turn will take them does this open one of its own.
+     */
+    async #deliverBackgroundSubagentNotifications() {
+        const pending = this.config.conversationService.backgroundSubagentNotifications;
+        if (!pending || pending.pendingCount === 0)
+            return;
+        if (this.#stoppingByUser)
+            return;
+        const turnIsRunning = this.#activeTurns > 0 || this.config.conversationService.isQueueActive?.() === true;
+        if (turnIsRunning) {
+            await this.#injectBackgroundSubagentNotifications(pending);
+            return;
+        }
+        if (this.config.conversationService.getPendingInteractionSnapshot?.())
+            return;
+        const notifications = pending.drain();
+        if (notifications.length === 0)
+            return;
+        this.#announceBackgroundSubagentNotifications(notifications);
+        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = this.#beginTurn('backgroundSubagentNotification');
+        let delivered = false;
+        try {
+            const result = await this.config.conversationService.sendMessage(withAskUserCancelNotice(this.#takeAskUserCancelNotice(), formatBackgroundSubagentNotifications(notifications)), {
+                onEvent: this.createOnEventHandler(applyConversationEvent),
+                suppressUserMessageDisplay: true,
+            });
+            // A turn the queue refused to admit resolves without a terminal, so the
+            // notifications were never seen and must go back on the queue.
+            delivered = Boolean(result);
+            this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
+        }
+        catch (error) {
+            this.logError('Error delivering background subagent notifications', error);
+            if (isClassifiedCancellation(error)) {
+                this.config.loggingService.debug('Suppressing abort error in background subagent notification turn');
+                return;
+            }
+            this.appendBotError(enhanceApiKeyError(describeError(error)));
+        }
+        finally {
+            reasoningUpdater.flush();
+            botResponseUpdater.cancel();
+            if (!delivered) {
+                pending.retain(notifications);
+            }
+            // Only a delivered batch may chain: retrying a failed batch immediately
+            // would spin. Anything still queued waits for the next turn or completion.
+            this.#endTurn(delivered);
+        }
+    }
+    createTurnSession(label) {
+        return createStreamingSession({
+            appendMessages: this.config.messages.appendMessages,
+            setMessages: this.config.messages.setMessages,
+            trimMessages: this.config.messages.trimMessages,
+            annotateCommandMessage: (msg) => this.annotateCommandMessage(msg),
+            loggingService: this.config.loggingService,
+            setLastUsage: (usage) => this.config.ui.onUsageUpdate(usage),
+            setCodexRateLimit: (rateLimit) => this.config.ui.onRateLimitUpdate(rateLimit),
+            setStreamingSpeed: (speed) => this.config.ui.onStreamingSpeedUpdate?.(speed),
+            setRunBudgetNotice: (event) => this.config.ui.onRunBudgetNotice?.(event),
+            charsPerToken: this.#charsPerToken,
+            onCharsPerTokenCalibrated: (ratio) => {
+                this.#charsPerToken = ratio;
+            },
+            reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
+            now: this.config.now,
+            // One id sequence for the whole conversation: a session-private
+            // factory can mint `<timestamp>-0` in the same millisecond as this
+            // class's own ids, and the colliding id makes in-place finalization
+            // skip the live message (sender mismatch) and strand it streaming.
+            createMessageId: this.createMessageId,
+        }, label);
+    }
+    createOnEventHandler(baseOnEvent) {
+        // Calls whose results have not arrived yet. The indicator has start events
+        // for each step but the next step's first event can be a slow provider
+        // round-trip away, so the tool step must end on its own result; otherwise
+        // the wait for the model reads as the tool still running.
+        const pendingToolCallIds = new Set();
+        return (event) => {
+            const eventType = event.type;
+            if (eventType === 'tool_started') {
+                pendingToolCallIds.add(event.toolCallId);
+            }
+            else if (eventType === 'command_message') {
+                if (event.message.callId)
+                    pendingToolCallIds.delete(event.message.callId);
+                if (pendingToolCallIds.size === 0) {
+                    this.config.ui.onStreamingToolInfo(null);
+                    this.config.ui.onStreamingThinkingCleared();
+                }
+            }
+            if (eventType === 'retry') {
+                // The failed attempt's tool and thinking state belong to output the
+                // retry discards; the backoff is the only thing happening now.
+                this.config.ui.onStreamingToolInfo(null);
+                this.config.ui.onStreamingThinkingCleared();
+                this.config.ui.onStreamingSpeedUpdate?.(null);
+                if (event.delayMs != null && event.delayMs > 0) {
+                    this.config.ui.onRetryCountdown?.({
+                        until: (this.config.now ?? Date.now)() + event.delayMs,
+                        attempt: event.attempt,
+                        maxRetries: event.maxRetries,
+                    });
+                }
+            }
+            else if (this.clearsThinkingIndicator(eventType) ||
+                eventType === 'reasoning_started' ||
+                eventType === 'reasoning_delta') {
+                this.config.ui.onRetryCountdown?.(null);
+            }
+            if (eventType === 'reasoning_started' || eventType === 'reasoning_delta') {
+                this.config.ui.onStreamingThinkingStarted((this.config.now ?? Date.now)());
+            }
+            else if (this.clearsThinkingIndicator(eventType)) {
+                this.config.ui.onStreamingThinkingCleared();
+            }
+            if (eventType === 'reasoning_started' || eventType === 'reasoning_delta') {
+                // A tool call can remain in flight after the provider has finished
+                // streaming its arguments. Keep the call indicator visible until the
+                // tool result or the next model response arrives; otherwise the
+                // bottom area falls back to the misleading generic "generating" label
+                // while the tool itself is still running.
+                this.config.ui.onStreamingToolInfo(null);
+            }
+            else if (eventType === 'tool_call_streaming_delta') {
+                this.config.ui.onStreamingToolInfo({ toolName: event.toolName, argumentCharCount: event.argumentCharCount });
+            }
+            else if (eventType === 'tool_started') {
+                // Responses API can deliver the assembled function_call item without
+                // any argument-delta frame. The execution event still carries the
+                // authoritative tool name, so retain it for the loading indicator.
+                this.config.ui.onStreamingToolInfo({ toolName: event.toolName });
+            }
+            else if (eventType === 'text_delta' || eventType === 'final') {
+                this.config.ui.onStreamingToolInfo(null);
+            }
+            if (eventType === 'user_message_consumed_for_abort') {
+                this.config.messages.setMessages((prev) => {
+                    for (let i = prev.length - 1; i >= 0; i--) {
+                        const msg = prev[i];
+                        if (isUserMessage(msg)) {
+                            if (msg.consumedForAbort)
+                                return prev;
+                            const next = prev.slice();
+                            next[i] = { ...msg, consumedForAbort: true };
+                            return next;
+                        }
+                    }
+                    return prev;
+                });
+                return;
+            }
+            baseOnEvent(event);
+            if (eventType === 'cost_update') {
+                // Per-request cost records arrive live during the run; the terminal
+                // result re-delivers the same records and the accumulator dedups them
+                // by request id, so adding here is idempotent.
+                this.config.costAccumulator?.addRecord(event.record);
+                this.emitCostSummary();
+                return;
+            }
+            if (eventType === 'subagent_completed') {
+                if (event.result.usage) {
+                    this.config.subagentUsageAccumulator?.add(event.result.usage);
+                }
+                this.config.costAccumulator?.addRecords(event.result.costRecords ?? []);
+                this.emitCostSummary();
+            }
+        };
+    }
+    hasActiveBackgroundWork() {
+        const details = this.config.conversationService?.backgroundTaskControl?.listDetails?.() ?? [];
+        for (const d of details) {
+            if (d.kind === 'subagent') {
+                if (d.status === 'running' ||
+                    d.status === 'awaiting_approval' ||
+                    d.status === 'waiting_for_answer' ||
+                    d.status === 'cancelling') {
+                    return true;
+                }
+            }
+            else if (d.kind === 'shell') {
+                if (d.status === 'running' || d.status === 'cancelling') {
+                    return true;
+                }
+            }
+        }
+        const approvals = this.config.conversationService?.backgroundSubagentApprovals?.getSnapshot?.();
+        if (approvals && approvals.pendingCount > 0)
+            return true;
+        return false;
+    }
+    /** Push the accumulator's current summary to the UI after any cost add. */
+    emitCostSummary() {
+        const summary = this.config.costAccumulator?.getSummary();
+        if (summary)
+            this.config.ui.onCostUpdate?.(summary);
+    }
+    /**
+     * Settle a turn this orchestrator owns: finalize the streamed tail, drop
+     * any pending throttled push, and apply the terminal result.
+     *
+     * The `final` event's flushBotText already wrote the accumulated tail into
+     * the list as finalized text, so a pending botResponseUpdater push is
+     * stale. flush() would fire it after the live slot was cleared and
+     * re-create a `status: 'streaming'` bot message that the settle below
+     * cannot account for — an orphaned streaming row that blocks static
+     * commit for the rest of the session. cancel() discards it instead.
+     */
+    #settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState) {
+        applyConversationEvent({ type: 'final', finalText: '' });
+        botResponseUpdater.cancel();
+        this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+    }
+    applyServiceResult(result, streamingState, latestStreamedUsage) {
+        if (!result) {
+            return;
+        }
+        if (result.type === 'approval_required') {
+            if (result.usage) {
+                this.config.ui.onUsageUpdate(latestStreamedUsage ?? result.usage);
+            }
+            this.config.messages.setMessages((prev) => this.config.messages.trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)));
+            this.config.ui.onApprovalRequested({ ...result.approval, llmAdvisory: result.approval.llmAdvisory });
+            this.config.notifier?.approvalNeeded();
+            return;
+        }
+        let finalizedStreamingMessage = false;
+        this.config.messages.setMessages((prev) => {
+            const applied = computeNextMessages({
+                prev,
+                result,
+                streamingState,
+                createMessageId: this.createMessageId,
+                trimMessages: this.config.messages.trimMessages,
+                annotateCommandMessage: (msg) => this.annotateCommandMessage(msg),
+            });
+            finalizedStreamingMessage = applied.finalizedStreamingMessage;
+            return applied.next;
+        });
+        if (finalizedStreamingMessage) {
+            clearStreamingBotMessage(streamingState);
+        }
+        this.config.ui.onApprovalResolved();
+        if (!this.hasActiveBackgroundWork()) {
+            this.config.notifier?.turnComplete();
+        }
+        if (result.usage) {
+            this.config.usageAccumulator?.add(result.usage);
+            this.config.ui.onUsageUpdate(latestStreamedUsage ?? result.usage);
+        }
+        this.config.costAccumulator?.addRecords(result.costRecords ?? []);
+        this.emitCostSummary();
+    }
+    /**
+     * Append a previously-queued user message into the message list. Called by
+     * the queue when it actually starts processing the next turn. After the
+     * append, the pending indicator above the input box is cleared.
+     */
+    moveQueuedMessageIntoList(messageId, fallbackInput) {
+        this.#outstandingSubmissions.delete(messageId);
+        // If the message was already appended directly (when no turn was in flight),
+        // the queue observer fired after the fact — skip the duplicate append and
+        // avoid restarting its UI lifecycle. Still emit message-started so stale
+        // pending UI state cannot survive a queue-state race.
+        const wasAlreadyStarted = this.#directlyAppendedMessageIds.has(messageId);
+        if (wasAlreadyStarted) {
+            this.#directlyAppendedMessageIds.delete(messageId);
+        }
+        // The message id we created up-front matches the one we will append now.
+        // We do not look it up by id because by the time the queue fires the
+        // observer the original UserMessage may not be reachable, so we re-build
+        // a minimal one with the same id and the formatted text.
+        let resolved = null;
+        if (fallbackInput !== undefined) {
+            const turn = normalizeUserTurn(fallbackInput);
+            if (hasUserTurnContent(turn)) {
+                resolved = {
+                    id: messageId,
+                    sender: 'user',
+                    text: formatUserTurnForDisplay(turn),
+                    ...(turn.skill ? { skill: turn.skill } : {}),
+                };
+            }
+        }
+        if (resolved && !wasAlreadyStarted) {
+            this.config.messages.appendMessages([resolved]);
+        }
+        this.config.ui.onQueuedMessageStarted?.(messageId);
+        return wasAlreadyStarted;
+    }
+    annotateCommandMessage(cmdMsg) {
+        const approvedMessage = annotateApprovedCommandMessage(cmdMsg, this.config.approvedContext.current);
+        const matchedByToolName = approvedMessage !== cmdMsg &&
+            !this.config.approvedContext.current?.callId &&
+            Boolean(this.config.approvedContext.current?.toolName) &&
+            this.config.approvedContext.current?.toolName === cmdMsg.toolName;
+        if (matchedByToolName) {
+            this.config.approvedContext.current = null;
+        }
+        return approvedMessage;
+    }
+    clearsThinkingIndicator(eventType) {
+        return (eventType === 'text_delta' ||
+            eventType === 'tool_started' ||
+            eventType === 'tool_call_streaming_delta' ||
+            eventType === 'final');
+    }
+    /** Reuse the established pending-approval surface for human budget judgement. */
+    #presentRunBudgetInteraction(event, prefix) {
+        if (this.config.conversationService.getPendingInteractionSnapshot?.())
+            return;
+        const approval = {
+            agentName: 'System',
+            toolName: CHECK_IN_TOOL_NAME,
+            argumentsText: `${prefix ? `${prefix}\n\n` : ''}${formatRunBudgetEvidence(event)}`,
+            rawInterruption: null,
+            checkIn: 'run_budget',
+            runBudgetEvent: event,
+        };
+        this.config.conversationService.presentPendingInteraction?.(approval);
+        this.config.ui.onApprovalRequested(approval);
+        this.config.notifier?.approvalNeeded();
+    }
+    appendBotError(errorMessage, options = {}) {
+        const readableMessage = readableProviderError(errorMessage);
+        const recoveryHint = options.retryHint === false ? '' : '\n\nUse /retry-turn to try again.';
+        const botErrorMessage = {
+            id: this.createMessageId(),
+            sender: 'bot',
+            status: 'finalized',
+            text: `Error: ${readableMessage}${recoveryHint}`,
+        };
+        this.config.messages.appendMessages([botErrorMessage]);
+    }
+    logError(message, error) {
+        // Abort-like failures are expected control flow for user cancellation and
+        // must not be emitted as application errors. Keep this at the logging
+        // boundary so every orchestrator call site shares the same classification.
+        if (isClassifiedCancellation(error))
+            return;
+        this.config.loggingService.error(message, {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+            ...(error instanceof Error && error.eventKind ? { eventKind: error.eventKind } : {}),
+        });
+    }
+}
+//# sourceMappingURL=conversation-orchestrator.js.map

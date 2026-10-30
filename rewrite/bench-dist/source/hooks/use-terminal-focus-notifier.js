@@ -1,0 +1,70 @@
+import { useEffect, useMemo, useRef } from 'react';
+import { useInput } from 'ink';
+import { sendNotification } from '../services/notification-service.js';
+export const useTerminalFocusNotifier = ({ stdout, settingsService, loggingService, }) => {
+    // Default to "focused" so we stay silent when focus state is unknown.
+    const focusedRef = useRef(true);
+    useEffect(() => {
+        stdout.write('\x1b[?1004h');
+        return () => {
+            stdout.write('\x1b[?1004l');
+        };
+    }, [stdout]);
+    useInput((rawInput) => {
+        loggingService.debug('Received terminal raw input sequence', {
+            rawInput: JSON.stringify(rawInput),
+            length: rawInput.length,
+        });
+        if (rawInput === '\x1b[I' || rawInput === '[I') {
+            loggingService.debug('Terminal focus changed to IN (focused)', {
+                prevFocused: focusedRef.current,
+            });
+            focusedRef.current = true;
+            return;
+        }
+        if (rawInput === '\x1b[O' || rawInput === '[O') {
+            loggingService.debug('Terminal focus changed to OUT (unfocused)', {
+                prevFocused: focusedRef.current,
+            });
+            focusedRef.current = false;
+            return;
+        }
+        if (!focusedRef.current) {
+            loggingService.debug('Terminal focus restored via user input heuristic', {
+                rawInput: JSON.stringify(rawInput),
+            });
+            focusedRef.current = true;
+        }
+    });
+    return useMemo(() => ({
+        approvalNeeded() {
+            loggingService.debug('notifier.approvalNeeded check', {
+                focused: focusedRef.current,
+                appNotifications: settingsService.get('app.notifications'),
+                appNotificationsOnApproval: settingsService.get('app.notificationsOnApproval'),
+            });
+            if (focusedRef.current)
+                return;
+            if (!settingsService.get('app.notifications'))
+                return;
+            if (!settingsService.get('app.notificationsOnApproval'))
+                return;
+            sendNotification('Approval needed', 'Agent is waiting for your approval', { logger: loggingService });
+        },
+        turnComplete() {
+            loggingService.debug('notifier.turnComplete check', {
+                focused: focusedRef.current,
+                appNotifications: settingsService.get('app.notifications'),
+                appNotificationsOnComplete: settingsService.get('app.notificationsOnComplete'),
+            });
+            if (focusedRef.current)
+                return;
+            if (!settingsService.get('app.notifications'))
+                return;
+            if (!settingsService.get('app.notificationsOnComplete'))
+                return;
+            sendNotification('Response ready', 'Agent has finished responding', { logger: loggingService });
+        },
+    }), [settingsService, loggingService]);
+};
+//# sourceMappingURL=use-terminal-focus-notifier.js.map

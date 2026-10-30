@@ -1,0 +1,1 @@
+{"version":3,"file":"CommandGroupSummary.d.ts","sourceRoot":"","sources":["../../../../../source/components/message/CommandGroupSummary.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAa,MAAM,OAAO,CAAC;AAClC,OAAO,EAAgD,KAAK,gBAAgB,EAAE,MAAM,uBAAuB,CAAC;AAG5G,KAAK,KAAK,GAAG;IACX,OAAO,EAAE,gBAAgB,EAAE,CAAC;IAC5B,MAAM,EAAE,WAAW,GAAG,SAAS,GAAG,QAAQ,CAAC;CAC5C,CAAC"}

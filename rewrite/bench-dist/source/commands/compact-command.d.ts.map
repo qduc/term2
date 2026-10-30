@@ -1,0 +1,1 @@
+{"version":3,"file":"compact-command.d.ts","sourceRoot":"","sources":["../../../../source/commands/compact-command.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,YAAY,EAAE,MAAM,sBAAsB,CAAC;AAEzD,eAAO,MAAM,yBAAyB,SAAU;IAC9C,cAAc,EAAE,MAAM,OAAO,CAAC,MAAM,CAAC,CAAC;IACtC,gBAAgB,EAAE,CAAC,IAAI,EAAE,MAAM,KAAK,IAAI,CAAC;CAC1C,KAAG,YAgBF,CAAC"}

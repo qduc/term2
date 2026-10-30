@@ -1,0 +1,122 @@
+/**
+ * Data-only binding descriptors for menu frames.
+ *
+ * Each table is the single source of truth for a frame's advertised keys:
+ * the MenuFooter renders from it (via bindingHints), and the interaction's
+ * handle() switch in the owning session session file is the behavior it
+ * describes. Hints cannot drift from behavior because both sides are tested
+ * against the same table (see menu-bindings.test.ts).
+ *
+ * Entries are deliberately data-only: key/action labels plus the command ids
+ * they map to. State-dependent availability (e.g. the inline nickname editor
+ * suspending Tab and list navigation in the model frame) is expressed by the
+ * owner selecting a different table, never by predicates inside entries.
+ *
+ * Tab policy (conditional rule, 2026-09-14): Tab advances the frame's
+ * secondary dimension — it switches tabs/sections where such a dimension
+ * exists, and completes the highlighted entry where it does not. Each Tab
+ * binding must carry a rationale recording the decision that gives it its
+ * meaning, so a future "consistency" pass has to consciously delete the
+ * recorded decision rather than silently reverting it.
+ */
+/** Every event/command id a menu interaction may advertise a key for. */
+export const MENU_COMMAND_VOCABULARY = [
+    'move',
+    'accept',
+    'escape',
+    'input',
+    'tab',
+    'left',
+    'right',
+    'backspace',
+    'delete',
+    'refresh',
+    'favorite',
+    'nickname',
+];
+/** Derive the [key, action] hint rows MenuFooter renders from a table. */
+export const bindingHints = (bindings) => bindings.map(({ key, action }) => [key === 'esc' ? 'Esc' : key, action]);
+/** Slash-command picker. Owned by createSlashMenuInteraction (SlashMenuSession). */
+export const SLASH_MENU_BINDINGS = [
+    { key: '↑↓', action: 'navigate', commands: ['move'] },
+    { key: '⏎', action: 'run', commands: ['accept'] },
+    {
+        key: 'Tab',
+        action: 'complete',
+        commands: ['tab'],
+        rationale: 'The slash frame has no tab/section dimension, so under the conditional Tab rule Tab inserts the highlighted command into the composer ("complete") without executing it.',
+    },
+    { key: 'esc', action: 'cancel', commands: ['escape'] },
+];
+/**
+ * Model picker list-footer segments, in advertised order. Owned by
+ * ModelMenuSession's interaction while no nickname draft is open;
+ * MODEL_MENU_BINDINGS is the unified (Favorites/Nicknames/All) composition.
+ */
+const MODEL_MENU_CORE_BINDINGS = [
+    { key: '↑↓', action: 'navigate', commands: ['move'] },
+    { key: '⏎', action: 'select', commands: ['accept'] },
+];
+const MODEL_MENU_TAB_BINDINGS = [
+    {
+        key: 'Tab/←→',
+        action: 'tab',
+        commands: ['tab', 'left', 'right'],
+        rationale: 'User decision f106ddd1 (2026-09-11): Tab switches model-picker tabs and never completes the highlighted model id into the composer; Enter is the only selection key. The tabs are Favorites, Nicknames, and All.',
+    },
+];
+const MODEL_MENU_NICKNAME_BINDINGS = [{ key: 'ctrl+n', action: 'nickname', commands: ['nickname'] }];
+const MODEL_MENU_TAIL_BINDINGS = [
+    { key: 'ctrl+f', action: 'favorite', commands: ['favorite'] },
+    { key: 'ctrl+r', action: 'refresh model list', commands: ['refresh'] },
+    { key: 'esc', action: 'cancel', commands: ['escape'] },
+];
+export const MODEL_MENU_BINDINGS = [
+    ...MODEL_MENU_CORE_BINDINGS,
+    ...MODEL_MENU_TAB_BINDINGS,
+    ...MODEL_MENU_NICKNAME_BINDINGS,
+    ...MODEL_MENU_TAIL_BINDINGS,
+];
+/** Model picker, legacy per-provider tab mode (←→ switches provider tabs). */
+export const MODEL_MENU_PROVIDER_TAB_BINDINGS = [
+    { key: '←→', action: 'provider', commands: ['left', 'right'] },
+];
+/**
+ * Model picker while the inline nickname editor owns the input row: Tab and
+ * list navigation are deliberately suspended (the editor is bound to one
+ * highlighted row, so navigating away would orphan it), and only the draft
+ * bindings are advertised.
+ */
+export const MODEL_MENU_NICKNAME_DRAFT_BINDINGS = [
+    { key: '⏎', action: 'save nickname', commands: ['accept'] },
+    { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
+];
+/** Existing nickname draft: Delete removes it without clearing the text. */
+export const MODEL_MENU_NICKNAME_EDIT_BINDINGS = [
+    { key: '⏎', action: 'save nickname', commands: ['accept'] },
+    { key: 'Delete', action: 'remove nickname', commands: ['delete'] },
+    { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
+];
+/** Same editor once Enter has offered to move a name off another model. */
+export const MODEL_MENU_NICKNAME_REPLACE_BINDINGS = [
+    { key: '⏎', action: 'replace nickname', commands: ['accept'] },
+    { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
+];
+/** Model picker error/empty fallback under a legacy per-provider tab. */
+export const MODEL_MENU_PROVIDER_FALLBACK_BINDINGS = [
+    { key: '←→', action: 'switch provider', commands: ['left', 'right'] },
+    { key: 'esc', action: 'cancel', commands: ['escape'] },
+];
+/**
+ * Select the bindings advertised in the model picker's list footer. Pure
+ * selection over the tables above — state lives in the caller's props, never
+ * in predicates here. While a nickname draft is open the component advertises
+ * MODEL_MENU_NICKNAME_DRAFT_BINDINGS instead and does not call this.
+ */
+export const modelMenuFooterBindings = (dims) => [
+    ...MODEL_MENU_CORE_BINDINGS,
+    ...(dims.tabDimension ? MODEL_MENU_TAB_BINDINGS : dims.providerDimension ? MODEL_MENU_PROVIDER_TAB_BINDINGS : []),
+    ...(dims.nicknameAvailable ? MODEL_MENU_NICKNAME_BINDINGS : []),
+    ...MODEL_MENU_TAIL_BINDINGS,
+];
+//# sourceMappingURL=menu-bindings.js.map

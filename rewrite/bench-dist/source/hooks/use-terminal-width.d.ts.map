@@ -1,0 +1,1 @@
+{"version":3,"file":"use-terminal-width.d.ts","sourceRoot":"","sources":["../../../../source/hooks/use-terminal-width.ts"],"names":[],"mappings":"AAGA,KAAK,OAAO,GAAG;IACb,yBAAyB,EAAE,OAAO,CAAC;IACnC,WAAW,EAAE,OAAO,CAAC;IACrB,WAAW,CAAC,EAAE,MAAM,CAAC;CACtB,CAAC;AAIF,eAAO,MAAM,gBAAgB,4DAA6D,OAAO,KAAG,MAmCnG,CAAC"}

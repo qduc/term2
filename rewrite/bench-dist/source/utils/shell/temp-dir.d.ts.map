@@ -1,0 +1,1 @@
+{"version":3,"file":"temp-dir.d.ts","sourceRoot":"","sources":["../../../../../source/utils/shell/temp-dir.ts"],"names":[],"mappings":"AA8CA,eAAO,MAAM,gBAAgB,QAAmB,CAAC;AAEjD,MAAM,WAAW,gBAAgB;IAC/B,IAAI,EAAE,MAAM,CAAC;IACb,MAAM,EAAE,MAAM,CAAC;IACf,KAAK,EAAE,MAAM,CAAC;IACd,IAAI,EAAE,MAAM,CAAC;IACb,KAAK,EAAE,MAAM,CAAC;CACf;AAeD,wBAAgB,uBAAuB,CAAC,GAAG,EAAE,MAAM,GAAG,gBAAgB,CAkBrE"}

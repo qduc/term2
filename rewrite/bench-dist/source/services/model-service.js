@@ -1,0 +1,384 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import envPaths from 'env-paths';
+import { BOUNDARY_REGEX, scoreSubsequence } from '../utils/subsequence-filter.js';
+import { getProvider } from '../providers/index.js';
+import { getModelContextWindow } from '../providers/model-catalog/catalog.js';
+export const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const MODEL_CACHE_STALE_GRACE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days fallback ceiling for last-known-good
+const cache = new Map();
+let testCacheDir = null;
+let testClock = null;
+export function setModelCacheDirForTest(dir) {
+    testCacheDir = dir;
+}
+export function setModelCacheClockForTest(clock) {
+    testClock = clock;
+}
+export function clearModelMemoryCacheForTest() {
+    cache.clear();
+}
+export function getModelCacheDir(customDir) {
+    const baseDir = customDir || testCacheDir || process.env.TERM2_CACHE_DIR || envPaths('term2').cache;
+    return path.join(baseDir, 'models');
+}
+export function getModelCacheFilePath(provider, customDir) {
+    const safeName = provider.replace(/[^a-zA-Z0-9-]/g, (c) => `_${c.charCodeAt(0).toString(16).padStart(2, '0')}_`);
+    return path.join(getModelCacheDir(customDir), `${safeName}.json`);
+}
+/**
+ * Determines whether candidate models list represents a strict subset of previous models.
+ * An empty list or a list with strictly fewer models containing only IDs from previous is degraded.
+ */
+export function isStrictSubsetModels(candidates, previous) {
+    if (previous.length === 0)
+        return false;
+    if (candidates.length === 0)
+        return true;
+    if (candidates.length >= previous.length)
+        return false;
+    const previousIds = new Set(previous.map((m) => m.id));
+    return candidates.every((m) => previousIds.has(m.id));
+}
+function readDiskCache(provider, cacheDir, nowFn, ttlMs = MODEL_CACHE_TTL_MS, loggingService) {
+    try {
+        const filePath = getModelCacheFilePath(provider, cacheDir);
+        if (!fs.existsSync(filePath)) {
+            return null;
+        }
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') {
+            return null;
+        }
+        // Older catalogs used broader eligibility rules. Refetch rather than
+        // preserve entries produced by an obsolete provider adapter policy.
+        if (parsed.version !== 3) {
+            return null;
+        }
+        if (parsed.provider !== provider) {
+            return null;
+        }
+        if (typeof parsed.timestamp !== 'number' || !Number.isFinite(parsed.timestamp)) {
+            return null;
+        }
+        const now = nowFn ?? testClock ?? Date.now;
+        const currentTime = now();
+        const age = currentTime - parsed.timestamp;
+        if (age < 0 || age >= ttlMs) {
+            return null;
+        }
+        if (!Array.isArray(parsed.models) || parsed.models.length === 0) {
+            return null;
+        }
+        for (const m of parsed.models) {
+            if (!m || typeof m !== 'object' || typeof m.id !== 'string') {
+                return null;
+            }
+        }
+        return parsed.models;
+    }
+    catch (error) {
+        loggingService?.debug?.('Failed to read model disk cache', { provider, error: String(error) });
+        return null;
+    }
+}
+/**
+ * Read-only peek at whatever model listing is already warm for a provider:
+ * the in-memory cache if still fresh, else a non-expired disk cache entry.
+ * Never fetches, and never populates, refreshes, or evicts either cache
+ * layer — a cold or expired cache costs nothing beyond a Map lookup and, on
+ * a miss, one `fs.existsSync` check. Intended for opportunistic
+ * cross-provider exact-match collision detection after a fast, single-
+ * provider resolution (see `resolveModelFlag`); deliberately not a
+ * substitute for `fetchModels`, which is the only thing allowed to touch
+ * the network or write the cache.
+ */
+export function peekCachedModels(provider, opts) {
+    const now = opts?.now ?? testClock ?? Date.now;
+    const ttlMs = opts?.ttlMs ?? MODEL_CACHE_TTL_MS;
+    const memCached = cache.get(provider);
+    if (memCached) {
+        const age = now() - memCached.timestamp;
+        if (age >= 0 && age < ttlMs && memCached.models.length > 0) {
+            return memCached.models;
+        }
+    }
+    const diskCached = readDiskCache(provider, opts?.cacheDir, opts?.now, ttlMs);
+    return diskCached ?? undefined;
+}
+function writeDiskCache(provider, models, cacheDir, nowFn, loggingService) {
+    if (!models || models.length === 0) {
+        return;
+    }
+    const dir = getModelCacheDir(cacheDir);
+    const targetFile = getModelCacheFilePath(provider, cacheDir);
+    const baseName = path.basename(targetFile, '.json');
+    const tempFile = path.join(dir, `.${baseName}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`);
+    let tempCreated = false;
+    try {
+        fs.mkdirSync(dir, { recursive: true });
+        const now = nowFn ?? testClock ?? Date.now;
+        const payload = {
+            version: 3,
+            provider,
+            timestamp: now(),
+            models,
+        };
+        const content = JSON.stringify(payload);
+        const fd = fs.openSync(tempFile, 'wx');
+        tempCreated = true;
+        try {
+            fs.writeFileSync(fd, content, 'utf-8');
+            fs.fsyncSync(fd);
+        }
+        finally {
+            fs.closeSync(fd);
+        }
+        fs.renameSync(tempFile, targetFile);
+        tempCreated = false;
+    }
+    catch (error) {
+        loggingService?.warn('Failed to write model disk cache', { provider, error: String(error) });
+    }
+    finally {
+        if (tempCreated) {
+            try {
+                fs.unlinkSync(tempFile);
+            }
+            catch {
+                // Best-effort cleanup of temp file
+            }
+        }
+    }
+}
+export async function fetchModels(deps, providerOverride, fetchImpl = fetch) {
+    const { settingsService, loggingService } = deps;
+    const provider = providerOverride || settingsService.get('agent.modelSelection').provider;
+    const cacheKey = provider;
+    const now = deps.now ?? testClock ?? Date.now;
+    const ttlMs = deps.ttlMs ?? MODEL_CACHE_TTL_MS;
+    const memory = deps.discovery?.cache ?? cache;
+    if (deps.discovery)
+        deps.signal?.throwIfAborted();
+    // 1. In-memory cache hit
+    const memCached = memory.get(cacheKey);
+    if (memCached) {
+        const age = now() - memCached.timestamp;
+        if (age >= 0 && age < ttlMs && memCached.models.length > 0) {
+            return memCached.models;
+        }
+        memory.delete(cacheKey);
+    }
+    // 2. Disk cache hit
+    const diskCached = deps.discovery
+        ? null
+        : readDiskCache(provider, deps.cacheDir, deps.now, deps.ttlMs, loggingService);
+    if (diskCached && diskCached.length > 0) {
+        memory.set(cacheKey, { models: diskCached, timestamp: now() });
+        return diskCached;
+    }
+    // 3. Cache miss: read previous disk cache within fallback grace period as last-known-good
+    const previous = deps.discovery
+        ? memCached && now() - memCached.timestamp >= 0 && now() - memCached.timestamp < MODEL_CACHE_STALE_GRACE_MS
+            ? memCached.models
+            : null
+        : readDiskCache(provider, deps.cacheDir, deps.now, MODEL_CACHE_STALE_GRACE_MS, loggingService);
+    const startTime = now();
+    try {
+        const providerDef = deps.discovery ? deps.discovery.providerDefinition(provider) : getProvider(provider);
+        if (!providerDef) {
+            throw new Error(`Provider '${provider}' is not registered`);
+        }
+        const rawModels = await providerDef.fetchModels({ settingsService, loggingService, signal: deps.signal }, fetchImpl);
+        if (deps.discovery)
+            deps.signal?.throwIfAborted();
+        let models = rawModels.map((m) => ({
+            ...m,
+            provider,
+            contextWindow: getModelContextWindow(provider, m.id),
+        }));
+        let isDegraded = previous !== null && previous.length > 0 && isStrictSubsetModels(models, previous);
+        if (isDegraded) {
+            loggingService.warn('Suspect degraded model list received from provider; attempting immediate retry', {
+                provider,
+                receivedCount: models.length,
+                previousCount: previous.length,
+            });
+            try {
+                const retryRaw = await providerDef.fetchModels({ settingsService, loggingService, signal: deps.signal }, fetchImpl);
+                if (deps.discovery)
+                    deps.signal?.throwIfAborted();
+                const retryModels = retryRaw.map((m) => ({
+                    ...m,
+                    provider,
+                    contextWindow: getModelContextWindow(provider, m.id),
+                }));
+                if (!isStrictSubsetModels(retryModels, previous)) {
+                    models = retryModels;
+                    isDegraded = false;
+                    loggingService.info?.('Model listing recovered on retry', {
+                        provider,
+                        recoveredCount: models.length,
+                    });
+                }
+            }
+            catch (retryError) {
+                loggingService.warn('Model listing retry failed', {
+                    provider,
+                    error: String(retryError),
+                });
+            }
+        }
+        if (deps.discovery)
+            deps.signal?.throwIfAborted();
+        if (isDegraded && previous && previous.length > 0) {
+            loggingService.warn('Provider returned degraded model list; preserving last-known-good catalog', {
+                provider,
+                receivedCount: models.length,
+                previousCount: previous.length,
+            });
+            // Do not write degraded models to disk cache.
+            // Retain expired disk cache file so subsequent sessions retry upstream.
+            memory.set(cacheKey, { models: previous, timestamp: now() });
+            return previous;
+        }
+        if (models.length > 0) {
+            memory.set(cacheKey, { models, timestamp: now() });
+            if (!deps.discovery)
+                writeDiskCache(provider, models, deps.cacheDir, deps.now, loggingService);
+        }
+        else {
+            loggingService.warn('Provider returned empty model catalog; skipping disk cache write', { provider });
+        }
+        loggingService.debug?.('Fetched models from provider', {
+            provider,
+            count: models.length,
+            durationMs: now() - startTime,
+            degraded: isDegraded,
+        });
+        return models;
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        let detailedError = message;
+        if (error instanceof Error && error.cause) {
+            const causeMessage = error.cause instanceof Error ? error.cause.message : String(error.cause);
+            if (causeMessage && causeMessage !== message) {
+                detailedError = `${message} (cause: ${causeMessage})`;
+            }
+        }
+        loggingService.warn('Failed to fetch models', {
+            provider,
+            error: detailedError,
+        });
+        if (error instanceof Error && error.cause) {
+            error.message = detailedError;
+        }
+        throw error;
+    }
+}
+export function clearModelCache(provider, opts) {
+    if (provider) {
+        cache.delete(provider);
+    }
+    else {
+        cache.clear();
+    }
+    try {
+        const dir = getModelCacheDir(opts?.cacheDir);
+        if (provider) {
+            const targetFile = getModelCacheFilePath(provider, opts?.cacheDir);
+            if (fs.existsSync(targetFile)) {
+                try {
+                    fs.unlinkSync(targetFile);
+                }
+                catch {
+                    // ignore
+                }
+            }
+        }
+        else {
+            if (fs.existsSync(dir)) {
+                const files = fs.readdirSync(dir);
+                for (const file of files) {
+                    if (file.endsWith('.json') || file.endsWith('.tmp')) {
+                        try {
+                            fs.unlinkSync(path.join(dir, file));
+                        }
+                        catch {
+                            // ignore
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        // Disk cache clearing is best-effort and must not throw
+    }
+}
+export function getModelDefaultReasoningLevel(provider, modelId, discovery) {
+    if (!(discovery ? discovery.providerDefinition(provider) : getProvider(provider))?.useModelReasoningDefault)
+        return undefined;
+    const entry = (discovery?.cache ?? cache).get(provider);
+    if (!entry)
+        return undefined;
+    const model = entry.models.find((m) => m.id === modelId);
+    return model?.default_reasoning_level;
+}
+/** Provider-owned fallback for APIs that do not advertise per-model reasoning defaults. */
+export function getProviderDefaultReasoningLevel(provider, discovery) {
+    return (discovery ? discovery.providerDefinition(provider) : getProvider(provider))?.defaultReasoningLevel;
+}
+/**
+ * Classify how strongly `query` matches `text`, independent of score magnitude.
+ * Used to rank id-prefix and word-boundary hits above a merely-plausible
+ * subsequence match, before falling back to the continuous score as a tiebreaker.
+ */
+export function matchTier(query, text) {
+    const q = query.toLowerCase();
+    const t = text.toLowerCase();
+    if (!q)
+        return 2;
+    if (t.startsWith(q))
+        return 0;
+    let idx = t.indexOf(q);
+    while (idx !== -1) {
+        const prevChar = idx > 0 ? t[idx - 1] : undefined;
+        if (prevChar !== undefined && BOUNDARY_REGEX.test(prevChar)) {
+            return 1;
+        }
+        idx = t.indexOf(q, idx + 1);
+    }
+    return 2;
+}
+/**
+ * Score a model against a search query the way `filterModels` does internally
+ * (id matches weighted 2x over name matches, higher of the two wins), but
+ * surface the result instead of discarding it. Returns null when neither the
+ * id nor the name is a subsequence match.
+ */
+export function rankModelMatch(model, query) {
+    const idScore = scoreSubsequence(query, model.id);
+    const nameScore = model.name ? scoreSubsequence(query, model.name) : -Infinity;
+    // Reward ID match more than Name match
+    const weightedId = idScore === -Infinity ? -Infinity : idScore * 2;
+    const weightedName = nameScore === -Infinity ? -Infinity : nameScore;
+    if (weightedId === -Infinity && weightedName === -Infinity) {
+        return null;
+    }
+    const useId = weightedId >= weightedName;
+    return {
+        score: useId ? weightedId : weightedName,
+        tier: matchTier(query, useId ? model.id : model.name),
+    };
+}
+export function filterModels(models, query) {
+    const trimmed = query.trim();
+    if (!trimmed) {
+        return models;
+    }
+    return models.filter((model) => rankModelMatch(model, trimmed) !== null);
+}
+//# sourceMappingURL=model-service.js.map

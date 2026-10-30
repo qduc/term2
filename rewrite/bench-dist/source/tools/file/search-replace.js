@@ -1,0 +1,520 @@
+import { z } from 'zod';
+import { readFile, writeFile } from 'fs/promises';
+import path from 'path';
+import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
+import { getOutputText, isSuccessOutput, safeJsonParse, normalizeToolArguments, createBaseMessage, formatPatchOutputItems, } from '../format-helpers.js';
+import { healSearchReplaceParams } from './edit-healing.js';
+import { resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
+import { getApprovalPresentationCapability } from '../tool-capabilities.js';
+import { withFileLock } from './file-locks.js';
+import { findMatchesInContent, normalizeSearchContent, normalizeToEOL, prepareMatchContext, SearchReplaceEditCache, } from './search-replace-matcher.js';
+/**
+ * Detect summarization markers in content that indicate truncated/omitted code.
+ */
+function detectSummarizationMarkers(content) {
+    if (/Lines \d+-\d+ omitted/i.test(content)) {
+        return 'oldString contains "Lines X-Y omitted" marker - provide the actual content';
+    }
+    if (content.includes('{…}') || content.includes('{...}')) {
+        return 'oldString contains ellipsis marker {…} - provide the actual content';
+    }
+    if (content.includes('/*...*/') || content.includes('/* ... */')) {
+        return 'oldString contains /*...*/ marker - provide the actual content';
+    }
+    if (content.includes('// ...') || content.includes('//...')) {
+        return 'oldString contains // ... marker - provide the actual content';
+    }
+    if (content.includes('# ...') || content.includes('#...')) {
+        return 'oldString contains # ... marker - provide the actual content';
+    }
+    return null;
+}
+const searchReplaceOperationSchema = z.object({
+    search_content: z.string().describe('The exact content to search for. <...> on its own line acts as a gap anchor.'),
+    replace_content: z.string().describe('The content to replace the matched search_content with.'),
+    match_all: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe('Replace every non-overlapping match. Defaults to false, which requires exactly one match.'),
+});
+const searchReplaceParametersSchema = z.object({
+    path: z.string().describe('The absolute or relative path to the file'),
+    replacements: z.array(searchReplaceOperationSchema).min(1).describe('The list of replacements to apply to the file'),
+});
+function getSearchReplaceOperations(params) {
+    return params.replacements.map((rep) => ({
+        path: params.path,
+        search_content: rep.search_content,
+        replace_content: rep.replace_content,
+        match_all: rep.match_all ?? false,
+    }));
+}
+function containsGapMarker(content) {
+    return content.includes('<...>');
+}
+function evaluateApprovalForMatch(matchInfo, matchAll, insideCwd, filePath, loggingService) {
+    if (matchInfo.type === 'none') {
+        loggingService.warn('search_replace validation: no match found - will fail in execute', {
+            path: filePath,
+        });
+        return false;
+    }
+    if (matchInfo.count > 1 && !matchAll) {
+        loggingService.warn(`search_replace validation: multiple ${matchInfo.type} matches - will fail in execute`, {
+            path: filePath,
+            count: matchInfo.count,
+        });
+        return false;
+    }
+    if (matchInfo.type === 'exact') {
+        loggingService.debug('search_replace validation: exact match found', {
+            path: filePath,
+            count: matchInfo.count,
+        });
+        return insideCwd ? false : true;
+    }
+    if (matchInfo.type === 'gap') {
+        loggingService.debug('search_replace validation: gap match found', {
+            path: filePath,
+            count: matchInfo.count,
+        });
+        return insideCwd ? false : true;
+    }
+    if (matchInfo.type === 'relaxed') {
+        loggingService.debug('search_replace validation: relaxed match found', {
+            path: filePath,
+            count: matchInfo.count,
+        });
+        return insideCwd ? false : true;
+    }
+    if (matchInfo.type === 'normalized') {
+        loggingService.debug('search_replace validation: normalized match found', {
+            path: filePath,
+            count: matchInfo.count,
+        });
+        return insideCwd ? false : true;
+    }
+    loggingService.debug(`search_replace validation: ${matchInfo.type} match found`, {
+        path: filePath,
+        count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+}
+function replaceIndexedMatches(content, matches, replaceContent, matchAll) {
+    const selectedMatches = matchAll ? selectNonOverlappingMatches(matches) : matches.slice(0, 1);
+    let newContent = content;
+    for (const match of [...selectedMatches].reverse()) {
+        newContent = newContent.substring(0, match.startIndex) + replaceContent + newContent.substring(match.endIndex);
+    }
+    return {
+        newContent,
+        replacedCount: selectedMatches.length,
+    };
+}
+function selectNonOverlappingMatches(matches) {
+    const selected = [];
+    let previousEnd = -1;
+    for (const match of matches) {
+        if (match.startIndex < previousEnd)
+            continue;
+        selected.push(match);
+        previousEnd = match.endIndex;
+    }
+    return selected;
+}
+function executeReplacement(matchInfo, content, eol, options) {
+    const normalizedReplaceContent = normalizeToEOL(options.replaceContent, eol);
+    if (matchInfo.type === 'none') {
+        return {
+            success: false,
+            error: 'Search content not found. Try splitting the changes into smaller search pattern.',
+        };
+    }
+    if (matchInfo.count > 1 && !options.matchAll) {
+        return {
+            success: false,
+            error: `Found ${matchInfo.count} ${matchInfo.type} matches. Search content must match exactly once. Set match_all to true to replace all matches.`,
+        };
+    }
+    const replaced = replaceIndexedMatches(content, matchInfo.matches, normalizedReplaceContent, options.matchAll);
+    return {
+        success: true,
+        newContent: replaced.newContent,
+        matchType: matchInfo.type,
+        replacedCount: replaced.replacedCount,
+    };
+}
+export const formatSearchReplaceCommandMessage = (item, index, _toolCallArgumentsById) => {
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args = normalizeToolArguments(normalizedArgs) ?? {};
+    const replacements = Array.isArray(args?.replacements) ? args.replacements : [];
+    const firstReplacement = replacements[0] ?? {};
+    const filePath = args?.path ?? 'unknown';
+    const searchContent = firstReplacement.search_content ?? '';
+    const replaceContent = firstReplacement.replace_content ?? '';
+    const rawOutput = getOutputText(item) || 'No output';
+    // Backward compatibility: old outputs were JSON strings with an output array.
+    const parsedOutput = rawOutput.startsWith('{') ? safeJsonParse(rawOutput) : undefined;
+    let output;
+    if (Array.isArray(parsedOutput?.output) && parsedOutput.output.length > 0) {
+        output = formatPatchOutputItems(parsedOutput.output) || rawOutput;
+    }
+    else {
+        output = rawOutput;
+    }
+    const success = isSuccessOutput(output);
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command: `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"${replacements.length > 1 ? ` (${replacements.length} edits)` : ''}`,
+            output,
+            success,
+            toolName: 'search_replace',
+            toolArgs: {
+                path: filePath,
+                replacements,
+            },
+        }),
+    ];
+};
+const SEARCH_REPLACE_DESCRIPTION = 'Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Matches must be unique unless match_all is true, and oversized fuzzy spans are rejected.\n' +
+    'Gap matching: When rewriting large chunks of text, put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span—both anchors and everything between them—is replaced, so a misplaced anchor silently deletes a large region. Choose distinctive, unambiguous anchors: prefer a few lines of real, unique code. Never anchor on a single generic line like }, return, or a blank line. Use this to edit or delete a large block without reproducing it: Delete the block including anchors: omit them from replace_content. Delete only the middle: repeat the anchors in replace_content.\n' +
+    'Do NOT use this to create files from scratch; inside run_code, use tools.create_file(...). Returns a plain-text summary with one line per replacement: Updated <path> or Error: <reason>.';
+export function createSearchReplaceToolDefinition(deps) {
+    const { loggingService, settingsService, executionContext, sessionAccess, editHealing = healSearchReplaceParams, } = deps;
+    const editCache = new SearchReplaceEditCache();
+    return {
+        name: 'search_replace',
+        description: SEARCH_REPLACE_DESCRIPTION,
+        scriptedReturnShape: 'string: one status line per operation, newline-joined — "Updated <path> (N match)" | "Created <path> (new file)" | "Error: \u2026"',
+        effect: 'mutating',
+        canRequireApproval: true,
+        scriptedReturnSchema: z.string(),
+        parameters: searchReplaceParametersSchema,
+        approvalPresentation: getApprovalPresentationCapability('search_replace'),
+        needsApproval: async (params) => {
+            if (sessionAccess?.isReadOnly)
+                return false;
+            if (settingsService.get('shell.autoApproveMode') === 'always') {
+                loggingService.security('search_replace needsApproval: auto-approved in YOLO mode', {
+                    operationCount: getSearchReplaceOperations(params).length,
+                });
+                return false;
+            }
+            try {
+                const operations = getSearchReplaceOperations(params);
+                const cwd = executionContext?.getCwd() || process.cwd();
+                const sshService = executionContext?.getSSHService();
+                const isRemote = executionContext?.isRemote() && !!sshService;
+                const resolvedOperations = [];
+                // Check every batch target physically before reading any file. This
+                // prevents validation from following an in-workspace symlink outside
+                // the workspace before approval is requested.
+                for (const operation of operations) {
+                    let targetPath;
+                    try {
+                        targetPath = resolveWorkspacePath(operation.path, cwd);
+                    }
+                    catch {
+                        return true;
+                    }
+                    const insideCwd = targetPath.startsWith(cwd + path.sep) ||
+                        targetPath === SANDBOX_TEMP_DIR ||
+                        targetPath.startsWith(SANDBOX_TEMP_DIR + path.sep);
+                    const physicallyInsideWorkspace = !isRemote &&
+                        insideCwd &&
+                        !isProtectedHookPath(targetPath, cwd) &&
+                        ((await isWorkspacePathPhysicallyInside(targetPath, cwd)) ||
+                            (await isWorkspacePathPhysicallyInside(targetPath, SANDBOX_TEMP_DIR)));
+                    if (!physicallyInsideWorkspace) {
+                        if (!sessionAccess?.allowsEdit(targetPath, cwd))
+                            return true;
+                    }
+                    resolvedOperations.push({ ...operation, targetPath, insideCwd });
+                }
+                // Preserve the existing batch behavior: boundary checks are applied to
+                // all operations, while content validation remains single-operation.
+                if (operations.length > 1) {
+                    return false;
+                }
+                const operation = resolvedOperations[0];
+                const { path: filePath, search_content, replace_content, targetPath, insideCwd } = operation;
+                // Read file content
+                let content;
+                try {
+                    if (isRemote && sshService) {
+                        content = await sshService.readFile(targetPath);
+                    }
+                    else {
+                        content = await readFile(targetPath, 'utf8');
+                    }
+                }
+                catch (error) {
+                    if (search_content === '' && error?.code === 'ENOENT') {
+                        loggingService.debug('search_replace validation: creating new file because search_content is empty', {
+                            path: filePath,
+                        });
+                        if (insideCwd) {
+                            return false;
+                        }
+                        return true;
+                    }
+                    loggingService.error('search_replace needsApproval: file not found', {
+                        path: filePath,
+                        error: error?.message || String(error),
+                    });
+                    return true;
+                }
+                if (search_content === '') {
+                    loggingService.warn('search_replace validation: empty search_content on existing file', {
+                        path: filePath,
+                    });
+                    return true;
+                }
+                if (search_content === replace_content) {
+                    loggingService.warn('search_replace validation: search_content and replace_content are identical', {
+                        path: filePath,
+                    });
+                    // Auto-approve - execute will handle the error gracefully
+                    return false;
+                }
+                // Check for summarization markers
+                const markerError = detectSummarizationMarkers(search_content);
+                if (markerError) {
+                    loggingService.warn('search_replace validation: summarization marker detected', {
+                        path: filePath,
+                        error: markerError,
+                    });
+                    // Auto-approve - execute will handle the error gracefully
+                    return false;
+                }
+                // Detect EOL, normalize search content, find matches, and cache result
+                const { matchInfo } = prepareMatchContext(operation, content, editCache);
+                return evaluateApprovalForMatch(matchInfo, operation.match_all ?? false, insideCwd, filePath, loggingService);
+            }
+            catch (error) {
+                loggingService.error('search_replace needsApproval error', {
+                    error: error?.message || String(error),
+                });
+                return true;
+            }
+        },
+        execute: async (params) => {
+            if (sessionAccess?.isReadOnly)
+                return 'Error: search_replace is unavailable in a read-only session.';
+            const enableFileLogging = settingsService.get('tools.logFileOperations');
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
+            const readFileFn = async (p) => {
+                if (isRemote && sshService)
+                    return sshService.readFile(p);
+                return readFile(p, 'utf8');
+            };
+            const writeFileFn = async (p, c) => {
+                if (isRemote && sshService)
+                    return sshService.writeFile(p, c);
+                return writeFile(p, c, 'utf8');
+            };
+            const fail = (error, extra) => ({
+                output: { success: false, error, ...extra },
+            });
+            const applyToContent = async (operation, content) => {
+                const { path: filePath, search_content, replace_content, match_all } = operation;
+                if (search_content === '') {
+                    return fail('search_content must not be empty when editing an existing file. Provide search text or create a new file with an empty search.');
+                }
+                if (search_content === replace_content) {
+                    return fail('search_content and replace_content are identical.');
+                }
+                const markerError = detectSummarizationMarkers(search_content);
+                if (markerError) {
+                    return fail(markerError);
+                }
+                let usedHealing = false;
+                let healingAttempted = false;
+                let healingSucceeded = false;
+                let healedSearchLength = 0;
+                let matchTypeAfterHealing = 'none';
+                let healingFailureReason;
+                // eslint-disable-next-line prefer-const -- eol is not reassigned but normalizedSearchContent and matchInfo are
+                let { eol, normalizedSearchContent, matchInfo } = prepareMatchContext(operation, content, editCache);
+                if (matchInfo.type === 'none') {
+                    if (containsGapMarker(search_content)) {
+                        return fail((matchInfo.diagnostic ?? 'Gap pattern did not match. Recheck the head and tail anchor lines.') +
+                            ' Gap (<...>) edits are not auto-healed — fix the anchors and retry.');
+                    }
+                    const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
+                    if (enableEditHealing) {
+                        healingAttempted = true;
+                        const { model: healingModel, provider: healingProvider } = resolveAncillaryModelTier('chore', settingsService);
+                        const healingResult = await editHealing(operation, content, healingModel, process.env.OPENAI_API_KEY ?? '', {
+                            settingsService,
+                            loggingService,
+                            providerId: healingProvider,
+                        });
+                        healedSearchLength = healingResult.params.search_content.length;
+                        healingFailureReason = healingResult.failureReason;
+                        if (healingResult.wasModified) {
+                            normalizedSearchContent = normalizeSearchContent(healingResult.params.search_content, filePath, eol);
+                            matchInfo = findMatchesInContent(content, normalizedSearchContent);
+                            matchTypeAfterHealing = matchInfo.type;
+                            if (matchInfo.type !== 'none') {
+                                usedHealing = true;
+                                healingSucceeded = true;
+                            }
+                        }
+                        if (enableFileLogging) {
+                            loggingService.debug('search_replace healing attempt', {
+                                path: filePath,
+                                healing_attempted: healingAttempted,
+                                healing_succeeded: healingSucceeded,
+                                original_search_length: search_content.length,
+                                healed_search_length: healedSearchLength,
+                                match_type_after_healing: matchTypeAfterHealing,
+                                failure_reason: healingFailureReason,
+                            });
+                        }
+                        if (!usedHealing) {
+                            const reasonSuffix = healingFailureReason ? ` Reason: ${healingFailureReason}.` : '';
+                            return fail(`Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.`, { healing_failure_reason: healingFailureReason });
+                        }
+                    }
+                }
+                const replacementResult = executeReplacement(matchInfo, content, eol, {
+                    replaceContent: replace_content,
+                    matchAll: match_all ?? false,
+                });
+                if (!replacementResult.success) {
+                    return fail(replacementResult.error);
+                }
+                if (enableFileLogging) {
+                    loggingService.debug(`File updated (${replacementResult.matchType} match)`, {
+                        path: filePath,
+                        count: replacementResult.replacedCount,
+                        healed: usedHealing,
+                    });
+                }
+                const successMessage = usedHealing
+                    ? `Updated ${filePath} (Search param has minor difference with actual file, auto healing was used. Reread the file to make sure the edit is correct)`
+                    : `Updated ${filePath} (${replacementResult.replacedCount} ${replacementResult.matchType} match${replacementResult.replacedCount > 1 ? 'es' : ''})`;
+                return {
+                    newContent: replacementResult.newContent,
+                    output: {
+                        success: true,
+                        operation: 'search_replace',
+                        path: filePath,
+                        message: successMessage,
+                        healed: usedHealing,
+                    },
+                };
+            };
+            try {
+                const operations = getSearchReplaceOperations(params);
+                const indexedOperations = operations.map((operation, index) => ({
+                    operation,
+                    index,
+                    // Standard modes enforce the workspace boundary in `needsApproval`;
+                    // YOLO deliberately reaches execute without a permission prompt.
+                    targetPath: resolveWorkspacePath(operation.path, cwd, { allowOutsideWorkspace: true }),
+                }));
+                const groups = new Map();
+                for (const indexedOperation of indexedOperations) {
+                    groups.set(indexedOperation.targetPath, [
+                        ...(groups.get(indexedOperation.targetPath) ?? []),
+                        indexedOperation,
+                    ]);
+                }
+                const output = new Array(operations.length);
+                for (const [targetPath, group] of groups) {
+                    await withFileLock(targetPath, async () => {
+                        let content = '';
+                        let fileExists = true;
+                        try {
+                            content = await readFileFn(targetPath);
+                        }
+                        catch (error) {
+                            if (error?.code === 'ENOENT') {
+                                fileExists = false;
+                            }
+                            else {
+                                throw error;
+                            }
+                        }
+                        if (enableFileLogging) {
+                            loggingService.debug(`File operation started: search_replace`, {
+                                path: group[0].operation.path,
+                                targetPath,
+                                operationCount: group.length,
+                            });
+                        }
+                        let nextContent = content;
+                        let changed = false;
+                        for (const { operation, index } of group) {
+                            if (!fileExists) {
+                                if (operation.search_content === '') {
+                                    nextContent = operation.replace_content;
+                                    fileExists = true;
+                                    changed = true;
+                                    output[index] = {
+                                        success: true,
+                                        operation: 'search_replace',
+                                        path: operation.path,
+                                        message: `Created ${operation.path} (new file)`,
+                                    };
+                                    continue;
+                                }
+                                output[index] = {
+                                    success: false,
+                                    error: `File not found: ${operation.path}`,
+                                };
+                                continue;
+                            }
+                            const result = await applyToContent(operation, nextContent);
+                            output[index] = result.output;
+                            if (!result.output.success) {
+                                continue;
+                            }
+                            nextContent = result.newContent;
+                            changed = true;
+                        }
+                        const batchFailed = group.some(({ index }) => output[index]?.success === false);
+                        if (batchFailed) {
+                            for (const { operation, index } of group) {
+                                const detail = typeof output[index]?.error === 'string' ? ` ${output[index].error}` : '';
+                                output[index] = {
+                                    success: false,
+                                    operation: 'search_replace',
+                                    path: operation.path,
+                                    error: `Batch aborted; no changes were written.${detail}`,
+                                };
+                            }
+                        }
+                        else if (changed) {
+                            await writeFileFn(targetPath, nextContent);
+                        }
+                    });
+                }
+                return output
+                    .filter(Boolean)
+                    .map((item) => item.success
+                    ? item.message || `Updated ${item.path ?? params.path}`
+                    : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`)
+                    .join('\n');
+            }
+            catch (error) {
+                if (enableFileLogging) {
+                    loggingService.error('File operation failed', {
+                        type: 'search_replace',
+                        path: params.path,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+                return `Error: ${(error.message || String(error)).replace(/\n/g, ' ')}`;
+            }
+        },
+        formatCommandMessage: formatSearchReplaceCommandMessage,
+    };
+}
+//# sourceMappingURL=search-replace.js.map

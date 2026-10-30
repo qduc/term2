@@ -1,0 +1,132 @@
+/**
+ * Web search tool for the terminal assistant.
+ * Uses pluggable web search providers (default: Tavily) to fetch current information from the web.
+ */
+import { z } from 'zod';
+import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem, isSuccessOutput, } from '../format-helpers.js';
+import { getConfiguredWebSearchProvider } from '../../providers/web-search/index.js';
+const WEB_SEARCH_DESCRIPTION = 'Search the web for current information. ' +
+    'Use this when you need up-to-date information that may not be in your training data, such as recent news, current events, documentation updates, or any time-sensitive information. ' +
+    'Do NOT use this to read a specific known page; inside run_code, use tools.web_fetch(...) instead. ' +
+    'Returns a markdown summary with an answer box (when available) and a numbered list of results. ' +
+    'Options are provider-specific: site/includeDomains/excludeDomains (Tavily, Exa, Firecrawl, or SearXNG), topic/days (Tavily), maxResults (all providers), and engines/language/timeRange (SearXNG).';
+const webSearchSchema = z.object({
+    query: z.string().min(1).describe('The search query to look up on the web.'),
+    site: z.string().min(1).optional().describe('Limit results to one site or domain (Firecrawl, SearXNG).'),
+    includeDomains: z
+        .array(z.string().min(1))
+        .max(100)
+        .optional()
+        .describe('Domains to include (Tavily, Exa, Firecrawl).'),
+    excludeDomains: z
+        .array(z.string().min(1))
+        .max(100)
+        .optional()
+        .describe('Domains to exclude (Tavily, Exa, Firecrawl).'),
+    topic: z.enum(['general', 'news', 'finance']).optional().describe('Search topic (Tavily).'),
+    days: z.number().int().positive().optional().describe('Only results from the last N days (Tavily).'),
+    maxResults: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('Maximum results (Tavily, Exa, Firecrawl, SearXNG).'),
+    engines: z.string().min(1).optional().describe('SearXNG engines.'),
+    language: z.string().min(1).optional().describe('SearXNG language.'),
+    timeRange: z.enum(['day', 'week', 'month', 'year']).optional().describe('SearXNG recency filter.'),
+});
+/**
+ * Convert web search results to a markdown-formatted string
+ */
+export function formatResultsAsMarkdown(response) {
+    const parts = [];
+    // Add answer box if available (Tavily's synthesized answer)
+    if (response.answerBox) {
+        parts.push('## Answer\n');
+        parts.push(response.answerBox);
+        parts.push('\n');
+    }
+    // Add search results
+    if (response.results.length > 0) {
+        parts.push('## Search Results\n');
+        response.results.forEach((result, index) => {
+            parts.push(`### ${index + 1}. ${result.title}\n`);
+            parts.push(`**URL:** ${result.url}\n`);
+            if (result.publishedDate) {
+                parts.push(`**Published:** ${result.publishedDate}\n`);
+            }
+            parts.push(`\n${result.content}\n`);
+            parts.push('\n---\n');
+        });
+    }
+    else {
+        parts.push('No results found for this query.\n');
+    }
+    return parts.join('\n');
+}
+/**
+ * Format command message for display in the terminal
+ */
+export const formatWebSearchCommandMessage = (item, index, toolCallArgumentsById) => {
+    const callId = getCallIdFromItem(item);
+    const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args = normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? {};
+    const query = args?.query ?? 'unknown query';
+    const command = `web_search: "${query}"`;
+    const output = getOutputText(item) || 'No results';
+    const success = isSuccessOutput(output);
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command,
+            output,
+            success,
+            toolName: 'web_search',
+            toolArgs: args,
+        }),
+    ];
+};
+/**
+ * Factory function to create the web_search tool definition
+ */
+export const createWebSearchToolDefinition = (deps) => {
+    const { settingsService, loggingService } = deps;
+    return {
+        name: 'web_search',
+        description: WEB_SEARCH_DESCRIPTION,
+        scriptedReturnShape: 'string: markdown-formatted search results; "Error: \u2026" when no provider is configured or the search fails',
+        scriptedReturnSchema: z.string(),
+        parameters: webSearchSchema,
+        parallelSafe: true,
+        needsApproval: () => false, // Web search is read-only, safe operation
+        execute: async (params, context) => {
+            const { query, ...options } = params;
+            try {
+                const provider = getConfiguredWebSearchProvider({ settingsService });
+                if (!provider) {
+                    return 'Error: No web search provider is configured.';
+                }
+                if (!provider.isConfigured({ settingsService })) {
+                    return (`Error: Web search provider '${provider.id}' is not properly configured. ` +
+                        `Please set the required API key (e.g., TAVILY_API_KEY environment variable).`);
+                }
+                const signal = context?.signal;
+                const response = await provider.search(query, {
+                    settingsService,
+                    loggingService,
+                }, { ...options, signal });
+                return formatResultsAsMarkdown(response);
+            }
+            catch (error) {
+                loggingService.error('Web search failed', {
+                    query,
+                    error: error.message || String(error),
+                });
+                return `Error: ${error.message || String(error)}`;
+            }
+        },
+        formatCommandMessage: formatWebSearchCommandMessage,
+    };
+};
+//# sourceMappingURL=web-search.js.map

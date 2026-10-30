@@ -1,0 +1,202 @@
+export const SETTINGS_SOURCE_KEYS = {
+    verifier: { model: 'verifier.model' },
+    agent: {
+        modelSelection: 'agent.modelSelection',
+        smartModel: 'agent.smartModel',
+        smartReasoningEffort: 'agent.smartReasoningEffort',
+        balancedModel: 'agent.balancedModel',
+        balancedReasoningEffort: 'agent.balancedReasoningEffort',
+        cheapModel: 'agent.cheapModel',
+        cheapReasoningEffort: 'agent.cheapReasoningEffort',
+        choreModel: 'agent.choreModel',
+        reasoningEffort: 'agent.reasoningEffort',
+        temperature: 'agent.temperature',
+        backgroundWaitTimeoutMs: 'agent.backgroundWaitTimeoutMs',
+        maxTurns: 'agent.maxTurns',
+        maxRequestInputTokens: 'agent.maxRequestInputTokens',
+        maxOutputTokens: 'agent.maxOutputTokens',
+        maxStreamOutputChars: 'agent.maxStreamOutputChars',
+        maxModelRequestDurationMs: 'agent.maxModelRequestDurationMs',
+        maxModelStreamIdleMs: 'agent.maxModelStreamIdleMs',
+        retryAttempts: 'agent.retryAttempts',
+        transport: 'agent.transport',
+        maxParallelToolCalls: 'agent.maxParallelToolCalls',
+        runBudget: {
+            maxUsdMicros: 'agent.runBudget.maxUsdMicros',
+            maxUnpricedTokens: 'agent.runBudget.maxUnpricedTokens',
+            maxActiveTimeMs: 'agent.runBudget.maxActiveTimeMs',
+            warningHeadroomUsdMicros: 'agent.runBudget.warningHeadroomUsdMicros',
+            warningHeadroomUnpricedTokens: 'agent.runBudget.warningHeadroomUnpricedTokens',
+            warningHeadroomActiveTimeMs: 'agent.runBudget.warningHeadroomActiveTimeMs',
+            softHeadroomUsdMicros: 'agent.runBudget.softHeadroomUsdMicros',
+            softHeadroomUnpricedTokens: 'agent.runBudget.softHeadroomUnpricedTokens',
+            softHeadroomActiveTimeMs: 'agent.runBudget.softHeadroomActiveTimeMs',
+            turnBackstop: 'agent.runBudget.turnBackstop',
+            extensionPercent: 'agent.runBudget.extensionPercent',
+            maxParentExtensions: 'agent.runBudget.maxParentExtensions',
+            identicalToolCallThreshold: 'agent.runBudget.identicalToolCallThreshold',
+            escalation: 'agent.runBudget.escalation',
+        },
+        backgroundCheckIn: {
+            enabled: 'agent.backgroundCheckIn.enabled',
+            intervalMs: 'agent.backgroundCheckIn.intervalMs',
+        },
+        sessionRollover: {
+            enabled: 'agent.sessionRollover.enabled',
+            milestones: 'agent.sessionRollover.milestones',
+            autoBrief: 'agent.sessionRollover.autoBrief',
+        },
+        favoriteModels: 'agent.favoriteModels',
+        modelNicknames: 'agent.modelNicknames',
+        disabledProviders: 'agent.disabledProviders',
+        openrouter: 'agent.openrouter',
+        openai: 'agent.openai',
+        codex: {
+            websocketFirstFrameTimeoutMs: 'agent.codex.websocketFirstFrameTimeoutMs',
+            websocketInterFrameTimeoutMs: 'agent.codex.websocketInterFrameTimeoutMs',
+        },
+        mentorReasoningEffort: 'agent.mentorReasoningEffort',
+        mentorSamples: 'agent.mentorSamples',
+        mentorPool: 'agent.mentorPool',
+        useFlexServiceTier: 'agent.useFlexServiceTier',
+        contextCompaction: {
+            enabled: 'agent.contextCompaction.enabled',
+            mode: 'agent.contextCompaction.mode',
+            compactThreshold: 'agent.contextCompaction.compactThreshold',
+            compactThresholdTokens: 'agent.contextCompaction.compactThresholdTokens',
+        },
+        autoApproveReasoningEffort: 'agent.autoApproveReasoningEffort',
+        decisionModel: 'agent.decisionModel',
+        completionVerification: 'agent.completionVerification',
+        verificationMaxRepairs: 'agent.verificationMaxRepairs',
+        subagentExplorerReasoningEffort: 'agent.subagentExplorerReasoningEffort',
+        subagentWorkerReasoningEffort: 'agent.subagentWorkerReasoningEffort',
+        subagentLibrarianReasoningEffort: 'agent.subagentLibrarianReasoningEffort',
+    },
+    shell: {
+        timeout: 'shell.timeout',
+        backgroundTimeout: 'shell.backgroundTimeout',
+        maxOutputLines: 'shell.maxOutputLines',
+        maxOutputChars: 'shell.maxOutputChars',
+        autoApproveMode: 'shell.autoApproveMode',
+    },
+    sandbox: {
+        enabled: 'sandbox.enabled',
+        readPolicy: 'sandbox.readPolicy',
+        allowReadExtra: 'sandbox.allowReadExtra',
+        dockerHostControlProjects: 'sandbox.dockerHostControlProjects',
+        allowNetworking: 'sandbox.allowNetworking',
+    },
+    subagent: {
+        asyncSessionTtlMs: 'subagent.asyncSessionTtlMs',
+        asyncMessageCap: 'subagent.asyncMessageCap',
+    },
+    ui: {
+        historySize: 'ui.historySize',
+        pasteThreshold: 'ui.pasteThreshold',
+        displayMode: 'ui.displayMode',
+        theme: 'ui.theme',
+        skin: 'ui.skin',
+    },
+    logging: {
+        logLevel: 'logging.logLevel',
+        disableLogging: 'logging.disableLogging',
+        debugLogging: 'logging.debugLogging',
+        suppressConsoleOutput: 'logging.suppressConsoleOutput',
+    },
+    environment: {
+        nodeEnv: 'environment.nodeEnv',
+    },
+    app: {
+        shellPath: 'app.shellPath',
+        activeProfileId: 'app.activeProfileId',
+        mentorMode: 'app.mentorMode',
+        liteMode: 'app.liteMode',
+        planMode: 'app.planMode',
+        orchestratorMode: 'app.orchestratorMode',
+        notifications: 'app.notifications',
+        notificationsOnApproval: 'app.notificationsOnApproval',
+        notificationsOnComplete: 'app.notificationsOnComplete',
+        searchViaShell: 'app.searchViaShell',
+    },
+    tools: {
+        logFileOperations: 'tools.logFileOperations',
+        enableEditHealing: 'tools.enableEditHealing',
+        shell: { enabled: 'tools.shell.enabled' },
+        web: { enabled: 'tools.web.enabled' },
+        fileRead: { enabled: 'tools.fileRead.enabled' },
+        fileWrite: { enabled: 'tools.fileWrite.enabled' },
+        memory: { enabled: 'tools.memory.enabled' },
+        sessions: { enabled: 'tools.sessions.enabled' },
+        skills: { enabled: 'tools.skills.enabled' },
+        mentor: { enabled: 'tools.mentor.enabled' },
+        subagents: { enabled: 'tools.subagents.enabled' },
+        backgroundTasks: { enabled: 'tools.backgroundTasks.enabled' },
+        userInteraction: { enabled: 'tools.userInteraction.enabled' },
+        codeContext: { enabled: 'tools.codeContext.enabled' },
+    },
+    debug: {
+        debugBashTool: 'debug.debugBashTool',
+    },
+    ssh: {
+        enabled: 'ssh.enabled',
+        host: 'ssh.host',
+        port: 'ssh.port',
+        username: 'ssh.username',
+        remoteDir: 'ssh.remoteDir',
+    },
+    webSearch: {
+        provider: 'webSearch.provider',
+        tavily: 'webSearch.tavily',
+        exa: 'webSearch.exa',
+        firecrawl: 'webSearch.firecrawl',
+        searxng: 'webSearch.searxng',
+    },
+    memory: {
+        enabled: 'memory.enabled',
+        directory: 'memory.directory',
+        contextBudgetChars: 'memory.contextBudgetChars',
+        searchDefaultLimit: 'memory.searchDefaultLimit',
+        searchMaxLimit: 'memory.searchMaxLimit',
+    },
+    hooks: {
+        user: 'hooks.user',
+        project: 'hooks.project',
+        trustedProjectRoots: 'hooks.trustedProjectRoots',
+        includeUserText: 'hooks.includeUserText',
+        includeToolArguments: 'hooks.includeToolArguments',
+        includeToolResults: 'hooks.includeToolResults',
+        timeoutMs: 'hooks.timeoutMs',
+    },
+};
+function getValueByPath(settings, path) {
+    const keys = path.split('.');
+    let value = settings;
+    for (const key of keys) {
+        if (value == null || typeof value !== 'object') {
+            return undefined;
+        }
+        value = value[key];
+    }
+    return value;
+}
+function mapSettingsSection(sourceKeys, settings, getSource) {
+    if (typeof sourceKeys === 'string') {
+        return {
+            value: getValueByPath(settings, sourceKeys),
+            source: getSource(sourceKeys),
+        };
+    }
+    if (sourceKeys == null || typeof sourceKeys !== 'object') {
+        return sourceKeys;
+    }
+    const mapped = {};
+    for (const [key, value] of Object.entries(sourceKeys)) {
+        mapped[key] = mapSettingsSection(value, settings, getSource);
+    }
+    return mapped;
+}
+export function buildSettingsWithSources(settings, getSource) {
+    return mapSettingsSection(SETTINGS_SOURCE_KEYS, settings, getSource);
+}
+//# sourceMappingURL=settings-sources.js.map

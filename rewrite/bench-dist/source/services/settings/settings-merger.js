@@ -1,0 +1,146 @@
+import { SettingsSchema } from './settings-schema.js';
+/**
+ * Flatten nested object to dot notation.
+ */
+export function flattenSettings(obj, prefix = '') {
+    const result = {};
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj))
+        return result;
+    const record = obj;
+    for (const key in record) {
+        if (!Object.prototype.hasOwnProperty.call(record, key))
+            continue;
+        const value = record[key];
+        const newKey = prefix ? `${prefix}.${key}` : key;
+        if (newKey === 'agent.modelSelection') {
+            result[newKey] = value;
+        }
+        else if (value && typeof value === 'object' && !Array.isArray(value)) {
+            Object.assign(result, flattenSettings(value, newKey));
+        }
+        else {
+            result[newKey] = value;
+        }
+    }
+    return result;
+}
+/**
+ * Deep merge source into target (mutates target).
+ */
+function deepMerge(target, source, prefix = '') {
+    for (const key in source) {
+        if (!Object.prototype.hasOwnProperty.call(source, key))
+            continue;
+        const sourceValue = source[key];
+        const settingPath = prefix ? `${prefix}.${key}` : key;
+        if (sourceValue &&
+            typeof sourceValue === 'object' &&
+            !Array.isArray(sourceValue) &&
+            settingPath !== 'agent.modelSelection') {
+            if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {
+                target[key] = {};
+            }
+            deepMerge(target[key], sourceValue, settingPath);
+        }
+        else {
+            target[key] = sourceValue;
+        }
+    }
+}
+/**
+ * Merge multiple settings sources with proper precedence.
+ * Precedence: cli > env > config > defaults.
+ */
+export function mergeSettings(defaults, fileConfig, env, cli, opts) {
+    // Deep merge starting with defaults
+    const result = JSON.parse(JSON.stringify(defaults));
+    // Merge file config
+    deepMerge(result, fileConfig);
+    // Merge env
+    deepMerge(result, env);
+    // Merge cli (highest priority)
+    deepMerge(result, cli);
+    // Ensure all required fields are present
+    const merged = {
+        verifier: result.verifier || { ...defaults.verifier },
+        providers: result.providers || JSON.parse(JSON.stringify(defaults.providers)),
+        enable_agent_workflow: result.enable_agent_workflow ?? defaults.enable_agent_workflow,
+        agent: result.agent || JSON.parse(JSON.stringify(defaults.agent)),
+        shell: result.shell || JSON.parse(JSON.stringify(defaults.shell)),
+        sandbox: result.sandbox || JSON.parse(JSON.stringify(defaults.sandbox)),
+        agentWorkflow: result.agentWorkflow || JSON.parse(JSON.stringify(defaults.agentWorkflow)),
+        subagent: result.subagent || JSON.parse(JSON.stringify(defaults.subagent)),
+        ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
+        logging: result.logging || JSON.parse(JSON.stringify(defaults.logging)),
+        environment: result.environment || JSON.parse(JSON.stringify(defaults.environment)),
+        app: result.app || JSON.parse(JSON.stringify(defaults.app)),
+        tools: result.tools || JSON.parse(JSON.stringify(defaults.tools)),
+        debug: result.debug || JSON.parse(JSON.stringify(defaults.debug)),
+        ssh: result.ssh || JSON.parse(JSON.stringify(defaults.ssh)),
+        webSearch: result.webSearch || JSON.parse(JSON.stringify(defaults.webSearch)),
+        memory: result.memory || JSON.parse(JSON.stringify(defaults.memory)),
+        hooks: result.hooks || JSON.parse(JSON.stringify(defaults.hooks)),
+    };
+    // Validate final result
+    const validated = SettingsSchema.safeParse(merged);
+    if (validated.success) {
+        // Ensure we return a complete SettingsData object
+        return {
+            verifier: validated.data.verifier,
+            providers: merged.providers,
+            enable_agent_workflow: merged.enable_agent_workflow,
+            agent: validated.data.agent,
+            shell: merged.shell,
+            sandbox: merged.sandbox,
+            agentWorkflow: merged.agentWorkflow,
+            subagent: merged.subagent,
+            ui: merged.ui,
+            logging: merged.logging,
+            environment: merged.environment,
+            app: merged.app,
+            tools: merged.tools,
+            debug: merged.debug,
+            ssh: merged.ssh,
+            webSearch: merged.webSearch,
+            memory: merged.memory,
+            hooks: merged.hooks,
+        };
+    }
+    // If validation fails, return defaults
+    if (!opts?.disableLogging) {
+        opts?.loggingService?.warn('Final merged settings failed validation, using defaults', {
+            errors: validated.error.issues.map((issue) => ({
+                path: issue.path.join('.'),
+                message: issue.message,
+            })),
+        });
+    }
+    return defaults;
+}
+/**
+ * Track the source of each setting key.
+ */
+export function trackSettingSources(defaults, fileConfig, env, cli) {
+    const sources = new Map();
+    const flatDefaults = flattenSettings(defaults);
+    const flatFileConfig = flattenSettings(fileConfig);
+    const flatEnv = flattenSettings(env);
+    const flatCli = flattenSettings(cli);
+    // For each possible setting key, determine its source
+    for (const key in flatDefaults) {
+        if (Object.prototype.hasOwnProperty.call(flatCli, key)) {
+            sources.set(key, 'cli');
+        }
+        else if (Object.prototype.hasOwnProperty.call(flatEnv, key)) {
+            sources.set(key, 'env');
+        }
+        else if (Object.prototype.hasOwnProperty.call(flatFileConfig, key)) {
+            sources.set(key, 'config');
+        }
+        else {
+            sources.set(key, 'default');
+        }
+    }
+    return sources;
+}
+//# sourceMappingURL=settings-merger.js.map

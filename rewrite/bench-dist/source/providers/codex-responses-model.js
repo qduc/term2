@@ -1,0 +1,2006 @@
+import { randomUUID } from 'node:crypto';
+import { ResponsesWS } from 'openai/resources/responses/ws';
+import OpenAI, { InternalServerError } from 'openai';
+import { toCodexResponsesInput } from './codex-turn-converter.js';
+import { sanitizeHeaders } from '../utils/header-sanitizer.js';
+import { AbortedStreamRecorder } from './aborted-stream-recorder.js';
+import { isOrphanedChainedToolOutputError, OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
+import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from '../services/retry/retry-errors.js';
+import { isClassifiedCancellation } from '../services/retry/provider-failure-classification.js';
+import { fingerprintChainRequest } from '../services/retry/chain-recovery-fingerprint.js';
+import { ChainedWireState } from './chained-wire-state.js';
+import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
+import { captureProviderRequest } from './provider-request-capture.js';
+import { createWebSocketReceiveWatchdog, DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS, } from './websocket-receive-watchdog.js';
+import { readWebSocketDispatch, recordWebSocketDispatch, UnsentWebSocketRequestError, } from './websocket-request-dispatch.js';
+import { WebSocketClosedEarlyError, webSocketCloseError, findWebSocketClosedEarly, readWebSocketCloseFrame, } from './websocket-close-evidence.js';
+import { markContextCompactionFailure, responsesTextDelta } from './openai-responses-model.js';
+import { compactOutputToProviderHistory } from './codex-compact.js';
+import { OPENAI_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
+import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
+import { raceWebSocketAbort } from './websocket-abort-race.js';
+const DUMMY_PROVIDER_TRAFFIC = {
+    recordRequestStart() { },
+    async recordResponseReceived() { },
+    recordResponseClosed() { },
+    recordRequestFailed() { },
+};
+function toCodexToolChoice(choice) {
+    if (choice === 'auto' || choice === 'required' || choice === 'none')
+        return choice;
+    if (choice && typeof choice === 'object' && typeof choice.name === 'string') {
+        return { type: 'function', name: choice.name };
+    }
+    throw new Error('Unsupported Codex tool choice.');
+}
+function toCodexResponsesTool(tool) {
+    if (tool.type === 'custom') {
+        return {
+            type: 'custom',
+            name: tool.name,
+            ...(tool.description ? { description: tool.description } : {}),
+            format: tool.format,
+        };
+    }
+    return {
+        type: 'function',
+        name: tool.name,
+        ...(tool.description ? { description: tool.description } : {}),
+        parameters: tool.parameters,
+        ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
+    };
+}
+function toCodexToolChoiceForTools(choice, tools) {
+    if (choice && typeof choice === 'object' && typeof choice.name === 'string') {
+        const selected = tools.find((tool) => tool.name === choice.name);
+        return { type: selected?.type === 'custom' ? 'custom' : 'function', name: choice.name };
+    }
+    return toCodexToolChoice(choice);
+}
+const TERMINAL_RESPONSE_EVENT_TYPES = new Set([
+    'response.completed',
+    'response.failed',
+    'response.incomplete',
+    'response.error',
+]);
+// RFC 6455 readyState values, named so the send path's evidence is readable.
+const WEBSOCKET_CONNECTING = 0;
+const WEBSOCKET_OPEN = 1;
+/** Provider-owned transport seam used by Codex's HTTP and WebSocket models. */
+export class CodexResponsesTransport {
+    client;
+    model;
+    websocket;
+    options;
+    #sessions = new ResponsesWebSocketSessions((headers) => new ResponsesWS(this.client, headers ? { headers } : undefined));
+    constructor(client = {}, model = '', websocket = false, options = {}) {
+        this.client = client;
+        this.model = model;
+        this.websocket = websocket;
+        this.options = options;
+    }
+    close() {
+        this.#sessions.close();
+    }
+    async compactHistory(request) {
+        if (typeof this.client?.responses?.create !== 'function') {
+            throw new Error('Codex Responses endpoint is unavailable on this client');
+        }
+        const stream = await this.client.responses.create({
+            model: this.model,
+            input: [...request.input, { type: 'compaction_trigger' }],
+            parallel_tool_calls: !isCodexResponsesLiteModel(this.model),
+            stream: true,
+            store: false,
+            include: ['reasoning.encrypted_content'],
+            // The Responses-Lite lane rejects compaction without an explicit
+            // reasoning context (400 `requires reasoning.context all_turns`);
+            // ordinary turns already carry this via request normalization, but
+            // the compaction call builds its own body and must set it itself.
+            ...(isCodexResponsesLiteModel(this.model) ? { reasoning: { context: 'all_turns' } } : {}),
+            ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
+        }, request.signal ? { signal: request.signal } : undefined);
+        let compactionItem;
+        let completed = false;
+        for await (const event of stream) {
+            if (event?.type === 'response.output_item.done' && event.item?.type === 'compaction') {
+                compactionItem = event.item;
+            }
+            else if (event?.type === 'response.completed') {
+                completed = true;
+            }
+            else if (event?.type === 'response.failed' || event?.type === 'error') {
+                throw new Error(event?.response?.error?.message ?? event?.message ?? 'Codex compaction failed');
+            }
+        }
+        if (!completed || !compactionItem) {
+            throw new Error('Codex compaction stream ended without a completed compaction item');
+        }
+        return { history: compactOutputToProviderHistory([compactionItem]) };
+    }
+    buildResponsesCreateRequest(request, stream) {
+        const providerOptions = request.providerOptions ?? {};
+        // contextCompaction is an app-level option; context_management is capability-gated
+        // below. Do not let either leak through native provider data or extraBody.
+        const { extraBody, extraHeaders: _extraHeaders, contextCompaction: _contextCompaction, ...nativeProviderData } = providerOptions;
+        const { context_management: _reservedContextManagement, ...safeExtraBody } = (extraBody ?? {});
+        // Codex ChatGPT backend uses the Responses compaction trigger via
+        // compactHistory(), not context_management on ordinary turns.
+        return {
+            requestData: {
+                model: this.model,
+                input: toCodexResponsesInput(request.input),
+                stream,
+                ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
+                ...(request.tools.length > 0 ? { tools: request.tools.map(toCodexResponsesTool) } : {}),
+                ...(request.toolChoice !== undefined
+                    ? { tool_choice: toCodexToolChoiceForTools(request.toolChoice, request.tools) }
+                    : {}),
+                ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+                ...(request.topP !== undefined ? { top_p: request.topP } : {}),
+                ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
+                ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {}),
+                ...(request.maxTokens !== undefined ? { max_output_tokens: request.maxTokens } : {}),
+                ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
+                ...nativeProviderData,
+                ...safeExtraBody,
+                ...(request.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
+                ...(request.codex?.promptCacheKey ? { prompt_cache_key: request.codex.promptCacheKey } : {}),
+                ...(request.codex?.include ? { include: request.codex.include } : {}),
+            },
+        };
+    }
+    async fetchResponse(request, stream, requestData, requestContext) {
+        try {
+            if (stream && this.websocket) {
+                if (!(this.client instanceof OpenAI) && typeof this.client?.responses?.create === 'function') {
+                    return this.client.responses.create(requestData);
+                }
+                const headers = request.providerOptions?.extraHeaders;
+                const affinityKey = typeof headers?.['session-id'] === 'string' && headers['session-id'].length > 0
+                    ? headers['session-id']
+                    : request.codex?.promptCacheKey;
+                const acquisition = this.#sessions.acquireWithMetadata(headers, { affinityKey });
+                const socket = acquisition.socket;
+                recordWebSocketDispatch(request, 'unsent');
+                try {
+                    requestContext?.onConnectionAcquired?.({
+                        connectionId: acquisition.connectionId,
+                        reused: acquisition.reused,
+                        ...(affinityKey ? { affinityKey } : {}),
+                    });
+                }
+                catch (error) {
+                    // Admission failed before stream listeners or response.create were
+                    // installed. Release the lease for the self-contained recovery.
+                    this.#sessions.release(socket, { keepAlive: true });
+                    throw error;
+                }
+                const messages = socket.stream();
+                const requestEvent = { type: 'response.create', ...requestData };
+                // Until the frame is written to an OPEN socket it is still ours, so a
+                // receive timeout before that point is provably unsent. `send` on a
+                // connecting or closing socket only queues, which proves nothing —
+                // record what the socket actually was, and `unknown` when it cannot be
+                // observed at all.
+                const dispatchRequestEvent = () => {
+                    const readyState = socket.socket?.readyState;
+                    socket.send(requestEvent);
+                    recordWebSocketDispatch(request, readyState === WEBSOCKET_OPEN ? 'flushed' : 'unknown');
+                };
+                if (socket.socket?.readyState === WEBSOCKET_CONNECTING) {
+                    socket.socket.once('open', dispatchRequestEvent);
+                }
+                else {
+                    dispatchRequestEvent();
+                }
+                const sessionState = this.options.contextCompactionSessionState;
+                const sessions = this.#sessions;
+                return (async function* () {
+                    let terminalReceived = false;
+                    let released = false;
+                    const release = (keepAlive) => {
+                        if (released)
+                            return;
+                        released = true;
+                        sessions.release(socket, { keepAlive });
+                    };
+                    // A raw WebSocket message iterator only settles its pending `next()`
+                    // when the socket itself emits something, so cancellation cannot
+                    // reach it through `for await` alone: nothing ever binds the
+                    // request's AbortSignal to the socket. Pull manually and race each
+                    // wait against the signal so an abort settles this generator (and
+                    // everything awaiting it, up through `cancel_run`) instead of
+                    // leaving it suspended forever.
+                    const iterator = messages[Symbol.asyncIterator]();
+                    let iteratorFinished = false;
+                    try {
+                        while (true) {
+                            const next = await raceWebSocketAbort(iterator.next(), request.signal);
+                            if (next.done) {
+                                iteratorFinished = true;
+                                break;
+                            }
+                            const message = next.value;
+                            if (message.type === 'message') {
+                                const event = message.message;
+                                if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type) || event?.type === 'response.completed') {
+                                    terminalReceived = true;
+                                    // The terminal frame proves this lease is no longer in
+                                    // flight. Release before yielding it: the application can
+                                    // settle a rollover immediately after observing the
+                                    // terminal event, before this generator is resumed for its
+                                    // finally block.
+                                    release(true);
+                                }
+                                yield event;
+                            }
+                            else if (message.event) {
+                                const event = message.event;
+                                if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type) || event?.type === 'response.completed') {
+                                    terminalReceived = true;
+                                    release(true);
+                                }
+                                yield event;
+                            }
+                            else if (message.type === 'error') {
+                                throw message.error;
+                            }
+                            else if (message.type === 'close') {
+                                throw webSocketCloseError(message, readWebSocketDispatch(request));
+                            }
+                        }
+                    }
+                    catch (error) {
+                        release(false);
+                        const normalizedError = normalizeExplicitCodexServerError(error);
+                        markContextCompactionFailure(normalizedError, request, sessionState);
+                        throw normalizedError;
+                    }
+                    finally {
+                        release(terminalReceived);
+                        // The session-scoped socket keeps running; only this generator's
+                        // pull loop needs to detach. Never await an SDK iterator return
+                        // that waits on the socket itself.
+                        if (!iteratorFinished) {
+                            try {
+                                void iterator.return?.().catch(() => undefined);
+                            }
+                            catch {
+                                // Settlement above remains authoritative.
+                            }
+                        }
+                    }
+                })();
+            }
+            return await this.client.responses.create(requestData, {
+                ...(request.signal ? { signal: request.signal } : {}),
+                ...(request.providerOptions?.extraHeaders ? { headers: request.providerOptions.extraHeaders } : {}),
+            });
+        }
+        catch (error) {
+            markContextCompactionFailure(error, request, this.options.contextCompactionSessionState);
+            throw error;
+        }
+    }
+}
+export class OpenAIResponsesModel {
+    client;
+    model;
+    transport;
+    constructor(client, model, transport, websocket = false) {
+        this.client = client;
+        this.model = model;
+        this.transport = transport ?? new CodexResponsesTransport(client, model, websocket);
+    }
+    async close() {
+        this.transport.close?.();
+    }
+    async compactHistory(request) {
+        return this.transport.compactHistory({
+            input: toCodexResponsesInput(request.input),
+            instructions: request.instructions,
+            signal: request.signal,
+        });
+    }
+    buildResponsesCreateRequest(request, stream) {
+        const built = this.transport.buildResponsesCreateRequest(request, stream);
+        if (this.transport instanceof CodexResponsesTransport && built?.requestData) {
+            built.requestData.model = this.model;
+        }
+        return built;
+    }
+    async fetchResponse(request, stream, requestContext) {
+        const built = this.buildResponsesCreateRequest(request, stream);
+        return this.transport.fetchResponse(request, stream, built.requestData, requestContext);
+    }
+    async fetchUnaryResponse(request) {
+        return this.fetchResponse(request, false);
+    }
+    async *rawStream(request) {
+        const source = await this.fetchResponse(request, true);
+        const iterator = source[Symbol.asyncIterator]();
+        let terminal = false;
+        let iteratorFinished = false;
+        try {
+            while (true) {
+                const next = await iterator.next();
+                if (next.done) {
+                    iteratorFinished = true;
+                    return;
+                }
+                const event = next.value;
+                if (event?.type === 'error')
+                    throw codexStreamError(event.error?.message ?? 'Codex WebSocket provider error', event.error ?? event);
+                if (event?.type === 'close')
+                    throw new WebSocketClosedEarlyError(readWebSocketCloseFrame(event));
+                terminal =
+                    event?.type === 'response.completed' ||
+                        event?.type === 'response.incomplete' ||
+                        event?.type === 'response.failed';
+                yield event;
+                if (terminal)
+                    return;
+            }
+        }
+        finally {
+            if (!iteratorFinished) {
+                if (terminal) {
+                    // The Responses WebSocket stream is session-scoped. Detach this
+                    // completed request without awaiting an SDK iterator return that
+                    // waits for the retained socket to close.
+                    try {
+                        void iterator.return?.().catch(() => undefined);
+                    }
+                    catch {
+                        // Completion is authoritative; socket disposal remains best effort.
+                    }
+                }
+                else {
+                    await iterator.return?.();
+                }
+            }
+        }
+    }
+    async *stream(request) {
+        yield* convertCodexRawStream(this.rawStream(request));
+    }
+}
+class OpenAIResponsesWSModel extends OpenAIResponsesModel {
+    constructor(client, model, transport) {
+        super(client, model, transport, true);
+    }
+}
+async function* convertCodexRawStream(source) {
+    const output = [];
+    const pendingToolCalls = [];
+    const terminalReasoning = [];
+    const toolNamesByIndex = new Map();
+    const toolArgumentLengthsByIndex = new Map();
+    let sawReasoningDelta = false;
+    let responseId = '';
+    let finishReason;
+    let usage;
+    let sawCompletedResponse = false;
+    for await (const event of source) {
+        if (event?.type === 'codex.rate_limits') {
+            const rateLimits = event.rate_limits ?? event;
+            if (rateLimits && typeof rateLimits === 'object')
+                yield { type: 'codex_rate_limits', rateLimits };
+        }
+        else if (event?.type === 'response.output_text.delta') {
+            yield responsesTextDelta(event);
+        }
+        else if (event?.type === 'response.reasoning_summary_text.delta') {
+            const text = String(event.delta ?? '');
+            if (text) {
+                sawReasoningDelta = true;
+                yield {
+                    type: 'reasoning_delta',
+                    ...(typeof event.item_id === 'string' ? { id: event.item_id } : {}),
+                    text,
+                };
+            }
+        }
+        else if (event?.type === 'response.reasoning_summary_part.added') {
+            const text = typeof event.part?.text === 'string' ? event.part.text : '';
+            const id = typeof event.item_id === 'string' ? event.item_id : undefined;
+            if (text) {
+                sawReasoningDelta = true;
+                yield { type: 'reasoning_delta', ...(id !== undefined ? { id } : {}), text };
+            }
+            else {
+                yield { type: 'reasoning_started', ...(id !== undefined ? { id } : {}) };
+            }
+        }
+        else if (event?.type === 'response.output_item.added' &&
+            (event.output_item ?? event.item)?.type === 'reasoning') {
+            const item = event.output_item ?? event.item;
+            const id = typeof item?.id === 'string' ? item.id : undefined;
+            yield { type: 'reasoning_started', ...(id !== undefined ? { id } : {}) };
+        }
+        else if (event?.type === 'response.output_item.added' &&
+            (event.output_item ?? event.item)?.type === 'compaction') {
+            yield { type: 'context_compaction_started', provider: OPENAI_RESPONSES_OPAQUE_TAG };
+        }
+        else if (event?.type === 'response.output_item.added' &&
+            (event.output_item?.type === 'function_call' || event.output_item?.type === 'custom_tool_call')) {
+            const index = typeof event.output_index === 'number' ? event.output_index : event.output_item.id ?? 0;
+            if (typeof event.output_item.name === 'string')
+                toolNamesByIndex.set(index, event.output_item.name);
+            toolArgumentLengthsByIndex.set(index, 0);
+        }
+        else if ((event?.type === 'response.function_call_arguments.delta' ||
+            event?.type === 'response.custom_tool_call_input.delta' ||
+            event?.type === 'response.mcp_call_arguments.delta') &&
+            typeof event.delta === 'string' &&
+            event.delta) {
+            const index = typeof event.output_index === 'number' ? event.output_index : event.item_id ?? 0;
+            const argumentCharCount = (toolArgumentLengthsByIndex.get(index) ?? 0) + event.delta.length;
+            toolArgumentLengthsByIndex.set(index, argumentCharCount);
+            const toolName = toolNamesByIndex.get(index);
+            yield { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
+        }
+        else if (event?.type === 'response.output_item.done' &&
+            (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call')) {
+            const call = toCodexToolCallOutput(event.item);
+            output.push(call);
+            pendingToolCalls.push(call);
+        }
+        else if (event?.type === 'response.completed') {
+            sawCompletedResponse = true;
+            responseId = codexString(event.response?.id) ?? responseId;
+            finishReason = codexString(event.response?.status) ?? codexString(event.response?.incomplete_details?.reason);
+            usage = toCodexUsage(event.response?.usage);
+            for (const item of event.response?.output ?? []) {
+                const converted = toCodexOutputItem(item);
+                if (converted.type !== 'tool_call') {
+                    output.push(converted);
+                    if (converted.type === 'reasoning')
+                        terminalReasoning.push(converted);
+                }
+            }
+            const authoritativeReasoning = sawReasoningDelta ? [] : terminalReasoning;
+            for (const reasoning of authoritativeReasoning) {
+                yield {
+                    type: 'reasoning_delta',
+                    ...(reasoning.id ? { id: reasoning.id } : {}),
+                    text: reasoning.text,
+                    ...(reasoning.providerMetadata ? { providerMetadata: reasoning.providerMetadata } : {}),
+                };
+            }
+            for (const call of pendingToolCalls)
+                yield call;
+            break;
+        }
+        else if (event?.type === 'response.incomplete' ||
+            event?.type === 'response.failed' ||
+            event?.type === 'response.error') {
+            const status = String(event.type).slice('response.'.length);
+            const message = event.response?.error?.message ?? event.error?.message ?? `Codex response ${status}`;
+            throw new Error(`Codex provider response ${status}: ${message}`);
+        }
+    }
+    if (!sawCompletedResponse)
+        throw new Error('Codex streamed response ended without a completed response event.');
+    if (!responseId)
+        throw new Error('Codex completed response did not include an id.');
+    yield {
+        type: 'completion',
+        responseId,
+        output,
+        ...(finishReason ? { finishReason } : {}),
+        ...(usage ? { usage } : {}),
+    };
+}
+function toCodexToolCallOutput(item) {
+    const id = codexString(item?.call_id) ?? codexString(item?.id);
+    const name = codexString(item?.name);
+    if (!id || !name)
+        throw new Error('Codex function call output is missing its call id or name.');
+    return {
+        type: 'tool_call',
+        id,
+        name,
+        arguments: item.type === 'custom_tool_call'
+            ? typeof item.input === 'string'
+                ? item.input
+                : ''
+            : typeof item.arguments === 'string'
+                ? item.arguments
+                : '{}',
+        ...(item.type === 'custom_tool_call' ? { toolType: 'custom' } : {}),
+    };
+}
+function toCodexOutputItem(item) {
+    if (!item || typeof item !== 'object')
+        throw new Error('Unsupported Codex response output item.');
+    if (item.type === 'function_call' || item.type === 'custom_tool_call')
+        return toCodexToolCallOutput(item);
+    if (item.type === 'message') {
+        const content = Array.isArray(item.content) ? item.content : [];
+        return {
+            type: 'message',
+            content: content.map((part) => {
+                if (part?.type && !['output_text', 'input_text', 'text'].includes(part.type))
+                    throw new Error(`Unsupported Codex response message content: ${String(part.type)}.`);
+                if (typeof part?.text !== 'string')
+                    throw new Error('Unsupported Codex response message content without text.');
+                return { type: 'text', text: part.text };
+            }),
+        };
+    }
+    if (item.type === 'reasoning') {
+        return {
+            type: 'reasoning',
+            ...(codexString(item.id) ? { id: item.id } : {}),
+            text: codexReasoningText(item.summary ?? item.content ?? ''),
+            providerMetadata: { codex: codexReasoningMetadata(item) },
+        };
+    }
+    if (item.type === 'compaction') {
+        return {
+            type: 'provider_opaque',
+            provider: OPENAI_RESPONSES_OPAQUE_TAG,
+            sourceProvider: 'codex',
+            item,
+        };
+    }
+    throw new Error(`Unsupported Codex response output item type: ${String(item.type)}.`);
+}
+function codexReasoningText(value) {
+    if (typeof value === 'string')
+        return value;
+    if (!Array.isArray(value))
+        return '';
+    return value
+        .map((part) => {
+        if (!part || typeof part !== 'object' || typeof part.text !== 'string')
+            throw new Error('Unsupported Codex reasoning content without text.');
+        return part.text;
+    })
+        .join('');
+}
+function codexReasoningMetadata(item) {
+    const { type: _type, id: _id, summary: _summary, content: _content, ...metadata } = item;
+    return metadata;
+}
+function toCodexUsage(rawUsage) {
+    if (!rawUsage || typeof rawUsage !== 'object')
+        return undefined;
+    const inputTokens = rawUsage.input_tokens ?? rawUsage.inputTokens;
+    const outputTokens = rawUsage.output_tokens ?? rawUsage.outputTokens;
+    if (inputTokens === undefined && outputTokens === undefined)
+        return undefined;
+    const cachedInputTokens = rawUsage.input_tokens_details?.cached_tokens ?? rawUsage.inputTokensDetails?.cachedTokens;
+    const cacheWriteTokens = rawUsage.input_tokens_details?.cache_write_tokens ?? rawUsage.inputTokensDetails?.cacheWriteTokens;
+    const reasoningTokens = rawUsage.output_tokens_details?.reasoning_tokens ??
+        rawUsage.outputTokensDetails?.reasoningTokens ??
+        rawUsage.outputTokensDetails?.reasoning_tokens;
+    return {
+        ...(inputTokens !== undefined ? { inputTokens } : {}),
+        ...(outputTokens !== undefined ? { outputTokens } : {}),
+        ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+        ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+        ...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+    };
+}
+function codexString(value) {
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+import { isIncompleteStreamTerminalError, isMissingServerToolOutputError, isPreviousResponseNotFoundError, isRetryableTransportError, isWebSocketConnectionLimitReachedError, } from '../services/retry/retry-error-classification.js';
+const SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT = 20;
+const WS_RESPONSE_MODEL_CLASS = 'OpenAIResponsesWSModel';
+const WS_RESPONSE_WRAPPER_CLASS = 'CodexResponsesWSModel';
+const RESPONSES_LITE_MODELS = new Set(['gpt-5.6-luna']);
+function isCodexResponsesLiteModel(model) {
+    return RESPONSES_LITE_MODELS.has(model);
+}
+const asRecord = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+const stringValue = (value) => (typeof value === 'string' && value ? value : undefined);
+/**
+ * A Codex WebSocket `error` frame is an explicit provider rejection, unlike a
+ * socket close after sending a request. Normalize only its documented
+ * `server_error` shape to the SDK's 5xx error so the pre-event retry wrapper
+ * can retry it without treating an ambiguous outcome as safe to replay.
+ */
+function normalizeExplicitCodexServerError(error) {
+    const outer = asRecord(asRecord(error)?.error) ?? asRecord(error);
+    const details = asRecord(outer?.error) ?? outer;
+    if (!details || (details.type !== 'server_error' && details.code !== 'server_error')) {
+        return error;
+    }
+    const normalized = new InternalServerError(500, details, stringValue(details.message), new Headers());
+    Object.defineProperty(normalized, 'cause', { value: error, configurable: true });
+    return normalized;
+}
+const CODEX_REPLAY_ITEM_TYPES_WITHOUT_IDS = new Set([
+    'message',
+    'reasoning',
+    'local_shell_call',
+    'function_call',
+    'tool_search_call',
+    'custom_tool_call',
+    'web_search_call',
+]);
+function stripCodexReplayIds(input) {
+    if (!Array.isArray(input)) {
+        return input;
+    }
+    let changed = false;
+    const normalized = input.map((item) => {
+        const record = asRecord(item);
+        const type = stringValue(record?.type);
+        if (!record || !type || !CODEX_REPLAY_ITEM_TYPES_WITHOUT_IDS.has(type) || !('id' in record)) {
+            return item;
+        }
+        const { id: _id, ...rest } = record;
+        changed = true;
+        return rest;
+    });
+    return changed ? normalized : input;
+}
+function normalizeCodexRequestData(requestData, request, model, options = {}) {
+    const normalizedRequestData = { ...requestData };
+    // Codex responses endpoint rejects temperature and max_output_tokens; always omit them.
+    if ('temperature' in normalizedRequestData) {
+        delete normalizedRequestData.temperature;
+    }
+    if ('max_output_tokens' in normalizedRequestData) {
+        delete normalizedRequestData.max_output_tokens;
+    }
+    const hasPreviousResponseId = (typeof normalizedRequestData.previous_response_id === 'string' &&
+        normalizedRequestData.previous_response_id.length > 0) ||
+        (typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0);
+    const normalizedInput = !hasPreviousResponseId && Array.isArray(normalizedRequestData.input)
+        ? dropUnpairedCodexToolItems(normalizedRequestData.input)
+        : normalizedRequestData.input;
+    normalizedRequestData.input = stripCodexReplayIds(Array.isArray(normalizedInput)
+        ? normalizedInput.map((item) => {
+            if (item?.type === 'function_call_result' || item?.type === 'function_call_output') {
+                // The Responses API rejects unknown parameters, so the camelCase
+                // spellings must be dropped, not just shadowed by the snake_case one
+                // added below — spreading `...item` alone leaves `callId` on the
+                // object alongside the new `call_id`.
+                const { callId: _callId, call_id: _call_id, tool_call_id: _toolCallId, ...rest } = item;
+                return {
+                    ...rest,
+                    type: 'function_call_output',
+                    call_id: item.call_id ?? item.callId ?? item.tool_call_id,
+                    // Responses supports rich function output content (input text,
+                    // images, and files). Preserve the already-normalized array;
+                    // only legacy object output needs JSON serialization.
+                    output: typeof item.output === 'string' || Array.isArray(item.output)
+                        ? item.output
+                        : JSON.stringify(item.output ?? ''),
+                };
+            }
+            if (item?.type === 'function_call' && item.callId && !item.call_id) {
+                const { callId: _callId, ...rest } = item;
+                return { ...rest, call_id: item.callId };
+            }
+            return item;
+        })
+        : normalizedInput);
+    const modelInclude = request?.codex?.include;
+    if (Array.isArray(modelInclude) && modelInclude.length > 0) {
+        const existingInclude = Array.isArray(normalizedRequestData.include) ? normalizedRequestData.include : [];
+        normalizedRequestData.include = Array.from(new Set([...existingInclude, ...modelInclude].filter((entry) => typeof entry === 'string' && entry.length > 0)));
+    }
+    const promptCacheKey = request?.codex?.promptCacheKey;
+    if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
+        normalizedRequestData.prompt_cache_key = promptCacheKey;
+    }
+    if (RESPONSES_LITE_MODELS.has(normalizedRequestData.model ?? model)) {
+        const prefix = [
+            {
+                type: 'additional_tools',
+                role: 'developer',
+                tools: normalizedRequestData.tools ?? [],
+            },
+        ];
+        if ((options.includeDeveloperInstructionsOnChainedRequest || !hasPreviousResponseId) &&
+            typeof normalizedRequestData.instructions === 'string' &&
+            normalizedRequestData.instructions.length > 0) {
+            prefix.push({
+                type: 'message',
+                role: 'developer',
+                content: [{ type: 'input_text', text: normalizedRequestData.instructions }],
+            });
+        }
+        normalizedRequestData.input = [...prefix, ...(normalizedRequestData.input ?? [])];
+        normalizedRequestData.instructions = '';
+        delete normalizedRequestData.tools;
+        normalizedRequestData.parallel_tool_calls = false;
+        normalizedRequestData.reasoning = {
+            ...(asRecord(normalizedRequestData.reasoning) ?? {}),
+            context: 'all_turns',
+        };
+        normalizedRequestData.client_metadata = {
+            ...normalizedRequestData.client_metadata,
+            'x-openai-internal-codex-responses-lite': 'true',
+        };
+    }
+    return normalizedRequestData;
+}
+const summarizeReconstructedItems = (items) => {
+    const typeCounts = {};
+    let functionCallCount = 0;
+    for (const item of items) {
+        const record = asRecord(item);
+        const type = stringValue(record?.type) ?? 'unknown';
+        typeCounts[type] = (typeCounts[type] ?? 0) + 1;
+        if (type === 'function_call') {
+            functionCallCount++;
+        }
+    }
+    const first = asRecord(items[0]);
+    const last = asRecord(items[items.length - 1]);
+    return {
+        itemCount: items.length,
+        typeCounts,
+        functionCallCount,
+        firstItemType: stringValue(first?.type),
+        firstItemId: stringValue(first?.id),
+        firstItemCallId: stringValue(first?.call_id) ?? stringValue(first?.callId),
+        lastItemType: stringValue(last?.type),
+        lastItemId: stringValue(last?.id),
+        lastItemCallId: stringValue(last?.call_id) ?? stringValue(last?.callId),
+    };
+};
+// Codex's `/backend-api/codex/responses` endpoint can ship terminal response
+// frames with either an empty `output` array or no `output` field at all, even
+// when the assistant message was already delivered via
+// `response.output_item.done`. The application transport must treat the
+// terminal frame as authoritative; when it is empty or missing, retaining the
+// completed output items prevents a false empty completion.
+//
+// The Codex transport accumulates raw items from `response.output_item.done`
+// and, only when terminal `response.output` is empty or missing, uses those
+// accumulated items for its application-owned completion event.
+const CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES = new Set([
+    'function_call_output',
+    'function_call_result',
+    'function_call_output_result',
+    'tool_call_output',
+    'tool_call_result',
+    'tool_call_output_item',
+    'local_shell_call_output',
+    'shell_call_output',
+    'computer_call_output',
+    'computer_call_result',
+    'apply_patch_call_output',
+    'custom_tool_call_output',
+]);
+const normalizeCodexServerHistoryItem = (item) => {
+    const record = asRecord(item);
+    const type = stringValue(record?.type);
+    const itemId = stringValue(record?.id);
+    const callId = stringValue(record?.call_id) ??
+        stringValue(record?.callId) ??
+        stringValue(record?.tool_call_id) ??
+        (type === 'tool_call' || type === 'tool_result' ? stringValue(record?.id) : undefined);
+    return {
+        type,
+        itemId,
+        callId,
+        isFunctionCall: type === 'function_call' || type === 'tool_call' || type === 'custom_tool_call',
+        isToolResult: type === 'tool_result' || (typeof type === 'string' && CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES.has(type)),
+    };
+};
+const isUserInputMessage = (item) => asRecord(item)?.role === 'user';
+const isToolResultItem = (item) => normalizeCodexServerHistoryItem(item).isToolResult;
+const hasToolResultInput = (request) => Array.isArray(request?.input) && request.input.some((item) => isToolResultItem(item));
+const getToolResultCallId = (item) => {
+    const normalized = normalizeCodexServerHistoryItem(item);
+    return normalized.isToolResult ? normalized.callId : undefined;
+};
+const isToolContinuationItem = (item) => {
+    const normalized = normalizeCodexServerHistoryItem(item);
+    if (normalized.isToolResult || normalized.callId) {
+        return true;
+    }
+    // Some Codex websocket function_call items arrive in reconstructed history
+    // with only their Responses item id (`fc_...`) even though their paired
+    // outputs carry the separate `call_...` invocation id. Treat those calls as
+    // part of the paired continuation region so earlier parallel outputs are not
+    // trimmed away.
+    return normalized.isFunctionCall && Boolean(normalized.itemId);
+};
+const findServerManagedDeltaStart = (input) => {
+    let endUserIndex = input.length;
+    while (endUserIndex > 0 && isUserInputMessage(input[endUserIndex - 1])) {
+        endUserIndex--;
+    }
+    if (endUserIndex > 0 && isToolContinuationItem(input[endUserIndex - 1])) {
+        let toolStart = endUserIndex;
+        while (toolStart > 0 && isToolContinuationItem(input[toolStart - 1])) {
+            toolStart--;
+        }
+        return toolStart;
+    }
+    for (let index = input.length - 1; index >= 0; index--) {
+        if (isUserInputMessage(input[index])) {
+            return index;
+        }
+    }
+    return 0;
+};
+const filterConsumedToolResults = (items, consumedToolResultCallIds) => {
+    if (!consumedToolResultCallIds || consumedToolResultCallIds.size === 0) {
+        return items;
+    }
+    return items.filter((item) => {
+        const callId = getToolResultCallId(item);
+        return !callId || !consumedToolResultCallIds.has(callId);
+    });
+};
+const collectToolResultCallIds = (input) => {
+    if (!Array.isArray(input)) {
+        return [];
+    }
+    const ids = [];
+    for (const item of input) {
+        const callId = getToolResultCallId(item);
+        if (callId) {
+            ids.push(callId);
+        }
+    }
+    return ids;
+};
+const collectFunctionCallIds = (input) => {
+    if (!Array.isArray(input)) {
+        return [];
+    }
+    const ids = [];
+    for (const item of input) {
+        const normalized = normalizeCodexServerHistoryItem(item);
+        if (normalized.isFunctionCall && normalized.callId) {
+            ids.push(normalized.callId);
+        }
+    }
+    return ids;
+};
+const isExactInputPrefix = (input, prefix) => {
+    if (prefix.length > input.length)
+        return false;
+    return prefix.every((item, index) => JSON.stringify(item) === JSON.stringify(input[index]));
+};
+const collectUnpairedToolResultCallIds = (original, filtered) => {
+    const remaining = new Set(collectToolResultCallIds(filtered));
+    return collectToolResultCallIds(original).filter((callId) => !remaining.has(callId));
+};
+const dropUnpairedCodexToolItems = (history) => {
+    const callIds = new Set();
+    const resultIds = new Set();
+    for (const item of history) {
+        const normalized = normalizeCodexServerHistoryItem(item);
+        if (!normalized.callId)
+            continue;
+        if (normalized.isFunctionCall)
+            callIds.add(normalized.callId);
+        if (normalized.isToolResult)
+            resultIds.add(normalized.callId);
+    }
+    if (callIds.size === 0 && resultIds.size === 0)
+        return history;
+    const filtered = history.filter((item) => {
+        const normalized = normalizeCodexServerHistoryItem(item);
+        if (!normalized.callId)
+            return true;
+        if (normalized.isFunctionCall)
+            return resultIds.has(normalized.callId);
+        if (normalized.isToolResult)
+            return callIds.has(normalized.callId);
+        return true;
+    });
+    return filtered.length === history.length ? history : filtered;
+};
+const filterServerManagedInput = (input, consumedToolResultCallIds) => {
+    if (!Array.isArray(input)) {
+        return input;
+    }
+    if (input.length <= 1) {
+        return input.length === 1 && isToolResultItem(input[0])
+            ? filterConsumedToolResults(input, consumedToolResultCallIds)
+            : input;
+    }
+    // When previous_response_id is reused, the server already holds the
+    // previous response's output items (assistant message, reasoning, and the
+    // function calls it issued). The request only needs the *new* items
+    // produced since then.
+    // Tool continuation: the input ends with a tool-call output answering the
+    // previous response's function call(s) — or tool-call output(s) followed by
+    // user steer message(s) admitted mid-turn.
+    let endUserIndex = input.length;
+    while (endUserIndex > 0 && isUserInputMessage(input[endUserIndex - 1])) {
+        endUserIndex--;
+    }
+    if (endUserIndex > 0 && isToolResultItem(input[endUserIndex - 1])) {
+        let start = endUserIndex - 1;
+        while (start > 0 && isToolContinuationItem(input[start - 1])) {
+            start--;
+        }
+        const trailing = input.slice(start, endUserIndex);
+        // A clean run of tool results (grouped layout) needs no filtering; for
+        // the paired layout, drop the interleaved function-call items.
+        const toolResults = trailing.every(isToolResultItem) ? trailing : trailing.filter(isToolResultItem);
+        const filteredToolResults = filterConsumedToolResults(toolResults, consumedToolResultCallIds);
+        const trailingUserMessages = input.slice(endUserIndex);
+        return [...filteredToolResults, ...trailingUserMessages];
+    }
+    // Fresh user turn with no trailing tool output: the delta is the latest
+    // user message onward.
+    const deltaStart = findServerManagedDeltaStart(input);
+    return deltaStart > 0 ? input.slice(deltaStart) : input;
+};
+const getResponseIdFromResponse = (response) => {
+    const record = asRecord(response);
+    const responseId = record?.responseId ?? record?.id;
+    return typeof responseId === 'string' && responseId.length > 0 ? responseId : undefined;
+};
+const getResponseIdFromStreamEvent = (event) => {
+    const candidate = asRecord(event);
+    if (!candidate ||
+        !['response.completed', 'response.incomplete', 'response.failed'].includes(String(candidate.type))) {
+        return undefined;
+    }
+    return getResponseIdFromResponse(candidate.response) ?? getResponseIdFromResponse(candidate);
+};
+const getResponseOutputFromStreamEvent = (event) => {
+    const candidate = asRecord(event);
+    if (!candidate ||
+        !['response.completed', 'response.incomplete', 'response.failed'].includes(String(candidate.type))) {
+        return undefined;
+    }
+    const response = asRecord(candidate.response);
+    return Array.isArray(response?.output) ? response.output : undefined;
+};
+const getErrorMessage = (error) => {
+    if (typeof error === 'string') {
+        return error;
+    }
+    if (error && typeof error === 'object' && 'message' in error) {
+        return String(error.message ?? '');
+    }
+    return '';
+};
+const isPreviousResponseUnavailableError = (error) => {
+    const message = getErrorMessage(error);
+    return isPreviousResponseNotFoundError(error) || message.includes('previous_response_not_found');
+};
+const isDefinitelyUnsentWebSocketError = (error, seen = new Set()) => {
+    if (!error || seen.has(error))
+        return false;
+    seen.add(error);
+    // The server explicitly rejects this request before model generation and
+    // instructs the client to reconnect. Retrying from durable history is safe;
+    // treating it as an ambiguous model outcome would suppress recovery.
+    if (isWebSocketConnectionLimitReachedError(error))
+        return true;
+    if (typeof error === 'string') {
+        const message = error.toLowerCase();
+        return (message.includes('before opening') ||
+            message.includes('timed out before opening') ||
+            message.includes('econnrefused') ||
+            message.includes('enotfound'));
+    }
+    if (typeof error !== 'object')
+        return false;
+    const record = error;
+    if (record.code === 'connection_closed_before_opening' ||
+        record.code === 'ECONNREFUSED' ||
+        record.code === 'ENOTFOUND') {
+        return true;
+    }
+    return isDefinitelyUnsentWebSocketError(record.message, seen) || isDefinitelyUnsentWebSocketError(record.cause, seen);
+};
+const isConnectTimeoutError = (error, seen = new Set()) => {
+    if (!error || seen.has(error))
+        return false;
+    seen.add(error);
+    if (typeof error !== 'object')
+        return false;
+    const record = error;
+    if (record.code === 'ETIMEDOUT' || record.code === 'UND_ERR_CONNECT_TIMEOUT')
+        return true;
+    return isConnectTimeoutError(record.cause, seen);
+};
+/**
+ * A receive-watchdog timeout that the send path proved never reached the wire.
+ *
+ * Three conditions must all hold, and each rules out a way of being wrong: the
+ * failure is the watchdog's own (not a provider error wearing a timeout
+ * message), no frame ever arrived (a single frame means the server had the
+ * request), and the send path positively recorded `unsent` (an unrecorded
+ * request is not evidence). Anything less stays ambiguous; only the session
+ * policy may admit a typed zero-frame timeout under its configured retry budget.
+ */
+const asProvablyUnsentTimeout = (timeoutError, timing, request) => {
+    if (!timeoutError || timing.frameCount > 0)
+        return undefined;
+    if (readWebSocketDispatch(request) !== 'unsent')
+        return undefined;
+    return new UnsentWebSocketRequestError(timeoutError.message, { cause: timeoutError });
+};
+const asProvablyUnsentConnectTimeout = (error, request, receivedRawFrame) => {
+    if (receivedRawFrame || readWebSocketDispatch(request) !== 'unsent' || !isConnectTimeoutError(error)) {
+        return undefined;
+    }
+    return new UnsentWebSocketRequestError(getErrorMessage(error) || 'Codex WebSocket connection timed out.', {
+        cause: error,
+    });
+};
+const asAmbiguousModelOutcome = (error) => {
+    // Connection never carried the request: safe to let outer retry / transport
+    // fallback policies decide. Do not pretend the model may have run.
+    if (error instanceof UnsentWebSocketRequestError || isDefinitelyUnsentWebSocketError(error)) {
+        return undefined;
+    }
+    // Incomplete stream terminals keep transportFallback=false so Codex does not
+    // force an HTTP/WS switch — but the request may already have been accepted,
+    // so keep ambiguity explicit. RetryingModel must not replay it; the session
+    // classifier alone may admit the authorized typed zero-frame timeout case.
+    if (isIncompleteStreamTerminalError(error) || isRetryableTransportError(error).transportFallback) {
+        return new AmbiguousModelOutcomeError(getErrorMessage(error) || 'Codex request outcome is unknown.', {
+            cause: error,
+        });
+    }
+    return undefined;
+};
+const hasGenerateFalse = (request) => request.providerOptions?.generate === false;
+export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
+    modelId;
+    tokenManager;
+    codexPreviousResponseIds = new Map();
+    codexConsumedToolResultCallIdsByResponseId = new Map();
+    codexFunctionCallIdsByResponseId = new Map();
+    codexTurnIdsBySession = new Map();
+    #serverHistoryReuseDisabled = false;
+    #lastSentChainFingerprint;
+    #lastRejectedChainFingerprint;
+    #lastLogicalRequestByKey = new Map();
+    #transportDiagnosticsByRequest = new WeakMap();
+    #connectionByHistoryKey = new Map();
+    providerTraffic;
+    diagnosticLogger;
+    sessionContextService;
+    requestCapture;
+    chainedWireState = new ChainedWireState(new LunaResponsesLiteWireProtocol());
+    requestTokens = new WeakMap();
+    websocketReceiveTimeouts;
+    constructor(client, modelId, tokenManager, diagnosticLogger, providerTraffic, sessionContextService, websocketReceiveTimeouts = DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS, requestCapture, transport) {
+        const candidates = [
+            transport,
+            diagnosticLogger,
+            providerTraffic,
+            sessionContextService,
+            websocketReceiveTimeouts,
+            requestCapture,
+        ];
+        const injectedTransport = candidates.find((candidate) => candidate instanceof CodexResponsesTransport);
+        super(client, modelId, injectedTransport);
+        this.modelId = modelId;
+        this.tokenManager = tokenManager;
+        this.diagnosticLogger = diagnosticLogger instanceof CodexResponsesTransport ? undefined : diagnosticLogger;
+        this.providerTraffic =
+            providerTraffic instanceof CodexResponsesTransport
+                ? DUMMY_PROVIDER_TRAFFIC
+                : providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+        this.sessionContextService =
+            sessionContextService instanceof CodexResponsesTransport ? undefined : sessionContextService;
+        this.websocketReceiveTimeouts =
+            websocketReceiveTimeouts instanceof CodexResponsesTransport
+                ? DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS
+                : websocketReceiveTimeouts;
+        this.requestCapture = requestCapture instanceof CodexResponsesTransport ? undefined : requestCapture;
+    }
+    /**
+     * Drop server-history bookkeeping for one logical scope while leaving the
+     * provider transport pool alive. Rollover supplies the predecessor key;
+     * refusing an unscoped reset protects live nested scopes sharing this model.
+     */
+    resetConversationState(options) {
+        if (!options?.providerHistoryKey)
+            return;
+        this.#forgetCodexServerHistoryForKey(options.providerHistoryKey);
+    }
+    #transportDiagnostics(request) {
+        return this.#transportDiagnosticsByRequest.get(request);
+    }
+    #onConnectionAcquired(request, requestData, diagnostics, details) {
+        this.#transportDiagnosticsByRequest.set(request, { ...diagnostics, ...details });
+        const key = this.#getCodexServerHistoryKey();
+        const previousConnection = key ? this.#connectionByHistoryKey.get(key) : undefined;
+        if (requestData.previous_response_id &&
+            (!details.reused || (previousConnection && previousConnection !== details.connectionId))) {
+            // Codex's store:false anchors live on the physical socket. Never send
+            // a stale anchor (or drop it from a caller delta). The existing chain
+            // recovery owner supplies a complete transcript before replaying.
+            throw Object.assign(new Error('Previous response belongs to a different WebSocket connection.'), {
+                code: 'previous_response_not_found',
+            });
+        }
+        if (key)
+            this.#connectionByHistoryKey.set(key, details.connectionId);
+    }
+    async compactHistory(request) {
+        const result = await super.compactHistory(request);
+        // A native compaction item replaces the provider's prior transcript. The
+        // old Responses-Lite chain may still contain an unfinished function call,
+        // so retaining it would combine the checkpoint with stale server debt.
+        this.#forgetCodexServerHistoryForCurrentKey();
+        return result;
+    }
+    #modelNameFallback() {
+        return this.modelId;
+    }
+    #logTrafficStarted(requestId, requestData, headers, transportDiagnostics) {
+        const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+        const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
+        const sanitizedHeaders = headers ? sanitizeHeaders(headers) : undefined;
+        providerTraffic.recordRequestStart({
+            requestId,
+            provider: 'codex',
+            model,
+            sentBody: requestData,
+            headers: sanitizedHeaders,
+            transportDiagnostics,
+            modelClass: WS_RESPONSE_MODEL_CLASS,
+            modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
+        });
+    }
+    #logTrafficReceived(requestId, requestData, response, receiveTiming, transportDiagnostics) {
+        const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+        const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
+        providerTraffic.recordResponseReceived({
+            requestId,
+            provider: 'codex',
+            model,
+            status: 200,
+            response: response,
+            transport: 'websocket',
+            ...(receiveTiming ? { receiveTiming } : {}),
+            transportDiagnostics,
+            modelClass: WS_RESPONSE_MODEL_CLASS,
+            modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
+        });
+    }
+    #logTrafficFailed(requestId, requestData, error, receiveTiming, diagnostics, transportDiagnostics) {
+        const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+        const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
+        providerTraffic.recordRequestFailed({
+            requestId,
+            provider: 'codex',
+            model,
+            error,
+            ...(receiveTiming ? { receiveTiming } : {}),
+            ...(diagnostics ? { diagnostics } : {}),
+            transportDiagnostics,
+            modelClass: WS_RESPONSE_MODEL_CLASS,
+            modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
+        });
+    }
+    #logTrafficClosed(requestId, requestData, outcome, eventCount, diagnostics, transportDiagnostics) {
+        const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+        const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
+        providerTraffic.recordResponseClosed({
+            requestId,
+            provider: 'codex',
+            model,
+            outcome,
+            eventCount,
+            ...(diagnostics ? { diagnostics } : {}),
+            transportDiagnostics,
+            modelClass: WS_RESPONSE_MODEL_CLASS,
+            modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
+        });
+    }
+    async #withTrafficLogging(responseStream, requestId, requestData, wireStateKey, wireStateToken, signal, receiveTiming, asProvablyUnsent, transportDiagnostics) {
+        const logReceived = this.#logTrafficReceived.bind(this);
+        const logFailed = this.#logTrafficFailed.bind(this);
+        const logClosed = this.#logTrafficClosed.bind(this);
+        const wireState = this.chainedWireState;
+        async function* wrapped() {
+            let sawTerminalEvent = false;
+            let sourceExhausted = false;
+            let streamFailed = false;
+            let eventCount = 0;
+            // A stream cut off mid-flight produces no payload to summarize later, so
+            // the transcript is retained until a terminal event proves it redundant.
+            const recorder = new AbortedStreamRecorder();
+            try {
+                for await (const event of responseStream) {
+                    eventCount += 1;
+                    recorder.observe(event);
+                    if (event &&
+                        typeof event === 'object' &&
+                        (event.type === 'response.completed' ||
+                            event.type === 'response.incomplete' ||
+                            event.type === 'response.failed')) {
+                        sawTerminalEvent = true;
+                    }
+                    if (event &&
+                        typeof event === 'object' &&
+                        (event.type === 'response.completed' || event.type === 'response.incomplete') &&
+                        event.response) {
+                        recorder.release();
+                        const response = event.response;
+                        if (wireStateKey && wireStateToken && typeof response.id === 'string' && response.id.length > 0) {
+                            wireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
+                        }
+                        logReceived(requestId, requestData, response, receiveTiming?.(), transportDiagnostics);
+                    }
+                    yield event;
+                }
+                sourceExhausted = true;
+            }
+            catch (error) {
+                streamFailed = true;
+                if (wireStateKey && !isWebSocketConnectionLimitReachedError(error)) {
+                    wireState.invalidate(wireStateKey);
+                }
+                // The watchdog's own timeout may carry proof that the request never
+                // reached the wire; the wire-state decision above still keys off the
+                // error as thrown.
+                const failure = asProvablyUnsent?.(error) ?? error;
+                if (signal?.aborted && eventCount > 0 && isClassifiedCancellation(failure)) {
+                    // An active request can reject from the provider as soon as the
+                    // application's abort reaches the socket. Preserve the partial raw
+                    // transcript in the same aborted outcome used when the consumer
+                    // closes the iterator explicitly; otherwise a guard-triggered abort
+                    // would be reduced to bounded counters before the recorder's
+                    // finally block can retain it.
+                    logClosed(requestId, requestData, 'aborted', eventCount, recorder.diagnostics(), transportDiagnostics);
+                }
+                else {
+                    // Bounded evidence of whatever progress the recorder observed before
+                    // the failure (category/counter/timing, no raw frame payload) — a
+                    // stream that fails after thousands of frames (e.g. an abrupt close)
+                    // must not lose that evidence the way an unrecorded failure would.
+                    logFailed(requestId, requestData, failure, receiveTiming?.(), recorder.boundedDiagnostics(), transportDiagnostics);
+                }
+                throw failure;
+            }
+            finally {
+                if (!sawTerminalEvent && !sourceExhausted && !streamFailed) {
+                    // A consumer-closed stream ended because we stopped reading, which is
+                    // ordinary; its partial output stays out of the log. An abort is the
+                    // failure we cannot otherwise explain, so it keeps the transcript.
+                    // A raw transport `error`/`close` frame observed before either of
+                    // those means the stream did not end because we chose to stop
+                    // reading — the socket ended the exchange — so it is neither
+                    // ordinary nor a client abort, and gets its own outcome plus
+                    // bounded (non-payload) progress evidence.
+                    const outcome = signal?.aborted ? 'aborted' : recorder.sawFailureFrame() ? 'failed' : 'consumer_closed';
+                    logClosed(requestId, requestData, outcome, eventCount, outcome === 'aborted'
+                        ? recorder.diagnostics()
+                        : outcome === 'failed'
+                            ? recorder.boundedDiagnostics()
+                            : undefined, transportDiagnostics);
+                }
+                recorder.release();
+                if (wireStateKey && wireStateToken) {
+                    wireState.abandon(wireStateKey, wireStateToken);
+                }
+            }
+        }
+        return wrapped();
+    }
+    #prepareCodexServerHistoryRequest(request) {
+        const explicitPreviousResponseId = typeof request.previousResponseId === 'string' && request.previousResponseId.length > 0
+            ? request.previousResponseId
+            : undefined;
+        const input = request.input;
+        const previousResponseId = explicitPreviousResponseId ?? this.#getRememberedCodexResponseIdForRequest(request);
+        if (!previousResponseId) {
+            return request;
+        }
+        const consumedToolResultCallIds = this.#getConsumedToolResultCallIds(previousResponseId);
+        const filteredInput = filterServerManagedInput(input, consumedToolResultCallIds);
+        const knownFunctionCallIds = this.codexFunctionCallIdsByResponseId.get(previousResponseId);
+        if (request.previousResponseId === previousResponseId && knownFunctionCallIds) {
+            const orphanedCallIds = collectToolResultCallIds(filteredInput).filter((callId) => !knownFunctionCallIds.has(callId));
+            if (orphanedCallIds.length > 0) {
+                throw new OrphanedChainedToolOutputError([...new Set(orphanedCallIds)]);
+            }
+        }
+        this.#warnIfConsumedToolResultsWereDropped(previousResponseId, input, filteredInput, consumedToolResultCallIds);
+        if (request.previousResponseId === previousResponseId && filteredInput === input) {
+            return request;
+        }
+        return {
+            ...request,
+            previousResponseId,
+            input: filteredInput,
+        };
+    }
+    #getRememberedCodexResponseIdForRequest(request) {
+        if (this.#serverHistoryReuseDisabled || hasGenerateFalse(request)) {
+            return undefined;
+        }
+        const key = this.#getCodexServerHistoryKey();
+        const stored = key ? this.#lastLogicalRequestByKey.get(key) : undefined;
+        if (!stored || !Array.isArray(request.input)) {
+            return undefined;
+        }
+        return isExactInputPrefix(request.input, stored.input) ? stored.responseId : undefined;
+    }
+    #prepareCodexServerHistoryRequests(request) {
+        if (request?.disableChaining === true) {
+            this.#forgetCodexResponseId();
+            const { previousResponseId: _previousResponseId, ...rest } = request;
+            const input = Array.isArray(rest.input) ? dropUnpairedCodexToolItems(rest.input) : rest.input;
+            this.diagnosticLogger?.debug?.('Codex chain recovery bypassed warmup and previous_response_id', {
+                eventType: 'codex.chain_recovery.warmup_bypassed',
+                category: 'provider',
+                phase: 'request_prepare',
+                droppedOrphanCallIds: collectUnpairedToolResultCallIds(rest.input, input),
+            });
+            return { request: input === rest.input ? rest : { ...rest, input } };
+        }
+        if (RESPONSES_LITE_MODELS.has(this.modelId)) {
+            // Luna chaining is owned by ChainedWireState in buildResponsesCreateRequest.
+            // That machine adopts the stored response id when the caller omits
+            // previousResponseId (nested explorers do). Injecting a terra-style
+            // remembered id here would duplicate that owner. disableChaining still
+            // clears the wire state via #forgetCodexResponseId above.
+            const input = Array.isArray(request.input) ? dropUnpairedCodexToolItems(request.input) : request.input;
+            return { request: input === request.input ? request : { ...request, input } };
+        }
+        const key = this.#getCodexServerHistoryKey();
+        if (!key || hasGenerateFalse(request)) {
+            return { request };
+        }
+        const preparedRequest = this.#prepareCodexServerHistoryRequest(request);
+        if (preparedRequest.previousResponseId) {
+            return { request: preparedRequest };
+        }
+        // No usable server-held anchor, so this request carries its full history.
+        //
+        // Codex's `generate:false` warmup is deliberately not used here. It is only
+        // a win when it can be issued ahead of an upcoming turn, and this call site
+        // sits immediately before the request it would prepare -- so it bought a
+        // serial round trip while the paired generate call still reported the full
+        // uncached prompt (`cached_tokens: 0`), counting the prompt twice. The
+        // response ID that anchors the next turn comes from the generate response
+        // either way, so dropping warmup costs no chaining.
+        const input = Array.isArray(request.input) ? dropUnpairedCodexToolItems(request.input) : request.input;
+        return { request: input === request.input ? request : { ...request, input } };
+    }
+    /**
+     * Records a response ID as the anchor for the next turn's `previous_response_id`.
+     *
+     * The chain anchor -- the set of function call IDs a response is known to hold
+     * -- is recorded only for a full-history request, meaning one sent without
+     * `previous_response_id`. That condition used to be implicit: only the
+     * `generate:false` warmup leg recorded an anchor, and warmup always carried
+     * complete history. Recording it from a chained request instead would be a
+     * false-positive machine, because a chained request's `input` is only the
+     * delta -- the orphan guard below would then reject every genuinely new tool
+     * output as unknown to the chain.
+     */
+    #rememberCodexResponseId(responseId, output, input, sentAsFullHistory = false) {
+        if (!responseId) {
+            return;
+        }
+        this.#serverHistoryReuseDisabled = false;
+        const key = this.#getCodexServerHistoryKey();
+        if (key) {
+            this.codexPreviousResponseIds.set(key, responseId);
+            this.#lastLogicalRequestByKey.set(key, {
+                input: Array.isArray(input) ? [...input] : this.#lastLogicalRequestByKey.get(key)?.input ?? [],
+                output: Array.isArray(output) ? [...output] : [],
+                responseId,
+            });
+        }
+        if (sentAsFullHistory && (Array.isArray(output) || Array.isArray(input))) {
+            this.codexFunctionCallIdsByResponseId.set(responseId, new Set([...collectFunctionCallIds(output), ...collectFunctionCallIds(input)]));
+        }
+    }
+    #getConsumedToolResultCallIds(responseId) {
+        if (!responseId) {
+            return undefined;
+        }
+        return this.codexConsumedToolResultCallIdsByResponseId.get(responseId);
+    }
+    #warnIfConsumedToolResultsWereDropped(previousResponseId, input, filteredInput, consumedToolResultCallIds) {
+        if (!consumedToolResultCallIds || consumedToolResultCallIds.size === 0 || filteredInput === input) {
+            return;
+        }
+        const filteredCallIds = new Set(collectToolResultCallIds(filteredInput));
+        const droppedCallIds = collectToolResultCallIds(input).filter((callId) => consumedToolResultCallIds.has(callId) && !filteredCallIds.has(callId));
+        if (droppedCallIds.length === 0) {
+            return;
+        }
+        this.diagnosticLogger?.debug?.('Codex provider dropped already-consumed tool outputs before continuation', {
+            eventType: 'codex.tool_outputs.dropped_consumed',
+            category: 'provider',
+            phase: 'request_prepare',
+            previousResponseId,
+            droppedCallIds,
+        });
+    }
+    #rememberConsumedToolResultCallIds(responseId, previousResponseId, input) {
+        if (!responseId) {
+            return;
+        }
+        const consumed = new Set(this.#getConsumedToolResultCallIds(previousResponseId));
+        for (const callId of collectToolResultCallIds(input)) {
+            consumed.add(callId);
+        }
+        this.codexConsumedToolResultCallIdsByResponseId.set(responseId, consumed);
+        // A continuation may explicitly reuse the prior response ID; retain the
+        // consumed-output checkpoint under that anchor as well as the new response.
+        if (previousResponseId)
+            this.codexConsumedToolResultCallIdsByResponseId.set(previousResponseId, consumed);
+    }
+    #forgetCodexServerHistoryForCurrentKey() {
+        this.#forgetCodexServerHistoryForKey(this.#getCodexServerHistoryKey());
+    }
+    #forgetCodexServerHistoryForKey(key) {
+        if (!key)
+            return;
+        const responseId = this.chainedWireState.getStoredResponseId(key);
+        this.chainedWireState.invalidate(key);
+        this.codexPreviousResponseIds.delete(key);
+        this.codexTurnIdsBySession.delete(key);
+        this.#lastLogicalRequestByKey.delete(key);
+        this.#connectionByHistoryKey.delete(key);
+        if (responseId) {
+            this.codexConsumedToolResultCallIdsByResponseId.delete(responseId);
+            this.codexFunctionCallIdsByResponseId.delete(responseId);
+        }
+        this.#lastSentChainFingerprint = undefined;
+    }
+    #forgetCodexResponseId() {
+        this.#serverHistoryReuseDisabled = true;
+        this.codexPreviousResponseIds.clear();
+        this.codexConsumedToolResultCallIdsByResponseId.clear();
+        this.codexFunctionCallIdsByResponseId.clear();
+        this.codexTurnIdsBySession.clear();
+        this.chainedWireState.clear();
+        this.#lastLogicalRequestByKey.clear();
+        this.#connectionByHistoryKey.clear();
+        this.#lastSentChainFingerprint = undefined;
+    }
+    #getEffectivePreviousResponseId(request) {
+        if (typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0) {
+            return request.previousResponseId;
+        }
+        if (request?.disableChaining === true) {
+            return undefined;
+        }
+        if (RESPONSES_LITE_MODELS.has(this.modelId)) {
+            const key = this.#getCodexServerHistoryKey();
+            return key ? this.chainedWireState.getStoredResponseId(key) : undefined;
+        }
+        return undefined;
+    }
+    #fingerprintPreparedRequest(request, recoveryClass = 'chain_recovery') {
+        const previousResponseId = this.#getEffectivePreviousResponseId(request);
+        return fingerprintChainRequest({
+            provider: 'codex',
+            model: this.modelId,
+            previousResponseId: previousResponseId ?? null,
+            input: Array.isArray(request?.input) ? request.input : [],
+            recoveryClass,
+        });
+    }
+    #assertChainRequestMakesProgress(request) {
+        const fingerprint = this.#fingerprintPreparedRequest(request);
+        if (this.#lastRejectedChainFingerprint && this.#lastRejectedChainFingerprint === fingerprint) {
+            this.diagnosticLogger?.warn?.('Codex chain recovery would repeat a rejected request', {
+                eventType: 'retry.conversation_state_no_progress',
+                category: 'retry',
+                phase: 'request_prepare',
+            });
+            throw new ConversationStateNoProgressError();
+        }
+        this.#lastSentChainFingerprint = fingerprint;
+    }
+    #recordRejectedChainRequest(error) {
+        if (isMissingServerToolOutputError(error) ||
+            isOrphanedChainedToolOutputError(error) ||
+            isPreviousResponseNotFoundError(error)) {
+            this.#lastRejectedChainFingerprint = this.#lastSentChainFingerprint;
+        }
+    }
+    #shouldForgetCodexServerHistory(error) {
+        // This rejects the new request before generation; it expires the socket,
+        // not the last acknowledged response. Retaining that response keeps an
+        // already-executed tool output paired with the call that introduced it.
+        if (isWebSocketConnectionLimitReachedError(error)) {
+            return false;
+        }
+        const message = getErrorMessage(error);
+        return (isPreviousResponseNotFoundError(error) ||
+            message.includes('previous_response_not_found') ||
+            isMissingServerToolOutputError(error) ||
+            isOrphanedChainedToolOutputError(error) ||
+            isRetryableTransportError(error).transportFallback);
+    }
+    #getCodexServerHistoryKey() {
+        const trafficContext = this.sessionContextService?.getContext() ?? null;
+        return trafficContext?.providerHistoryKey ?? trafficContext?.sessionId ?? trafficContext?.traceId ?? null;
+    }
+    #buildCodexWebSocketIdentity(requestId, request) {
+        const installationId = this.tokenManager.getInstallationId?.();
+        if (typeof installationId !== 'string' || installationId.length === 0) {
+            return undefined;
+        }
+        const sessionContext = this.sessionContextService?.getContext();
+        const logicalSessionId = sessionContext?.providerHistoryKey ?? sessionContext?.sessionId ?? requestId;
+        // A nested run must not reuse a sibling's socket: chained responses may
+        // be rejected when their IDs are continued on a different connection.
+        // Root rollovers still retain their physical cache affinity.
+        const cacheAffinity = request.codex?.promptCacheKey ?? sessionContext?.promptCacheKey ?? logicalSessionId;
+        const transportSessionId = sessionContext?.providerHistoryKey &&
+            sessionContext.providerHistoryKey !== sessionContext.sessionId &&
+            !sessionContext.rootContextCompaction
+            ? logicalSessionId
+            : cacheAffinity;
+        const threadId = logicalSessionId;
+        const hasPreviousResponseId = typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;
+        const turnId = hasPreviousResponseId
+            ? this.codexTurnIdsBySession.get(logicalSessionId) ?? randomUUID()
+            : randomUUID();
+        this.codexTurnIdsBySession.set(logicalSessionId, turnId);
+        const windowId = `${threadId}:1`;
+        const turnMetadata = JSON.stringify({
+            installation_id: installationId,
+            session_id: logicalSessionId,
+            thread_id: threadId,
+            turn_id: turnId,
+            window_id: windowId,
+            request_kind: 'turn',
+        });
+        return {
+            sessionId: logicalSessionId,
+            threadId,
+            turnId,
+            windowId,
+            turnMetadata,
+            clientMetadata: {
+                'x-codex-installation-id': installationId,
+                session_id: logicalSessionId,
+                thread_id: threadId,
+                'x-codex-window-id': windowId,
+                turn_id: turnId,
+                'x-codex-turn-metadata': turnMetadata,
+            },
+            headers: {
+                'x-client-request-id': transportSessionId,
+                'session-id': transportSessionId,
+                'thread-id': transportSessionId,
+                'x-codex-window-id': transportSessionId + ':1',
+                'x-codex-turn-metadata': turnMetadata,
+            },
+        };
+    }
+    #withoutCodexServerHistory(request) {
+        if (!request || typeof request !== 'object') {
+            return request;
+        }
+        const { previousResponseId: _previousResponseId, ...rest } = request;
+        return rest;
+    }
+    #callerSuppliedPreviousResponseId(request) {
+        return typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;
+    }
+    /**
+     * Provider-injected chaining may be dropped and the same complete logical
+     * request retried. A caller-supplied `previousResponseId` means the input is
+     * a chained delta and is not a conversation without that anchor.
+     */
+    #shouldFallbackWithoutServerHistory(request) {
+        if (this.#callerSuppliedPreviousResponseId(request))
+            return false;
+        if (hasToolResultInput(request))
+            return false;
+        return true;
+    }
+    async fetchUnaryResponse(request) {
+        const run = async () => {
+            let attemptedWithServerHistory = false;
+            try {
+                const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
+                attemptedWithServerHistory = Boolean(this.#getEffectivePreviousResponseId(preparedRequest.request));
+                const effectiveRequest = preparedRequest.request;
+                this.#assertChainRequestMakesProgress(effectiveRequest);
+                const response = await super.fetchUnaryResponse(effectiveRequest);
+                const responseId = getResponseIdFromResponse(response);
+                this.#rememberCodexResponseId(responseId, asRecord(response)?.output, request.input, !effectiveRequest.previousResponseId);
+                this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
+                return response;
+            }
+            catch (error) {
+                this.#recordRejectedChainRequest(error);
+                if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory) {
+                    this.#forgetCodexResponseId();
+                    if (!this.#shouldFallbackWithoutServerHistory(request)) {
+                        throw error;
+                    }
+                    const fallbackRequest = this.#withoutCodexServerHistory(request);
+                    const response = await super.fetchUnaryResponse(fallbackRequest);
+                    const responseId = getResponseIdFromResponse(response);
+                    this.#rememberCodexResponseId(responseId, asRecord(response)?.output, fallbackRequest.input, true);
+                    this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
+                    return response;
+                }
+                if (this.#shouldForgetCodexServerHistory(error)) {
+                    this.#forgetCodexResponseId();
+                }
+                throw asAmbiguousModelOutcome(error) ?? error;
+            }
+        };
+        return run();
+    }
+    async *rawStream(request) {
+        let receivedRawFrame = false;
+        let attemptedWithServerHistory = false;
+        let effectiveRequest = request;
+        try {
+            const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
+            attemptedWithServerHistory = Boolean(this.#getEffectivePreviousResponseId(preparedRequest.request));
+            effectiveRequest = preparedRequest.request;
+            this.#assertChainRequestMakesProgress(effectiveRequest);
+            let responseId;
+            for await (const event of super.rawStream(effectiveRequest)) {
+                const eventResponseId = getResponseIdFromStreamEvent(event);
+                if (eventResponseId) {
+                    responseId = eventResponseId;
+                    this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), request.input, !effectiveRequest.previousResponseId);
+                }
+                if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type)) {
+                    this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
+                }
+                receivedRawFrame = true;
+                yield event;
+            }
+            this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
+        }
+        catch (error) {
+            const failure = asProvablyUnsentConnectTimeout(error, effectiveRequest, receivedRawFrame) ?? error;
+            this.#logWebSocketClosedEarly(failure, receivedRawFrame);
+            this.#recordRejectedChainRequest(error);
+            if (isPreviousResponseUnavailableError(failure) && attemptedWithServerHistory && !receivedRawFrame) {
+                this.#forgetCodexResponseId();
+                if (!this.#shouldFallbackWithoutServerHistory(request)) {
+                    throw failure;
+                }
+                const fallbackRequest = this.#withoutCodexServerHistory(request);
+                let responseId;
+                try {
+                    for await (const event of super.rawStream(fallbackRequest)) {
+                        receivedRawFrame = true;
+                        const eventResponseId = getResponseIdFromStreamEvent(event);
+                        if (eventResponseId) {
+                            responseId = eventResponseId;
+                            this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), fallbackRequest.input, true);
+                        }
+                        if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type)) {
+                            this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
+                        }
+                        yield event;
+                    }
+                    this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
+                    return;
+                }
+                catch (fallbackError) {
+                    throw asAmbiguousModelOutcome(fallbackError) ?? fallbackError;
+                }
+            }
+            if (this.#shouldForgetCodexServerHistory(failure)) {
+                this.#forgetCodexResponseId();
+            }
+            throw asAmbiguousModelOutcome(failure) ?? failure;
+        }
+    }
+    /**
+     * The close code is the only field that distinguishes a network drop from a
+     * deliberate server close, and it is discarded once the error is wrapped for
+     * recovery. Record it here, where the retry decision that follows can be read
+     * against it.
+     */
+    #logWebSocketClosedEarly(error, receivedRawFrame) {
+        const closed = findWebSocketClosedEarly(error);
+        if (!closed)
+            return;
+        this.diagnosticLogger?.warn?.('Codex WebSocket closed before a terminal response event', {
+            eventType: 'codex.websocket.closed_early',
+            category: 'provider',
+            model: this.modelId,
+            closeCode: closed.closeCode ?? null,
+            closeReason: closed.closeReason ?? null,
+            unsentCount: closed.unsentCount,
+            receivedRawFrame,
+            provablyUnsent: error instanceof UnsentWebSocketRequestError,
+        });
+    }
+    buildResponsesCreateRequest(request, stream) {
+        const built = super.buildResponsesCreateRequest(request, stream);
+        const requestData = normalizeCodexRequestData(built.requestData, request, this.modelId, {
+            includeDeveloperInstructionsOnChainedRequest: true,
+        });
+        const wireStateKey = RESPONSES_LITE_MODELS.has(this.modelId) ? this.#getCodexServerHistoryKey() : null;
+        if (!wireStateKey) {
+            return { ...built, requestData };
+        }
+        const token = this.requestTokens.get(request) ?? randomUUID();
+        this.requestTokens.set(request, token);
+        const prepared = this.chainedWireState.prepare(wireStateKey, token, requestData);
+        return {
+            ...built,
+            requestData: prepared.requestData,
+        };
+    }
+    async fetchResponse(request, stream) {
+        const requestId = randomUUID();
+        const wireStateKey = RESPONSES_LITE_MODELS.has(this.modelId)
+            ? this.#getCodexServerHistoryKey() ?? undefined
+            : undefined;
+        const accessToken = await this.tokenManager.getOrRefreshAccessToken();
+        const accountId = this.tokenManager.getAccountId();
+        const codexIdentity = this.#buildCodexWebSocketIdentity(requestId, request);
+        const extraHeaders = {
+            authorization: `Bearer ${accessToken}`,
+            'OpenAI-Beta': 'responses_websockets=2026-02-06',
+            originator: 'codex_exec',
+        };
+        if (codexIdentity) {
+            Object.assign(extraHeaders, codexIdentity.headers);
+        }
+        const isResponsesLite = RESPONSES_LITE_MODELS.has(this.modelId);
+        if (isResponsesLite) {
+            extraHeaders['x-openai-internal-codex-responses-lite'] = 'true';
+        }
+        if (accountId) {
+            extraHeaders['chatgpt-account-id'] = accountId;
+        }
+        const watchdog = createWebSocketReceiveWatchdog(request.signal, this.websocketReceiveTimeouts);
+        const updatedRequest = {
+            ...request,
+            signal: watchdog.signal,
+            providerOptions: {
+                ...request.providerOptions,
+                ...(codexIdentity
+                    ? {
+                        client_metadata: {
+                            ...asRecord(request.providerOptions?.client_metadata),
+                            ...codexIdentity.clientMetadata,
+                        },
+                    }
+                    : {}),
+                ...(isResponsesLite
+                    ? {
+                        client_metadata: {
+                            ...asRecord(request.providerOptions?.client_metadata),
+                            ...(codexIdentity?.clientMetadata ?? {}),
+                            ws_request_header_x_openai_internal_codex_responses_lite: 'true',
+                        },
+                    }
+                    : {}),
+                extraHeaders: {
+                    ...asRecord(request.providerOptions?.extraHeaders),
+                    ...extraHeaders,
+                },
+            },
+        };
+        const builtRequest = this.buildResponsesCreateRequest(updatedRequest, true);
+        const requestData = (asRecord(builtRequest?.requestData) ?? {});
+        const wireStateToken = this.requestTokens.get(updatedRequest);
+        // This is the last application-owned point before the inherited
+        // transport's private fetch path. Capture it without changing the
+        // prepared request or wire state.
+        captureProviderRequest(this.requestCapture, { provider: 'codex', transport: 'websocket', requestData });
+        const affinityKey = extraHeaders['session-id'] ??
+            request.codex?.promptCacheKey ??
+            this.sessionContextService?.getContext()?.promptCacheKey;
+        const transportDiagnostics = {
+            ...(affinityKey ? { affinityKey } : {}),
+            ...(this.#getCodexServerHistoryKey() ? { logicalHistoryKey: this.#getCodexServerHistoryKey() } : {}),
+        };
+        this.#logTrafficStarted(requestId, requestData, extraHeaders, transportDiagnostics);
+        if (!stream) {
+            try {
+                const response = await fetchAndReconstructUnaryResponse(async () => watchdog.wrap(await super.fetchResponse(updatedRequest, true, {
+                    onConnectionAcquired: (details) => this.#onConnectionAcquired(updatedRequest, requestData, transportDiagnostics, details),
+                })), this.diagnosticLogger);
+                if (wireStateKey && wireStateToken && typeof response?.id === 'string' && response.id.length > 0) {
+                    this.chainedWireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
+                }
+                this.#logTrafficReceived(requestId, requestData, response, watchdog.receiveTiming(), this.#transportDiagnostics(updatedRequest));
+                return response;
+            }
+            catch (error) {
+                const timeoutError = watchdog.timeoutError();
+                const receiveTiming = watchdog.receiveTiming();
+                watchdog.close();
+                const failure = asProvablyUnsentTimeout(timeoutError, receiveTiming, updatedRequest) ?? timeoutError ?? error;
+                if (wireStateKey) {
+                    if (isWebSocketConnectionLimitReachedError(failure)) {
+                        if (wireStateToken)
+                            this.chainedWireState.abandon(wireStateKey, wireStateToken);
+                    }
+                    else {
+                        this.chainedWireState.invalidate(wireStateKey);
+                    }
+                }
+                this.#logTrafficFailed(requestId, requestData, failure, receiveTiming, undefined, this.#transportDiagnostics(updatedRequest));
+                throw failure;
+            }
+        }
+        try {
+            const response = (await super.fetchResponse(updatedRequest, stream, {
+                onConnectionAcquired: (details) => this.#onConnectionAcquired(updatedRequest, requestData, transportDiagnostics, details),
+            }));
+            const patched = wrapCodexStream(watchdog.wrap(response), this.diagnosticLogger);
+            return this.#withTrafficLogging(patched, requestId, requestData, wireStateKey, wireStateToken, updatedRequest.signal, () => watchdog.receiveTiming(), (error) => asProvablyUnsentTimeout(watchdog.timeoutError(), watchdog.receiveTiming(), updatedRequest) ??
+                asProvablyUnsentConnectTimeout(error, updatedRequest, watchdog.receiveTiming().frameCount > 0), this.#transportDiagnostics(updatedRequest));
+        }
+        catch (error) {
+            const timeoutError = watchdog.timeoutError();
+            const receiveTiming = watchdog.receiveTiming();
+            watchdog.close();
+            const failure = asProvablyUnsentTimeout(timeoutError, receiveTiming, updatedRequest) ?? timeoutError ?? error;
+            if (wireStateKey) {
+                if (isWebSocketConnectionLimitReachedError(failure)) {
+                    if (wireStateToken)
+                        this.chainedWireState.abandon(wireStateKey, wireStateToken);
+                }
+                else {
+                    this.chainedWireState.invalidate(wireStateKey);
+                }
+            }
+            this.#logTrafficFailed(requestId, requestData, failure, receiveTiming, undefined, this.#transportDiagnostics(updatedRequest));
+            throw failure;
+        }
+    }
+}
+export class CodexResponsesModel extends OpenAIResponsesModel {
+    modelId;
+    diagnosticLogger;
+    requestCapture;
+    constructor(client, modelId, diagnosticLogger, requestCapture, transport) {
+        const candidates = [transport, diagnosticLogger, requestCapture];
+        const injectedTransport = candidates.find((candidate) => candidate instanceof CodexResponsesTransport);
+        super(client, modelId, injectedTransport);
+        this.modelId = modelId;
+        this.diagnosticLogger = diagnosticLogger instanceof CodexResponsesTransport ? undefined : diagnosticLogger;
+        this.requestCapture = requestCapture instanceof CodexResponsesTransport ? undefined : requestCapture;
+    }
+    buildResponsesCreateRequest(request, stream) {
+        const built = super.buildResponsesCreateRequest(request, stream);
+        const result = {
+            ...built,
+            requestData: normalizeCodexRequestData(built.requestData, request, this.modelId),
+        };
+        captureProviderRequest(this.requestCapture, {
+            provider: 'codex',
+            transport: 'http',
+            requestData: result.requestData,
+        });
+        return result;
+    }
+    async fetchResponse(request, stream) {
+        if (!stream) {
+            return fetchAndReconstructUnaryResponse(() => super.fetchResponse(request, true), this.diagnosticLogger);
+        }
+        const response = await super.fetchResponse(request, stream);
+        return wrapCodexStream(response, this.diagnosticLogger);
+    }
+}
+async function fetchAndReconstructUnaryResponse(fetchStream, logger) {
+    const eventStream = wrapCodexStream(await fetchStream(), logger);
+    let finalResponse = null;
+    for await (const event of eventStream) {
+        if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type) && event.response) {
+            finalResponse = event.response;
+        }
+    }
+    if (!finalResponse) {
+        throw new Error('Codex connection closed before a terminal response event.');
+    }
+    return finalResponse;
+}
+/** Retain provider-declared fields for the shared retry policy without inferring a status from text. */
+function codexStreamError(message, details) {
+    return Object.assign(new Error(message), { error: details });
+}
+export async function* wrapCodexStream(source, logger) {
+    let accumulatedItems = [];
+    // Track call_id values from function_call_arguments events keyed by item_id,
+    // since the Codex server may omit call_id on output_item.done for function_calls
+    // while still expecting it on continuation requests.
+    const itemCallIds = new Map();
+    for await (let event of source) {
+        const type = event?.type;
+        if (type === 'response.error') {
+            const errMsg = event.error?.message || JSON.stringify(event.error ?? event);
+            logger?.error?.('Codex stream received response.error event', {
+                eventType: 'codex.response.stream_error_event',
+                error: event.error ?? event,
+            });
+            throw codexStreamError(`Codex provider stream error: ${errMsg}`, event.error);
+        }
+        if ((type === 'response.function_call_arguments.done' || type === 'response.custom_tool_call_input.done') &&
+            typeof event.call_id === 'string' &&
+            typeof event.item_id === 'string') {
+            // Capture the authoritative call_id from the arguments-done event.
+            itemCallIds.set(event.item_id, event.call_id);
+        }
+        if (type === 'response.output_item.done' && event.item) {
+            const item = event.item;
+            const itemRecord = asRecord(item);
+            // If the accumulated function_call item is missing call_id, backfill it
+            // from the itemCallIds map so the inherited transport's
+            // convertToOutputItem picks up the correct identifier and the continuation
+            // request sends the right call_id.
+            if ((itemRecord?.type === 'function_call' || itemRecord?.type === 'custom_tool_call') &&
+                !stringValue(itemRecord?.call_id) &&
+                typeof itemRecord?.id === 'string') {
+                const knownCallId = itemCallIds.get(itemRecord.id);
+                if (knownCallId) {
+                    // Clone the item with the backfilled call_id.
+                    event = { ...event, item: { ...itemRecord, call_id: knownCallId } };
+                }
+            }
+            accumulatedItems.push(event.item);
+        }
+        else if (TERMINAL_RESPONSE_EVENT_TYPES.has(type) && event.response) {
+            // Clear the per-turn map on terminal events so we don't leak IDs across responses.
+            itemCallIds.clear();
+            const output = event.response.output;
+            const isMissingOrEmptyOutput = output === undefined || (Array.isArray(output) && output.length === 0);
+            if (isMissingOrEmptyOutput && accumulatedItems.length > 0) {
+                const reconstructedOutput = accumulatedItems;
+                accumulatedItems = [];
+                if (reconstructedOutput.length >= SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT) {
+                    logger?.warn?.('Codex stream reconstructed a suspiciously large completed response output', {
+                        eventType: 'codex.reconstructed_output.suspicious',
+                        category: 'provider',
+                        phase: 'provider_response',
+                        responseId: stringValue(event.response.id),
+                        ...summarizeReconstructedItems(reconstructedOutput),
+                    });
+                }
+                try {
+                    event.response.output = reconstructedOutput;
+                }
+                catch {
+                    // Response object may be frozen; clone with the reconstructed output.
+                    event = { ...event, response: { ...event.response, output: reconstructedOutput } };
+                }
+            }
+            else {
+                accumulatedItems = [];
+            }
+            // Check if output is still missing/empty and there's a failed status or error details
+            const finalOutput = event.response.output;
+            const isStillMissingOutput = finalOutput === undefined || (Array.isArray(finalOutput) && finalOutput.length === 0);
+            if (isStillMissingOutput) {
+                if (event.response.error) {
+                    const errMsg = event.response.error.message || JSON.stringify(event.response.error);
+                    logger?.error?.(`Codex response terminal event "${type}" has error details`, {
+                        eventType: 'codex.response.terminal_error',
+                        responseId: event.response.id,
+                        status: event.response.status,
+                        error: event.response.error,
+                    });
+                    throw codexStreamError(`Codex provider error: ${errMsg}`, event.response.error);
+                }
+                else if (event.response.status === 'failed') {
+                    logger?.error?.(`Codex response terminal event "${type}" has failed status without error details`, {
+                        eventType: 'codex.response.terminal_failed',
+                        responseId: event.response.id,
+                        status: event.response.status,
+                    });
+                    throw new Error(`Codex provider response failed without explicit error details.`);
+                }
+            }
+        }
+        yield event;
+    }
+}
+//# sourceMappingURL=codex-responses-model.js.map

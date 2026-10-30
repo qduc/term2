@@ -1,0 +1,119 @@
+import { classifyCommandDetailed } from '../../utils/shell/command-safety/index.js';
+import { TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
+import { CHECK_IN_TOOL_NAME } from '../../contracts/conversation.js';
+import { SafetyStatus } from '../../utils/shell/command-safety/constants.js';
+import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
+import { getTierModelPool } from '../agent-runtime/model-resolver.js';
+const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
+const noOpLogger = {
+    debug: () => { },
+    info: () => { },
+    warn: () => { },
+    error: () => { },
+    security: () => { },
+    setCorrelationId: () => { },
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => { },
+};
+/**
+ * Decides whether a tool approval paused in a non-interactive session can be
+ * resumed. This is deliberately policy-only: callers retain the continuation
+ * loop and their own output handling.
+ */
+export class NonInteractiveApprovalPolicy {
+    deps;
+    constructor(deps) {
+        this.deps = deps;
+    }
+    async decide(input) {
+        if (!input.autoApprove) {
+            return { answer: 'n', rejectionReason: NON_INTERACTIVE_REJECTION_REASON, reportRejection: false };
+        }
+        const { approval } = input;
+        // A run check-in (exhausted budget, stall, max turns) is not a tool: answering
+        // it 'y' grants the run more budget or turns. Auto-approval stands in for
+        // tool approvals only, so it never answers a check-in.
+        if (approval.checkIn || approval.toolName === CHECK_IN_TOOL_NAME) {
+            return {
+                answer: 'n',
+                rejectionReason: 'Run check-ins need an interactive decision; --auto-approve never grants budget or turns',
+                reportRejection: false,
+            };
+        }
+        if (this.deps.isMcpTool?.(approval.toolName) === true) {
+            const allowed = this.deps.mcpAllowlist ?? [];
+            const member = approval.toolName;
+            const matches = this.deps.isMcpAllowed?.(member, allowed) ?? false;
+            return matches
+                ? { answer: 'y' }
+                : {
+                    answer: 'n',
+                    rejectionReason: NON_INTERACTIVE_REJECTION_REASON,
+                    reportRejection: false,
+                };
+        }
+        // propose_goal mutates user-authored durable state; auto-approval modes can
+        // never stand in for the interactive user decision it requires.
+        if (approval.toolName === TOOL_NAME_PROPOSE_GOAL) {
+            return {
+                answer: 'n',
+                rejectionReason: 'propose_goal requires an interactive user decision and is never auto-approved',
+                reportRejection: false,
+            };
+        }
+        if (approval.toolName !== 'shell' && approval.toolName !== 'bash') {
+            return { answer: 'y' };
+        }
+        const command = approval.argumentsText;
+        const classification = classifyCommandDetailed(command, this.deps.logger);
+        if (classification.status === SafetyStatus.RED) {
+            return {
+                answer: 'n',
+                rejectionReason: `Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically: ${command}`,
+                reportRejection: true,
+            };
+        }
+        if (classification.status !== SafetyStatus.YELLOW) {
+            return { answer: 'y' };
+        }
+        const autoApproveModel = this.deps.settingsService && this.deps.agentClient
+            ? getTierModelPool('chore', this.deps.settingsService)[0]
+            : undefined;
+        if (!autoApproveModel) {
+            return {
+                answer: 'n',
+                rejectionReason: `Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured: ${command}`,
+                reportRejection: true,
+            };
+        }
+        const history = (input.getHistory?.() ?? []);
+        try {
+            const callId = approval.callId || '__single__';
+            const advisories = await evaluateShellAutoApprovalAdvisories({
+                commands: [{ id: callId, command }],
+                history,
+                settingsService: this.deps.settingsService,
+                agentClient: this.deps.agentClient,
+                logger: this.deps.logger ?? noOpLogger,
+                sessionContextService: this.deps.sessionContextService,
+            });
+            const advisory = advisories.get(callId);
+            if (advisory?.approved) {
+                return { answer: 'y' };
+            }
+            return {
+                answer: 'n',
+                rejectionReason: `LLM evaluation rejected the command: ${advisory?.reasoning ?? 'No reasoning provided'}`,
+                reportRejection: true,
+            };
+        }
+        catch (error) {
+            return {
+                answer: 'n',
+                rejectionReason: `LLM auto-approval evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
+                reportRejection: true,
+            };
+        }
+    }
+}
+//# sourceMappingURL=non-interactive-approval-policy.js.map

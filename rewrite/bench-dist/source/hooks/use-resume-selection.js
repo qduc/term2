@@ -1,0 +1,102 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useInputContext } from '../context/InputContext.js';
+import { useSelection } from './use-selection.js';
+/** Case-insensitive match over id, first message, model, and SSH host. */
+export const filterConversations = (conversations, query) => {
+    if (!query)
+        return conversations;
+    const lowerQuery = query.toLowerCase();
+    return conversations.filter((c) => c.id.toLowerCase().includes(lowerQuery) ||
+        (c.firstUserMessage && c.firstUserMessage.toLowerCase().includes(lowerQuery)) ||
+        (c.model && c.model.toLowerCase().includes(lowerQuery)) ||
+        (c.sshHost && c.sshHost.toLowerCase().includes(lowerQuery)));
+};
+export const useResumeSelection = (deps) => {
+    const { listConversations } = deps;
+    const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
+    const controllerFrame = controller.getSnapshot().stack.at(-1);
+    const isControllerOpen = controllerFrame?.kind === 'resume';
+    const isOpen = isControllerOpen || mode === 'resume_selection';
+    const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
+    const [result, setResult] = useState({
+        entries: [],
+        loading: false,
+        error: false,
+    });
+    useEffect(() => {
+        if (!isOpen)
+            return;
+        let current = true;
+        setResult({ entries: [], loading: true, error: false });
+        Promise.resolve()
+            .then(listConversations)
+            .then((entries) => {
+            if (current)
+                setResult({ entries: entries.filter((entry) => entry.messageCount !== 0), loading: false, error: false });
+        }, (error) => {
+            if (current)
+                setResult({ entries: [], loading: false, error: error instanceof Error ? error.message : String(error) });
+        });
+        return () => {
+            current = false;
+        };
+    }, [listConversations, isOpen]);
+    const allConversations = isOpen ? result.entries : [];
+    const query = useMemo(() => {
+        if (!isOpen)
+            return '';
+        if (isControllerOpen)
+            return controllerFrame.binding.query;
+        if (triggerIndex === null)
+            return '';
+        const end = Math.min(cursorOffset, input.length);
+        return input.slice(triggerIndex, end);
+    }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
+    const filteredConversations = useMemo(() => filterConversations(allConversations, query), [allConversations, query]);
+    const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } = useSelection(filteredConversations);
+    const MAX_VISIBLE_ITEMS = 10;
+    const [scrollOffset, setScrollOffset] = useState(0);
+    useEffect(() => {
+        setScrollOffset(0);
+    }, [query]);
+    useEffect(() => {
+        if (selectedIndex < scrollOffset) {
+            setScrollOffset(selectedIndex);
+        }
+        else if (selectedIndex >= scrollOffset + MAX_VISIBLE_ITEMS) {
+            setScrollOffset(selectedIndex - MAX_VISIBLE_ITEMS + 1);
+        }
+    }, [selectedIndex, scrollOffset]);
+    const open = useCallback((startIndex) => {
+        if (mode === 'resume_selection')
+            return;
+        const editor = controller.getSnapshot().editor;
+        controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
+        setSelectedIndex(0);
+    }, [mode, controller, setSelectedIndex]);
+    const close = useCallback(() => {
+        if (mode === 'resume_selection') {
+            controller.close();
+        }
+    }, [mode, controller]);
+    return {
+        isOpen,
+        loading: isOpen && result.loading,
+        error: isOpen && result.error,
+        open,
+        close,
+        query,
+        triggerIndex: activeTriggerIndex,
+        conversations: filteredConversations,
+        selectedIndex,
+        scrollOffset,
+        moveUp,
+        moveDown,
+        moveHome,
+        moveEnd,
+        pageUp,
+        pageDown,
+        getSelectedItem,
+    };
+};
+//# sourceMappingURL=use-resume-selection.js.map

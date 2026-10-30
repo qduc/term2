@@ -1,0 +1,627 @@
+import { toolOccurrenceKey, toolOccurrenceMetadata } from './conversation/tool-occurrence.js';
+import { normalizeRunItem } from './conversation/run-item-normalizer.js';
+/** Synthetic tool result for a dispatched call whose outcome was never observed. */
+const UNKNOWN_OUTCOME_TOOL_RESULT = 'Outcome unobserved: this operation was dispatched but the result was lost ' +
+    '(for example due to a stream failure). Do not assume it failed or succeeded. ' +
+    'Verify the current state before any retry, and do not re-run non-idempotent operations blindly.';
+/**
+ * Synthetic tool result for a call interrupted by a session restart, whose
+ * outcome the restart cannot observe (replay has no dispatch evidence, unlike
+ * the live ledger's `dispatchedAt`). It must not assert whether the effect
+ * landed — only that it is unverified.
+ */
+export const RESTART_UNOBSERVED_TOOL_RESULT = "Outcome unobserved: the session restarted before this operation's result was recorded. " +
+    'Its effect may or may not have occurred. Verify the current state before any retry, and ' +
+    'do not re-run non-idempotent operations blindly.';
+const asRecord = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+const rawItem = (item) => {
+    const record = asRecord(item);
+    if (!record) {
+        return null;
+    }
+    return asRecord(record.rawItem) ?? record;
+};
+const canonicalToolItem = (item) => normalizeRunItem(item).find((candidate) => candidate.type === 'tool_call' || candidate.type === 'tool_result') ?? null;
+const hasCanonicalType = (item, type) => normalizeRunItem(item).some((candidate) => candidate.type === type);
+const clone = (value) => {
+    try {
+        return structuredClone(value);
+    }
+    catch {
+        return JSON.parse(JSON.stringify(value));
+    }
+};
+export const callIdOf = (item) => {
+    return canonicalToolItem(item)?.callId ?? null;
+};
+const isToolCall = (item) => canonicalToolItem(item)?.type === 'tool_call';
+const isToolResult = (item) => canonicalToolItem(item)?.type === 'tool_result';
+/** Type guards for history items, exported for replay-time settlement. */
+export const isToolCallHistoryItem = isToolCall;
+export const isToolResultHistoryItem = isToolResult;
+export const toolNameOf = (item) => {
+    return canonicalToolItem(item)?.toolName ?? 'unknown';
+};
+export const outputOf = (item) => {
+    const normalized = canonicalToolItem(item);
+    return normalized?.type === 'tool_result' ? normalized.output : undefined;
+};
+/** History remains provider-facing even when the stream hands us an SDK wrapper. */
+const providerHistoryItem = (item) => {
+    const canonical = canonicalToolItem(item);
+    return canonical
+        ? { ...clone(canonical.providerItem ?? rawItem(item) ?? {}), ...toolOccurrenceMetadata(canonical) }
+        : clone(rawItem(item) ?? item);
+};
+const turnNumberOf = (turnId) => {
+    if (typeof turnId !== 'string') {
+        return null;
+    }
+    const match = /^turn-(\d+)$/.exec(turnId);
+    if (!match) {
+        return null;
+    }
+    const value = Number.parseInt(match[1], 10);
+    return Number.isFinite(value) ? value : null;
+};
+const isUserMessage = (item) => {
+    const raw = rawItem(item);
+    return raw?.role === 'user' && raw?.type === 'message';
+};
+const insertionIndexForEntry = (history, entry, latestTurnNumber = 0) => {
+    const turnNumber = turnNumberOf(entry.turnId);
+    if (!turnNumber || turnNumber < 1) {
+        return history.length;
+    }
+    // `turn-N` counts run attempts, not user messages, so it drifts from the
+    // user-message count (retries, tool-less turns). The latest turn is always
+    // the live one and belongs after the last user message; counting user
+    // messages would land it before the request it answers.
+    if (turnNumber >= latestTurnNumber) {
+        return history.length;
+    }
+    const anchor = entry.userTurnCount ?? turnNumber;
+    let seenUserTurns = 0;
+    for (let index = 0; index < history.length; index++) {
+        if (!isUserMessage(history[index])) {
+            continue;
+        }
+        seenUserTurns++;
+        if (seenUserTurns === anchor + 1) {
+            return index;
+        }
+    }
+    return history.length;
+};
+const hasCallPair = (history, entry) => {
+    let hasCall = false;
+    let hasResult = false;
+    for (const item of history) {
+        if (toolOccurrenceKey(canonicalToolItem(item) ?? { callId: '' }) !== toolOccurrenceKey(entry)) {
+            continue;
+        }
+        if (isToolCall(item)) {
+            hasCall = true;
+        }
+        else if (isToolResult(item)) {
+            hasResult = true;
+        }
+    }
+    return hasCall && hasResult;
+};
+const hasRecoverableCallPair = (entry) => Array.isArray(entry.historyItems) && entry.historyItems.length >= 2;
+/** Entries that carry a recoverable call/result pair for history projection. */
+const isProjectableSettledEntry = (entry) => (entry.status === 'completed' || entry.status === 'aborted' || entry.status === 'unknown') &&
+    hasRecoverableCallPair(entry);
+const isOpenEntry = (entry) => entry.status === 'started' || entry.status === 'approval_required';
+const hasReasoningHistoryItem = (items) => Array.isArray(items) && items.some((item) => hasCanonicalType(item, 'reasoning'));
+const isResultHistoryItem = isToolResult;
+const hasResultHistoryItem = (items, callId) => Array.isArray(items) && items.some((item) => callIdOf(item) === callId && isResultHistoryItem(item));
+const reasoningHistoryItem = (text) => ({
+    type: 'reasoning',
+    content: [{ type: 'reasoning_text', text }],
+    rawContent: [{ type: 'reasoning_text', text }],
+});
+export class ToolExecutionLedger {
+    #entries = [];
+    #turnCounter = 0;
+    #currentTurnId = 'turn-0';
+    #pendingReasoningHistoryItems = [];
+    #userTurnCountSource;
+    /** Lets new entries record where in the transcript they were made. */
+    setUserTurnCountSource(source) {
+        this.#userTurnCountSource = source;
+    }
+    #stampUserTurnCount() {
+        const count = this.#userTurnCountSource?.();
+        return count === undefined ? {} : { userTurnCount: count };
+    }
+    beginTurn() {
+        this.#turnCounter++;
+        this.#currentTurnId = `turn-${this.#turnCounter}`;
+        return this.#currentTurnId;
+    }
+    /**
+     * Returns the id of the turn currently in progress, or 'turn-0' if no turn
+     * has begun yet. Used by the journal and logger to tag entries with a stable
+     * turn identifier that survives approval continuations.
+     */
+    getCurrentTurnId() {
+        return this.#currentTurnId;
+    }
+    import(entries) {
+        this.#entries = normalizeToolLedgerOccurrences(entries);
+        // The next turn id must clear every imported entry's turn number — after an
+        // undo prunes entries, entry *count* is unrelated to the logical turn
+        // numbering and reusing an old turn-N id would make journal events from
+        // different logical turns collide.
+        this.#turnCounter = this.#entries.reduce((max, entry) => Math.max(max, turnNumberOf(entry.turnId) ?? 0), 0);
+        this.#currentTurnId = `turn-${this.#turnCounter}`;
+    }
+    export() {
+        return clone(this.#entries);
+    }
+    recordReasoningText(text) {
+        if (!text) {
+            return;
+        }
+        this.#pendingReasoningHistoryItems = [reasoningHistoryItem(text)];
+    }
+    recordFunctionCall(item) {
+        const toolCall = canonicalToolItem(item);
+        if (toolCall?.type !== 'tool_call') {
+            return;
+        }
+        const { callId } = toolCall;
+        const existing = this.#entries.find((entry) => entry.callId === callId &&
+            entry.turnId === (toolCall.turnId ?? this.#currentTurnId) &&
+            (toolCall.occurrence !== undefined ? entry.occurrence === toolCall.occurrence : isOpenEntry(entry)));
+        const occurrence = existing?.occurrence ??
+            toolCall.occurrence ??
+            Math.max(0, ...this.#entries
+                .filter((entry) => entry.turnId === this.#currentTurnId && entry.callId === callId)
+                .map((entry) => entry.occurrence ?? 0)) + 1;
+        const accepted = { ...toolCall, turnId: toolCall.turnId ?? this.#currentTurnId, occurrence };
+        if (existing) {
+            if (!isOpenEntry(existing))
+                return existing;
+            // Approval continuations re-offer display arguments, not a new admission.
+            // Keep the original provider payload and settlement/dispatch evidence.
+            if (!existing.historyItems || existing.historyItems.length === 0) {
+                existing.historyItems = [...this.#pendingReasoningHistoryItems, providerHistoryItem(accepted)];
+            }
+            else if (this.#pendingReasoningHistoryItems.length > 0 && !hasReasoningHistoryItem(existing.historyItems)) {
+                existing.historyItems = [...this.#pendingReasoningHistoryItems, ...existing.historyItems];
+            }
+            this.#pendingReasoningHistoryItems = [];
+            return existing;
+        }
+        const entry = {
+            turnId: accepted.turnId,
+            occurrence,
+            ...this.#stampUserTurnCount(),
+            callId,
+            toolName: toolCall.toolName,
+            arguments: toolCall.arguments,
+            status: 'started',
+            startedAt: new Date().toISOString(),
+            historyItems: [...this.#pendingReasoningHistoryItems, providerHistoryItem(accepted)],
+        };
+        this.#entries.push(entry);
+        this.#pendingReasoningHistoryItems = [];
+        return entry;
+    }
+    recordFunctionResult(item) {
+        const toolResult = canonicalToolItem(item);
+        if (toolResult?.type !== 'tool_result') {
+            return;
+        }
+        const { callId } = toolResult;
+        let entry = [...this.#entries]
+            .reverse()
+            .find((candidate) => candidate.callId === callId &&
+            (toolResult.turnId === undefined || candidate.turnId === toolResult.turnId) &&
+            (toolResult.occurrence === undefined || candidate.occurrence === toolResult.occurrence));
+        if (!entry) {
+            entry = {
+                turnId: this.#currentTurnId,
+                ...this.#stampUserTurnCount(),
+                callId,
+                occurrence: toolResult.occurrence ?? 1,
+                toolName: toolResult.toolName,
+                status: 'started',
+                startedAt: new Date().toISOString(),
+                historyItems: [],
+            };
+            this.#entries.push(entry);
+        }
+        if (entry.status === 'completed')
+            return entry;
+        const callItem = entry.historyItems?.find(isToolCall);
+        const resultItem = providerHistoryItem({ ...toolResult, ...toolOccurrenceMetadata(entry) });
+        entry.status = 'completed';
+        entry.output = toolResult.output;
+        entry.completedAt = new Date().toISOString();
+        const previousHistoryItems = entry.historyItems ?? (callItem ? [callItem] : []);
+        entry.historyItems = hasResultHistoryItem(previousHistoryItems, callId)
+            ? previousHistoryItems
+            : [...previousHistoryItems, resultItem];
+        return entry;
+    }
+    /**
+     * Mark that the tool body for this call has begun. Used by stream recovery to
+     * distinguish "never ran" (aborted) from "ran with unobserved outcome" (unknown).
+     */
+    markDispatched(callId) {
+        const entry = [...this.#entries]
+            .reverse()
+            .find((candidate) => candidate.callId === callId && isOpenEntry(candidate));
+        if (!entry) {
+            return;
+        }
+        entry.dispatchedAt ??= new Date().toISOString();
+    }
+    markOpenCallsAborted(reason, callId) {
+        for (const entry of this.#entries) {
+            if (callId && entry.callId !== callId) {
+                continue;
+            }
+            if (!isOpenEntry(entry)) {
+                continue;
+            }
+            entry.status = 'aborted';
+            entry.failureReason = reason;
+            delete entry.historyItems;
+        }
+    }
+    recordAbortedApproval(output, reason = 'Tool execution was not approved.', callId) {
+        const candidates = [...this.#entries].reverse().filter((candidate) => isOpenEntry(candidate));
+        const targets = callId ? candidates.filter((c) => c.callId === callId) : candidates;
+        for (const entry of targets) {
+            this.#settleOpenEntry(entry, {
+                status: 'aborted',
+                output,
+                reason,
+            });
+        }
+    }
+    /**
+     * Settle open calls after a stream failure.
+     *
+     * - Never dispatched → `aborted` with a synthetic error result (safe to treat as "did not happen").
+     * - Dispatched but outcome unobserved → `unknown` with a non-failure verify-before-retry message.
+     */
+    settleOpenCallsOnStreamFailure(reason = 'Stream failed', callId) {
+        const abortedCallIds = [];
+        const unknownCallIds = [];
+        const candidates = this.#entries.filter((entry) => isOpenEntry(entry) && (!callId || entry.callId === callId));
+        for (const entry of candidates) {
+            if (entry.dispatchedAt) {
+                this.#settleOpenEntry(entry, {
+                    status: 'unknown',
+                    output: UNKNOWN_OUTCOME_TOOL_RESULT,
+                    reason,
+                });
+                unknownCallIds.push(entry.callId);
+            }
+            else {
+                this.#settleOpenEntry(entry, {
+                    status: 'aborted',
+                    output: reason,
+                    reason,
+                });
+                abortedCallIds.push(entry.callId);
+            }
+        }
+        return { abortedCallIds, unknownCallIds };
+    }
+    #settleOpenEntry(entry, settlement) {
+        const callItem = entry.historyItems?.find(isToolCall);
+        if (!callItem) {
+            entry.status = settlement.status;
+            entry.failureReason = settlement.reason;
+            if (settlement.status === 'unknown') {
+                entry.output = settlement.output;
+                entry.completedAt = new Date().toISOString();
+            }
+            return;
+        }
+        entry.status = settlement.status;
+        entry.failureReason = settlement.reason;
+        entry.completedAt = new Date().toISOString();
+        entry.output = settlement.output;
+        const previousHistoryItems = entry.historyItems ?? [callItem];
+        entry.historyItems = hasResultHistoryItem(previousHistoryItems, entry.callId)
+            ? previousHistoryItems
+            : [
+                ...previousHistoryItems,
+                {
+                    type: 'function_call_output',
+                    callId: entry.callId,
+                    ...toolOccurrenceMetadata(entry),
+                    output: settlement.output,
+                },
+            ];
+    }
+    /**
+     * Returns call IDs for every tool call recorded in the given (or current)
+     * turn, regardless of status. The chained-input filter requires the complete
+     * set because the provider API requires a tool output for every tool call in
+     * an assistant turn — including rejected calls, for which the SDK produces a
+     * synthetic output.
+     */
+    activeCallIdsForTurn(turnId) {
+        const target = turnId ?? this.#currentTurnId;
+        return this.#entries.filter((entry) => entry.turnId === target).map((entry) => entry.callId);
+    }
+    /** Returns completed tool-result call IDs recorded during the current turn. */
+    completedResultCallIdsForCurrentTurn() {
+        return this.#entries
+            .filter((entry) => entry.turnId === this.#currentTurnId && entry.status === 'completed')
+            .map((entry) => entry.callId);
+    }
+    /**
+     * Call IDs settled for provider history in the current turn: completed,
+     * aborted-with-pair, or unknown-with-pair. Used so unpaid-debt tracking does
+     * not treat synthetic recovery results as still open.
+     */
+    settledResultCallIdsForCurrentTurn() {
+        return this.#entries
+            .filter((entry) => entry.turnId === this.#currentTurnId && isProjectableSettledEntry(entry))
+            .map((entry) => entry.callId);
+    }
+    getRecoverySummary() {
+        const currentTurnEntries = this.#entries.filter((entry) => entry.turnId === this.#currentTurnId);
+        if (currentTurnEntries.length === 0) {
+            return null;
+        }
+        const recoveredCallIds = currentTurnEntries
+            .filter((entry) => isProjectableSettledEntry(entry))
+            .map((entry) => entry.callId);
+        // Incomplete means no recoverable pair yet — exclude settled synthetic pairs.
+        const droppedCallIds = currentTurnEntries
+            .filter((entry) => !isProjectableSettledEntry(entry))
+            .map((entry) => entry.callId);
+        if (recoveredCallIds.length === 0 && droppedCallIds.length === 0) {
+            return null;
+        }
+        return {
+            recoveredCallIds,
+            droppedCallIds,
+            message: createRecoveryMessage(recoveredCallIds.length, droppedCallIds.length),
+        };
+    }
+}
+const createRecoveryMessage = (completedPairs, incompleteCalls) => `Recovered ${completedPairs} settled tool call/result pair(s) from a previously interrupted turn. Dropped ${incompleteCalls} incomplete tool call(s); do not assume dropped calls completed.`;
+/**
+ * Drop function_call items and function_call_output items that do not form a
+ * complete pair in the history. The Responses API rejects stateless (no
+ * previous_response_id) inputs containing either side on its own. This is a
+ * safety net for the stateless full-history fallback path: recovery can lose
+ * an in-flight output, or retain an already-consumed output after its provider
+ * response chain is reset. Dropping the orphaned item keeps the request
+ * self-contained rather than synthesizing misleading history.
+ *
+ * Returns the same array reference when no changes are needed.
+ */
+export function dropUnpairedFunctionCalls(history) {
+    const callIdsWithCall = new Set();
+    const callIdsWithResult = new Set();
+    for (const item of history) {
+        if (isToolCall(item)) {
+            const tool = canonicalToolItem(item);
+            const callId = tool ? toolOccurrenceKey(tool) : null;
+            if (callId) {
+                callIdsWithCall.add(callId);
+            }
+        }
+        if (isResultHistoryItem(item)) {
+            const tool = canonicalToolItem(item);
+            const callId = tool ? toolOccurrenceKey(tool) : null;
+            if (callId) {
+                callIdsWithResult.add(callId);
+            }
+        }
+    }
+    const filtered = history.filter((item) => {
+        const tool = canonicalToolItem(item);
+        const callId = tool ? toolOccurrenceKey(tool) : null;
+        if (isToolCall(item)) {
+            return !callId || callIdsWithResult.has(callId);
+        }
+        if (isResultHistoryItem(item)) {
+            return !callId || callIdsWithCall.has(callId);
+        }
+        return true;
+    });
+    return filtered.length === history.length ? history : filtered;
+}
+export function reconcileHistoryWithToolLedger(history, ledger) {
+    const entries = normalizeToolLedgerOccurrences(ledger);
+    let next = clone(alignHistoryToolOccurrences(history, entries));
+    let addedCompletedPairs = 0;
+    let droppedIncompleteCalls = 0;
+    const latestTurnNumber = entries.reduce((max, entry) => Math.max(max, turnNumberOf(entry.turnId) ?? 0), 0);
+    for (const [entryIndex, entry] of entries.entries()) {
+        if (hasRecoverableCallPair(entry)) {
+            if (hasCallPair(next, entry)) {
+                continue;
+            }
+            // The persisted assistant_turn is compact: it keeps only a turn's last
+            // tool result, so replayed history can hold a lone call or result for
+            // this callId. Drop those fragments before inserting the authoritative
+            // ledger pair, or the result is duplicated and the pair lands after a
+            // result that precedes its call — a shape OpenAI-compatible providers
+            // reject with 400 ("tool must be a response to a preceding message with
+            // tool_calls").
+            const ownIndex = next.findIndex((item) => toolOccurrenceKey(canonicalToolItem(item) ?? { callId: '' }) === toolOccurrenceKey(entry));
+            const laterKeys = new Set(entries.slice(entryIndex + 1).map(toolOccurrenceKey));
+            const laterIndex = next.findIndex((item) => laterKeys.has(toolOccurrenceKey(canonicalToolItem(item) ?? { callId: '' })));
+            const anchor = insertionIndexForEntry(next, entry, latestTurnNumber);
+            const insertion = ownIndex >= 0 ? ownIndex : laterIndex >= 0 ? Math.min(anchor, laterIndex) : anchor;
+            next = next.filter((item) => toolOccurrenceKey(canonicalToolItem(item) ?? { callId: '' }) !== toolOccurrenceKey(entry));
+            next.splice(insertion, 0, ...clone(entry.historyItems));
+            // Count completed, aborted, and unknown pairs as injected so the warning
+            // fires and replaceHistory is called. Without this, synthetic pairs for
+            // interrupted calls would not trigger a history replacement, leaving
+            // dangling function_call items in the store.
+            if (entry.status === 'completed' || entry.status === 'aborted' || entry.status === 'unknown') {
+                addedCompletedPairs++;
+            }
+            continue;
+        }
+        if (entry.status !== 'completed' && entry.status !== 'started' && entry.status !== 'approval_required') {
+            droppedIncompleteCalls++;
+        }
+    }
+    return { history: next, addedCompletedPairs, droppedIncompleteCalls };
+}
+/**
+ * Check whether a value is a malformed JSON string — i.e. a non-empty string
+ * that looks like JSON (starts with `{` or `[`) but fails to parse.
+ */
+const isMalformedJsonString = (value) => {
+    if (typeof value !== 'string') {
+        return false;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return false;
+    }
+    try {
+        JSON.parse(trimmed);
+        return false;
+    }
+    catch {
+        return trimmed.startsWith('{') || trimmed.startsWith('[');
+    }
+};
+/**
+ * Returns true when the history contains any `function_call` item whose
+ * `arguments` field is a malformed JSON string.
+ *
+ * Used to decide whether provider-side conversation chaining must be
+ * disabled: the previous response stored on the provider side may contain
+ * the malformed tool call, making continuation via `previousResponseId`
+ * unreliable. Falling back to stateless (full-history) mode lets
+ * {@link sanitizeMalformedToolCallArguments} repair the arguments before
+ * they reach the provider API.
+ */
+export function hasMalformedToolCallArguments(history) {
+    return history.some((item) => {
+        if (!isToolCall(item)) {
+            return false;
+        }
+        const raw = rawItem(item);
+        return isMalformedJsonString(raw?.arguments ?? raw?.args);
+    });
+}
+/**
+ * Replace malformed JSON arguments in `function_call` items with `'{}'`.
+ *
+ * When the model's response stream is interrupted (e.g. the server drops
+ * mid-stream), it may emit a `function_call` item with truncated JSON
+ * arguments. The provider API rejects requests containing invalid JSON in
+ * tool call arguments, which blocks the continuation user message. This
+ * function is a safety net for the stateless (full-history) path: it repairs
+ * malformed argument strings so the conversation history can still be sent.
+ *
+ * Non-string arguments (already-parsed objects), valid JSON strings, and
+ * non-`function_call` items are left untouched.
+ *
+ * Returns the same array reference when no changes are needed.
+ */
+export function sanitizeMalformedToolCallArguments(history) {
+    let changed = false;
+    const result = history.map((item) => {
+        if (!isToolCall(item)) {
+            return item;
+        }
+        const raw = rawItem(item);
+        if (!raw) {
+            return item;
+        }
+        const args = raw.arguments ?? raw.args;
+        if (!isMalformedJsonString(args)) {
+            return item;
+        }
+        changed = true;
+        const normalized = clone(raw);
+        normalized.arguments = '{}';
+        delete normalized.args;
+        // Preserve the wrapper structure if the original item had a rawItem wrapper
+        const wrapperRecord = asRecord(item);
+        if (wrapperRecord && asRecord(wrapperRecord.rawItem)) {
+            return { ...wrapperRecord, rawItem: normalized };
+        }
+        return normalized;
+    });
+    return changed ? result : history;
+}
+/**
+ * Attach known admission identities to untagged provider snapshots in order.
+ * Payload matching avoids assigning an older settled sibling to a latest-only
+ * segment. Explicit tags are authoritative; no provider payload is rewritten.
+ */
+export function alignHistoryToolOccurrences(history, ledger) {
+    const used = new Set();
+    // A result belongs to the call we just aligned, not an independently chosen
+    // payload-equal sibling. Null also preserves an unmatched new admission.
+    const pending = new Map();
+    const comparable = (value) => {
+        if (typeof value === 'string') {
+            try {
+                return JSON.stringify(JSON.parse(value));
+            }
+            catch {
+                return value;
+            }
+        }
+        return JSON.stringify(value);
+    };
+    return history.map((item) => {
+        const tool = canonicalToolItem(item);
+        if (!tool)
+            return item;
+        const explicit = tool.occurrence !== undefined && tool.turnId !== undefined;
+        const pairKey = JSON.stringify([tool.turnId ?? '', tool.callId]);
+        const pairedResult = !explicit && tool.type === 'tool_result' && pending.has(pairKey);
+        const entry = pairedResult
+            ? pending.get(pairKey)
+            : ledger.find((entry) => {
+                const key = `${tool.type}:${toolOccurrenceKey(entry)}`;
+                if (explicit)
+                    return toolOccurrenceKey(entry) === toolOccurrenceKey(tool);
+                if (used.has(key) || entry.callId !== tool.callId)
+                    return false;
+                const evidence = entry.historyItems?.flatMap(normalizeRunItem).find((item) => item.type === tool.type);
+                return tool.type === 'tool_call'
+                    ? comparable(evidence?.type === 'tool_call' ? evidence.arguments : entry.arguments) ===
+                        comparable(tool.arguments)
+                    : comparable(evidence?.type === 'tool_result' ? evidence.output : entry.output) === comparable(tool.output);
+            });
+        if (tool.type === 'tool_call')
+            pending.set(pairKey, entry ?? null);
+        else
+            pending.delete(pairKey);
+        if (!entry)
+            return item;
+        used.add(`${tool.type}:${toolOccurrenceKey(entry)}`);
+        return { ...item, ...toolOccurrenceMetadata(entry) };
+    });
+}
+/** Give legacy ordered entries deterministic ordinals before correlation. */
+export function normalizeToolLedgerOccurrences(entries) {
+    const normalized = Array.isArray(entries) ? clone([...entries]) : [];
+    const counters = new Map();
+    for (const entry of normalized) {
+        const key = JSON.stringify([entry.turnId, entry.callId]);
+        entry.occurrence ??= (counters.get(key) ?? 0) + 1;
+        counters.set(key, Math.max(counters.get(key) ?? 0, entry.occurrence));
+        entry.historyItems = entry.historyItems?.map((item) => callIdOf(item) === entry.callId
+            ? { ...providerHistoryItem(item), ...toolOccurrenceMetadata(entry) }
+            : item);
+    }
+    return normalized;
+}
+//# sourceMappingURL=tool-execution-ledger.js.map

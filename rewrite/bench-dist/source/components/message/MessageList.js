@@ -1,0 +1,397 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { clearTerminalForRedraw } from '../../app-helpers.js';
+import { Box, Static, useStdout } from 'ink';
+import CommandMessage from './CommandMessage.js';
+import CommandGroupSummary from './CommandGroupSummary.js';
+import ChatMessage from './ChatMessage.js';
+import Banner from '../layout/Banner.js';
+import SessionBoundary from './SessionBoundary.js';
+import SubagentActivityMessage from './SubagentActivityMessage.js';
+import { groupCommandRuns } from './command-grouping.js';
+import { classifyStaticCommitBlocker, isBlockingStaticCommit, } from '../../utils/conversation/static-commit-policy.js';
+export const MESSAGE_HORIZONTAL_PADDING = 2;
+export const EMPTY_RESTORED_STATIC_MESSAGE_IDS = [];
+const STATIC_BLOCKER_MESSAGE_COUNT_THRESHOLD = 12;
+const STATIC_BLOCKER_TEXT_LENGTH_THRESHOLD = 12_000;
+// MessageLike is a structural superset kept for rendering and tests; the
+// static-commit policy needs the discriminated sender/status unions of the
+// real Message rows. Production rows are Message, so the cast is safe, and the
+// policy degrades an unrecognized runtime string to "committable" rather than
+// throwing inside the render loop.
+const canRenderStatically = (message) => !isBlockingStaticCommit(message);
+const isGroupableToolMessage = (message) => message?.sender === 'command' || message?.sender === 'subagent' || message?.sender === 'command-group';
+// These rows are produced asynchronously by background work. They are
+// chronological relative to the session, but must not be frozen into
+// <Static> while a streamed assistant response is still being assembled.
+const isBackgroundNotification = (message) => message.sender === 'command' && message.toolName?.endsWith('_notification') === true;
+// A run of command or subagent messages that reaches the very end of the array
+// might still grow (another tool call could land right after it). Concise-mode
+// grouping keeps that whole run in the dynamic/active region — never committed
+// to <Static> — until something else closes it, so its summary line can keep
+// counting up in place. <Static> writes each item exactly once, so committing
+// any member early would strand it as a separate frozen line beside the group
+// that later absorbs it.
+//
+// This includes a run of one: a lone completed tool call must stay dynamic too,
+// or the next tool call would form a group whose first member is already frozen
+// in static history.
+const findOpenTrailingCommandRunStart = (messages) => {
+    const lastIndex = messages.length - 1;
+    if (lastIndex < 0 || !isGroupableToolMessage(messages[lastIndex])) {
+        return -1;
+    }
+    let runStart = lastIndex;
+    while (runStart > 0 && isGroupableToolMessage(messages[runStart - 1])) {
+        runStart -= 1;
+    }
+    return runStart;
+};
+export const splitStaticHistory = (messages, options = {}) => {
+    const canRenderStart = messages.findIndex((message) => !canRenderStatically(message));
+    let activeStart = canRenderStart === -1 ? messages.length : canRenderStart;
+    if (options.groupCommands) {
+        const openRunStart = findOpenTrailingCommandRunStart(messages);
+        if (openRunStart !== -1 && openRunStart < activeStart) {
+            activeStart = openRunStart;
+        }
+    }
+    if (activeStart >= messages.length) {
+        return { history: messages, active: [] };
+    }
+    const firstActiveMessage = messages[activeStart];
+    const previousMessage = activeStart > 0 ? messages[activeStart - 1] : undefined;
+    const previousMessageIsToolLeadIn = previousMessage?.status === 'finalized' &&
+        (previousMessage.sender === 'bot' || previousMessage.sender === 'reasoning');
+    const activeStartWithToolLeadIn = isGroupableToolMessage(firstActiveMessage) &&
+        (firstActiveMessage.status === 'pending' || firstActiveMessage.status === 'running') &&
+        previousMessageIsToolLeadIn
+        ? activeStart - 1
+        : activeStart;
+    return {
+        history: messages.slice(0, activeStartWithToolLeadIn),
+        active: messages.slice(activeStartWithToolLeadIn),
+    };
+};
+export const detectStaticCommitBlocker = (messages, options = {}) => {
+    const filteredMessages = options.displayMode === 'concise' ? messages.filter((message) => message.sender !== 'reasoning') : messages;
+    const activeStart = filteredMessages.findIndex((message) => !canRenderStatically(message));
+    if (activeStart === -1) {
+        return null;
+    }
+    const active = filteredMessages.slice(activeStart);
+    const dynamicTextLength = active.reduce((sum, message) => sum + (message.text?.length ?? 0), 0);
+    const messageCountThreshold = options.messageCountThreshold ?? STATIC_BLOCKER_MESSAGE_COUNT_THRESHOLD;
+    const textLengthThreshold = options.textLengthThreshold ?? STATIC_BLOCKER_TEXT_LENGTH_THRESHOLD;
+    if (active.length < messageCountThreshold && dynamicTextLength < textLengthThreshold) {
+        return null;
+    }
+    const blocker = filteredMessages[activeStart];
+    const reason = classifyStaticCommitBlocker(blocker);
+    if (reason === null) {
+        return null;
+    }
+    return {
+        id: blocker.id,
+        index: activeStart,
+        sender: blocker.sender,
+        status: blocker.status,
+        reason,
+        dynamicMessageCount: active.length,
+        dynamicTextLength,
+    };
+};
+const getToolCallIds = (message) => 'members' in message && Array.isArray(message.members) ? message.members.map((member) => member.id) : [message.id];
+const createStaticItems = (bannerItems, history) => [
+    ...bannerItems.map((id) => ({ kind: 'banner', id })),
+    ...history.map((message) => ({ kind: 'message', id: message.id, message })),
+];
+const createMessageSignature = (message) => {
+    try {
+        return JSON.stringify(message);
+    }
+    catch {
+        return `${message.id}:${message.sender ?? ''}:${message.status ?? ''}`;
+    }
+};
+export const shouldCommitMessageToStatic = ({ hasActiveMessages, hasExistingStaticHistory, wasPreviouslyActive, hasPendingCandidateSignature, isRestoredMessage, isCompletedCommand = false, }) => {
+    if (isCompletedCommand) {
+        return true;
+    }
+    if (hasActiveMessages || wasPreviouslyActive) {
+        return true;
+    }
+    // Resumed conversations can arrive with a fully finalized history and no
+    // live tail. Commit that backlog immediately so Ink can keep it in Static.
+    if (isRestoredMessage && !hasExistingStaticHistory) {
+        return true;
+    }
+    return hasPendingCandidateSignature;
+};
+const MessageListContent = ({ messages, bannerItems = [], bannerStartsNewSession = false, settingsService, displayMode = settingsService?.get('ui.displayMode') ?? 'concise', restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS, turnPaused = false, }) => {
+    const { stdout } = useStdout();
+    const terminalColumns = stdout.columns || 80;
+    const contentWidth = Math.max(1, terminalColumns - MESSAGE_HORIZONTAL_PADDING * 2);
+    const restoredStaticMessageIdSet = useMemo(() => new Set(restoredStaticMessageIds), [restoredStaticMessageIds]);
+    const filteredMessages = useMemo(() => {
+        if (displayMode === 'concise') {
+            return messages.filter((message) => {
+                if (message.sender === 'reasoning') {
+                    return false;
+                }
+                // Drop text-free bot messages whatever their status. A continuation
+                // step that emits only tool calls produces a bot message that streams
+                // empty and then finalizes empty. Keeping it while it streams makes it
+                // a non-groupable separator that closes the tool run before it — the
+                // run then groups, commits to <Static>, and when the empty bot is
+                // finally dropped the two runs merge into one group with an earlier
+                // first member, and so a different id. The id guard below cannot see
+                // that as the same group, so the run reprints instead of updating in
+                // place, once per continuation step. An empty bot message renders
+                // nothing either way, so never admitting it is the cheaper fix.
+                if (message.sender === 'bot' && (!message.text || !message.text.trim())) {
+                    return false;
+                }
+                return true;
+            });
+        }
+        return messages;
+    }, [messages, displayMode]);
+    // Use useMemo to prevent array recreation on every render.
+    // This stabilizes the references passed to Static and the active Box,
+    // preventing unnecessary re-renders and fixing flickering in long sessions.
+    const { history, active } = useMemo(() => {
+        const groupCommands = displayMode === 'concise';
+        const split = splitStaticHistory(filteredMessages, { groupCommands });
+        if (!groupCommands) {
+            return split;
+        }
+        // Grouping is a pure display transform on top of the static/active split
+        // above, which already guarantees every run in `split.history` is closed.
+        // A still-open run lives in `split.active`, where it is re-rendered each
+        // frame, so it can be grouped just as eagerly and simply count up.
+        return {
+            history: groupCommandRuns(split.history, { isClosed: true }),
+            active: groupCommandRuns(split.active),
+        };
+    }, [filteredMessages, displayMode]);
+    const staticItemsRef = useRef(createStaticItems(bannerItems, []));
+    const seenBannerIdsRef = useRef(new Set(bannerItems));
+    const committedMessageSignaturesRef = useRef(new Map());
+    const candidateMessageSignaturesRef = useRef(new Map());
+    const previousActiveMessageIdsRef = useRef(new Set());
+    // Ids of every tool call already frozen in <Static>, whether alone or as a
+    // group member. A group's id keys on its first member, so when the capped
+    // message buffer trims that member off the front, the rest of the run comes
+    // back under a new id; this set is what recognizes it as already printed.
+    const committedToolCallIdsRef = useRef(new Set());
+    const { staticItems, deferredHistory, deferredNotifications } = useMemo(() => {
+        if (history.length === 0 && active.length === 0) {
+            staticItemsRef.current = staticItemsRef.current.filter((item) => item.kind === 'banner');
+            committedMessageSignaturesRef.current.clear();
+            committedToolCallIdsRef.current.clear();
+            candidateMessageSignaturesRef.current.clear();
+            previousActiveMessageIdsRef.current.clear();
+        }
+        const additions = [];
+        const deferred = [];
+        const deferredNotifications = [];
+        const hasActiveMessages = active.length > 0;
+        const previousActiveMessageIds = previousActiveMessageIdsRef.current;
+        const hasExistingStaticHistory = staticItemsRef.current.some((item) => item.kind === 'message');
+        const committedToolCallIds = committedToolCallIdsRef.current;
+        for (const bannerId of bannerItems) {
+            if (seenBannerIdsRef.current.has(bannerId)) {
+                continue;
+            }
+            seenBannerIdsRef.current.add(bannerId);
+            additions.push({ kind: 'banner', id: bannerId });
+        }
+        const historyIds = new Set(history.map((message) => message.id));
+        for (const messageId of candidateMessageSignaturesRef.current.keys()) {
+            if (!historyIds.has(messageId)) {
+                candidateMessageSignaturesRef.current.delete(messageId);
+            }
+        }
+        let hasDeferred = false;
+        for (const message of history) {
+            const signature = createMessageSignature(message);
+            const committedSignature = committedMessageSignaturesRef.current.get(message.id);
+            const isCompletedCommand = (message.sender === 'command' && message.status !== 'pending' && message.status !== 'running') ||
+                // A command-group only ever holds settled calls, and one reaching
+                // `history` is closed by construction (an open run is held in the
+                // active region), so it is as safe to commit as a completed command.
+                message.sender === 'command-group';
+            if (committedSignature === signature) {
+                continue;
+            }
+            // <Static> is write-once: Ink physically cannot un-print an already
+            // frozen line. Re-opening a committed message here by pushing its
+            // updated content into the dynamic region does not "update" the frozen
+            // copy — it leaves the stale text frozen in place *and* renders a
+            // second, corrected copy down in the dynamic area, after everything
+            // (including tool calls) that has since also been committed to
+            // <Static>. Chronologically-earlier text then visually appears after a
+            // chronologically-later tool call, which reads as misordered output
+            // that "fixes itself" on the next full re-render (e.g. a resize) once
+            // the later content's own commit finally catches the correction up.
+            // Once a message is committed, treat it — like a command-group — as
+            // immutable for display purposes, and drop any further changes to it,
+            // instead of accepting one out-of-order duplicate render.
+            if (committedSignature !== undefined) {
+                continue;
+            }
+            // Same rule at member granularity: a history run that shares any tool
+            // call with one already frozen is that run seen again after trimming.
+            // Reprinting it would add a stale duplicate, never new information.
+            if (isGroupableToolMessage(message) && getToolCallIds(message).some((id) => committedToolCallIds.has(id))) {
+                continue;
+            }
+            const shouldCommitImmediately = (!isBackgroundNotification(message) || !hasActiveMessages) &&
+                !hasDeferred &&
+                shouldCommitMessageToStatic({
+                    hasActiveMessages,
+                    hasExistingStaticHistory,
+                    wasPreviouslyActive: previousActiveMessageIds.has(message.id),
+                    hasPendingCandidateSignature: candidateMessageSignaturesRef.current.get(message.id) === signature,
+                    isRestoredMessage: restoredStaticMessageIdSet.has(message.id),
+                    isCompletedCommand,
+                });
+            const isFinishedSubagent = message.sender === 'subagent' &&
+                (message.status === 'completed' ||
+                    message.status === 'failed' ||
+                    message.status === 'cancelled' ||
+                    message.status === 'backgrounded');
+            // Keep finished subagent summaries dynamic while sibling work is still
+            // running. Committing them to <Static> mid-flight causes an extra Ink
+            // write and visible flicker when parallel subagents finish one by one.
+            if (isFinishedSubagent && hasActiveMessages) {
+                if (candidateMessageSignaturesRef.current.get(message.id) !== signature) {
+                    candidateMessageSignaturesRef.current.set(message.id, signature);
+                }
+                (isBackgroundNotification(message) ? deferredNotifications : deferred).push(message);
+                hasDeferred = true;
+                continue;
+            }
+            if (!shouldCommitImmediately) {
+                if (candidateMessageSignaturesRef.current.get(message.id) !== signature) {
+                    candidateMessageSignaturesRef.current.set(message.id, signature);
+                }
+                (isBackgroundNotification(message) ? deferredNotifications : deferred).push(message);
+                hasDeferred = true;
+                continue;
+            }
+            committedMessageSignaturesRef.current.set(message.id, signature);
+            if (isGroupableToolMessage(message)) {
+                for (const id of getToolCallIds(message)) {
+                    committedToolCallIds.add(id);
+                }
+            }
+            candidateMessageSignaturesRef.current.delete(message.id);
+            additions.push({ kind: 'message', id: message.id, message });
+        }
+        if (additions.length > 0) {
+            staticItemsRef.current = [...staticItemsRef.current, ...additions];
+        }
+        previousActiveMessageIdsRef.current = new Set(active.map((message) => message.id));
+        return {
+            staticItems: staticItemsRef.current,
+            deferredHistory: deferred,
+            deferredNotifications,
+        };
+    }, [active, bannerItems, history, restoredStaticMessageIdSet]);
+    // Active messages that were already committed to <Static> in a prior render
+    // (e.g. a bot lead-in text that became a toolLeadIn) must not be rendered again
+    // in the dynamic area, or they would appear twice – once in the permanent
+    // static output and once in the re-rendered dynamic region.
+    const dynamicItems = useMemo(() => {
+        const committedActiveIds = new Set();
+        for (const message of active) {
+            const committedSignature = committedMessageSignaturesRef.current.get(message.id);
+            if (committedSignature !== undefined && committedSignature === createMessageSignature(message)) {
+                committedActiveIds.add(message.id);
+            }
+        }
+        const filteredActive = committedActiveIds.size > 0 ? active.filter((m) => !committedActiveIds.has(m.id)) : active;
+        // Keep deferred notifications out of the live region until active rows settle.
+        return [...deferredHistory, ...filteredActive, ...(active.length === 0 ? deferredNotifications : [])];
+    }, [deferredHistory, deferredNotifications, active]);
+    const renderMessage = (msg, idx, collection, maxWidth) => {
+        // Helper to get previous message safely from either StaticItem[] or MessageLike[]
+        const getPreviousMessage = () => {
+            if (idx <= 0)
+                return null;
+            const prev = collection[idx - 1];
+            if (!prev)
+                return null;
+            if ('sender' in prev) {
+                return prev;
+            }
+            if ('kind' in prev && prev.kind === 'message') {
+                return prev.message;
+            }
+            return null;
+        };
+        // Helper to peek at the last static item when this is the first dynamic message.
+        // Streaming splits flush earlier finalized chunks to static while the tail stays
+        // dynamic, so continuation detection must cross the static/dynamic boundary.
+        const getCrossBoundaryPreviousMessage = () => {
+            if (collection !== dynamicItems)
+                return null;
+            if (idx !== 0)
+                return null;
+            if (staticItems.length === 0)
+                return null;
+            const lastStatic = staticItems[staticItems.length - 1];
+            if (lastStatic.kind === 'message') {
+                return lastStatic.message;
+            }
+            return null;
+        };
+        // Use consistent marginTop to prevent layout reflow.
+        // This ensures stable spacing regardless of message order or streaming updates.
+        // The first message in each collection has no top margin to avoid extra space.
+        // Consecutive split bot response messages (continuation messages) also have no top margin
+        // because their inner markdown renderer already provides correct spacing/newlines.
+        const prevMsg = getPreviousMessage() ?? getCrossBoundaryPreviousMessage();
+        const isContinuation = prevMsg && prevMsg.sender === 'bot' && msg.sender === 'bot';
+        const isFirst = idx === 0 && collection === dynamicItems && staticItems.length === 0;
+        const isUser = 'sender' in msg && msg.sender === 'user';
+        const marginTop = isFirst || isContinuation ? 0 : isUser ? 2 : 1;
+        return (React.createElement(Box, { key: msg.id, marginTop: marginTop, width: maxWidth }, 'members' in msg ? (React.createElement(CommandGroupSummary, { members: msg.members, status: msg.status })) : msg.sender === 'command' ? (React.createElement(CommandMessage, { command: msg.command ?? '', output: msg.output, status: msg.status, success: msg.success, failureReason: msg.failureReason, toolName: msg.toolName, toolArgs: msg.toolArgs, isApprovalRejection: msg.isApprovalRejection, autoApprovedByLlm: msg.autoApprovedByLlm, hadApproval: msg.hadApproval, displayMode: displayMode, awaitingDecision: turnPaused })) : msg.sender === 'subagent' ? (React.createElement(SubagentActivityMessage, { msg: msg })) : (React.createElement(ChatMessage, { msg: msg, maxWidth: maxWidth, displayMode: displayMode }))));
+    };
+    const renderStaticItem = (item, idx) => {
+        if (item.kind === 'banner') {
+            return (React.createElement(Box, { key: item.id, flexDirection: "column" },
+                bannerStartsNewSession && React.createElement(SessionBoundary, { width: contentWidth }),
+                settingsService && React.createElement(Banner, { settingsService: settingsService })));
+        }
+        // The trailing blank line is rendered outside <Static> (see below). It must
+        // not be committed here: <Static> writes each item exactly once, so an
+        // "is this the last item?" decision made at commit time gets frozen and
+        // strands stray blank lines mid-history when more items are appended later
+        // (e.g. during chunked reasoning streaming).
+        return renderMessage(item.message, idx, staticItems, contentWidth);
+    };
+    return (React.createElement(Box, { flexDirection: "column", marginBottom: 1 },
+        React.createElement(Static, { items: staticItems, style: { paddingLeft: MESSAGE_HORIZONTAL_PADDING, paddingRight: MESSAGE_HORIZONTAL_PADDING } }, renderStaticItem),
+        staticItems.length > 0 && dynamicItems.length === 0 && React.createElement(Box, { height: 1 }),
+        React.createElement(Box, { flexDirection: "column", paddingX: MESSAGE_HORIZONTAL_PADDING }, dynamicItems.map((msg, idx) => renderMessage(msg, idx, dynamicItems, contentWidth)))));
+};
+/** Repaint write-once history when its presentation changes, without resetting conversation state. */
+const MessageList = (props) => {
+    const { stdout } = useStdout();
+    const displayMode = props.displayMode ?? props.settingsService?.get('ui.displayMode') ?? 'concise';
+    const [renderedMode, setRenderedMode] = useState(displayMode);
+    useEffect(() => {
+        if (displayMode === renderedMode)
+            return;
+        // Clear before remounting, just like App's explicit redraw. A changed prop
+        // alone cannot replace the rows Ink has already committed to <Static>.
+        clearTerminalForRedraw(stdout);
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- external presentation changes require a clear-then-remount of write-once terminal history
+        setRenderedMode(displayMode);
+    }, [displayMode, renderedMode, stdout]);
+    return React.createElement(MessageListContent, { key: renderedMode, ...props, displayMode: renderedMode });
+};
+export default React.memo(MessageList);
+//# sourceMappingURL=MessageList.js.map

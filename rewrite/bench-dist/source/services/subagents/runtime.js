@@ -1,0 +1,172 @@
+import { randomUUID } from 'node:crypto';
+import { SubagentToolPolicy, SubagentToolFactory } from './tool-policy.js';
+import { NestedSubagentRunner } from './nested-runner.js';
+import { ExecutionSubagentRunner } from './execution-runner.js';
+import { MentorRunner } from './mentor-runner.js';
+import { SubagentAsyncRegistry } from './subagent-async-registry.js';
+import { SubagentSession } from './subagent-session.js';
+import { loadRoleDefinition } from './role-loader.js';
+import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
+import { SubagentRolePoolSelector } from './subagent-role-pool-selector.js';
+import { classifyPoolEntryFailure } from '../retry/provider-failure-classification.js';
+export function createSubagentRuntime(deps) {
+    const nestedCompatibility = deps.nestedCompatibility ?? new NestedToolCompatibilityState(deps.settings);
+    // Peek (get_subagent_status): route subagent_tool_started events into the
+    // registry so it can capture live per-run progress. The registry is assigned
+    // after the runners below (its `run` callback references them), so the
+    // optional chaining keeps this safe until then. Events fire only during
+    // execution, which always happens after the registry is assigned.
+    // `asyncRegistry` is assigned once below but referenced earlier by the
+    // `onEventWithPeek` closure; prefer-const lint would complain here so
+    // disable it for this declaration.
+    // eslint-disable-next-line prefer-const
+    let asyncRegistry;
+    const onEventWithPeek = (event) => {
+        asyncRegistry?.handleSubagentEvent(event);
+        // Registry state is updated before the bridge routes the event. This is
+        // what makes an adopted run's first terminal event background-owned.
+        deps.onEvent?.(event);
+    };
+    const toolPolicy = new SubagentToolPolicy({
+        settings: deps.settings,
+        logger: deps.logger,
+        sessionContextService: deps.sessionContextService,
+        executionContext: deps.executionContext,
+        agentClient: deps.agentClient,
+    });
+    const toolFactory = new SubagentToolFactory({
+        driverFactory: deps.driverFactory,
+        modelBinding: deps.modelBinding,
+        settings: deps.settings,
+        logger: deps.logger,
+        executionContext: deps.executionContext,
+        toolPolicy,
+        skillsService: deps.skillsService,
+        nestedCompatibility,
+        readOnly: deps.readOnly,
+        scopedSandbox: deps.scopedSandbox,
+        sessionBrowser: deps.sessionBrowser,
+    });
+    const roleToolCache = new Map();
+    // One cursor per role, shared by both spawn paths below (the foreground
+    // `run_subagent` tool and the async registry's fresh-run resolution) so a
+    // pool round-robins across every spawn regardless of which path it came
+    // through.
+    const rolePoolSelector = new SubagentRolePoolSelector(deps.settings);
+    const nestedRunner = new NestedSubagentRunner({
+        driverFactory: deps.driverFactory,
+        modelBinding: deps.modelBinding,
+        logger: deps.logger,
+        settings: deps.settings,
+        sessionContextService: deps.sessionContextService,
+        executionContext: deps.executionContext,
+        toolFactory,
+        onEvent: onEventWithPeek,
+        roleToolCache,
+        rolePoolSelector,
+        skillsService: deps.skillsService,
+        toolOwnership: deps.toolOwnership,
+        ...(deps.backgroundApprovalPauseSink ? { backgroundApprovalPauseSink: deps.backgroundApprovalPauseSink } : {}),
+    });
+    const executionRunner = new ExecutionSubagentRunner({
+        logger: deps.logger,
+        settings: deps.settings,
+        sessionContextService: deps.sessionContextService,
+        executionContext: deps.executionContext,
+        createClient: deps.createClient,
+        toolFactory,
+        onEvent: onEventWithPeek,
+        skillsService: deps.skillsService,
+        toolOwnership: deps.toolOwnership,
+    });
+    // Reviewer explorers are fresh, contained child runs: their events are not
+    // forwarded, so they never surface as orphan activity in the parent session.
+    toolFactory.setExplorerRunner(async (task, signal) => {
+        const agentId = randomUUID();
+        const session = new SubagentSession(agentId, 'explorer');
+        let definition = rolePoolSelector.resolveForSpawn('explorer', loadRoleDefinition('explorer', deps.settings));
+        for (;;) {
+            let receivedOutput = false;
+            const result = await executionRunner.runInSession(agentId, { role: 'explorer', task, signal, parentTool: 'run_explorer' }, definition, session, undefined, signal, (event) => {
+                if (event.type === 'subagent_streaming_text' || event.type === 'subagent_tool_started')
+                    receivedOutput = true;
+            });
+            const failure = result.status === 'failed' ? classifyPoolEntryFailure(result.error) : undefined;
+            if (!failure ||
+                receivedOutput ||
+                result.toolsUsed.length > 0 ||
+                signal?.aborted ||
+                !rolePoolSelector.hasPool('explorer'))
+                return result;
+            rolePoolSelector.markUnhealthy(definition, failure);
+            const next = rolePoolSelector.resolveForSpawn('explorer', loadRoleDefinition('explorer', deps.settings));
+            deps.logger.warn('Subagent pool failover', {
+                role: 'explorer',
+                from: `${definition.provider}/${definition.model}`,
+                failure,
+                to: `${next.provider}/${next.model}`,
+            });
+            definition = next;
+        }
+    });
+    const mentorSession = new SubagentSession('mentor', 'mentor');
+    const mentorRunner = new MentorRunner({
+        driverFactory: deps.driverFactory,
+        modelBinding: deps.modelBinding,
+        logger: deps.logger,
+        settings: deps.settings,
+        sessionContextService: deps.sessionContextService,
+        executionContext: deps.executionContext,
+        onEvent: onEventWithPeek,
+        session: mentorSession,
+    });
+    asyncRegistry = new SubagentAsyncRegistry({
+        logger: deps.logger,
+        run: async ({ request, runId, session, signal, input, control, definition }) => {
+            if (request.role === 'mentor') {
+                return mentorRunner.run(runId, input, signal, session, request.executionBudget);
+            }
+            // `definition` is resolved once per run by `resolveDefinition` below and
+            // carried across every later segment (including steering continuations
+            // and an explicit `continue_run_id`), so it is never recomputed here —
+            // recomputing per segment would draw another pool entry per turn
+            // instead of once per spawn. The fallback only covers callers that
+            // never went through `resolveDefinition` (e.g. a bare test double).
+            const resolvedDefinition = definition ?? request.resolvedDefinition ?? loadRoleDefinition(request.role, deps.settings);
+            return executionRunner.runInSession(runId, { ...request, signal }, {
+                ...resolvedDefinition,
+                ...(request.executionBudget ? { executionBudget: request.executionBudget } : {}),
+            }, session, undefined, signal, undefined, control, input);
+        },
+        onEvent: deps.onEvent,
+        sessionContextService: deps.sessionContextService,
+        ttlMs: deps.settings.get('subagent.asyncSessionTtlMs') ?? 30 * 60 * 1000,
+        messageCap: deps.settings.get('subagent.asyncMessageCap') ?? 50,
+        sessionForRole: (role) => (role === 'mentor' ? mentorSession : undefined),
+        // Called once per fresh (non-continuation) spawn; a configured pool
+        // advances its round-robin cursor here.
+        resolveDefinition: (role) => {
+            const base = loadRoleDefinition(role, deps.settings);
+            return rolePoolSelector.resolveForSpawn(role, base);
+        },
+        markPoolEntryUnhealthy: (definition, failure) => rolePoolSelector.markUnhealthy(definition, failure),
+        hasModelPool: (role) => role !== 'agent' && rolePoolSelector.hasPool(role),
+        modelForRole: (role) => {
+            const mentorPool = role === 'mentor' ? deps.settings.get('agent.mentorPool') : undefined;
+            if (Array.isArray(mentorPool) && mentorPool.length > 0)
+                return undefined;
+            const definition = loadRoleDefinition(role, deps.settings);
+            return { provider: definition.provider, id: definition.model };
+        },
+    });
+    return {
+        toolPolicy,
+        toolFactory,
+        nestedRunner,
+        executionRunner,
+        mentorRunner,
+        asyncRegistry,
+        nestedCompatibility,
+    };
+}
+//# sourceMappingURL=runtime.js.map

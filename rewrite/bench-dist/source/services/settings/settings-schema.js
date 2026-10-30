@@ -1,0 +1,1043 @@
+import { z } from 'zod';
+import envPaths from 'env-paths';
+import path from 'node:path';
+import { ModelSelectionSchema } from './model-selection.js';
+import { THEME_SETTING_VALUES } from '../../theme/resolve-theme.js';
+import { SKIN_NAMES } from '../../skins/names.js';
+import { normalizeProviderIdentifier, resolveProviderId, resolveProviderName, } from './custom-provider-normalization.js';
+// Saved mentor entries pin the host and model; only reasoning may inherit.
+export const SubagentPoolEntrySchema = ModelSelectionSchema.extend({
+    reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+});
+function rejectRemovedSelectionKeys(keys) {
+    return (value, ctx) => {
+        if (value && typeof value === 'object') {
+            for (const key of keys) {
+                if (Object.hasOwn(value, key)) {
+                    ctx.addIssue({
+                        code: 'custom',
+                        path: [key],
+                        message: 'Removed model/provider setting; use complete bound selections in modelSelection or tier/mentor pools',
+                    });
+                }
+            }
+        }
+        return value;
+    };
+}
+const MAX_SUBAGENT_POOL_ENTRIES = 8;
+const subagentPoolSchema = (description) => z.array(SubagentPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).default([]).describe(description);
+export const TierModelPoolEntrySchema = ModelSelectionSchema;
+const tierModelPoolSchema = (description) => z.array(TierModelPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).optional().describe(description);
+const AgentSettingsObjectSchema = z.object({
+    modelSelection: ModelSelectionSchema.default({ model: 'gpt-5.1', provider: 'openai' }).describe('Bound provider and model selection for the main agent'),
+    smartModel: tierModelPoolSchema('Models for smart-tier helper agents (the hardest side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset.'),
+    smartReasoningEffort: z
+        .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+        .optional()
+        .describe('Reasoning effort for smart-tier helper agents (the hardest side tasks). Falls back to agent.reasoningEffort when unset.'),
+    balancedModel: tierModelPoolSchema('Models for balanced-tier helper agents (everyday side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset.'),
+    balancedReasoningEffort: z
+        .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+        .optional()
+        .describe('Reasoning effort for balanced-tier helper agents (everyday side tasks). Falls back to agent.reasoningEffort when unset.'),
+    cheapModel: tierModelPoolSchema('Models for cheap-tier helper agents (simple, high-volume side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset.'),
+    cheapReasoningEffort: z
+        .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+        .optional()
+        .describe('Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.reasoningEffort when unset.'),
+    choreModel: tierModelPoolSchema('Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.modelSelection when unset.'),
+    reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).default('default'),
+    // Temperature controls randomness. We keep it optional so providers/models
+    // can use their own defaults when unset.
+    temperature: z.number().min(0).max(2).optional(),
+    backgroundWaitTimeoutMs: z
+        .number()
+        .int()
+        .min(1)
+        .max(86_400_000)
+        .default(3_600_000)
+        .describe('Overall headless background-work wait limit in milliseconds (default one hour; unfinished work is cancelled and named)'),
+    maxTurns: z.number().int().positive().default(100),
+    maxRequestInputTokens: z
+        .number()
+        .int()
+        .min(1_000)
+        .nullable()
+        .default(null)
+        .describe('Per-request estimated or last-observed input cost/latency ceiling; retains work on refusal (null uses known model capacity)'),
+    maxOutputTokens: z.number().int().positive().default(32_000),
+    maxStreamOutputChars: z.number().int().positive().default(100_000),
+    // Total wall-clock ceiling per provider request. 0 means "no ceiling": the
+    // provider-neutral stream-idle watchdog (maxModelStreamIdleMs) owns stall
+    // detection, so this is an opt-in backstop and defaults off. `Generation
+    // StreamDeadlines` treats a non-positive value as disabled.
+    maxModelRequestDurationMs: z.number().int().nonnegative().default(0),
+    // Provider-neutral inactivity window: abort a request that streams no output
+    // for this many ms. Re-arms on every streamed delta, so long legitimate
+    // reasoning survives while a silent stall is cut. 0 disables it.
+    maxModelStreamIdleMs: z.number().int().nonnegative().default(600_000),
+    retryAttempts: z.number().int().nonnegative().default(2),
+    transport: z.enum(['websocket', 'http']).default('websocket'),
+    maxParallelToolCalls: z
+        .number()
+        .int()
+        .positive()
+        .default(3)
+        .describe('Maximum number of tool calls allowed to run at the same time'),
+    runBudget: z
+        .object({
+        maxUsdMicros: z.number().int().positive().finite().default(5_000_000),
+        maxUnpricedTokens: z.number().int().positive().finite().default(5_000_000),
+        maxActiveTimeMs: z.number().int().positive().finite().default(3_600_000),
+        warningHeadroomUsdMicros: z.number().int().nonnegative().finite().default(1_000_000),
+        warningHeadroomUnpricedTokens: z.number().int().nonnegative().finite().default(1_000_000),
+        warningHeadroomActiveTimeMs: z.number().int().nonnegative().finite().default(900_000),
+        softHeadroomUsdMicros: z.number().int().nonnegative().finite().default(250_000),
+        softHeadroomUnpricedTokens: z.number().int().nonnegative().finite().default(250_000),
+        softHeadroomActiveTimeMs: z.number().int().nonnegative().finite().default(300_000),
+        turnBackstop: z.number().int().positive().finite().default(150),
+        extensionPercent: z.number().int().positive().finite().default(50),
+        maxParentExtensions: z.number().int().nonnegative().finite().default(2),
+        identicalToolCallThreshold: z.number().int().positive().finite().default(3),
+        escalation: z
+            .enum(['warn', 'contain', 'pause', 'disabled'])
+            .default('warn')
+            .describe('warn is advisory; contain pauses at exhaustion; pause also stops on warning/stall; disabled emits no evidence'),
+    })
+        .default({
+        maxUsdMicros: 5_000_000,
+        maxUnpricedTokens: 5_000_000,
+        maxActiveTimeMs: 3_600_000,
+        warningHeadroomUsdMicros: 1_000_000,
+        warningHeadroomUnpricedTokens: 1_000_000,
+        warningHeadroomActiveTimeMs: 900_000,
+        softHeadroomUsdMicros: 250_000,
+        softHeadroomUnpricedTokens: 250_000,
+        softHeadroomActiveTimeMs: 300_000,
+        turnBackstop: 150,
+        extensionPercent: 50,
+        maxParentExtensions: 2,
+        identicalToolCallThreshold: 3,
+        escalation: 'warn',
+    })
+        .describe('Per-run staged budget and stall-detection policy'),
+    backgroundCheckIn: z
+        .object({
+        enabled: z.boolean().default(true),
+        intervalMs: z.number().int().positive().finite().default(300_000),
+    })
+        .default({ enabled: true, intervalMs: 300_000 })
+        .describe('Proactive check-ins on a still-running background shell job or subagent while the session is otherwise idle'),
+    sessionRollover: z
+        .object({
+        enabled: z.boolean().default(true),
+        milestones: z.array(z.number().int().positive()).default([200_000, 300_000, 400_000]),
+        autoBrief: z.boolean().default(true),
+    })
+        .default({ enabled: true, milestones: [200_000, 300_000, 400_000], autoBrief: true })
+        .describe('Agent advice for handing off a growing session at context milestones'),
+    // NOTE: We do NOT validate provider existence here because the provider
+    // registry can be extended at runtime from settings.json (custom providers).
+    // We validate/fallback after SettingsService loads and registers runtime providers.
+    favoriteModels: z
+        .array(z.string())
+        .optional()
+        .default([])
+        .describe('Ordered list of favorited models as "provider/modelId" strings; matched before any provider catalog loads'),
+    modelNicknames: z
+        .record(z.string(), z.string())
+        .optional()
+        .default({})
+        .describe('Map of nickname -> "provider/modelId" (with optional ":effort" suffix); an exact nickname match wins for --model before any provider catalog loads. Browse them on the model picker Nicknames tab'),
+    disabledProviders: z
+        .array(z.string())
+        .optional()
+        .default([])
+        .describe('Provider ids hidden from model pickers and catalogs; managed and reversible in provider management'),
+    openrouter: z
+        .object({
+        apiKey: z.string().optional().meta({ secret: true }),
+        baseUrl: z.string().url().optional(),
+        referrer: z.string().optional(),
+        title: z.string().optional(),
+    })
+        .optional(),
+    openai: z
+        .object({
+        apiKey: z.string().optional().meta({ secret: true }),
+    })
+        .optional(),
+    codex: z
+        .object({
+        websocketFirstFrameTimeoutMs: z.number().int().positive().finite().default(90_000),
+        websocketInterFrameTimeoutMs: z.number().int().positive().finite().default(600_000),
+    })
+        .default({ websocketFirstFrameTimeoutMs: 90_000, websocketInterFrameTimeoutMs: 600_000 }),
+    mentorReasoningEffort: z
+        .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+        .default('default')
+        .describe('Reasoning effort for the mentor model'),
+    mentorSamples: z
+        .number()
+        .int()
+        .min(1)
+        .max(8)
+        .default(1)
+        .describe('Number of independent mentor answers to gather per consultation (1 = single answer)'),
+    mentorPool: subagentPoolSchema('Models consulted per mentor question, one answer each. When set, overrides agent.mentorSamples'),
+    useFlexServiceTier: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe('Use OpenAI Flex Service Tier to reduce costs (OpenAI only)'),
+    contextCompaction: z
+        .object({
+        enabled: z.boolean().default(true),
+        mode: z.enum(['native', 'auto', 'local']).default('auto'),
+        compactThreshold: z.number().finite().min(0).max(1).default(0.8),
+        compactThresholdTokens: z.number().int().finite().min(1_000).nullable().default(null),
+    })
+        .default({ enabled: true, mode: 'auto', compactThreshold: 0.8, compactThresholdTokens: null })
+        .describe('Native and application-owned context compaction settings'),
+    autoApproveReasoningEffort: z
+        .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+        .default('low')
+        .describe('Reasoning effort for risky shell auto-approval reviews'),
+    completionVerification: z
+        .boolean()
+        .default(true)
+        .describe('Verify durable-goal completion before marking achieved (true|false). Disable for operational rollback; applies at the next completion boundary.'),
+    verificationMaxRepairs: z
+        .number()
+        .int()
+        .min(0)
+        .max(10)
+        .default(3)
+        .describe('Maximum autonomous completion-verification repairs per new task (0-10). Existing persisted tasks retain their original budget.'),
+    decisionModel: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('OpenRouter Decisions model shared by the approval fast path and failure-triage comparisons. For approval, only low/medium-risk, explicit/implied decisions at confidence 0.8 or higher can authorize execution; every other outcome falls back to the chore reviewer. Sends approval context plus failure evidence. Adds API charges'),
+    subagentExplorerReasoningEffort: z
+        .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+        .optional()
+        .describe('Reasoning effort override for the explorer subagent. Falls back to agent.reasoningEffort when unset.'),
+    subagentWorkerReasoningEffort: z
+        .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+        .optional()
+        .describe('Reasoning effort override for the worker subagent. Falls back to agent.reasoningEffort when unset.'),
+    subagentLibrarianReasoningEffort: z
+        .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+        .optional()
+        .describe('Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset.'),
+});
+export const AgentSettingsSchema = z.preprocess(rejectRemovedSelectionKeys([
+    'model',
+    'provider',
+    'efficientModel',
+    'capableModel',
+    'mentorModel',
+    'mentorProvider',
+    'subagentExplorerModel',
+    'subagentExplorerProvider',
+    'subagentWorkerModel',
+    'subagentWorkerProvider',
+    'subagentLibrarianModel',
+    'subagentLibrarianProvider',
+    'autoApproveModel',
+    'autoApproveProvider',
+    'smartProvider',
+    'balancedProvider',
+    'cheapProvider',
+    'choreProvider',
+]), AgentSettingsObjectSchema);
+export const ShellSettingsSchema = z.object({
+    timeout: z.number().int().positive().default(120000),
+    backgroundTimeout: z
+        .number()
+        .int()
+        .positive()
+        .default(30 * 60 * 1000)
+        .describe('Timeout for background shell jobs, in milliseconds. Capped: 0 or unbounded values are rejected.'),
+    maxOutputLines: z.number().int().positive().default(1000),
+    maxOutputChars: z.number().int().positive().default(40000),
+    autoApproveMode: z
+        .enum(['off', 'advisory', 'auto', 'always'])
+        .default('off')
+        .describe('Mode for tool approval; always bypasses permission prompts except ask_user and disables sandbox.enabled'),
+});
+export const SandboxSettingsSchema = z.object({
+    enabled: z.boolean().optional().default(true),
+    readPolicy: z.enum(['standard', 'strict']).optional().default('standard'),
+    allowReadExtra: z.array(z.string()).optional().default([]),
+    dockerHostControlProjects: z.array(z.string()).optional().default([]),
+    allowNetworking: z.boolean().optional().default(false),
+});
+export const AgentWorkflowSettingsSchema = z.object({
+    // Node `setTimeout` wraps delays above 2**31-1 to ~1 ms.
+    timeoutMs: z.number().int().positive().max(2_147_483_647).default(120_000),
+    maxRuns: z.number().int().positive().default(8),
+    maxConcurrency: z.number().int().positive().default(3),
+    maxCodeBytes: z.number().int().positive().default(16_384),
+    maxOutputBytes: z.number().int().positive().default(65_536),
+    maxConsoleBytes: z.number().int().positive().default(16_384),
+});
+export const SubagentSettingsSchema = z.object({
+    asyncSessionTtlMs: z
+        .number()
+        .int()
+        .positive()
+        .default(30 * 60 * 1000)
+        .describe('How long completed async subagent sessions are retained in memory before eviction, in milliseconds'),
+    asyncMessageCap: z
+        .number()
+        .int()
+        .positive()
+        .default(50)
+        .describe('Maximum number of user turns to retain in a persisted async subagent session'),
+});
+export const UISettingsSchema = z.object({
+    historySize: z.number().int().positive().default(1000),
+    pasteThreshold: z
+        .number()
+        .int()
+        .positive()
+        .default(3000)
+        .describe('Max paste length before text is replaced by a placeholder'),
+    displayMode: z
+        .enum(['standard', 'concise'])
+        .default('concise')
+        .describe('Display mode for rendering conversation output'),
+    theme: z
+        .enum(THEME_SETTING_VALUES)
+        .default('auto')
+        .describe('Colour theme; auto follows the terminal background and honours NO_COLOR'),
+    skin: z
+        .enum(SKIN_NAMES)
+        .default('classic')
+        .describe('Layout skin: how messages, tool calls, approvals and the status bar are drawn'),
+});
+export const LoggingSettingsSchema = z.object({
+    logLevel: z.enum(['error', 'warn', 'info', 'security', 'debug']).default('info'),
+    disableLogging: z.boolean().optional().default(false),
+    debugLogging: z.boolean().optional().default(false),
+    suppressConsoleOutput: z.boolean().optional().default(true),
+});
+export const EnvironmentSettingsSchema = z.object({
+    nodeEnv: z.string().optional(),
+});
+export const AppSettingsSchema = z.object({
+    shellPath: z.string().optional(),
+    // Legacy compatibility fields accepted at boundaries; activeProfileId is the canonical profile selection.
+    // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
+    // liteMode: selects the Bare profile (Lite was merged into Bare)
+    // planMode: when enabled, forces read-only operation (Plan mode)
+    // orchestratorMode: prompt-guided delegation workflow; standard tools remain available for cache stability
+    // Standard mode is the default (all flags false): full capabilities with auto-approve for apply_patch
+    activeProfileId: z.string().optional().default('builtin:standard'),
+    mentorMode: z.boolean().optional().default(false),
+    liteMode: z.boolean().optional().default(false),
+    planMode: z.boolean().optional().default(false),
+    orchestratorMode: z.boolean().optional().default(false),
+    notifications: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe('Enable desktop notifications when the terminal is unfocused (true|false)'),
+    notificationsOnApproval: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe('Notify when the agent pauses awaiting tool-call approval (true|false)'),
+    notificationsOnComplete: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe('Notify when the agent finishes responding (true|false)'),
+    searchViaShell: z
+        .union([z.boolean(), z.enum(['auto', 'on', 'off'])])
+        .transform((val) => (typeof val === 'boolean' ? (val ? 'on' : 'off') : val))
+        .optional()
+        .default('auto'),
+});
+const ToolsSettingsObjectSchema = z.object({
+    logFileOperations: z.boolean().optional().default(true),
+    enableEditHealing: z.boolean().optional().default(true),
+    // Per-tool-group kill switches for the main agent. Each masks exactly one
+    // capability group from the profile's tool capabilities (tool-toggles.ts),
+    // removing that group's tools and capability-gated prompt fragments on the
+    // next model request. They never restrict subagents, which resolve their own
+    // capabilities. tools.fileRead.enabled masks both filesystem read
+    // capabilities; filesystem-read-external has no separate toggle.
+    shell: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable shell tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.'),
+    web: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable web_search and web_fetch tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.'),
+    fileRead: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable file read tools (read_file, grep, glob) for the main agent (true|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request.'),
+    fileWrite: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable file edit tools (apply_patch / create_file / search_replace) for the main agent (true|false). Does not restrict subagents; applies on the next model request.'),
+    memory: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable memory tools (memory_*) for the main agent (true|false). Does not restrict subagents; applies on the next model request.'),
+    sessions: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable prior-session tools (session_list, session_search, session_read, session_rollover) for the main agent (true|false). Applies on the next model request.'),
+    skills: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable the activate_skill tool and skill catalog for the main agent (true|false). Applies on the next model request.'),
+    mentor: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable the ask_mentor tool for the main agent (true|false). Also requires a configured mentor model; applies on the next model request.'),
+    subagents: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable subagent delegation tools (run_subagent and its async controls) for the main agent (true|false). Does not restrict the subagents themselves; applies on the next model request.'),
+    backgroundTasks: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable background task tools (get_shell_job, cancel_shell_job, configure_task_check_in) for the main agent (true|false). Applies on the next model request.'),
+    userInteraction: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable the ask_user tool for the main agent (true|false). Applies on the next model request.'),
+    codeContext: z
+        .object({ enabled: z.boolean().optional().default(true) })
+        .optional()
+        .default({ enabled: true })
+        .describe('Enable code-context tools (read_code_outline, code_context_search) for the main agent (true|false). Applies on the next model request.'),
+});
+export const ToolsSettingsSchema = z.preprocess(rejectRemovedSelectionKeys(['editHealingModel', 'editHealingProvider']), ToolsSettingsObjectSchema);
+export const DebugSettingsSchema = z.object({
+    debugBashTool: z.boolean().optional().default(false),
+});
+export const SSHSettingsSchema = z.object({
+    enabled: z.boolean().default(false),
+    host: z.string().optional(),
+    port: z.number().int().positive().default(22),
+    username: z.string().optional(),
+    remoteDir: z.string().optional(),
+});
+export const WebSearchSettingsSchema = z.object({
+    provider: z.string().optional(),
+    tavily: z
+        .object({
+        apiKey: z.string().optional().meta({ secret: true }),
+    })
+        .optional(),
+    exa: z
+        .object({
+        apiKey: z.string().optional().meta({ secret: true }),
+    })
+        .optional(),
+    firecrawl: z
+        .object({
+        apiKey: z.string().optional().meta({ secret: true }),
+        baseUrl: z.string().url().optional(),
+    })
+        .optional(),
+    searxng: z
+        .object({
+        baseUrl: z.string().url().optional(),
+    })
+        .optional(),
+});
+export const MemorySettingsSchema = z
+    .object({
+    enabled: z.boolean().optional().default(true),
+    directory: z
+        .string()
+        .min(1)
+        .default(path.join(envPaths('term2').data, 'memory')),
+    contextBudgetChars: z.number().int().positive().default(8000),
+    searchDefaultLimit: z.number().int().positive().default(10),
+    searchMaxLimit: z.number().int().positive().default(50),
+})
+    .refine((config) => config.searchDefaultLimit <= config.searchMaxLimit, {
+    message: 'searchDefaultLimit must not exceed searchMaxLimit.',
+    path: ['searchDefaultLimit'],
+});
+export const HooksSettingsSchema = z.object({
+    user: z
+        .object({
+        enabled: z.boolean().default(true),
+    })
+        .default({ enabled: true }),
+    project: z
+        .object({
+        enabled: z.boolean().default(false),
+    })
+        .default({ enabled: false }),
+    trustedProjectRoots: z.array(z.string()).default([]),
+    includeUserText: z.boolean().default(false),
+    includeToolArguments: z.boolean().default(false),
+    includeToolResults: z.boolean().default(false),
+    timeoutMs: z.number().int().positive().default(5_000),
+});
+export const KNOWN_CUSTOM_PROVIDER_TYPES = [
+    'openai',
+    'openai-compatible',
+    'llama.cpp',
+    'anthropic',
+    'google',
+    'opencode',
+];
+export function isKnownCustomProviderType(value) {
+    return KNOWN_CUSTOM_PROVIDER_TYPES.includes(value);
+}
+const CustomProviderTypeSchema = z.enum(KNOWN_CUSTOM_PROVIDER_TYPES).default('openai-compatible');
+export const CustomProviderSchema = z
+    .object({
+    id: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+    type: CustomProviderTypeSchema,
+    baseUrl: z.string().url().optional(),
+    apiKey: z.string().optional().meta({ secret: true }),
+})
+    .passthrough()
+    .superRefine((data, ctx) => {
+    const id = resolveProviderId(data);
+    if (!id) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'id is required',
+            path: ['id'],
+        });
+    }
+    if (data.type !== 'anthropic' && data.type !== 'google' && data.type !== 'opencode' && !data.baseUrl) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'baseUrl is required for this provider type',
+            path: ['baseUrl'],
+        });
+    }
+})
+    .transform((data) => {
+    const id = resolveProviderId(data) ?? normalizeProviderIdentifier(data.name ?? '');
+    const name = resolveProviderName(data, id);
+    return {
+        id,
+        name,
+        type: data.type,
+        baseUrl: data.baseUrl,
+        apiKey: data.apiKey,
+    };
+});
+/**
+ * Settings that are sensitive and should NEVER be saved to disk.
+ * These are only loaded from environment variables.
+ */
+function getSensitiveSettingKeys() {
+    return new Set([
+        'app.shellPath',
+        'agent.openrouter.baseUrl',
+        'agent.openrouter.referrer',
+        'agent.openrouter.title',
+    ]);
+}
+export const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();
+const SettingsObjectSchema = z.object({
+    providers: z.array(CustomProviderSchema).optional().default([]),
+    enable_agent_workflow: z.boolean().optional().default(false),
+    verifier: z
+        .object({
+        model: z
+            .string()
+            .default('')
+            .describe('Independent verifier model ID; empty uses the session model and provider'),
+    })
+        .default({ model: '' }),
+    agent: AgentSettingsSchema.optional(),
+    shell: ShellSettingsSchema.optional(),
+    sandbox: SandboxSettingsSchema.optional(),
+    agentWorkflow: AgentWorkflowSettingsSchema.optional().default(AgentWorkflowSettingsSchema.parse({})),
+    subagent: SubagentSettingsSchema.optional().default(SubagentSettingsSchema.parse({})),
+    ui: UISettingsSchema.optional(),
+    logging: LoggingSettingsSchema.optional(),
+    environment: EnvironmentSettingsSchema.optional(),
+    app: AppSettingsSchema.optional(),
+    tools: ToolsSettingsSchema.optional(),
+    debug: DebugSettingsSchema.optional(),
+    ssh: SSHSettingsSchema.optional(),
+    webSearch: WebSearchSettingsSchema.optional(),
+    memory: MemorySettingsSchema.optional().default(MemorySettingsSchema.parse({})),
+    hooks: HooksSettingsSchema.optional().default(HooksSettingsSchema.parse({})),
+});
+export const SettingsSchema = SettingsObjectSchema;
+/**
+ * Centralized list of all setting keys for consistency across the app.
+ * Used by settings command UI and other components to avoid duplication.
+ */
+export const SETTING_KEYS = {
+    VERIFIER_MODEL: 'verifier.model',
+    AGENT_BACKGROUND_WAIT_TIMEOUT_MS: 'agent.backgroundWaitTimeoutMs',
+    ENABLE_AGENT_WORKFLOW: 'enable_agent_workflow',
+    AGENT_MODEL_SELECTION: 'agent.modelSelection',
+    AGENT_SMART_MODEL: 'agent.smartModel',
+    AGENT_SMART_REASONING_EFFORT: 'agent.smartReasoningEffort',
+    AGENT_BALANCED_MODEL: 'agent.balancedModel',
+    AGENT_BALANCED_REASONING_EFFORT: 'agent.balancedReasoningEffort',
+    AGENT_CHEAP_MODEL: 'agent.cheapModel',
+    AGENT_CHEAP_REASONING_EFFORT: 'agent.cheapReasoningEffort',
+    AGENT_CHORE_MODEL: 'agent.choreModel',
+    AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
+    AGENT_TEMPERATURE: 'agent.temperature',
+    AGENT_FAVORITE_MODELS: 'agent.favoriteModels',
+    AGENT_MODEL_NICKNAMES: 'agent.modelNicknames',
+    AGENT_DISABLED_PROVIDERS: 'agent.disabledProviders',
+    AGENT_MAX_TURNS: 'agent.maxTurns',
+    AGENT_MAX_REQUEST_INPUT_TOKENS: 'agent.maxRequestInputTokens',
+    AGENT_MAX_OUTPUT_TOKENS: 'agent.maxOutputTokens',
+    AGENT_MAX_STREAM_OUTPUT_CHARS: 'agent.maxStreamOutputChars',
+    AGENT_MAX_MODEL_REQUEST_DURATION_MS: 'agent.maxModelRequestDurationMs',
+    AGENT_MAX_MODEL_STREAM_IDLE_MS: 'agent.maxModelStreamIdleMs',
+    AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
+    AGENT_TRANSPORT: 'agent.transport',
+    AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
+    AGENT_RUN_BUDGET_MAX_USD_MICROS: 'agent.runBudget.maxUsdMicros',
+    AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS: 'agent.runBudget.maxUnpricedTokens',
+    AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS: 'agent.runBudget.maxActiveTimeMs',
+    AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS: 'agent.runBudget.warningHeadroomUsdMicros',
+    AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS: 'agent.runBudget.warningHeadroomUnpricedTokens',
+    AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS: 'agent.runBudget.warningHeadroomActiveTimeMs',
+    AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS: 'agent.runBudget.softHeadroomUsdMicros',
+    AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS: 'agent.runBudget.softHeadroomUnpricedTokens',
+    AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS: 'agent.runBudget.softHeadroomActiveTimeMs',
+    AGENT_RUN_BUDGET_TURN_BACKSTOP: 'agent.runBudget.turnBackstop',
+    AGENT_RUN_BUDGET_EXTENSION_PERCENT: 'agent.runBudget.extensionPercent',
+    AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS: 'agent.runBudget.maxParentExtensions',
+    AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD: 'agent.runBudget.identicalToolCallThreshold',
+    AGENT_RUN_BUDGET_ESCALATION: 'agent.runBudget.escalation',
+    AGENT_BACKGROUND_CHECK_IN_ENABLED: 'agent.backgroundCheckIn.enabled',
+    AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS: 'agent.backgroundCheckIn.intervalMs',
+    AGENT_SESSION_ROLLOVER_ENABLED: 'agent.sessionRollover.enabled',
+    AGENT_SESSION_ROLLOVER_MILESTONES: 'agent.sessionRollover.milestones',
+    AGENT_SESSION_ROLLOVER_AUTO_BRIEF: 'agent.sessionRollover.autoBrief',
+    AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
+    AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
+    AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
+    AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
+    AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
+    AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS: 'agent.codex.websocketFirstFrameTimeoutMs',
+    AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS: 'agent.codex.websocketInterFrameTimeoutMs',
+    AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
+    AGENT_MENTOR_SAMPLES: 'agent.mentorSamples',
+    AGENT_MENTOR_POOL: 'agent.mentorPool',
+    AGENT_USE_FLEX_SERVICE_TIER: 'agent.useFlexServiceTier',
+    AGENT_CONTEXT_COMPACTION_ENABLED: 'agent.contextCompaction.enabled',
+    AGENT_CONTEXT_COMPACTION_MODE: 'agent.contextCompaction.mode',
+    AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD: 'agent.contextCompaction.compactThreshold',
+    AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS: 'agent.contextCompaction.compactThresholdTokens',
+    SHELL_TIMEOUT: 'shell.timeout',
+    SHELL_BACKGROUND_TIMEOUT: 'shell.backgroundTimeout',
+    SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
+    SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
+    SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
+    SANDBOX_ENABLED: 'sandbox.enabled',
+    SANDBOX_READ_POLICY: 'sandbox.readPolicy',
+    SANDBOX_ALLOW_READ_EXTRA: 'sandbox.allowReadExtra',
+    SANDBOX_DOCKER_HOST_CONTROL_PROJECTS: 'sandbox.dockerHostControlProjects',
+    SANDBOX_ALLOW_NETWORKING: 'sandbox.allowNetworking',
+    AGENT_AUTO_APPROVE_REASONING_EFFORT: 'agent.autoApproveReasoningEffort',
+    AGENT_DECISION_MODEL: 'agent.decisionModel',
+    AGENT_COMPLETION_VERIFICATION: 'agent.completionVerification',
+    AGENT_VERIFICATION_MAX_REPAIRS: 'agent.verificationMaxRepairs',
+    AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT: 'agent.subagentExplorerReasoningEffort',
+    AGENT_SUBAGENT_WORKER_REASONING_EFFORT: 'agent.subagentWorkerReasoningEffort',
+    AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT: 'agent.subagentLibrarianReasoningEffort',
+    SUBAGENT_ASYNC_SESSION_TTL_MS: 'subagent.asyncSessionTtlMs',
+    SUBAGENT_ASYNC_MESSAGE_CAP: 'subagent.asyncMessageCap',
+    UI_HISTORY_SIZE: 'ui.historySize',
+    UI_PASTE_THRESHOLD: 'ui.pasteThreshold',
+    UI_DISPLAY_MODE: 'ui.displayMode',
+    UI_THEME: 'ui.theme',
+    UI_SKIN: 'ui.skin',
+    LOGGING_LOG_LEVEL: 'logging.logLevel',
+    LOGGING_DISABLE: 'logging.disableLogging',
+    LOGGING_DEBUG: 'logging.debugLogging',
+    LOGGING_SUPPRESS_CONSOLE: 'logging.suppressConsoleOutput',
+    ENV_NODE_ENV: 'environment.nodeEnv',
+    APP_SHELL_PATH: 'app.shellPath',
+    APP_ACTIVE_PROFILE_ID: 'app.activeProfileId',
+    APP_MENTOR_MODE: 'app.mentorMode',
+    APP_LITE_MODE: 'app.liteMode',
+    APP_PLAN_MODE: 'app.planMode',
+    APP_ORCHESTRATOR_MODE: 'app.orchestratorMode',
+    APP_NOTIFICATIONS: 'app.notifications',
+    APP_NOTIFICATIONS_ON_APPROVAL: 'app.notificationsOnApproval',
+    APP_NOTIFICATIONS_ON_COMPLETE: 'app.notificationsOnComplete',
+    APP_SEARCH_VIA_SHELL: 'app.searchViaShell',
+    TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
+    TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
+    TOOLS_SHELL_ENABLED: 'tools.shell.enabled',
+    TOOLS_WEB_ENABLED: 'tools.web.enabled',
+    TOOLS_FILE_READ_ENABLED: 'tools.fileRead.enabled',
+    TOOLS_FILE_WRITE_ENABLED: 'tools.fileWrite.enabled',
+    TOOLS_MEMORY_ENABLED: 'tools.memory.enabled',
+    TOOLS_SESSIONS_ENABLED: 'tools.sessions.enabled',
+    TOOLS_SKILLS_ENABLED: 'tools.skills.enabled',
+    TOOLS_MENTOR_ENABLED: 'tools.mentor.enabled',
+    TOOLS_SUBAGENTS_ENABLED: 'tools.subagents.enabled',
+    TOOLS_BACKGROUND_TASKS_ENABLED: 'tools.backgroundTasks.enabled',
+    TOOLS_USER_INTERACTION_ENABLED: 'tools.userInteraction.enabled',
+    TOOLS_CODE_CONTEXT_ENABLED: 'tools.codeContext.enabled',
+    DEBUG_BASH_TOOL: 'debug.debugBashTool',
+    SSH_ENABLED: 'ssh.enabled',
+    SSH_HOST: 'ssh.host',
+    SSH_PORT: 'ssh.port',
+    SSH_USERNAME: 'ssh.username',
+    SSH_REMOTE_DIR: 'ssh.remoteDir',
+    WEB_SEARCH_PROVIDER: 'webSearch.provider',
+    WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey',
+    WEB_SEARCH_EXA_API_KEY: 'webSearch.exa.apiKey',
+    WEB_SEARCH_FIRECRAWL_API_KEY: 'webSearch.firecrawl.apiKey',
+    WEB_SEARCH_FIRECRAWL_BASE_URL: 'webSearch.firecrawl.baseUrl',
+    WEB_SEARCH_SEARXNG_BASE_URL: 'webSearch.searxng.baseUrl',
+    MEMORY_ENABLED: 'memory.enabled',
+    MEMORY_DIRECTORY: 'memory.directory',
+    MEMORY_CONTEXT_BUDGET_CHARS: 'memory.contextBudgetChars',
+    MEMORY_SEARCH_DEFAULT_LIMIT: 'memory.searchDefaultLimit',
+    MEMORY_SEARCH_MAX_LIMIT: 'memory.searchMaxLimit',
+    HOOKS_USER_ENABLED: 'hooks.user.enabled',
+    HOOKS_PROJECT_ENABLED: 'hooks.project.enabled',
+    HOOKS_TRUSTED_PROJECT_ROOTS: 'hooks.trustedProjectRoots',
+    HOOKS_INCLUDE_USER_TEXT: 'hooks.includeUserText',
+    HOOKS_INCLUDE_TOOL_ARGUMENTS: 'hooks.includeToolArguments',
+    HOOKS_INCLUDE_TOOL_RESULTS: 'hooks.includeToolResults',
+    HOOKS_TIMEOUT_MS: 'hooks.timeoutMs',
+};
+// Define which settings are modifiable at runtime
+export const RUNTIME_MODIFIABLE_SETTINGS = new Set([
+    SETTING_KEYS.VERIFIER_MODEL,
+    'agent.modelSelection',
+    SETTING_KEYS.AGENT_OPENROUTER_API_KEY,
+    SETTING_KEYS.AGENT_OPENAI_API_KEY,
+    SETTING_KEYS.AGENT_SMART_MODEL,
+    SETTING_KEYS.AGENT_SMART_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_BALANCED_MODEL,
+    SETTING_KEYS.AGENT_BALANCED_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_CHEAP_MODEL,
+    SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_CHORE_MODEL,
+    SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_DECISION_MODEL,
+    SETTING_KEYS.AGENT_COMPLETION_VERIFICATION,
+    SETTING_KEYS.AGENT_VERIFICATION_MAX_REPAIRS,
+    SETTING_KEYS.AGENT_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_TEMPERATURE,
+    SETTING_KEYS.AGENT_FAVORITE_MODELS,
+    SETTING_KEYS.AGENT_MODEL_NICKNAMES,
+    SETTING_KEYS.AGENT_DISABLED_PROVIDERS,
+    SETTING_KEYS.AGENT_RETRY_ATTEMPTS,
+    SETTING_KEYS.AGENT_MAX_REQUEST_INPUT_TOKENS,
+    SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS,
+    SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS,
+    SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS,
+    SETTING_KEYS.AGENT_TRANSPORT,
+    SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP,
+    SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
+    SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION,
+    SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED,
+    SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS,
+    SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED,
+    SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES,
+    SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF,
+    SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_MENTOR_POOL,
+    SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
+    SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED,
+    SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE,
+    SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD,
+    SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS,
+    SETTING_KEYS.SHELL_TIMEOUT,
+    SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT,
+    SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
+    SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
+    SETTING_KEYS.LOGGING_LOG_LEVEL,
+    SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE,
+    SETTING_KEYS.APP_ACTIVE_PROFILE_ID,
+    SETTING_KEYS.APP_MENTOR_MODE,
+    SETTING_KEYS.APP_LITE_MODE,
+    SETTING_KEYS.APP_PLAN_MODE,
+    SETTING_KEYS.APP_ORCHESTRATOR_MODE,
+    SETTING_KEYS.APP_NOTIFICATIONS,
+    SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL,
+    SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE,
+    SETTING_KEYS.APP_SEARCH_VIA_SHELL,
+    SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+    SETTING_KEYS.SANDBOX_ENABLED,
+    SETTING_KEYS.SANDBOX_READ_POLICY,
+    SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,
+    SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS,
+    SETTING_KEYS.SANDBOX_ALLOW_NETWORKING,
+    SETTING_KEYS.UI_PASTE_THRESHOLD,
+    SETTING_KEYS.UI_DISPLAY_MODE,
+    SETTING_KEYS.UI_THEME,
+    SETTING_KEYS.UI_SKIN,
+    SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT,
+    SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS,
+    SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP,
+    SETTING_KEYS.TOOLS_SHELL_ENABLED,
+    SETTING_KEYS.TOOLS_WEB_ENABLED,
+    SETTING_KEYS.TOOLS_FILE_READ_ENABLED,
+    SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
+    SETTING_KEYS.TOOLS_MEMORY_ENABLED,
+    SETTING_KEYS.TOOLS_SESSIONS_ENABLED,
+    SETTING_KEYS.TOOLS_SKILLS_ENABLED,
+    SETTING_KEYS.TOOLS_MENTOR_ENABLED,
+    SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED,
+    SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED,
+    SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED,
+    SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED,
+    SETTING_KEYS.WEB_SEARCH_PROVIDER,
+    SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
+    SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
+    SETTING_KEYS.MEMORY_ENABLED,
+    SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS,
+    SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT,
+    SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT,
+    SETTING_KEYS.HOOKS_USER_ENABLED,
+    SETTING_KEYS.HOOKS_PROJECT_ENABLED,
+    SETTING_KEYS.HOOKS_INCLUDE_USER_TEXT,
+    SETTING_KEYS.HOOKS_INCLUDE_TOOL_ARGUMENTS,
+    SETTING_KEYS.HOOKS_INCLUDE_TOOL_RESULTS,
+    SETTING_KEYS.HOOKS_TIMEOUT_MS,
+]);
+// Some settings with default values are optional to persist
+// Absence preserves inherited output-allocation provenance on disk.
+export const OPTIONAL_DEFAULT_KEYS = new Set(['agent.maxOutputTokens']);
+// Default settings
+export const DEFAULT_SETTINGS = {
+    providers: [],
+    enable_agent_workflow: false,
+    verifier: { model: '' },
+    agent: {
+        modelSelection: { model: 'gpt-5.1', provider: 'openai' },
+        smartModel: undefined,
+        smartReasoningEffort: undefined,
+        balancedModel: undefined,
+        balancedReasoningEffort: undefined,
+        cheapModel: undefined,
+        cheapReasoningEffort: undefined,
+        choreModel: undefined,
+        reasoningEffort: 'default',
+        backgroundWaitTimeoutMs: 3_600_000,
+        maxTurns: 100,
+        maxRequestInputTokens: null,
+        maxOutputTokens: 32_000,
+        maxStreamOutputChars: 100_000,
+        maxModelRequestDurationMs: 0,
+        maxModelStreamIdleMs: 600_000,
+        retryAttempts: 2,
+        transport: 'websocket',
+        maxParallelToolCalls: 3,
+        runBudget: {
+            maxUsdMicros: 5_000_000,
+            maxUnpricedTokens: 5_000_000,
+            maxActiveTimeMs: 3_600_000,
+            warningHeadroomUsdMicros: 1_000_000,
+            warningHeadroomUnpricedTokens: 1_000_000,
+            warningHeadroomActiveTimeMs: 900_000,
+            softHeadroomUsdMicros: 250_000,
+            softHeadroomUnpricedTokens: 250_000,
+            softHeadroomActiveTimeMs: 300_000,
+            turnBackstop: 150,
+            extensionPercent: 50,
+            maxParentExtensions: 2,
+            identicalToolCallThreshold: 3,
+            escalation: 'warn',
+        },
+        backgroundCheckIn: {
+            enabled: true,
+            intervalMs: 300_000,
+        },
+        sessionRollover: {
+            enabled: true,
+            milestones: [200_000, 300_000, 400_000],
+            autoBrief: true,
+        },
+        favoriteModels: [],
+        modelNicknames: {},
+        disabledProviders: [],
+        openrouter: {
+        // defaults empty; can be provided via env or config
+        // defaults empty; can be provided via env or config
+        },
+        openai: {
+        // defaults empty; can be provided via env or config
+        },
+        codex: {
+            websocketFirstFrameTimeoutMs: 90_000,
+            websocketInterFrameTimeoutMs: 600_000,
+        },
+        mentorReasoningEffort: 'default',
+        mentorSamples: 1,
+        mentorPool: [],
+        useFlexServiceTier: false,
+        contextCompaction: {
+            enabled: true,
+            mode: 'auto',
+            compactThreshold: 0.8,
+            compactThresholdTokens: null,
+        },
+        autoApproveReasoningEffort: 'low',
+        decisionModel: undefined,
+        completionVerification: true,
+        verificationMaxRepairs: 3,
+        subagentExplorerReasoningEffort: undefined,
+        subagentWorkerReasoningEffort: undefined,
+        subagentLibrarianReasoningEffort: undefined,
+    },
+    shell: {
+        timeout: 120000,
+        backgroundTimeout: 30 * 60 * 1000,
+        maxOutputLines: 1000,
+        maxOutputChars: 40000,
+        autoApproveMode: 'off',
+    },
+    sandbox: {
+        enabled: true,
+        readPolicy: 'standard',
+        allowReadExtra: [],
+        dockerHostControlProjects: [],
+        allowNetworking: false,
+    },
+    agentWorkflow: {
+        timeoutMs: 120_000,
+        maxRuns: 8,
+        maxConcurrency: 3,
+        maxCodeBytes: 16_384,
+        maxOutputBytes: 65_536,
+        maxConsoleBytes: 16_384,
+    },
+    subagent: {
+        asyncSessionTtlMs: 30 * 60 * 1000,
+        asyncMessageCap: 50,
+    },
+    ui: {
+        historySize: 1000,
+        pasteThreshold: 3000,
+        displayMode: 'concise',
+        theme: 'auto',
+        skin: 'classic',
+    },
+    logging: {
+        logLevel: 'info',
+        disableLogging: false,
+        debugLogging: false,
+        suppressConsoleOutput: true,
+    },
+    environment: {
+        nodeEnv: undefined,
+    },
+    app: {
+        shellPath: undefined,
+        activeProfileId: 'builtin:standard',
+        mentorMode: false,
+        liteMode: false,
+        planMode: false,
+        orchestratorMode: false,
+        notifications: true,
+        notificationsOnApproval: true,
+        notificationsOnComplete: true,
+        searchViaShell: 'auto',
+    },
+    tools: {
+        logFileOperations: true,
+        enableEditHealing: true,
+        shell: { enabled: true },
+        web: { enabled: true },
+        fileRead: { enabled: true },
+        fileWrite: { enabled: true },
+        memory: { enabled: true },
+        sessions: { enabled: true },
+        skills: { enabled: true },
+        mentor: { enabled: true },
+        subagents: { enabled: true },
+        backgroundTasks: { enabled: true },
+        userInteraction: { enabled: true },
+        codeContext: { enabled: true },
+    },
+    debug: {
+        debugBashTool: false,
+    },
+    ssh: {
+        enabled: false,
+        port: 22,
+    },
+    webSearch: {
+        provider: 'tavily',
+        tavily: {},
+        exa: {},
+        firecrawl: {},
+        searxng: {},
+    },
+    memory: {
+        enabled: true,
+        directory: path.join(envPaths('term2').data, 'memory'),
+        contextBudgetChars: 8000,
+        searchDefaultLimit: 10,
+        searchMaxLimit: 50,
+    },
+    hooks: {
+        user: { enabled: true },
+        project: { enabled: false },
+        trustedProjectRoots: [],
+        includeUserText: false,
+        includeToolArguments: false,
+        includeToolResults: false,
+        timeoutMs: 5_000,
+    },
+};
+/**
+ * Publicly exported list of sensitive settings for UI/CLI components to use.
+ * These settings should only be configured via environment variables.
+ */
+export const SENSITIVE_SETTINGS = {
+    AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
+    AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
+    AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
+    AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
+    AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',
+    APP_SHELL_PATH: 'app.shellPath',
+};
+//# sourceMappingURL=settings-schema.js.map

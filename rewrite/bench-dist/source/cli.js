@@ -1,0 +1,1436 @@
+#!/usr/bin/env node
+import './env-setup.js';
+import { fileURLToPath } from 'node:url';
+import { assertRestartSupported, createRestartPlan } from './utils/process-restart.js';
+import { createFailClosedDiscordSend } from './services/discord/discord-send-capability.js';
+import meow from 'meow';
+import { createRequire } from 'node:module';
+import { AgentClient } from './lib/agent-client.js';
+import { ConversationService } from './services/conversation/conversation-service.js';
+import { SettingsService, buildEnvOverrides } from './services/settings/settings-service.js';
+import { SessionContextService } from './services/session/session-context-service.js';
+import { SkillsService } from './services/skills/skills-service.js';
+import { getAllProviders, getProviderIds } from './providers/index.js';
+import { LoggingService } from './services/logging/logging-service.js';
+import { HistoryService } from './services/history-service.js';
+import { SSHService } from './services/ssh-service.js';
+import { ExecutionContext } from './services/execution-context.js';
+import { resolveSSHHost } from './utils/ssh-config-parser.js';
+import { resolveSettingsDirectory } from './services/settings/settings-path.js';
+import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/ai/token-usage.js';
+import { createSessionCostAccumulator, formatModelUsageBreakdown, formatUsdMicros, } from './services/cost/model-cost.js';
+import { buildProjectFolderTitle, setTerminalTitle } from './utils/output/terminal-title.js';
+import { generateId, collectOrphanedDeltaSidecars, getConversationsDir, getConversationLockPath, getResumeCommand, loadConversationForProject, loadLastConversation, forkConversation, isConversationLocked, deleteConversation, hasConversationContent, } from './services/conversation/conversation-persistence.js';
+import { listRecentConversations } from './services/conversation/recent-conversations.js';
+import { rotateSessionLog } from './services/conversation/session-log-lifecycle.js';
+import { formatResumeList } from './utils/resume-list.js';
+import { killLiveShellChildren } from './utils/shell/execute-shell.js';
+import { resolveProfile } from './services/profiles/resolver.js';
+import { getProfileMetadata } from './services/profiles/active-profile.js';
+import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
+import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
+import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
+import { isModelPickerEligible } from './services/models/model-picker-host.js';
+import { HARNESS_IDLE_ENV } from './lib/harness-input-idle.js';
+import { legacyModeFromProfileId, BARE_PROFILE_ID, canonicalProfileId, profileIdFromLegacyMode, } from './services/profiles/legacy-adapter.js';
+import { createOwnedSessionClientFactory } from './services/session/session-client-factory.js';
+import os from 'os';
+import fs from 'fs';
+import path from 'path';
+import { createInterface } from 'node:readline/promises';
+import { stdin as nodeStdin, stdout as nodeStdout } from 'node:process';
+import { confirmHomeDirectoryStart, HOME_DIRECTORY_START_WARNING, shouldWarnOnHomeDirectoryStart, } from './utils/home-directory-start-guard.js';
+import { createRootHookRuntime } from './services/hooks/hook-composition.js';
+import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
+import { SessionBrowser } from './services/conversation/session-browser.js';
+import { loadMcpConfig } from './services/mcp/mcp-config.js';
+import { McpConnectionManager } from './services/mcp/mcp-connection-manager.js';
+import { McpOAuthStore } from './services/mcp/mcp-oauth-store.js';
+import { McpConfigController } from './services/mcp/mcp-config-controller.js';
+import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
+import { AutomaticMemoryCanary } from './services/memory/automatic-memory-canary.js';
+import { ControlSocketServer, isControlSocketName } from './services/control-socket/control-socket.js';
+import { runControlCommand } from './services/control-socket/control-command.js';
+import { createDurableGoal } from './services/conversation/durable-goal.js';
+const controlArgv = [];
+let controlSocketRequested = false;
+let discordInput = false;
+let controlSocketName;
+let controlSocketNameRejected = false;
+for (const arg of process.argv.slice(2)) {
+    if (arg === '--discord-input') {
+        discordInput = true;
+    }
+    else if (arg === '--control-socket') {
+        controlSocketRequested = true;
+        controlSocketName ??= String(process.pid);
+    }
+    else if (arg.startsWith('--control-socket=')) {
+        controlSocketRequested = true;
+        const name = arg.slice('--control-socket='.length);
+        controlSocketName = name;
+        if (!isControlSocketName(name))
+            controlSocketNameRejected = true;
+    }
+    else {
+        controlArgv.push(arg);
+    }
+}
+const sessionUsageAccumulator = createUsageAccumulator();
+const subagentUsageAccumulator = createUsageAccumulator();
+const sessionCostAccumulator = createSessionCostAccumulator();
+let usagePrinted = false;
+const printUsage = () => {
+    const costSummary = sessionCostAccumulator.getSummary();
+    const costLine = costSummary.state === 'exact'
+        ? `Cost ${formatUsdMicros(costSummary.knownUsdMicros)}`
+        : costSummary.state === 'estimated'
+            ? `Est ${formatUsdMicros(costSummary.knownUsdMicros)}`
+            : costSummary.state === 'partial'
+                ? `Est ${formatUsdMicros(costSummary.knownUsdMicros)}+`
+                : null;
+    const modelUsage = formatModelUsageBreakdown(sessionCostAccumulator.getModelUsageBreakdown());
+    process.stdout.write(`\n${[
+        formatSessionUsageBreakdown(sessionUsageAccumulator.get(), subagentUsageAccumulator.get()),
+        modelUsage,
+        costLine,
+    ]
+        .filter(Boolean)
+        .join('\n')}\n`);
+};
+const printUsageOnce = () => {
+    if (usagePrinted)
+        return;
+    usagePrinted = true;
+    printUsage();
+    if (effectiveSessionId && effectiveHasConversationContent && !sessionSummaryPrinted) {
+        sessionSummaryPrinted = true;
+        // Only reachable once the session id exists, after SSH setup has run.
+        const resumeCommand = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
+        process.stdout.write(`\nSession: ${effectiveSessionId}\nTo resume this conversation: ${resumeCommand}\n`);
+    }
+};
+let activeLogWriter = null;
+let activeSessionBrowser = null;
+let activeMcpManager = null;
+let activeControlSocketServer = null;
+let effectiveSessionId;
+let effectiveHasConversationContent = false;
+let sessionSummaryPrinted = false;
+let restartPlan;
+// Best-effort release of lock + close on uncatchable exits (caught process.exit).
+process.on('exit', () => {
+    if (process.stdout.isTTY) {
+        process.stdout.write('\x1b[?1004l');
+    }
+    // Shell children are spawned detached, so nothing else takes them down with
+    // us. A background subagent's in-flight command would otherwise keep running
+    // after the CLI is gone.
+    killLiveShellChildren();
+    if (activeLogWriter) {
+        try {
+            // Synchronous close path: the writer's close() does sync work and unlinks the lock.
+            void activeLogWriter.close();
+        }
+        catch {
+            /* ignore */
+        }
+    }
+    if (activeSessionBrowser) {
+        try {
+            void activeSessionBrowser.close();
+        }
+        catch {
+            /* ignore */
+        }
+    }
+    try {
+        if (!restartPlan && effectiveSessionId && !hasConversationContent(effectiveSessionId)) {
+            deleteConversation(effectiveSessionId);
+        }
+    }
+    catch {
+        /* ignore */
+    }
+});
+const require = createRequire(import.meta.url);
+let reportedVersion;
+try {
+    const buildInfo = require('./build-info.json');
+    if (buildInfo.version)
+        reportedVersion = buildInfo.version;
+}
+catch {
+    // Source checkouts and older/test builds have no generated build identity.
+}
+const cli = meow(`
+    Everyday usage
+      $ term2
+      $ term2 "explain this function"
+      $ term2 --resume
+      $ term2 --resume <conversation-id>
+      $ term2 --resume <conversation-id> "Follow-up prompt"
+      $ term2 --help
+      $ term2 discord --help  (candidate bridge; explicit sends, local approvals)
+
+    Usage
+      $ term2 [options] [prompt...]
+      $ term2 [options] --resume [conversation-id|ls]
+
+    In a chat, type / to see available commands.
+
+    Options
+      -m, --model <model>                  Model pattern or ID, supports provider/id and optional :<thinking>
+      -p, --provider <provider>            Override the configured provider (e.g. openai, openrouter)
+      -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
+          --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
+          --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
+          --profile <name>                 Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)
+      -l, --lite                           Start in the Bare profile (alias kept from Lite)
+          --auto-approve                   Allow tool execution for a non-interactive prompt
+      -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
+          --show-reasoning                 Stream reasoning deltas to stderr in non-interactive mode
+          --json                           Emit newline-delimited JSON (NDJSON) events in non-interactive mode
+          --ssh <user@host>                Enable SSH mode for a remote host
+          --discord-input                 Allow Discord input and explicit root notifications on this control socket
+          --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
+          --ssh-port <port>                SSH port (default: 22)
+          --control-socket[=<name>]        Enable a local socket for the interactive TUI
+          --grok-login                     Log in to Grok in a browser (OAuth) and exit
+          --codex-login                    Log in to Codex/ChatGPT in a browser (OAuth) and exit
+          --list-models [search]           Print available models grouped by provider, filtered by an optional search term
+          --refresh                        With --list-models, bypass the model catalog cache and re-fetch before listing
+      -R, --resume [conversation-id|ls]    Resume the last conversation, a specific ID, or list recent conversations
+          --fork                           Fork the resumed conversation into a new session (requires --resume)
+      -h, --help                           Show help
+      -v, --version                        Show version
+
+    Settings
+      Settings file: ${path.join(resolveSettingsDirectory(), 'settings.json')}
+
+    Notes
+      A prompt passed on the command line runs non-interactively. Tool execution is disabled by default;
+      use --auto-approve to allow tools to run without interactive confirmation.
+
+      -m/--model with no value (bare --model/-m, or followed only by another flag) opens an
+      interactive picker in a TTY session with no prompt; the same picker also opens for an
+      ambiguous or unmatched pattern. Elsewhere (no TTY, --json, or a prompt on the line) it is a
+      no-op. If no model is selected, term2 starts with the configured default.
+
+    Gateway launcher (term2 serve)
+      Runs the local web gateway until SIGINT/SIGTERM.
+
+      $ term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>]
+          [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
+          [--pairing] [--bff-key <kid>=<pem path>]... [--workspace-root <dir>]...
+          [--issuer <iss>] [--audience <aud>] [--allow-write]
+
+      Transport defaults to a Unix socket at <state-dir>/gateway.sock (mode 0660). TLS network
+      mode requires --listen with --tls-cert and --tls-key, and binds loopback unless
+      --allow-remote is also given. Browser-selected workspaces must live under your home
+      directory unless --workspace-root (repeatable) adds allowed roots. --allow-write admits
+      read_write workspace grants (workspace write access); without it every admitted root is
+      read-only.
+
+    ACP launcher (term2 acp)
+      Serves the Agent Client Protocol v2 over stdio as newline-delimited JSON-RPC, so an editor
+      can drive real term2 sessions as an ACP agent. Runs until the client closes stdin or
+      SIGINT/SIGTERM. Stdout carries protocol traffic only; diagnostics go to stderr.
+
+      $ term2 acp [--provider <provider>] [--model <model>] [--effort <effort>]
+
+      Sessions are read-only and tool approvals stay fail-closed: there is no auto-approve flag,
+      and --auto-approve is rejected. --model is resolved against the model catalog
+      non-interactively, so it needs an exact model id or <provider>/<model>.
+
+    More examples
+      $ term2 --model gpt-5.4 --provider openai
+      $ term2 --model
+      $ term2 --lite
+      $ term2 --auto-approve "list files in the current directory"
+      $ term2 -q "generate json payload"
+      $ term2 --json "explain this function"
+      $ term2 --resume
+      $ term2 --resume <conversation-id>
+      $ term2 --resume <conversation-id> "Follow-up prompt"
+      $ term2 --resume <conversation-id> --fork
+      $ term2 --resume ls
+      $ term2 --grok-login
+      $ term2 --codex-login
+      $ term2 --list-models
+      $ term2 --list-models gpt-5
+      $ term2 acp --provider openai --model gpt-5.4
+      $ term2 --list-models --refresh
+      $ term2 --ssh user@host --remote-dir /path/to/project
+      $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
+      $ term2 --control-socket=worker-1
+      $ term2 control status worker-1 --json
+  `, {
+    ...(reportedVersion ? { version: reportedVersion } : {}),
+    importMeta: import.meta,
+    argv: controlArgv,
+    flags: {
+        model: {
+            type: 'string',
+            alias: 'm',
+        },
+        help: { type: 'boolean', alias: 'h', default: false },
+        version: { type: 'boolean', alias: 'v', default: false },
+        provider: {
+            type: 'string',
+            alias: 'p',
+        },
+        reasoning: {
+            type: 'string',
+            alias: 'r',
+        },
+        goal: { type: 'string' },
+        goalCriteria: { type: 'string' },
+        profile: { type: 'string' },
+        lite: {
+            type: 'boolean',
+            alias: 'l',
+            default: false,
+        },
+        autoApprove: {
+            type: 'boolean',
+            default: false,
+        },
+        quiet: {
+            type: 'boolean',
+            alias: 'q',
+            default: false,
+        },
+        showReasoning: {
+            type: 'boolean',
+            default: false,
+        },
+        json: {
+            type: 'boolean',
+            default: false,
+        },
+        ssh: {
+            type: 'string',
+        },
+        remoteDir: {
+            type: 'string',
+        },
+        sshPort: {
+            type: 'number',
+            default: 22,
+        },
+        resume: {
+            type: 'boolean',
+            alias: 'R',
+            default: false,
+        },
+        fork: {
+            type: 'boolean',
+            default: false,
+        },
+        grokLogin: {
+            type: 'boolean',
+            default: false,
+        },
+        codexLogin: {
+            type: 'boolean',
+            default: false,
+        },
+        listModels: {
+            type: 'boolean',
+            default: false,
+        },
+        refresh: {
+            type: 'boolean',
+            default: false,
+        },
+    },
+    allowUnknownFlags: controlArgv[0] === 'discord' ||
+        controlArgv[0] === 'control' ||
+        process.argv[2] === 'serve' ||
+        process.argv[2] === 'acp',
+});
+if (cli.input[0] === 'discord') {
+    const { runDiscordBridge } = await import('./services/discord/discord-command.js');
+    await runDiscordBridge(controlArgv.slice(1));
+    process.exit(process.exitCode ?? 0);
+}
+// Standalone Discord dispatch above owns and awaits its signal lifecycle.
+// Register force-exit session handlers only for the remaining CLI modes; a
+// competing listener would skip the bridge's in-flight tick and finally cleanup.
+// Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
+process.on('SIGINT', () => {
+    if (process.stdout.isTTY) {
+        process.stdout.write('\x1b[?1004l');
+    }
+    void Promise.all([
+        activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
+        activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+        activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
+        activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
+    ]).finally(() => {
+        printUsageOnce();
+        process.exit(130);
+    });
+});
+process.on('SIGTERM', () => {
+    if (process.stdout.isTTY) {
+        process.stdout.write('\x1b[?1004l');
+    }
+    void Promise.all([
+        activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
+        activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+        activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
+        activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
+    ]).finally(() => {
+        process.exit(143);
+    });
+});
+if (cli.input[0] === 'control') {
+    const exitCode = await runControlCommand(controlArgv.slice(1), process.stdout, process.stderr);
+    process.exit(exitCode);
+}
+function oauthLoginIo(providerLabel) {
+    return {
+        pasteInput: process.stdin.isTTY ? process.stdin : undefined,
+        onPasteRejected: (message) => {
+            console.error(message);
+        },
+        onPrompt: (url) => {
+            console.log(`Opening your browser to log in to ${providerLabel}.`);
+            console.log(`If it does not open, visit:\n${url}\n`);
+            console.log('If you are remote and the browser cannot reach this machine, copy the redirected localhost URL from the address bar (or just its code), paste it here, and press Enter.');
+        },
+    };
+}
+// Login is a standalone errand: it must run before any session, settings, or
+// Ink setup so a fresh host can authenticate without a usable provider.
+if (cli.flags.grokLogin) {
+    const { loginToGrok } = await import('./providers/grok-auth.js');
+    try {
+        const tokens = await loginToGrok(oauthLoginIo('Grok'));
+        console.log(`Logged in to Grok${tokens.email ? ` as ${tokens.email}` : ''}.`);
+        process.exit(0);
+    }
+    catch (error) {
+        console.error(`Grok login failed: ${error?.message ?? error}`);
+        process.exit(1);
+    }
+}
+if (cli.flags.codexLogin) {
+    const { loginToCodex } = await import('./providers/codex-auth.js');
+    try {
+        await loginToCodex(oauthLoginIo('Codex'));
+        console.log('Logged in to Codex.');
+        process.exit(0);
+    }
+    catch (error) {
+        console.error(`Codex login failed: ${error?.message ?? error}`);
+        process.exit(1);
+    }
+}
+// `serve` is a standalone launcher errand like the logins above: it composes
+// the gateway runtime and blocks until SIGINT/SIGTERM, so it must dispatch
+// before any Ink render, session setup, home-directory guard, or positional
+// prompt handling. Its flags are parsed by gateway/serve-args.ts, not meow.
+if (cli.input[0] === 'serve') {
+    const { runServe } = await import('./gateway/serve.js');
+    const argv = process.argv.slice(2);
+    const serveIndex = argv.indexOf('serve');
+    await runServe(serveIndex >= 0 ? argv.slice(serveIndex + 1) : []);
+    process.exit(0);
+}
+// `acp` is the ACP v2 stdio launcher, another standalone errand: it composes
+// the real runtime and blocks until its client disconnects, so it dispatches
+// before any Ink render, session setup, home-directory guard, or positional
+// prompt handling. Its flags are parsed by acp-v2/serve-args.ts, and stdout is
+// reserved for the JSON-RPC protocol channel.
+if (cli.input[0] === 'acp') {
+    const { createStdioAcpIo, runAcp } = await import('./acp-v2/serve.js');
+    const argv = process.argv.slice(2);
+    const acpIndex = argv.indexOf('acp');
+    const exitCode = await runAcp(acpIndex >= 0 ? argv.slice(acpIndex + 1) : [], createStdioAcpIo());
+    process.exit(exitCode);
+}
+// Model listing is a standalone errand like the logins above: it prints and
+// exits before any Ink, session, or profile setup. It does need settings,
+// because model availability is credential-gated at the same boundary the
+// /model picker uses. The optional positional search term is consumed here,
+// ahead of the resume/prompt positional handling below.
+if (cli.flags.refresh && !cli.flags.listModels) {
+    console.error('Error: --refresh can only be used with --list-models.');
+    process.exit(1);
+}
+if (cli.flags.listModels) {
+    // --list-models is a standalone errand and does not start or touch a
+    // session, so it cannot coexist with flags that select or manipulate a
+    // conversation: --resume/--fork consume the same leading positional this
+    // block reads as a search term, and would otherwise be silently
+    // misinterpreted rather than honored. Flags that only affect model
+    // resolution, output shape, or session startup once a session actually
+    // begins (--model, --provider, --reasoning, --lite, --auto-approve,
+    // --quiet, --show-reasoning, --json, --ssh, --remote-dir, --ssh-port) are
+    // harmless alongside a listing and are intentionally not rejected here.
+    if (cli.flags.resume || cli.flags.fork) {
+        console.error('Error: --list-models cannot be combined with --resume or --fork.');
+        process.exit(1);
+    }
+    if (cli.input.length > 1) {
+        console.error('Error: --list-models accepts at most one search term.');
+        process.exit(1);
+    }
+    const { runListModels } = await import('./services/models/model-listing.js');
+    const listingLogger = new LoggingService({ sessionContextService: new SessionContextService() });
+    const listingSettings = new SettingsService({ env: buildEnvOverrides(), loggingService: listingLogger });
+    const outcome = await runListModels({
+        settingsService: listingSettings,
+        loggingService: listingLogger,
+        search: cli.input[0]?.trim(),
+        refresh: cli.flags.refresh,
+    });
+    for (const warning of outcome.warnings)
+        console.error(warning);
+    if (outcome.error)
+        console.error(outcome.error);
+    if (outcome.output)
+        console.log(outcome.output);
+    process.exit(outcome.exitCode);
+}
+const resumeRequested = Boolean(cli.flags.resume);
+const forkRequested = Boolean(cli.flags.fork);
+const resumeTarget = resumeRequested ? cli.input[0]?.trim() : undefined;
+const resumeProjectPath = cli.flags.ssh ? cli.flags.remoteDir?.trim() || undefined : process.cwd();
+const expectedSshHost = cli.flags.ssh
+    ? cli.flags.ssh.includes('@')
+        ? cli.flags.ssh.split('@')[1]
+        : cli.flags.ssh
+    : undefined;
+if (resumeRequested && (resumeTarget === 'ls' || resumeTarget === 'list')) {
+    if (cli.input.length > 1) {
+        console.error('Error: --resume ls does not accept a prompt.');
+        process.exit(1);
+    }
+    const conversations = await listRecentConversations(resumeProjectPath, expectedSshHost, 10);
+    const formatted = formatResumeList(conversations);
+    console.log(formatted);
+    process.exit(0);
+}
+if (forkRequested && !resumeRequested) {
+    console.error('Error: --fork can only be used with --resume.');
+    process.exit(1);
+}
+const positionalPrompt = (resumeRequested ? cli.input.slice(1) : cli.input).join(' ').trim();
+const hasPositionalPrompt = positionalPrompt.length > 0;
+let launchGoal;
+try {
+    if (cli.flags.goalCriteria !== undefined && cli.flags.goal === undefined) {
+        throw new Error('--goal-criteria requires --goal.');
+    }
+    if (cli.flags.goal !== undefined)
+        launchGoal = createDurableGoal(cli.flags.goal, cli.flags.goalCriteria);
+}
+catch (error) {
+    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+}
+// If the user passed an explicit empty prompt (e.g. `term2 ""`), show help.
+if (!resumeRequested && cli.input.length > 0 && !hasPositionalPrompt) {
+    cli.showHelp(0);
+}
+const needsHomeDirectoryConfirmation = shouldWarnOnHomeDirectoryStart({
+    cwd: path.resolve(process.cwd()),
+    homeDir: path.resolve(os.homedir()),
+    isNonLiteStart: !cli.flags.lite && !resumeRequested && !cli.flags.ssh && (!hasPositionalPrompt || cli.flags.autoApprove),
+});
+if (needsHomeDirectoryConfirmation) {
+    if (hasPositionalPrompt) {
+        // Positional prompts are headless even when launched from a terminal.
+        // Preserve the startup restriction without entering readline or asking a question.
+        console.error('Headless startup refused from the home or root directory. Start in a project directory.');
+        process.exit(1);
+    }
+    if (!nodeStdin.isTTY || !nodeStdout.isTTY) {
+        console.error(HOME_DIRECTORY_START_WARNING.trimEnd());
+        console.error('Cancelled.');
+        process.exit(1);
+    }
+    const rl = createInterface({ input: nodeStdin, output: nodeStdout });
+    try {
+        const confirmed = await confirmHomeDirectoryStart(() => rl.question(HOME_DIRECTORY_START_WARNING));
+        if (!confirmed) {
+            console.error('Cancelled.');
+            process.exit(1);
+        }
+    }
+    finally {
+        rl.close();
+    }
+}
+const rawModelFlag = cli.flags.model;
+const rawProviderFlag = cli.flags.provider;
+const rawReasoningFlag = cli.flags.reasoning;
+// meow already parses a present-but-valueless --model/-m to '' — when it's
+// the last token, or immediately followed by another flag — WITHOUT
+// swallowing anything else on the line: a value right after -m/--model is
+// always consumed as that value, exactly as before this feature. '' is
+// therefore distinct from the flag being absent entirely (undefined). Only
+// that empty-but-present shape means "open the picker", and only when the
+// session is actually going to be interactive: never for no TTY, --json, a
+// positional prompt, or the isolated-harness marker. Every one of those also
+// gates the ambiguous/no-match picker paths below.
+const modelFlagGivenWithoutValue = rawModelFlag === '';
+const canUseInteractiveModelPicker = isModelPickerEligible({
+    stdin: nodeStdin,
+    stdout: nodeStdout,
+    hasPositionalPrompt,
+    json: cli.flags.json,
+    harnessIdle: Boolean(process.env[HARNESS_IDLE_ENV]),
+});
+const modelFlag = typeof rawModelFlag === 'string' && rawModelFlag.trim().length > 0 ? rawModelFlag.trim() : undefined;
+const providerFlag = typeof rawProviderFlag === 'string' && rawProviderFlag.trim().length > 0 ? rawProviderFlag.trim() : undefined;
+const reasoningEffort = typeof rawReasoningFlag === 'string' && rawReasoningFlag.trim().length > 0 ? rawReasoningFlag.trim() : undefined;
+const validReasoningEfforts = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', null];
+const isValidReasoningEffort = (v) => validReasoningEfforts.includes(v);
+const validatedReasoningEffort = reasoningEffort && isValidReasoningEffort(reasoningEffort)
+    ? reasoningEffort
+    : undefined;
+let resumedConversation = null;
+let resumedSourceId;
+if (resumeRequested) {
+    if (resumeTarget) {
+        const result = resumeProjectPath
+            ? loadConversationForProject(resumeTarget, resumeProjectPath, expectedSshHost)
+            : { status: 'not_found' };
+        if (result.status === 'ambiguous') {
+            console.error(`Error: Conversation reference ${resumeTarget} is ambiguous.`);
+            for (const candidate of result.candidates) {
+                console.error(`  ${candidate.shortRef}  ${candidate.id}`);
+            }
+            process.exit(1);
+        }
+        if (result.status === 'project_mismatch') {
+            console.error(`Error: Conversation ${resumeTarget} belongs to a different project path (${result.conversation.projectPath ?? 'unknown'}).`);
+            console.error(`Resume it from that project directory with: term2 --resume ${resumeTarget}`);
+            console.error(`Current project path: ${resumeProjectPath ?? 'unknown'}`);
+            if (result.conversation.sshHost || expectedSshHost) {
+                console.error(`Conversation SSH Host: ${result.conversation.sshHost ?? 'none'}`);
+                console.error(`Current SSH Host: ${expectedSshHost ?? 'none'}`);
+            }
+            process.exit(1);
+        }
+        if (result.status === 'unreadable') {
+            const detail = result.error instanceof Error ? result.error.message : String(result.error);
+            console.error(`Error: Could not read conversation ${resumeTarget} (${detail}).`);
+            console.error('The conversation log is unreadable; it may be missing permissions or disk-backed.');
+            process.exit(1);
+        }
+        resumedConversation = result.status === 'loaded' ? result.conversation : null;
+        resumedSourceId = resumeTarget;
+    }
+    else {
+        resumedConversation = loadLastConversation(resumeProjectPath, expectedSshHost);
+        resumedSourceId = resumedConversation?.id;
+    }
+}
+if (resumeRequested && !resumedConversation) {
+    console.error(`No conversation found to resume (${resumeTarget ?? 'last'}).`);
+    console.error('Run "term2 --resume ls" to list available conversations.');
+    process.exit(1);
+}
+// If --fork was requested, copy the source jsonl to a new id and resume from the copy.
+if (forkRequested) {
+    if (!resumedSourceId || !resumedConversation) {
+        console.error('Error: --fork requires an existing conversation to fork from.');
+        process.exit(1);
+    }
+    const forkedId = generateId();
+    if (!forkConversation(resumedSourceId, forkedId)) {
+        console.error(`Error: Could not fork conversation ${resumedSourceId}.`);
+        process.exit(1);
+    }
+    console.error(`Forked conversation ${resumedSourceId} → ${forkedId}`);
+    resumedConversation = { ...resumedConversation, id: forkedId, forkedFrom: resumedSourceId };
+    resumedSourceId = forkedId;
+}
+const cliOverrides = {};
+if (resumedConversation) {
+    cliOverrides.agent = {};
+    if (resumedConversation.model && resumedConversation.provider && !modelFlag) {
+        cliOverrides.agent.modelSelection = { model: resumedConversation.model, provider: resumedConversation.provider };
+    }
+    if (resumedConversation.reasoningEffort &&
+        !validatedReasoningEffort &&
+        isValidReasoningEffort(resumedConversation.reasoningEffort)) {
+        cliOverrides.agent.reasoningEffort = resumedConversation.reasoningEffort;
+    }
+    if (resumedConversation.appMode) {
+        cliOverrides.app = {
+            ...cliOverrides.app,
+            activeProfileId: resumedConversation.activeProfileId ?? profileIdFromLegacyMode(resumedConversation.appMode),
+        };
+    }
+}
+if (validatedReasoningEffort) {
+    cliOverrides.agent = {
+        ...cliOverrides.agent,
+        reasoningEffort: validatedReasoningEffort,
+    };
+}
+const sessionContextService = new SessionContextService();
+// Create LoggingService instance
+const logger = new LoggingService({
+    sessionContextService,
+});
+// Build settings with CLI overrides applied first so we can read the canonical
+// Profile selection before deciding the implicit lite default.
+const settings = new SettingsService({
+    env: buildEnvOverrides(),
+    cli: Object.keys(cliOverrides).length > 0
+        ? cliOverrides
+        : undefined,
+    loggingService: logger,
+});
+// Validate provider flag after settings load so runtime-defined providers from
+// settings.json are registered before we check.
+if (providerFlag && !getProviderIds().includes(providerFlag)) {
+    console.error(`Error: Unknown provider "${providerFlag}".`);
+    console.error('Available providers:');
+    const providers = getAllProviders();
+    for (const p of providers) {
+        console.error(`  - ${p.id}  (${p.label})`);
+    }
+    console.error('\nYou can configure custom providers in your settings.json file.');
+    process.exit(1);
+}
+if (providerFlag && !modelFlag && !modelFlagGivenWithoutValue) {
+    console.error('Error: --provider requires --model; provider-only selection is not supported.');
+    process.exit(1);
+}
+if (modelFlagGivenWithoutValue && canUseInteractiveModelPicker) {
+    const { runModelPickerHost } = await import('./services/models/model-picker-host.js');
+    const picked = await runModelPickerHost({ settingsService: settings, loggingService: logger });
+    if (picked.status === 'cancelled') {
+        // Escape keeps the configured (or resumed) model and continues startup.
+    }
+    else {
+        settings.set('agent.modelSelection', { model: picked.selection.modelId, provider: picked.selection.provider }, { persist: false });
+    }
+}
+if (modelFlag) {
+    const { resolveModelFlag } = await import('./services/models/model-resolution.js');
+    const interactivePicker = canUseInteractiveModelPicker
+        ? async (request) => {
+            const { runModelPickerHost } = await import('./services/models/model-picker-host.js');
+            const picked = await runModelPickerHost({
+                settingsService: settings,
+                loggingService: logger,
+                initialQuery: request.initialQuery,
+                initialProvider: request.initialProvider,
+                lockProvider: request.lockProvider,
+                bannerLines: request.bannerLines,
+            });
+            return picked.status === 'selected' ? picked.selection : null;
+        }
+        : undefined;
+    const resolution = await resolveModelFlag({
+        modelFlag,
+        providerFlag,
+        settingsService: settings,
+        loggingService: logger,
+        interactivePicker,
+        unattended: !canUseInteractiveModelPicker,
+    });
+    if (resolution.status === 'no_match') {
+        console.error(resolution.error);
+        process.exit(1);
+    }
+    if (resolution.status === 'cancelled') {
+        if (!canUseInteractiveModelPicker) {
+            console.error('Cancelled.');
+            process.exit(1);
+        }
+        // Escape returns to the configured default model instead of aborting startup.
+    }
+    else {
+        // Surfaces provider catalogs that failed to load while resolution still
+        // proceeded, so a partial outage never silently narrows what was matched.
+        if ('warnings' in resolution && resolution.warnings) {
+            for (const warning of resolution.warnings) {
+                console.error(warning);
+            }
+        }
+        // --model is a per-session override like every other CLI flag; it must not
+        // rewrite the user's persisted defaults (set() persists by default).
+        settings.set('agent.modelSelection', { model: resolution.modelId, provider: resolution.provider }, { persist: false });
+        if (resolution.reasoningEffort && !validatedReasoningEffort) {
+            settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
+        }
+    }
+}
+// Fresh sessions honor --lite/non-interactive defaults. Resumed sessions keep
+// the saved mode profile so prompt/tool behavior matches the conversation.
+// IMPORTANT: only apply the implicit lite default when no other exclusive mode
+// is already active (orchestrator or mentor take precedence).
+{
+    let profileId;
+    if (cli.flags.profile) {
+        const name = cli.flags.profile === 'full' ? 'standard' : cli.flags.profile;
+        profileId = canonicalProfileId(name.includes(':') ? name : `builtin:${name}`);
+        // Validate before building providers or starting a session.
+        resolveProfile(profileId);
+    }
+    else if (resumedConversation) {
+        profileId = cli.flags.lite
+            ? BARE_PROFILE_ID
+            : canonicalProfileId(resumedConversation.activeProfileId ??
+                (resumedConversation.appMode
+                    ? profileIdFromLegacyMode(resumedConversation.appMode)
+                    : String(settings.get('app.activeProfileId'))));
+    }
+    else if (cli.flags.lite) {
+        profileId = BARE_PROFILE_ID;
+    }
+    else {
+        const implicitLite = Boolean(hasPositionalPrompt && !cli.flags.autoApprove);
+        const persistedProfileId = String(settings.get('app.activeProfileId'));
+        // Implicit lite must not override a higher-precedence mode already persisted.
+        profileId =
+            implicitLite && !['builtin:orchestrator', 'builtin:mentor'].includes(persistedProfileId)
+                ? BARE_PROFILE_ID
+                : persistedProfileId;
+    }
+    settings.set('app.activeProfileId', profileId, { persist: false });
+}
+const activeProfileId = settings.get('app.activeProfileId');
+process.stderr.write(`Profile: ${activeProfileId === 'builtin:standard' ? 'full' : activeProfileId.replace(/^builtin:/, '')}\n`);
+logger.info('Session profile selected', { eventType: 'session.profile', activeProfileId });
+// SSH Handling
+const sshFlag = cli.flags.ssh;
+const remoteDirFlag = cli.flags.remoteDir;
+const sshPortFlag = cli.flags.sshPort;
+let sshService;
+let executionContext;
+let sshInfo;
+if (sshFlag) {
+    if (!remoteDirFlag && !cli.flags.lite) {
+        console.error('Error: --remote-dir is required when using --ssh');
+        process.exit(1);
+    }
+    let user = '';
+    let host = sshFlag;
+    if (sshFlag.includes('@')) {
+        [user, host] = sshFlag.split('@');
+    }
+    // Try to resolve host from ~/.ssh/config
+    const sshConfigPath = path.join(os.homedir(), '.ssh', 'config');
+    let resolvedHost = host;
+    let resolvedUser = user;
+    let resolvedPort = sshPortFlag || 22;
+    let identityFile;
+    if (fs.existsSync(sshConfigPath)) {
+        try {
+            const configContent = fs.readFileSync(sshConfigPath, 'utf-8');
+            const hostConfig = resolveSSHHost(host, configContent);
+            if (hostConfig) {
+                resolvedHost = hostConfig.hostName || host;
+                resolvedUser = user || hostConfig.user || '';
+                resolvedPort = sshPortFlag !== 22 ? sshPortFlag : hostConfig.port || 22;
+                identityFile = hostConfig.identityFile;
+            }
+        }
+        catch {
+            // Ignore errors reading SSH config, fall back to direct host
+        }
+    }
+    const sshConfig = {
+        host: resolvedHost,
+        port: resolvedPort,
+        username: resolvedUser || os.userInfo().username,
+        agent: process.env.SSH_AUTH_SOCK,
+        identityFile,
+    };
+    const service = new SSHService(sshConfig);
+    // Initialize remoteDir with the flag value
+    let remoteDir = remoteDirFlag;
+    try {
+        // We use top-level await here assuming node16+ / esm
+        // To provide feedback, we can log to console before UI starts
+        console.log(`Connecting to ${host}...`);
+        await service.connect();
+        sshService = service;
+        // If remoteDir was not specified (only allowed in lite mode), auto-detect it
+        if (!remoteDir) {
+            try {
+                const { stdout } = await service.executeCommand('pwd');
+                remoteDir = stdout.trim();
+                console.log(`Defaulting to remote directory: ${remoteDir}`);
+            }
+            catch (e) {
+                console.warn('Failed to detect remote home directory, defaulting to "."', e instanceof Error ? e.message : String(e));
+                remoteDir = '.';
+            }
+        }
+        // Create SSH info for status bar display
+        sshInfo = {
+            host: host, // Use original alias for display
+            user: sshConfig.username,
+            remoteDir: remoteDir,
+        };
+        // Setup cleanup
+        const cleanup = () => {
+            if (sshService?.isConnected()) {
+                sshService.disconnect();
+            }
+        };
+        process.on('exit', cleanup);
+        process.on('SIGINT', cleanup);
+        process.on('SIGTERM', cleanup);
+    }
+    catch (e) {
+        console.error(`Failed to connect via SSH to ${host}:`, e instanceof Error ? e.message : String(e));
+        process.exit(1);
+    }
+    executionContext = new ExecutionContext(sshService, remoteDir);
+}
+else {
+    executionContext = new ExecutionContext();
+}
+// Kept for the UI as well as the log: a dropped or malformed server entry is
+// otherwise invisible to the user, who has no other view of their MCP config.
+const mcpStartupNotices = [];
+const mcpConfig = await loadMcpConfig({
+    workspaceRoot: executionContext.getHomeWorkspace(),
+    onNote: (message) => {
+        mcpStartupNotices.push(message);
+        logger.warn('MCP configuration notice', { message });
+    },
+});
+// The manager remains stable even when the initial catalog is empty so /mcp
+// can add a server and expose it to run_code without restarting the session.
+const mcpOAuthStore = new McpOAuthStore();
+const mcpManager = new McpConnectionManager({
+    servers: mcpConfig.servers,
+    userConfigPath: mcpConfig.userConfigPath,
+    workspaceRoot: executionContext.getHomeWorkspace(),
+    onNotice: (message) => logger.warn('MCP catalog notice', { message }),
+    oauthStore: mcpOAuthStore,
+    // A positional prompt means nobody is at the keyboard to finish a browser
+    // login, so an unauthenticated server says so instead of naming /mcp-login.
+    interactive: !hasPositionalPrompt,
+});
+const mcpConfigController = new McpConfigController({
+    userConfigPath: mcpConfig.userConfigPath,
+    workspaceRoot: executionContext.getHomeWorkspace(),
+    replaceServers: (servers) => mcpManager.replaceServers(servers),
+    onNote: (message) => logger.warn('MCP configuration notice', { message }),
+});
+activeMcpManager = mcpManager;
+mcpManager.start();
+const history = new HistoryService({
+    loggingService: logger,
+    settingsService: settings,
+});
+// This is deliberately composed only for the interactive root session. The
+// browser pins its corpus to the session's home workspace (the root the
+// session started in, per ExecutionContext.getHomeWorkspace) rather than the
+// live cwd, because entering a git worktree changes the live cwd and silently
+// emptying the corpus was observed to blind sessions to their transcript
+// history. The effective scope is surfaced in every result so a scope switch
+// stays distinguishable. currentSessionId is read lazily because it is
+// assigned after composition, and session_search uses it to demote the live
+// session's self-referential matches below all other sessions.
+const sessionBrowser = new SessionBrowser(() => ({
+    projectPath: executionContext.getHomeWorkspace(),
+    ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
+    ...(effectiveSessionId ? { currentSessionId: effectiveSessionId } : {}),
+}));
+activeSessionBrowser = sessionBrowser;
+const skillsService = new SkillsService(logger, executionContext.getCwd());
+skillsService.discoverSkills();
+const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
+// Non-blocking sweep of dead-PID and stale temp artifacts from prior sessions.
+void pruneStaleTempArtifacts().catch(() => { });
+// Hooks are trusted in-process code, not sandboxed tools. Discovery is done
+// once at startup; untrusted project roots are skipped rather than prompting
+// unexpectedly (including in non-interactive/CI mode).
+const localHookRuntime = createRootHookRuntime({
+    executionContext,
+    userEnabled: settings.getDynamic('hooks.user.enabled') !== false,
+    projectEnabled: settings.getDynamic('hooks.project.enabled') !== false,
+    trustedProjectRoots: settings.getDynamic('hooks.trustedProjectRoots') ?? [],
+    registryOptions: {
+        callbackTimeoutMs: Number(settings.getDynamic('hooks.timeoutMs') ?? 5_000),
+    },
+    logger: (diagnostic) => {
+        logger.warn('Public hook diagnostic', {
+            eventType: `hooks.${diagnostic.code}`,
+            category: 'application',
+            ...diagnostic,
+        });
+    },
+});
+const { hookService } = localHookRuntime;
+await hookService.initialize();
+// Shared by the owned root client and the interactive goal command callback.
+// Mutations become visible to later provider requests only after the event append succeeds.
+const currentGoalState = { current: resumedConversation?.goal };
+// A recorded achieved goal_check closes the goal at the root stop seam. The
+// active surface (App or runNonInteractive) installs the handler and persists
+// the goal through its own goal-write path.
+const goalAchievedSlot = {};
+// A prior goal proposal (approved or rejected) leaves a propose_goal function
+// call in the transcript; replaying it seeds the once-per-session proposal guard.
+let goalProposalAttempted = resumedConversation?.history?.some((item) => item.type === 'function_call' && item.name === 'propose_goal') ?? false;
+const sessionClientFactory = createOwnedSessionClientFactory(settings, (_sessionId, toolOwnership, postExecutePauseCapability, access, continuationProjectionMode, _continuity, requestCapture, toolLifecycle, backgroundShellRegistry, allowBackgroundShell, backgroundShellOutput, allowAskUser) => {
+    const agentClient = new AgentClient({
+        selection: settings.get('agent.modelSelection'),
+        reasoningEffort: settings.get('agent.reasoningEffort'),
+        maxTurns: settings.get('agent.maxTurns'),
+        retryAttempts: settings.get('agent.retryAttempts'),
+        deps: {
+            logger: logger,
+            settings: settings,
+            getGoal: () => currentGoalState.current,
+            onGoalAchieved: (goal) => {
+                if (!goalAchievedSlot.handler)
+                    throw new Error('No session surface is installed to persist the goal.');
+                goalAchievedSlot.handler(goal);
+            },
+            // Interactive sessions only: propose_goal needs an answerable user, so
+            // non-interactive callers (allowAskUser=false) never register the tool.
+            ...(allowAskUser
+                ? {
+                    proposeGoal: {
+                        appendGoal: (goal) => {
+                            logWriter.append({ type: 'goal_changed', version: 1, goal });
+                            currentGoalState.current = goal;
+                            goalProposalAttempted = true;
+                        },
+                        hasPriorProposal: () => goalProposalAttempted,
+                    },
+                }
+                : {}),
+            executionContext: executionContext,
+            sessionContextService,
+            skillsService,
+            requestCapture,
+            sessionBrowser: hasPositionalPrompt ? undefined : sessionBrowser,
+            ...(!hasPositionalPrompt
+                ? {
+                    discordSend: createFailClosedDiscordSend(() => activeControlSocketServer, process.env.XDG_RUNTIME_DIR ?? ''),
+                    isDiscordInputEnabled: () => activeControlSocketServer?.discordInputEnabled === true,
+                }
+                : {}),
+            mcpToolSource: mcpManager,
+        },
+        toolOwnership,
+        postExecutePauseCapability,
+        sessionAccess: access,
+        continuationProjectionMode,
+        toolLifecycle,
+        backgroundShellRegistry,
+        backgroundShellOutput,
+        allowBackgroundShell,
+        allowAskUser,
+    });
+    installPlanModeInterceptor(agentClient, { settingsService: settings });
+    return agentClient;
+}, hookService);
+if (hasPositionalPrompt) {
+    const { runNonInteractive } = await import('./non-interactive.js');
+    const exitCode = await runNonInteractive({
+        prompt: positionalPrompt,
+        autoApprove: cli.flags.autoApprove,
+        quiet: cli.flags.quiet,
+        showReasoning: cli.flags.showReasoning,
+        json: cli.flags.json,
+        sessionClientFactory,
+        logger,
+        settingsService: settings,
+        sessionContextService,
+        hookLifecycle: hookService,
+        mcpAllowlist: mcpConfig.nonInteractiveAllow,
+        mcpToolSource: mcpManager,
+        initialGoal: launchGoal ?? resumedConversation?.goal,
+        resumedConversation: resumedConversation ?? undefined,
+        onGoalPersisted: (goal) => {
+            currentGoalState.current = goal;
+        },
+        goalAchievedSlot,
+    });
+    process.exit(exitCode);
+}
+setTerminalTitle(terminalTitleBase);
+// Generate session UUID and handle resume
+effectiveSessionId = generateId();
+let effectiveCreatedAt = new Date().toISOString();
+let initialMessages = [];
+let restoredStaticMessageIds = [];
+if (resumedConversation) {
+    effectiveSessionId = resumedConversation.id;
+    effectiveCreatedAt = resumedConversation.createdAt;
+    initialMessages = resumedConversation.messages;
+    restoredStaticMessageIds = initialMessages.map((message) => message.id);
+    if (resumedConversation.usage) {
+        sessionUsageAccumulator.add(resumedConversation.usage, { alreadyBillable: true });
+    }
+    if (resumedConversation.subagentUsage) {
+        subagentUsageAccumulator.add(resumedConversation.subagentUsage, { alreadyBillable: true });
+    }
+    if (resumedConversation.costRecords?.length) {
+        sessionCostAccumulator.addRecords(resumedConversation.costRecords);
+    }
+}
+else if (resumeRequested) {
+    const target = resumeTarget ?? 'last';
+    console.error(`No conversation found to resume (${target}).`);
+    console.error('Run "term2 --resume ls" to list available conversations.');
+    process.exit(1);
+}
+// Refuse to open a session whose log file is locked by another writer (live or
+// corrupt). A same-host stale lock (holder PID demonstrably dead) is reclaimed
+// by the writer on open, so it proceeds with a notice.
+// --fork (handled above) is the documented escape hatch.
+if (!forkRequested) {
+    const lockInfo = isConversationLocked(effectiveSessionId);
+    if (lockInfo !== null) {
+        if (lockInfo.status === 'corrupt') {
+            console.error(`Conversation ${effectiveSessionId} has a corrupt lockfile at ${getConversationLockPath(effectiveSessionId)}.\n` +
+                `- If another terminal still has it open, close that one first.\n` +
+                `- Otherwise delete the lockfile manually, or fork into a new\n` +
+                `  conversation that branches from the same state:\n` +
+                `      term2 --resume ${effectiveSessionId} --fork\n`);
+            process.exit(1);
+        }
+        if (lockInfo.status === 'held') {
+            const pid = lockInfo.pid;
+            const host = lockInfo.host;
+            const startedAt = lockInfo.startedAt;
+            console.error(`Conversation ${effectiveSessionId} is locked (pid ${pid}, started ${startedAt}, host ${host}).\n` +
+                `- If another terminal still has it open, close that one first.\n` +
+                `- If a previous run crashed and left the lock behind, fork into a new\n` +
+                `  conversation that branches from the same state:\n` +
+                `      term2 --resume ${effectiveSessionId} --fork\n`);
+            process.exit(1);
+        }
+        // status === 'stale': same-host holder PID is demonstrably dead; the
+        // writer reclaims the lock when the session opens.
+        console.error(`Conversation ${effectiveSessionId} was left locked by a dead process ` +
+            `(pid ${lockInfo.pid}, started ${lockInfo.startedAt}); reclaiming the stale lock.`);
+    }
+}
+const conversationService = new ConversationService({
+    sessionClientFactory,
+    ...(process.env.TERM2_AUTOMATIC_MEMORY_CANARY === '1' &&
+        settings.get('memory.enabled') &&
+        !executionContext.isRemote()
+        ? {
+            automaticMemory: new AutomaticMemoryCanary(new MemoryCapabilityBuilder(settings).projectStore(executionContext.getCwd())),
+        }
+        : {}),
+    sessionId: effectiveSessionId,
+    sessionStartedAt: effectiveCreatedAt,
+    deps: {
+        logger: logger,
+        settingsService: settings,
+        sessionContextService,
+        skillsService,
+    },
+    enableNestedApproval: true,
+});
+if (conversationService.hookEvents) {
+    await hookService.emit(conversationService.hookEvents.create('session.start', {
+        cwd: localHookRuntime.cwd,
+        mode: 'interactive',
+        providerName: settings.get('agent.modelSelection').provider,
+        modelName: settings.get('agent.modelSelection').model,
+    }));
+}
+if (resumedConversation) {
+    const savedProviderMatches = !resumedConversation.provider || resumedConversation.provider === settings.get('agent.modelSelection').provider;
+    const savedModelMatches = !resumedConversation.model || resumedConversation.model === settings.get('agent.modelSelection').model;
+    const previousResponseId = savedProviderMatches && savedModelMatches ? resumedConversation.previousResponseId : null;
+    conversationService.importState({
+        history: resumedConversation.history,
+        previousResponseId,
+        toolLedger: resumedConversation.toolLedger,
+        updatedAt: resumedConversation.updatedAt,
+    });
+    for (const warning of resumedConversation.replayWarnings) {
+        console.warn(`Conversation replay: ${warning}`);
+    }
+    console.log(`Resumed conversation: ${resumedConversation.id}`);
+}
+// Open the append-only log writer for the active session using the same
+// directory resolver as conversation loading and resume operations.
+const logWriterDir = getConversationsDir();
+// Sidecars whose conversation log is gone can never be resumed. Collect them
+// once at startup; sidecars for still-resumable crashed sessions are kept.
+collectOrphanedDeltaSidecars();
+const logWriter = createConversationLogWriter({ sessionId: effectiveSessionId, dir: logWriterDir, logger });
+function buildInitMeta(id, createdAt, rolloverFrom) {
+    // Persist under the session's home workspace, the same scope SessionBrowser
+    // and --resume read from. The live cwd moves into a worktree during work, so
+    // a rollover or /clear there used to hide the successor from its own scope.
+    const cwd = executionContext?.getHomeWorkspace();
+    const persistedRolloverFrom = rolloverFrom ?? (resumedConversation?.id === id ? resumedConversation.rolloverFrom : undefined);
+    const activeProfileId = settings.get('app.activeProfileId');
+    return {
+        id,
+        createdAt,
+        ...(cwd ? { projectPath: cwd } : {}),
+        ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
+        ...getProfileMetadata(activeProfileId),
+        appMode: legacyModeFromProfileId(activeProfileId),
+        ...(settings.get('agent.modelSelection').model ? { model: settings.get('agent.modelSelection').model } : {}),
+        ...(settings.get('agent.modelSelection').provider
+            ? { provider: settings.get('agent.modelSelection').provider }
+            : {}),
+        ...(settings.get('agent.reasoningEffort') ? { reasoningEffort: settings.get('agent.reasoningEffort') } : {}),
+        ...(resumedConversation?.forkedFrom ? { forkedFrom: resumedConversation.forkedFrom } : {}),
+        ...(persistedRolloverFrom ? { rolloverFrom: persistedRolloverFrom } : {}),
+    };
+}
+try {
+    logWriter.init(buildInitMeta(effectiveSessionId, effectiveCreatedAt));
+}
+catch (err) {
+    if (err instanceof LockConflictError) {
+        const info = err.lockInfo;
+        console.error(`Conversation ${effectiveSessionId} is locked (pid ${info?.pid}, started ${info?.startedAt}, host ${info?.host}).\n` +
+            `- If another terminal still has it open, close that one first.\n` +
+            `- If a previous run crashed and left the lock behind, fork into a new\n` +
+            `  conversation that branches from the same state:\n` +
+            `      term2 --resume ${effectiveSessionId} --fork\n`);
+        process.exit(1);
+    }
+    throw err;
+}
+if (launchGoal) {
+    try {
+        logWriter.append({ type: 'goal_changed', version: 1, goal: launchGoal });
+        currentGoalState.current = launchGoal;
+    }
+    catch (error) {
+        console.error(`Unable to persist requested goal: ${error instanceof Error ? error.message : String(error)}`);
+        await logWriter.close().catch(() => undefined);
+        process.exit(1);
+    }
+}
+activeLogWriter = logWriter;
+conversationService.setLogSink((event) => logWriter.append(event));
+// Persist agent-affecting settings changes as they happen.
+settings.onChange((key) => {
+    if (!key || !AGENT_AFFECTING_SETTINGS.has(key))
+        return;
+    logWriter.append({ type: 'settings_changed', key, value: settings.getDynamic(key) });
+});
+// Do NOT wrap stdout writes with DEC Mode 2026 synchronized-output markers here.
+// Ink 7.0.1 already wraps each interactive frame in `\x1b[?2026h … \x1b[?2026l`
+// natively (node_modules/ink/build/write-synchronized.js). Re-wrapping each
+// individual write() breaks that frame-level atomicity and makes the terminal
+// paint blank/partial intermediate frames — visible flicker while streaming.
+if (!hasPositionalPrompt && (!nodeStdin.isTTY || !nodeStdout.isTTY)) {
+    console.error('term2 needs an interactive terminal; for one-shot use: term2 "<prompt>"');
+    process.exit(1);
+}
+let controlStartupNotice;
+let controlSocket;
+let runtimeControlSocketConnectPending = false;
+if (controlSocketRequested) {
+    if (controlSocketNameRejected || !controlSocketName) {
+        controlStartupNotice = `Control socket name rejected: ${controlSocketName ?? ''}`;
+    }
+    else {
+        try {
+            controlSocket = new ControlSocketServer({
+                name: controlSocketName,
+                discordInput,
+                sessionId: () => conversationService.sessionId,
+            });
+            await controlSocket.listen();
+            activeControlSocketServer = controlSocket;
+            controlStartupNotice = `Control socket on: ${controlSocket.name} (pid ${process.pid})`;
+        }
+        catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            controlStartupNotice = `Control socket off: ${reason}`;
+            if (controlSocket)
+                await controlSocket.close().catch(() => undefined);
+            controlSocket = undefined;
+        }
+    }
+}
+const [{ default: React }, { render }, { default: App }, { InputProvider }, { getInkRenderOptions }, { SettingsThemeProvider }, { SettingsSkinProvider }, { detectTerminalBackground }, { shouldDetectBackground },] = await Promise.all([
+    import('react'),
+    import('ink'),
+    import('./app.js'),
+    import('./context/InputContext.js'),
+    import('./utils/ink-render-options.js'),
+    import('./theme/ThemeContext.js'),
+    import('./skins/SkinContext.js'),
+    import('./theme/detect-terminal-background.js'),
+    import('./theme/resolve-theme.js'),
+]);
+// Ask the terminal for its background before Ink takes over stdin: the reply
+// arrives as input. Skipped unless `ui.theme` is `auto` and colour is on.
+const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)
+    ? await detectTerminalBackground({ stdin: process.stdin, stdout: process.stdout })
+    : undefined;
+const { waitUntilExit } = render((React.createElement(SettingsThemeProvider, { settingsService: settings, detectedBackground: detectedBackground },
+    React.createElement(SettingsSkinProvider, { settingsService: settings },
+        React.createElement(InputProvider, null,
+            React.createElement(App, { onRestart: async (stopBackground, exitInk) => {
+                    const snapshot = () => createRestartPlan({
+                        entry: fileURLToPath(import.meta.url),
+                        sessionId: logWriter.sessionId,
+                        model: settings.get('agent.modelSelection'),
+                        reasoning: settings.get('agent.reasoningEffort'),
+                        profile: canonicalProfileId(settings.get('app.activeProfileId')),
+                        approval: settings.get('shell.autoApproveMode'),
+                        sandbox: settings.get('sandbox.enabled'),
+                        ...(sshFlag
+                            ? { ssh: { target: sshFlag, directory: sshInfo?.remoteDir, port: cli.flags.sshPort } }
+                            : {}),
+                        ...(controlSocket
+                            ? { control: { name: controlSocket.name, discordInput: controlSocket.discordInputEnabled } }
+                            : {}),
+                    });
+                    const manual = snapshot().manualCommand;
+                    try {
+                        assertRestartSupported(fileURLToPath(import.meta.url));
+                        if (runtimeControlSocketConnectPending)
+                            throw new Error('Control socket connection is still pending.');
+                    }
+                    catch (error) {
+                        throw new Error(`${error instanceof Error ? error.message : String(error)}\nManual resume: ${manual}`);
+                    }
+                    const liveTasks = () => conversationService.backgroundTaskControl
+                        .listDetails()
+                        .filter((task) => ['running', 'awaiting_approval', 'waiting_for_answer', 'cancelling'].includes(task.status));
+                    const checkTasks = () => {
+                        const tasks = liveTasks();
+                        if (tasks.length && !stopBackground)
+                            throw new Error(`Live background work: ${tasks
+                                .map((task) => `${task.kind}:${task.id} (${task.status})`)
+                                .join(', ')}. ` +
+                                'Leave it running by cancelling restart, or use /restart stop to stop it and restart.');
+                    };
+                    checkTasks();
+                    const controlHold = controlSocket?.pauseMutations();
+                    let release;
+                    try {
+                        await controlHold?.drained;
+                        release = await conversationService.prepareRestart();
+                        await logWriter.flush();
+                        checkTasks();
+                        // No await after this snapshot: the held adapter and current writer own the handoff.
+                        restartPlan = snapshot();
+                        if (executionContext?.getActiveWorkspace())
+                            console.log('Restart resets the active workspace lease to its home scope.');
+                        exitInk();
+                    }
+                    catch (error) {
+                        release?.();
+                        controlHold?.release();
+                        throw error;
+                    }
+                }, conversationService: conversationService, controlSocket: controlSocket, controlSocketIsStartup: controlSocket !== undefined, connectControlSocket: async (name) => {
+                    if (controlSocket || runtimeControlSocketConnectPending) {
+                        throw new Error('A control socket is already connected or connecting.');
+                    }
+                    runtimeControlSocketConnectPending = true;
+                    let server;
+                    try {
+                        server = new ControlSocketServer({
+                            name,
+                            discordInput: true,
+                            sessionId: () => conversationService.sessionId,
+                        });
+                        await server.listen();
+                        controlSocket = server;
+                        activeControlSocketServer = server;
+                        return server;
+                    }
+                    catch (error) {
+                        if (server)
+                            await server.close().catch(() => undefined);
+                        throw error;
+                    }
+                    finally {
+                        runtimeControlSocketConnectPending = false;
+                    }
+                }, disconnectControlSocket: async (server) => {
+                    await server.close();
+                    if (activeControlSocketServer === server)
+                        activeControlSocketServer = null;
+                    if (controlSocket === server)
+                        controlSocket = undefined;
+                }, controlStartupNotice: controlStartupNotice, controlSessionMetadata: () => ({
+                    workspaceRoot: executionContext?.getHomeWorkspace() ?? null,
+                    version: String(cli.pkg.version ?? ''),
+                    createdAt: conversationService.sessionStartedAt,
+                    logPath: path.join(logWriterDir, `${effectiveSessionId ?? conversationService.sessionId}.jsonl`),
+                }), settingsService: settings, historyService: history, loggingService: logger, skillsService: skillsService, sshInfo: sshInfo, sshService: sshService, usageAccumulator: sessionUsageAccumulator, subagentUsageAccumulator: subagentUsageAccumulator, costAccumulator: sessionCostAccumulator, onPrintUsage: printUsage, onExitUsage: printUsageOnce, sessionId: effectiveSessionId, initialMessages: initialMessages, initialGoal: launchGoal ?? resumedConversation?.goal, appendGoal: (goal, source) => {
+                    logWriter.append({ type: 'goal_changed', version: 1, goal, ...(source ? { source } : {}) });
+                    currentGoalState.current = goal;
+                }, goalAchievedSlot: goalAchievedSlot, onGoalRestore: (goal) => {
+                    currentGoalState.current = goal;
+                }, restoredStaticMessageIds: restoredStaticMessageIds, logWriter: logWriter, onRotateWriter: (newId, createdAt, rolloverFrom, rolloverGoal) => {
+                    rotateSessionLog(logWriter, newId, buildInitMeta(newId, createdAt ?? new Date().toISOString(), rolloverFrom), rolloverGoal);
+                    if (rolloverFrom && rolloverGoal) {
+                        currentGoalState.current = rolloverGoal;
+                    }
+                    effectiveHasConversationContent = false;
+                }, generateId: generateId, onSessionIdChange: (newId, createdAt) => {
+                    effectiveSessionId = newId;
+                    effectiveCreatedAt = createdAt;
+                    controlSocket?.refreshAdvertisement();
+                }, onHasConversationContent: (hasContent) => {
+                    effectiveHasConversationContent = hasContent;
+                }, terminalTitleBase: terminalTitleBase, mcpManager: mcpManager, mcpOAuthStore: mcpOAuthStore, mcpConfigController: mcpConfigController, mcpStartupNotices: mcpStartupNotices, mcpUserConfigPath: mcpConfig.userConfigPath }))))), getInkRenderOptions());
+await waitUntilExit();
+const writeRestartRecovery = async () => {
+    if (restartPlan)
+        await new Promise((resolve, reject) => process.stdout.write(`\nRestart recovery command: ${restartPlan.manualCommand}\n`, (error) => error ? reject(error) : resolve()));
+};
+try {
+    await writeRestartRecovery();
+    if (controlSocket) {
+        await controlSocket.close();
+        activeControlSocketServer = null;
+    }
+    if (conversationService.hookEvents) {
+        await hookService.emit(conversationService.hookEvents.create('session.end', {
+            reason: 'normal',
+            sessionDuration: Math.max(0, Date.now() - Date.parse(effectiveCreatedAt)),
+        }));
+    }
+    await conversationService.shutdown();
+    await mcpManager.close();
+    await sessionBrowser.close();
+    activeSessionBrowser = null;
+    await logWriter.close();
+    activeLogWriter = null;
+    printUsageOnce();
+    if (restartPlan) {
+        if (process.stdout.isTTY)
+            process.stdout.write('\x1b[?1004l');
+        killLiveShellChildren();
+        await sshService?.disconnect();
+        if (fs.existsSync(getConversationLockPath(logWriter.sessionId))) {
+            throw new Error('Conversation lock remains after shutdown; refusing same-PID restart.');
+        }
+        await writeRestartRecovery();
+        process.execve(process.execPath, [process.execPath, ...restartPlan.args], restartPlan.env);
+    }
+}
+catch (error) {
+    if (!restartPlan)
+        throw error;
+    console.error(`Restart cleanup failed; no replacement attempted: ${error instanceof Error ? error.message : String(error)}`);
+    await writeRestartRecovery();
+    process.exit(1);
+}
+process.exit(0);
+//# sourceMappingURL=cli.js.map

@@ -1,0 +1,145 @@
+import path from 'path';
+import { getActiveWorkspaceRoot } from '../services/workspace/active-workspace-root.js';
+import { homedir } from 'os';
+import { lstat, realpath } from 'fs/promises';
+import { z } from 'zod';
+import { getDiscoveredSkillRoots } from '../utils/skill-discovery-paths.js';
+import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
+/**
+ * Resolves a relative path and ensures it's within the workspace
+ */
+export function resolveWorkspacePath(relativePath, baseDir = getActiveWorkspaceRoot(), options) {
+    const allowOutsideWorkspace = options?.allowOutsideWorkspace ?? false;
+    const allowDiscoveredSkillFolders = options?.allowDiscoveredSkillFolders ?? false;
+    // Expand ~ if the path starts with it
+    const expandedPath = relativePath.startsWith('~') ? relativePath.replace(/^~/, homedir()) : relativePath;
+    const resolved = path.isAbsolute(expandedPath) ? path.normalize(expandedPath) : path.resolve(baseDir, expandedPath);
+    if (allowOutsideWorkspace) {
+        return resolved;
+    }
+    const normalizedBaseDir = path.resolve(baseDir);
+    const normalizedResolved = path.resolve(resolved);
+    // Ensure either exact match or within base directory (prefix with separator to avoid /foo/bar2 matching /foo/bar)
+    const basePrefix = normalizedBaseDir.endsWith(path.sep) ? normalizedBaseDir : normalizedBaseDir + path.sep;
+    let isInside = normalizedResolved === normalizedBaseDir || normalizedResolved.startsWith(basePrefix);
+    if (!isInside) {
+        // Check if the path is in the sandbox-specific temp directory.
+        // Only the app's own temp dir is allowed — not the entire /tmp tree.
+        const isTempDir = normalizedResolved === SANDBOX_TEMP_DIR || normalizedResolved.startsWith(SANDBOX_TEMP_DIR + path.sep);
+        if (isTempDir) {
+            isInside = true;
+        }
+    }
+    if (!isInside && allowDiscoveredSkillFolders) {
+        const isWithin = (targetPath, rootPath) => {
+            const normalizedRoot = path.resolve(rootPath);
+            const rootPrefix = normalizedRoot.endsWith(path.sep) ? normalizedRoot : normalizedRoot + path.sep;
+            return targetPath === normalizedRoot || targetPath.startsWith(rootPrefix);
+        };
+        const discoveredSkillRoots = getDiscoveredSkillRoots(normalizedBaseDir, homedir());
+        if (discoveredSkillRoots.some((rootPath) => isWithin(normalizedResolved, rootPath))) {
+            isInside = true;
+        }
+    }
+    if (!isInside) {
+        throw new Error(`Operation outside workspace: ${relativePath}`);
+    }
+    return normalizedResolved;
+}
+/**
+ * Resolve a path through the filesystem without requiring the final target to
+ * exist. Existing targets are fully realpathed; for a missing target, the
+ * nearest existing ancestor is realpathed and the missing suffix is appended.
+ * A dangling symlink (or any other filesystem resolution error) is rejected.
+ */
+async function resolvePhysicalPath(targetPath) {
+    let candidate = path.resolve(targetPath);
+    const missingSuffix = [];
+    while (true) {
+        try {
+            const resolvedAncestor = await realpath(candidate);
+            return path.join(resolvedAncestor, ...missingSuffix.reverse());
+        }
+        catch (error) {
+            if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') {
+                return undefined;
+            }
+            const parent = path.dirname(candidate);
+            if (parent === candidate) {
+                return undefined;
+            }
+            // lstat distinguishes a dangling symlink from a merely missing target.
+            // If the candidate itself is a symlink, realpath above would have failed
+            // and we must fail closed rather than treat its parent as the target.
+            try {
+                const stats = await lstat(candidate);
+                if (stats.isSymbolicLink()) {
+                    return undefined;
+                }
+            }
+            catch (lstatError) {
+                if (lstatError?.code !== 'ENOENT' && lstatError?.code !== 'ENOTDIR') {
+                    return undefined;
+                }
+            }
+            missingSuffix.push(path.basename(candidate));
+            candidate = parent;
+        }
+    }
+}
+/**
+ * Resolve a path using the same existing-ancestor semantics as the physical
+ * containment check, without enforcing lexical workspace containment.
+ *
+ * Approval continuations use this to bind the path that was inspected to the
+ * physical referent that will be dispatched. A missing leaf is still
+ * meaningful: its existing ancestor (including symlinks) is resolved and the
+ * missing suffix is appended.
+ */
+export async function resolveWorkspacePathPhysically(targetPath, baseDir = getActiveWorkspaceRoot()) {
+    const lexicalPath = resolveWorkspacePath(targetPath, baseDir, { allowOutsideWorkspace: true });
+    return resolvePhysicalPath(lexicalPath);
+}
+/**
+ * Whether a filesystem write resolves physically within the workspace.
+ *
+ * This is intentionally separate from resolveWorkspacePath: lexical
+ * containment is still used to preserve explicit approval for outside paths,
+ * while this check prevents an apparently-inside path from auto-approving a
+ * write through a symlink. Missing create-file paths are safe when their
+ * nearest existing ancestor resolves inside the workspace.
+ */
+export async function isWorkspacePathPhysicallyInside(targetPath, workspaceRoot) {
+    const [physicalTarget, physicalWorkspace] = await Promise.all([
+        resolvePhysicalPath(targetPath),
+        resolvePhysicalPath(workspaceRoot),
+    ]);
+    if (!physicalTarget || !physicalWorkspace) {
+        return false;
+    }
+    const workspacePrefix = physicalWorkspace.endsWith(path.sep) ? physicalWorkspace : `${physicalWorkspace}${path.sep}`;
+    return physicalTarget === physicalWorkspace || physicalTarget.startsWith(workspacePrefix);
+}
+/**
+ * Hook files are executable, trusted in-process code.  A model write to one
+ * must therefore remain explicitly approved even when the hook directory is
+ * physically inside the active workspace.  Keep this check independent of
+ * hook loading/trust: trusting a project permits execution, never silent model
+ * mutation.
+ */
+export function isProtectedHookPath(targetPath, workspaceRoot = getActiveWorkspaceRoot()) {
+    const normalizedTarget = path.resolve(targetPath);
+    const roots = [path.join(homedir(), '.term2', 'hooks'), path.join(path.resolve(workspaceRoot), '.term2', 'hooks')];
+    return roots.some((root) => {
+        const normalizedRoot = path.resolve(root);
+        const prefix = normalizedRoot.endsWith(path.sep) ? normalizedRoot : `${normalizedRoot}${path.sep}`;
+        return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(prefix);
+    });
+}
+/**
+ * A Zod schema that allows either a number or a string that can be parsed as a number.
+ * Useful for tool parameters that might be passed as strings from the LLM.
+ * Use with .int(), .positive(), etc. to add further constraints.
+ */
+export const relaxedNumber = z.coerce.number();
+//# sourceMappingURL=utils.js.map

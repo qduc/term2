@@ -1,0 +1,1032 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { LoggingService } from '../logging/logging-service.js';
+import { clearModelCache } from '../model-service.js';
+import { getProvider, upsertProvider } from '../../providers/registry.js';
+import { createOpenAICompatibleProviderDefinition } from '../../providers/openai-compatible-lazy.js';
+import { resolveProviderId, resolveProviderName } from './custom-provider-normalization.js';
+import { canonicalProfileId, legacyModeFromProfileId, profileIdFromLegacyMode, profileIdFromLegacyModeSetting, } from '../profiles/legacy-adapter.js';
+import { DEFAULT_SETTINGS, OPTIONAL_DEFAULT_KEYS, RUNTIME_MODIFIABLE_SETTINGS, SENSITIVE_SETTING_KEYS, SettingsSchema, } from './settings-schema.js';
+import { isTestEnvironment, parseBooleanEnv } from './settings-env.js';
+import { flattenSettings, mergeSettings, trackSettingSources } from './settings-merger.js';
+import { buildSettingsWithSources } from './settings-sources.js';
+import { migrateLegacyAncillarySettings } from './ancillary-settings-migration.js';
+import { hasMissingKeys, loadSettingsFromFile, quarantineCorruptSettingsFile, saveSettingsToFile, stripSensitiveSettings, } from './settings-persistence.js';
+import { resolveSettingsDirectory } from './settings-path.js';
+function cloneSettingValue(value) {
+    if (value == null || typeof value !== 'object') {
+        return value;
+    }
+    return structuredClone(value);
+}
+/** Canonical JSON comparison for provider config entries (key order does not matter). */
+function providerConfigsEqual(a, b) {
+    return JSON.stringify(sortObjectKeys(a)) === JSON.stringify(sortObjectKeys(b));
+}
+function sortObjectKeys(value) {
+    if (Array.isArray(value))
+        return value.map(sortObjectKeys);
+    if (value !== null && typeof value === 'object') {
+        const record = value;
+        return Object.fromEntries(Object.keys(record)
+            .sort()
+            .map((key) => [key, sortObjectKeys(record[key])]));
+    }
+    return value;
+}
+function setSettingValue(target, key, value) {
+    const parts = key.split('.');
+    let current = target;
+    for (const part of parts.slice(0, -1)) {
+        current[part] ??= {};
+        current = current[part];
+    }
+    current[parts[parts.length - 1]] = cloneSettingValue(value);
+}
+function changedSettingPaths(before, after, prefix = '') {
+    if (Object.is(before, after))
+        return [];
+    if (before &&
+        after &&
+        typeof before === 'object' &&
+        typeof after === 'object' &&
+        !Array.isArray(before) &&
+        !Array.isArray(after)) {
+        const beforeRecord = before;
+        const afterRecord = after;
+        const paths = [];
+        for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+            paths.push(...changedSettingPaths(beforeRecord[key], afterRecord[key], prefix ? `${prefix}.${key}` : key));
+        }
+        return paths;
+    }
+    return prefix ? [[prefix, after]] : [];
+}
+/**
+ * Service for managing application settings.
+ * Follows singleton pattern and supports:
+ * - XDG-compliant storage
+ * - Hierarchical precedence (CLI > Env > Config > Defaults)
+ * - Zod validation with graceful degradation
+ * - Runtime-modifiable vs startup-only settings
+ * - Setting source tracking
+ */
+export class SettingsService {
+    settings;
+    sources;
+    settingsDir;
+    disableLogging;
+    disableFilePersistence;
+    listeners = new Set();
+    loggingService;
+    startupMigrations = [];
+    startupEnv = {};
+    startupCli = {};
+    runtimeOverrides = new Map();
+    runtimeOverrideSources = new Map();
+    resetAllAtRuntime = false;
+    lastDurableWrite;
+    recoveryResult = { recovered: false };
+    constructor(options) {
+        const { settingsDir = resolveSettingsDirectory(), disableLogging = false, disableFilePersistence, cli = {}, env = {}, loggingService, } = options ?? {};
+        const resolvedDisableLogging = disableLogging || parseBooleanEnv(process.env.DISABLE_LOGGING);
+        this.settingsDir = settingsDir;
+        this.disableLogging = resolvedDisableLogging;
+        this.sources = new Map();
+        this.startupEnv = structuredClone(env);
+        this.startupCli = structuredClone(cli);
+        // Use injected LoggingService or create a new one if not provided
+        this.loggingService =
+            loggingService ||
+                new LoggingService({
+                    disableLogging: this.disableLogging,
+                });
+        // Disk persistence can be explicitly disabled (e.g., for tests), and is
+        // also automatically disabled when running under a known test runner.
+        this.disableFilePersistence = disableFilePersistence ?? isTestEnvironment();
+        // Ensure settings directory exists
+        if (disableFilePersistence !== true && !fs.existsSync(this.settingsDir)) {
+            try {
+                fs.mkdirSync(this.settingsDir, { recursive: true });
+            }
+            catch (error) {
+                if (!this.disableLogging) {
+                    this.loggingService.error('Failed to create settings directory', {
+                        error: error instanceof Error ? error.message : String(error),
+                        path: this.settingsDir,
+                    });
+                }
+            }
+        }
+        // Load settings with precedence: CLI > Env > Config > Default
+        const settingsFilePath = path.join(this.settingsDir, 'settings.json');
+        const configFileExisted = fs.existsSync(settingsFilePath);
+        const { validated, raw: rawFileConfig, hadErrors: fileHadErrors, errorDetails, recovery, migratedSelections, } = this.loadFromFile();
+        if (configFileExisted && fileHadErrors) {
+            if (!recovery?.recovered) {
+                const details = errorDetails && errorDetails.length > 0 ? `:\n  - ${errorDetails.join('\n  - ')}` : '';
+                throw new Error(`Failed to parse settings file at ${settingsFilePath}${details}`);
+            }
+            // The file was syntactically corrupt but a scan salvaged a JSON object
+            // from its bytes. Move the original bytes aside for diagnosis (only when
+            // persistence is enabled; otherwise the corrupt file is left untouched
+            // and every startup re-recovers), then continue with the salvaged state.
+            const quarantinedPath = this.disableFilePersistence ? undefined : quarantineCorruptSettingsFile(this.settingsDir);
+            this.recoveryResult = {
+                recovered: true,
+                reason: recovery.reason,
+                quarantinedPath,
+                recoveredSectionKeys: recovery.recoveredSectionKeys,
+            };
+            if (!this.disableLogging) {
+                this.loggingService.warn('Recovered settings from a corrupt file; original bytes preserved', {
+                    settingsFile: settingsFilePath,
+                    quarantinedPath,
+                    recoveredSectionKeys: recovery.recoveredSectionKeys,
+                });
+            }
+        }
+        const { config: fileConfig, migrated: migratedLegacyAncillarySettings } = migrateLegacyAncillarySettings(validated, rawFileConfig);
+        if (migratedLegacyAncillarySettings) {
+            this.startupMigrations = changedSettingPaths(validated, fileConfig);
+        }
+        for (const tier of ['smart', 'balanced', 'cheap', 'chore']) {
+            const key = `${tier}Model`;
+            const rawAgent = rawFileConfig?.agent;
+            const pool = fileConfig.agent?.[key];
+            if (rawAgent && Object.hasOwn(rawAgent, key) && JSON.stringify(rawAgent[key]) !== JSON.stringify(pool)) {
+                this.startupMigrations.push([`agent.${key}`, pool]);
+            }
+        }
+        this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
+            disableLogging: this.disableLogging,
+            loggingService: this.loggingService,
+        });
+        this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
+        if (!Object.hasOwn(rawFileConfig?.agent ?? {}, 'maxOutputTokens')) {
+            this.sources.set('agent.maxOutputTokens', trackSettingSources(DEFAULT_SETTINGS, {}, env, cli).get('agent.maxOutputTokens') ?? 'default');
+        }
+        // Normalize profile selection so conflicting persisted state is resolved
+        // on load, not lazily at first set() call. Legacy files without a
+        // non-default profile derive their canonical selection from the flags.
+        {
+            const app = this.settings.app ?? {};
+            const hasOwn = (section, key) => section != null && typeof section === 'object' && Object.prototype.hasOwnProperty.call(section, key);
+            const hasPersistedProfileId = hasOwn(rawFileConfig?.app, 'activeProfileId') ||
+                hasOwn(env?.app, 'activeProfileId') ||
+                hasOwn(cli?.app, 'activeProfileId');
+            const profileId = hasPersistedProfileId
+                ? canonicalProfileId(String(app.activeProfileId))
+                : profileIdFromLegacyMode(app);
+            // Rewrite a retired id (Lite → Bare) in the file once, so the reconcile
+            // after each save cannot reload it.
+            const fileProfileId = rawFileConfig?.app?.activeProfileId;
+            if (typeof fileProfileId === 'string' && canonicalProfileId(fileProfileId) !== fileProfileId) {
+                this.startupMigrations.push(['app.activeProfileId', canonicalProfileId(fileProfileId)]);
+            }
+            this.settings.app = { ...app, activeProfileId: profileId };
+            this.normalizeProfileSelection('app.activeProfileId', profileId);
+        }
+        // Normalize sandbox / auto-approve exclusivity on load: 'always' mode
+        // cannot coexist with an enabled sandbox (it auto-approves the unsandboxed
+        // escape the sandbox exists to gate), so a persisted conflict is demoted
+        // to 'auto' up front and flagged instead of silently surviving a restart.
+        // When the conflict comes from the settings file, the demotion is recorded
+        // as a startup migration so the file is rewritten once and the conflict
+        // cannot be resurrected by a later reconcile.
+        let normalizedSandboxAutoApproveConflict = false;
+        if (this.settings.sandbox?.enabled === true && this.settings.shell?.autoApproveMode === 'always') {
+            this.settings.shell.autoApproveMode = 'auto';
+            this.sources.set('shell.autoApproveMode', 'config');
+            if (fileConfig.shell?.autoApproveMode === 'always' && (fileConfig.sandbox?.enabled ?? true) === true) {
+                this.startupMigrations.push(['shell.autoApproveMode', 'auto']);
+                normalizedSandboxAutoApproveConflict = true;
+            }
+            if (!this.disableLogging) {
+                this.loggingService.warn('shell.autoApproveMode "always" conflicts with sandbox.enabled=true; demoted mode to "auto"', { settingsFile: settingsFilePath });
+            }
+        }
+        // Register any runtime-defined providers from settings.json so they appear
+        // in the model selection menu and can be bound in agent.modelSelection.
+        this.registerRuntimeProviders();
+        // Migrate legacy selected provider values (for example values with spaces)
+        // to the normalized provider id form. The normalization is recorded as a
+        // startup migration so the durable file is rewritten with the normalized
+        // identity and a fresh service restart sees it. Values that name no
+        // registered provider are left untouched (fail loudly at first stream).
+        const normalizedSelectedProviderId = this.migrateSelectedProviderId();
+        // Apply logging level from settings to the logging service so it respects settings
+        try {
+            this.loggingService.setLogLevel(this.settings.logging.logLevel);
+            this.loggingService.setSuppressConsoleOutput(this.settings.logging.suppressConsoleOutput);
+        }
+        catch (error) {
+            if (!this.disableLogging) {
+                this.loggingService.warn('Failed to apply logging level from settings', {
+                    error: error instanceof Error ? error.message : String(error),
+                    loggingLevel: this.settings.logging.logLevel,
+                });
+            }
+        }
+        if (!this.disableLogging) {
+            this.loggingService.debug('SettingsService initialized', {
+                cliOverrides: Object.keys(flattenSettings(cli)).length > 0,
+                envOverrides: Object.keys(flattenSettings(env)).length > 0,
+                configOverrides: Object.keys(flattenSettings(fileConfig)).length > 0,
+            });
+        }
+        // Check if file config is missing any keys that exist in defaults
+        // Use raw file config (pre-Zod) to detect missing keys since Zod adds defaults
+        const shouldUpdateFile = configFileExisted && this.hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS);
+        const shouldMigrateLegacyProviderFormat = configFileExisted && this.hasLegacyProviderFormat(rawFileConfig);
+        if (shouldMigrateLegacyProviderFormat) {
+            this.startupMigrations.push(['providers', fileConfig.providers]);
+        }
+        // If there was no config file on disk, persist the current merged settings so
+        // users get a settings.json created at startup (rather than waiting for a
+        // manual change). saveToFile is safe and handles errors/logging internally.
+        // Also update the file if new settings have been added since the file was created.
+        if (!configFileExisted) {
+            if (!this.disableFilePersistence) {
+                this.saveToFile();
+                if (!this.disableLogging) {
+                    this.loggingService.debug('Created settings file at startup', {
+                        settingsFile: settingsFilePath,
+                    });
+                }
+            }
+        }
+        else if (this.recoveryResult.recovered) {
+            // The corrupt file was quarantined above; write a fresh replacement now
+            // so the recovery happens once instead of on every startup.
+            if (!this.disableFilePersistence) {
+                this.saveToFile();
+                if (!this.disableLogging) {
+                    this.loggingService.debug('Rewrote settings file after corruption recovery', {
+                        settingsFile: settingsFilePath,
+                    });
+                }
+            }
+        }
+        else if ((shouldUpdateFile ||
+            shouldMigrateLegacyProviderFormat ||
+            normalizedSelectedProviderId ||
+            migratedLegacyAncillarySettings ||
+            migratedSelections ||
+            normalizedSandboxAutoApproveConflict) &&
+            !fileHadErrors) {
+            if (!this.disableFilePersistence) {
+                this.saveToFile();
+                if (!this.disableLogging) {
+                    this.loggingService.debug('Updated settings file with defaults and/or migrations', {
+                        settingsFile: settingsFilePath,
+                        updatedMissingDefaults: shouldUpdateFile,
+                        migratedLegacyProviders: shouldMigrateLegacyProviderFormat,
+                        migratedLegacyAncillarySettings,
+                    });
+                }
+            }
+        }
+    }
+    hasLegacyProviderFormat(rawFileConfig) {
+        const providers = rawFileConfig?.providers;
+        if (!Array.isArray(providers))
+            return false;
+        for (const provider of providers) {
+            if (!provider || typeof provider !== 'object') {
+                continue;
+            }
+            const hasId = typeof provider.id === 'string' && provider.id.trim().length > 0;
+            if (!hasId) {
+                return true;
+            }
+        }
+        return false;
+    }
+    registerRuntimeProviders() {
+        const configured = this.settings?.providers;
+        if (!Array.isArray(configured) || configured.length === 0)
+            return;
+        for (const p of configured) {
+            const providerId = resolveProviderId(p);
+            if (!providerId)
+                continue;
+            const baseUrl = p?.baseUrl;
+            const providerType = String(p?.type || '');
+            const providerName = resolveProviderName(p, providerId);
+            const baseUrlOptional = providerType === 'anthropic' || providerType === 'google' || providerType === 'opencode';
+            if (!providerId || (!baseUrl && !baseUrlOptional))
+                continue;
+            const existing = getProvider(providerId);
+            if (existing && !existing.isRuntimeDefined) {
+                if (!this.disableLogging) {
+                    this.loggingService.warn('Skipping custom provider because it conflicts with a built-in provider id', {
+                        providerId,
+                    });
+                }
+                continue;
+            }
+            try {
+                upsertProvider(createOpenAICompatibleProviderDefinition({
+                    name: String(providerId),
+                    label: providerName,
+                    type: p?.type ? String(p.type) : 'openai-compatible',
+                    baseUrl: baseUrl ? String(baseUrl) : undefined,
+                    apiKey: p?.apiKey ? String(p.apiKey) : undefined,
+                }));
+            }
+            catch (error) {
+                if (!this.disableLogging) {
+                    this.loggingService.warn('Failed to register custom provider', {
+                        providerId,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            }
+        }
+    }
+    /**
+     * Invalidate the process-global model cache for exactly the custom providers
+     * whose persisted configuration changed at the settings boundary (added,
+     * removed, or modified under the same id). Providers whose configuration is
+     * untouched keep their cached model lists; there is deliberately no global
+     * wipe here. This runs at the provider-update boundary (before the settings
+     * change is broadcast), so the next model-selection load re-fetches the new
+     * configuration instead of presenting stale models from the previous one.
+     */
+    invalidateChangedProviderModelCaches(previous, next) {
+        const indexById = (list) => {
+            const byId = new Map();
+            if (!Array.isArray(list))
+                return byId;
+            for (const entry of list) {
+                const id = resolveProviderId(entry);
+                if (id)
+                    byId.set(id, entry);
+            }
+            return byId;
+        };
+        const prevById = indexById(previous);
+        const nextById = indexById(next);
+        const affected = new Set();
+        for (const [id, prevEntry] of prevById) {
+            const nextEntry = nextById.get(id);
+            if (!nextEntry || !providerConfigsEqual(prevEntry, nextEntry))
+                affected.add(id);
+        }
+        for (const id of nextById.keys()) {
+            if (!prevById.has(id))
+                affected.add(id);
+        }
+        for (const id of affected) {
+            clearModelCache(id);
+        }
+    }
+    migrateSelectedProviderId() {
+        const current = this.settings?.agent?.modelSelection.provider;
+        if (!current || typeof current !== 'string') {
+            return false;
+        }
+        if (getProvider(current)) {
+            return false;
+        }
+        const normalized = resolveProviderId({ name: current });
+        if (!normalized || normalized === current) {
+            return false;
+        }
+        if (!getProvider(normalized)) {
+            // The value is not a registered provider and not an alias of one. Keep
+            // it untouched: erasing it would hide a legitimately invalid selection
+            // (and any warning would be noise, since the real guard is the agent
+            // failing loudly at first stream with "Provider '<id>' does not expose an
+            // application streamed model").
+            return false;
+        }
+        this.settings.agent.modelSelection = { ...this.settings.agent.modelSelection, provider: normalized };
+        this.sources.set('agent.modelSelection', 'config');
+        // Durable normalization: a fresh restart must see the same identity that
+        // the current process resolved, so the replacement is part of the startup
+        // rewrite instead of living only in memory.
+        this.startupMigrations.push(['agent.modelSelection', this.settings.agent.modelSelection]);
+        return true;
+    }
+    /**
+     * Get a setting value by typed dot-notation key (e.g., 'agent.modelSelection')
+     */
+    get(key) {
+        return this.getDynamic(key);
+    }
+    /**
+     * Get a setting value by arbitrary dynamic key path, returning unknown.
+     */
+    getDynamic(key) {
+        if (key === 'app.mentorMode' ||
+            key === 'app.liteMode' ||
+            key === 'app.planMode' ||
+            key === 'app.orchestratorMode') {
+            try {
+                return legacyModeFromProfileId(String(this.settings.app.activeProfileId))[key.slice('app.'.length)];
+            }
+            catch {
+                return false;
+            }
+        }
+        const keys = key.split('.');
+        let value = this.settings;
+        for (const k of keys) {
+            if (value && typeof value === 'object') {
+                value = value[k];
+            }
+            else {
+                return undefined;
+            }
+        }
+        return value;
+    }
+    /**
+     * Get the source of a setting
+     */
+    getSource(key) {
+        return this.sources.get(key) || 'default';
+    }
+    /**
+     * The environment variable or CLI flag that set this key at startup, if any.
+     * Startup values are re-applied on the next launch, so they win over a
+     * value saved from the settings menu once term2 restarts.
+     */
+    getStartupOverride(key) {
+        const source = trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get(key);
+        return source === 'env' || source === 'cli' ? source : undefined;
+    }
+    /**
+     * Get the built-in default for a setting key (undefined when it has none)
+     */
+    getDefault(key) {
+        let value = DEFAULT_SETTINGS;
+        for (const part of key.split('.'))
+            value = value?.[part];
+        return value;
+    }
+    /**
+     * Check if a setting is runtime-modifiable
+     */
+    isRuntimeModifiable(key) {
+        return RUNTIME_MODIFIABLE_SETTINGS.has(key);
+    }
+    /**
+     * Check if a setting is sensitive and should not be saved to disk
+     */
+    isSensitive(key) {
+        return SENSITIVE_SETTING_KEYS.has(key);
+    }
+    validateAndApplySetting(key, value) {
+        this.assertAtomicModelSelectionKey(key);
+        const nextSettings = structuredClone(this.settings);
+        const keys = key.split('.');
+        let obj = nextSettings;
+        for (let i = 0; i < keys.length - 1; i++) {
+            if (!obj[keys[i]]) {
+                obj[keys[i]] = {};
+            }
+            obj = obj[keys[i]];
+        }
+        obj[keys[keys.length - 1]] = value;
+        const result = SettingsSchema.safeParse(nextSettings);
+        if (!result.success) {
+            const matchingIssue = result.error.issues.find((issue) => issue.path.join('.') === key) ?? result.error.issues[0];
+            const issuePath = matchingIssue?.path?.join('.') || key;
+            const issueMessage = matchingIssue?.message || 'Invalid setting value';
+            throw new Error(`Invalid value for '${issuePath}': ${issueMessage}`);
+        }
+        this.settings = result.data;
+    }
+    normalizeProfileSelection(key, value) {
+        if (key !== 'app.activeProfileId')
+            return;
+        try {
+            const legacyMode = legacyModeFromProfileId(String(value));
+            this.settings.app = {
+                ...this.settings.app,
+                activeProfileId: String(value),
+                ...legacyMode,
+            };
+        }
+        catch {
+            // The schema currently accepts arbitrary strings for forward-compatible
+            // profile ids. Until custom profiles are supported, leave an unknown id
+            // untouched rather than crashing a settings write.
+        }
+    }
+    canonicalizeProfileChange(key, value, currentProfileId = String(this.settings.app.activeProfileId)) {
+        if (key === 'app.activeProfileId' && typeof value === 'string')
+            return { key, value: canonicalProfileId(value) };
+        const profileId = profileIdFromLegacyModeSetting(key, value, currentProfileId);
+        return profileId ? { key: 'app.activeProfileId', value: profileId } : { key, value };
+    }
+    canonicalizeProfileChanges(changes) {
+        let currentProfileId = String(this.settings.app.activeProfileId);
+        return changes.flatMap(({ key, value }) => {
+            const canonical = this.canonicalizeProfileChange(key, value, currentProfileId);
+            if (canonical.key === 'app.activeProfileId' && typeof canonical.value === 'string') {
+                currentProfileId = canonical.value;
+            }
+            return [canonical];
+        });
+    }
+    /**
+     * Enforce sandbox / auto-approve exclusivity: 'always' auto-approval cannot
+     * coexist with an enabled sandbox. Setting the mode to 'always' disables the
+     * sandbox; enabling the sandbox while the mode is 'always' demotes the mode
+     * to 'auto'. Returns the coupled key when a normalization was applied, so
+     * callers can notify listeners for it (the status bar reads both settings).
+     */
+    normalizeSandboxAutoApproveExclusivity(key, value) {
+        if (key === 'shell.autoApproveMode' && value === 'always') {
+            this.settings.sandbox.enabled = false;
+            this.sources.set('sandbox.enabled', this.getSource(key));
+            return 'sandbox.enabled';
+        }
+        if (key === 'sandbox.enabled' && value === true && this.settings.shell.autoApproveMode === 'always') {
+            this.settings.shell.autoApproveMode = 'auto';
+            this.sources.set('shell.autoApproveMode', this.getSource(key));
+            return 'shell.autoApproveMode';
+        }
+        return undefined;
+    }
+    /**
+     * Set a setting value (runtime modification)
+     * Only runtime-modifiable settings can be changed.
+     * Sensitive settings cannot be modified (must come from environment).
+     */
+    set(key, value, options) {
+        this.setDynamic(key, value, options);
+    }
+    setDynamic(key, value, options) {
+        if (this.isSensitive(key)) {
+            throw new Error(`Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`);
+        }
+        if (!this.isRuntimeModifiable(key)) {
+            throw new Error(`Cannot modify '${key}' at runtime. Requires restart.`);
+        }
+        const canonical = this.canonicalizeProfileChange(key, value);
+        if (canonical.key !== key)
+            return this.setDynamic(canonical.key, canonical.value, options);
+        value = canonical.value;
+        const outputIntent = this.outputIntentForChange(key, value);
+        this.validateAndApplySetting(key, value);
+        value = this.getDynamic(key);
+        if (key === 'app.activeProfileId')
+            this.normalizeProfileSelection(key, value);
+        // A saved runtime change reads as a settings-file value. Only startup
+        // flags (--model, --effort, --profile, gateway/ACP startup) opt out of
+        // persistence, so an unsaved change is a command-line value.
+        const persist = options?.persist !== false;
+        const source = persist ? 'config' : 'cli';
+        this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), source);
+        this.sources.set(key, source);
+        // Same single-enforcement-point treatment for the sandbox / auto-approve
+        // pair. Must run after recordRuntimeOverride so that method can read the
+        // pre-normalization mode for its own override-map handling.
+        const coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, value);
+        // If we're changing the logging level, update the logging service runtime
+        if (key === 'logging.logLevel') {
+            try {
+                this.loggingService.setLogLevel(value);
+            }
+            catch (err) {
+                if (!this.disableLogging) {
+                    this.loggingService.warn('Failed to update logging level at runtime', {
+                        error: err instanceof Error ? err.message : String(err),
+                        loggingLevel: value,
+                    });
+                }
+            }
+        }
+        if (key === 'logging.suppressConsoleOutput') {
+            try {
+                this.loggingService.setSuppressConsoleOutput(Boolean(value));
+            }
+            catch (err) {
+                if (!this.disableLogging) {
+                    this.loggingService.warn('Failed to update console output suppression at runtime', {
+                        error: err instanceof Error ? err.message : String(err),
+                        suppressConsoleOutput: value,
+                    });
+                }
+            }
+        }
+        // Persist to file unless the caller explicitly opts out. The durable
+        // settlement is the caller's evidence: only a `saved` result may be
+        // reported as a durable replacement.
+        const durableResult = persist
+            ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent)
+            : { status: 'not-persisted', reason: 'disabled' };
+        this.lastDurableWrite = durableResult;
+        this.notifyChange(key);
+        if (coupledKey) {
+            this.notifyChange(coupledKey);
+        }
+        return durableResult;
+    }
+    /**
+     * Validate all runtime changes before applying any of them. This is the
+     * transaction boundary used by conversation configuration: a multi-field
+     * model/provider selection must not leave settings half-applied when one
+     * field is invalid.
+     */
+    setDynamicTransaction(changes) {
+        if (changes.length === 0)
+            return;
+        const canonicalChanges = this.canonicalizeProfileChanges(changes);
+        const candidate = structuredClone(this.settings);
+        for (const change of canonicalChanges) {
+            if (this.isSensitive(change.key)) {
+                throw new Error(`Cannot modify '${change.key}' - it is a sensitive setting that can only be configured via environment variables.`);
+            }
+            if (!this.isRuntimeModifiable(change.key)) {
+                throw new Error(`Cannot modify '${change.key}' at runtime. Requires restart.`);
+            }
+            setSettingValue(candidate, change.key, change.value);
+        }
+        const result = SettingsSchema.safeParse(candidate);
+        if (!result.success) {
+            const issue = result.error.issues[0];
+            const issuePath = issue?.path.join('.') || changes[0].key;
+            throw new Error(`Invalid value for '${issuePath}': ${issue?.message || 'Invalid setting value'}`);
+        }
+        for (const change of canonicalChanges) {
+            const value = change.key
+                .split('.')
+                .reduce((current, part) => current?.[part], result.data);
+            this.setDynamic(change.key, value);
+        }
+    }
+    /**
+     * Persist a setting even if it only takes effect after restart.
+     * This still validates against the full schema and updates in-memory state
+     * so the settings UI reflects the saved value immediately.
+     */
+    setPersistent(key, value) {
+        this.setPersistentDynamic(key, value);
+    }
+    setPersistentDynamic(key, value) {
+        if (this.isSensitive(key)) {
+            throw new Error(`Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`);
+        }
+        const canonical = this.canonicalizeProfileChange(key, value);
+        if (canonical.key !== key)
+            return this.setPersistentDynamic(canonical.key, canonical.value);
+        // The persisted provider list is the provider-update boundary: any runtime
+        // save/delete flows through here. Capture the pre-change list so a same-id
+        // config change can be detected and only the affected providers' model
+        // caches evicted.
+        const previousProviders = key === 'providers' ? this.settings.providers : undefined;
+        const outputIntent = this.outputIntentForChange(key, value);
+        this.validateAndApplySetting(key, value);
+        value = this.getDynamic(key);
+        if (key === 'app.activeProfileId')
+            this.normalizeProfileSelection(key, value);
+        if (key === 'providers') {
+            this.invalidateChangedProviderModelCaches(previousProviders, value);
+        }
+        this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), 'config');
+        this.sources.set(key, 'config');
+        const coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, value);
+        const durableResult = this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent);
+        this.lastDurableWrite = durableResult;
+        this.notifyChange(key);
+        if (coupledKey) {
+            this.notifyChange(coupledKey);
+        }
+        return durableResult;
+    }
+    /**
+     * Persist a batch as one file settlement.  Validation happens against a
+     * clone before the file lock is entered, and the in-memory/runtime-overlay
+     * state is changed only after the atomic save reports `saved`.
+     */
+    setPersistentDynamicTransaction(changes) {
+        if (changes.length === 0)
+            return { status: 'saved' };
+        const canonicalChanges = this.canonicalizeProfileChanges(changes);
+        let candidate = structuredClone(this.settings);
+        for (const change of canonicalChanges) {
+            if (this.isSensitive(change.key)) {
+                throw new Error(`Cannot modify '${change.key}' - it is a sensitive setting that can only be configured via environment variables.`);
+            }
+            candidate = this.applyPersistedSetting(candidate, change.key, change.value);
+        }
+        const previousProviders = canonicalChanges.some((change) => change.key === 'providers')
+            ? this.settings.providers
+            : undefined;
+        const durableResult = this.saveToFile((current) => {
+            let next = current;
+            for (const change of canonicalChanges)
+                next = this.applyPersistedSetting(next, change.key, change.value);
+            return next;
+        }, canonicalChanges.reduce((intent, change) => this.outputIntentForChange(change.key, change.value) === 'preserve'
+            ? intent
+            : this.outputIntentForChange(change.key, change.value), 'preserve'), () => {
+            // Install only successful batch intents before reconciliation. This
+            // removes superseded leaf overlays without reinstalling a stale snapshot.
+            for (const change of canonicalChanges)
+                this.recordRuntimeOverride(change.key, change.value, 'config');
+        });
+        this.lastDurableWrite = durableResult;
+        if (durableResult.status !== 'saved')
+            return durableResult;
+        for (const change of canonicalChanges)
+            this.notifyChange(change.key);
+        if (previousProviders)
+            this.invalidateChangedProviderModelCaches(previousProviders, this.settings.providers);
+        return durableResult;
+    }
+    /**
+     * Reset a setting to its default value.
+     * Sensitive settings cannot be reset as they should only come from env.
+     */
+    reset(key) {
+        if (key && this.isSensitive(key)) {
+            throw new Error(`Cannot reset '${key}' - it is a sensitive setting that can only be configured via environment variables.`);
+        }
+        if (key) {
+            const canonical = this.canonicalizeProfileChange(key, false);
+            if (canonical.key !== key)
+                return this.setPersistentDynamic(canonical.key, canonical.value);
+        }
+        let coupledKey;
+        if (key) {
+            // Reset specific setting
+            const keys = key.split('.');
+            let obj = this.settings;
+            // Navigate to parent
+            for (let i = 0; i < keys.length - 1; i++) {
+                if (!obj[keys[i]]) {
+                    obj[keys[i]] = {};
+                }
+                obj = obj[keys[i]];
+            }
+            // Reset to default
+            const lastKey = keys[keys.length - 1];
+            const defaultValue = this.getDefault(key);
+            const previousProviders = key === 'providers' ? this.settings.providers : undefined;
+            obj[lastKey] = cloneSettingValue(defaultValue);
+            if (key === 'app.activeProfileId') {
+                this.normalizeProfileSelection(key, defaultValue);
+            }
+            if (key === 'providers') {
+                this.invalidateChangedProviderModelCaches(previousProviders, defaultValue);
+            }
+            this.sources.set(key, 'default');
+            this.recordRuntimeOverride(key, defaultValue, 'default');
+            coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, defaultValue);
+        }
+        else {
+            // Reset all settings
+            const previousProviders = this.settings.providers;
+            this.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+            this.invalidateChangedProviderModelCaches(previousProviders, DEFAULT_SETTINGS.providers);
+            this.sources.clear();
+            this.resetAllAtRuntime = true;
+            this.runtimeOverrides.clear();
+            this.runtimeOverrideSources.clear();
+        }
+        const durableResult = this.saveToFile((current) => {
+            if (!key)
+                return structuredClone(DEFAULT_SETTINGS);
+            return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
+        }, !key || key === 'agent.maxOutputTokens' || key === 'agent' ? 'reset' : 'preserve');
+        this.lastDurableWrite = durableResult;
+        this.notifyChange(key);
+        if (key && coupledKey) {
+            this.notifyChange(coupledKey);
+        }
+        return durableResult;
+    }
+    /**
+     * The durable settlement recorded by the most recent public mutation. A
+     * caller that did not receive the mutation's return value (for example
+     * {@link setDynamicTransaction}) reads the same evidence here.
+     */
+    getLastDurableWrite() {
+        return this.lastDurableWrite;
+    }
+    /**
+     * Truthful startup corruption-recovery outcome. `recovered: false` is the
+     * ordinary state; `recovered: true` means the file was syntactically
+     * corrupt, a scan salvaged a JSON object from its bytes, and (when
+     * persistence is enabled) the original bytes were moved to `quarantinedPath`
+     * before a fresh replacement was written.
+     */
+    getRecoveryResult() {
+        return this.recoveryResult;
+    }
+    /**
+     * Subscribe to changes; returns an unsubscribe function.
+     */
+    onChange(listener) {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
+    }
+    notifyChange(changedKey) {
+        for (const listener of this.listeners) {
+            try {
+                listener(changedKey);
+            }
+            catch (error) {
+                if (!this.disableLogging) {
+                    this.loggingService.warn('Settings change listener threw', {
+                        error: error instanceof Error ? error.message : String(error),
+                        changedKey,
+                    });
+                }
+            }
+        }
+    }
+    /**
+     * Get all settings with their sources
+     */
+    getAll() {
+        return buildSettingsWithSources(this.settings, (key) => this.getSource(key));
+    }
+    /**
+     * Load settings from file
+     * Returns both raw (pre-Zod) and validated data
+     */
+    loadFromFile() {
+        return loadSettingsFromFile({
+            settingsDir: this.settingsDir,
+            schema: SettingsSchema,
+            disableLogging: this.disableLogging,
+            loggingService: this.loggingService,
+        });
+    }
+    /**
+     * Save settings to file, excluding sensitive values
+     */
+    defaultValueFor(key) {
+        let value = DEFAULT_SETTINGS;
+        for (const part of key.split('.')) {
+            value = value[part];
+        }
+        return cloneSettingValue(value);
+    }
+    assertAtomicModelSelectionKey(key) {
+        if (key.startsWith('agent.modelSelection.')) {
+            throw new Error('Model selection is atomic; write agent.modelSelection with both model and provider.');
+        }
+    }
+    applyPersistedSetting(current, key, value) {
+        this.assertAtomicModelSelectionKey(key);
+        const next = structuredClone(current);
+        setSettingValue(next, key, value);
+        if (key === 'app.activeProfileId') {
+            try {
+                next.app = {
+                    ...next.app,
+                    ...legacyModeFromProfileId(String(value)),
+                };
+            }
+            catch {
+                // Preserve forward-compatible unknown profile ids until custom profile
+                // registration supplies a projection for them.
+            }
+        }
+        // Sandbox / auto-approve exclusivity in the persisted copy, mirroring the
+        // app-mode block above: writing one side must normalize the other side in
+        // the file so a stale service cannot commit the conflicting pair.
+        if (key === 'shell.autoApproveMode' && value === 'always') {
+            setSettingValue(next, 'sandbox.enabled', false);
+        }
+        else if (key === 'sandbox.enabled' && value === true && current.shell?.autoApproveMode === 'always') {
+            setSettingValue(next, 'shell.autoApproveMode', 'auto');
+        }
+        return SettingsSchema.parse(next);
+    }
+    applyRuntimeSetting(current, key, value) {
+        const next = this.applyPersistedSetting(current, key, value);
+        // An ancestor overlay that omitted this leaf has no output preference.
+        // Preserve the reconciled CLI/env/peer allocation rather than a Zod default.
+        if (key === 'agent' && !Object.hasOwn(value ?? {}, 'maxOutputTokens')) {
+            next.agent.maxOutputTokens = current.agent.maxOutputTokens;
+        }
+        return next;
+    }
+    outputIntentForChange(key, value) {
+        if (key === 'agent.maxOutputTokens')
+            return 'explicit';
+        if (key === 'agent')
+            return Object.hasOwn(value ?? {}, 'maxOutputTokens') ? 'explicit' : 'reset';
+        return 'preserve';
+    }
+    runtimeValueForChange(key, value, intent) {
+        if (key !== 'agent' || intent !== 'reset')
+            return value;
+        const group = { ...value };
+        delete group.maxOutputTokens;
+        return group;
+    }
+    recordRuntimeOverride(key, value, source) {
+        this.resetAllAtRuntime = false;
+        if (key === 'agent') {
+            this.runtimeOverrides.delete('agent.maxOutputTokens');
+            this.runtimeOverrideSources.delete('agent.maxOutputTokens');
+            if (Object.hasOwn(value ?? {}, 'maxOutputTokens')) {
+                this.runtimeOverrideSources.set('agent.maxOutputTokens', source);
+                this.sources.set('agent.maxOutputTokens', source);
+            }
+            else {
+                this.sources.set('agent.maxOutputTokens', trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get('agent.maxOutputTokens') ??
+                    'default');
+            }
+        }
+        this.runtimeOverrides.set(key, cloneSettingValue(value));
+        this.runtimeOverrideSources.set(key, source);
+        // Sandbox / auto-approve exclusivity, mirroring the app-mode block: the
+        // runtime override map must stay consistent with the normalized in-memory
+        // state so a later reconciliation cannot resurrect the conflict. Rule B
+        // reads this.settings because normalization runs after this method.
+        if (key === 'shell.autoApproveMode' && value === 'always') {
+            this.runtimeOverrides.set('sandbox.enabled', false);
+            this.runtimeOverrideSources.set('sandbox.enabled', source);
+        }
+        else if (key === 'sandbox.enabled' && value === true && this.settings.shell.autoApproveMode === 'always') {
+            this.runtimeOverrides.set('shell.autoApproveMode', 'auto');
+            this.runtimeOverrideSources.set('shell.autoApproveMode', source);
+        }
+    }
+    reconcileCommittedSettings(committed, implicitOutputDefault = false) {
+        if (this.resetAllAtRuntime) {
+            this.settings = structuredClone(DEFAULT_SETTINGS);
+            this.sources.clear();
+            return;
+        }
+        let next = mergeSettings(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli, {
+            disableLogging: this.disableLogging,
+            loggingService: this.loggingService,
+        });
+        for (const [key, value] of this.runtimeOverrides) {
+            next = this.applyRuntimeSetting(next, key, value);
+        }
+        // env/cli may still name a retired Profile id; keep memory canonical.
+        if (next.app)
+            next.app = { ...next.app, activeProfileId: canonicalProfileId(String(next.app.activeProfileId)) };
+        this.settings = next;
+        this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli);
+        if (implicitOutputDefault)
+            this.sources.set('agent.maxOutputTokens', trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get('agent.maxOutputTokens') ??
+                'default');
+        for (const [key, source] of this.runtimeOverrideSources) {
+            this.sources.set(key, source);
+        }
+    }
+    applyStartupChanges(current) {
+        const next = structuredClone(current);
+        for (const [key, value] of this.startupMigrations) {
+            setSettingValue(next, key, value);
+        }
+        return next;
+    }
+    saveToFile(mutate, outputIntent = 'preserve', onCommitted) {
+        if (this.disableFilePersistence) {
+            return { status: 'not-persisted', reason: 'disabled' };
+        }
+        let implicitOutputDefault = false;
+        const committed = saveSettingsToFile({
+            settingsDir: this.settingsDir,
+            schema: SettingsSchema,
+            defaults: DEFAULT_SETTINGS,
+            mutate: (current) => {
+                return mutate ? mutate(current) : this.applyStartupChanges(current);
+            },
+            stripSensitiveSettings: (next, raw) => {
+                const cleaned = stripSensitiveSettings(next);
+                implicitOutputDefault =
+                    outputIntent === 'reset' ||
+                        (outputIntent === 'preserve' && !Object.hasOwn(raw?.agent ?? {}, 'maxOutputTokens'));
+                if (implicitOutputDefault && cleaned.agent)
+                    delete cleaned.agent.maxOutputTokens;
+                return cleaned;
+            },
+            disableLogging: this.disableLogging,
+            loggingService: this.loggingService,
+        });
+        if (committed) {
+            onCommitted?.();
+            this.reconcileCommittedSettings(committed, implicitOutputDefault);
+            return { status: 'saved' };
+        }
+        return { status: 'not-persisted', reason: 'failed' };
+    }
+    /**
+     * Check if target object is missing any keys that exist in source
+     */
+    hasMissingKeys(target, source, prefix = '') {
+        return hasMissingKeys(target, source, OPTIONAL_DEFAULT_KEYS, prefix);
+    }
+}
+export { buildEnvOverrides } from './settings-env.js';
+export { SETTING_KEYS, SENSITIVE_SETTINGS } from './settings-schema.js';
+//# sourceMappingURL=settings-service.js.map

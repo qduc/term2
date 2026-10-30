@@ -1,0 +1,1012 @@
+import { isDeniedReadApproveAnswer } from '../../../contracts/conversation.js';
+import { appendFileSync } from 'node:fs';
+import { lstat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { SandboxedCodeHostImpl } from '../../../services/sandboxed-code-host/sandboxed-code-host.js';
+import { quoteShellArg } from '../../../services/ssh-service.js';
+import { applyApprovalGrant } from '../../../services/approval/approval-grant-executor.js';
+import { isDockerHostControlShellApproval } from '../../../services/approval/shell-sandbox-approval.js';
+import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
+import { normalizeToolParameters } from '../../../lib/tool-invoke.js';
+import { isZodToolParameterSchema } from '../../types.js';
+import { renderCompactSignature } from './tools-header.js';
+import { MCP_TOOL_BINDING, describeMcpTool, isMcpToolDefinition, validateMcpArguments } from './mcp-script-surface.js';
+import { getScriptedReturnContract, scriptedReturnContractJsonSchema, validateScriptedReturn, } from '../../scripted-return-contract.js';
+import { WORKFLOW_PROHIBITED_TOOL_NAMES } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
+import { createRunCodeAgentCapability, isRunCodeAgentBridgeActive, } from './run-code-agent-capability.js';
+import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
+import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_GOAL_CHECK } from '../../tool-names.js';
+import { saveOutputArtifact } from '../../../utils/shell/shell-output.js';
+import { getRunCodeExecutionResult } from './run-code-execution.js';
+export const TOOL_NAME_RUN_CODE = 'run_code';
+export const TOOL_NAME_DESCRIBE = 'describe';
+/** Limits governing one script invocation. */
+export const RUN_CODE_LIMITS = {
+    maxCalls: 200,
+    maxConcurrency: 8,
+    // Agent capability budgets are separate from the tools ledger by design:
+    // launching child agents is scarcer and more expensive than a tool call.
+    maxAgentStarts: 16,
+    maxAgentConcurrency: 4,
+    maxAgentCalls: 200,
+    maxResultChars: 100_000,
+    maxMediaBytes: 8 * 1024 * 1024,
+    maxMediaTotalBytes: 32 * 1024 * 1024,
+    maxMediaAttachments: 32,
+    maxCodeBytes: 65_536,
+    maxOutputBytes: 262_144,
+    maxConsoleBytes: 262_144,
+};
+/**
+ * Every name policy withholds from a script, annotated with the union in
+ * `tools/tool-names.ts` so a name added here that the union lacks fails to
+ * compile instead of silently changing what a script can reach.
+ */
+const PROHIBITED_TOOL_NAMES = [
+    ...WORKFLOW_PROHIBITED_TOOL_NAMES,
+    TOOL_NAME_RUN_CODE,
+    'ask_mentor',
+    'session_rollover',
+    // The goal stop check must be a direct, top-level call so the stop guard sees it in history.
+    TOOL_NAME_GOAL_CHECK,
+    'bash',
+    'enter_worktree',
+    'exit_worktree',
+];
+/** Tools that are structurally unavailable from a script. */
+export const RUN_CODE_PROHIBITED_TOOLS = new Set(PROHIBITED_TOOL_NAMES);
+/** Static semantic adapters for action tools whose result contract is known. */
+export const ACTION_SEMANTICS = {
+    configure_task_check_in: (raw) => {
+        const parsed = parseActionPayload(raw);
+        if (!isRecord(parsed) || typeof parsed.ok !== 'boolean')
+            return { outcome: 'unknown', reason: 'unrecognized action result shape' };
+        if (parsed.ok === true)
+            return { outcome: 'applied' };
+        return {
+            outcome: 'not_applied',
+            reason: typeof parsed.error === 'string' && parsed.error ? parsed.error : 'action reported ok:false',
+        };
+    },
+    cancel_run: (raw) => {
+        const parsed = parseActionPayload(raw);
+        if (!isRecord(parsed) || typeof parsed.ok !== 'boolean')
+            return { outcome: 'unknown', reason: 'unrecognized action result shape' };
+        if (parsed.ok === true &&
+            typeof parsed.runId === 'string' &&
+            parsed.runId.length > 0 &&
+            parsed.status === 'cancelling') {
+            return { outcome: 'applied', reason: 'cancellation requested and accepted; settlement is reported separately' };
+        }
+        if (parsed.ok === false &&
+            parsed.code === 'not_active' &&
+            typeof parsed.target === 'string' &&
+            parsed.target.length > 0) {
+            return { outcome: 'not_applied', reason: `not_active (target: ${parsed.target})` };
+        }
+        return { outcome: 'unknown', reason: 'unrecognized action result shape' };
+    },
+};
+export const isActionTool = (name) => ACTION_SEMANTICS[name] !== undefined;
+const parseActionPayload = (raw) => {
+    if (typeof raw !== 'string')
+        return raw;
+    try {
+        return JSON.parse(raw);
+    }
+    catch {
+        return raw;
+    }
+};
+const MAX_RECEIPT_REASON_CHARS = 280;
+export const clipReason = (reason) => reason.length <= MAX_RECEIPT_REASON_CHARS ? reason : `${reason.slice(0, MAX_RECEIPT_REASON_CHARS)}…`;
+export function isDirectlyCallable(tool) {
+    return tool.name === 'shell' || RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
+}
+function createUnknownToolHints(allTools, directToolNames) {
+    const names = new Set(allTools.map((tool) => tool.name));
+    const hints = Object.create(null);
+    for (const name of directToolNames) {
+        if (name !== TOOL_NAME_RUN_CODE && RUN_CODE_PROHIBITED_TOOLS.has(name))
+            hints[name] = 'This is a direct tool; call it outside run_code instead.';
+    }
+    if (names.has('apply_patch')) {
+        for (const name of ['create_file', 'search_replace']) {
+            if (!names.has(name))
+                hints[name] = 'Use apply_patch instead (use *** Add File: to create a file).';
+        }
+    }
+    if (!names.has('apply_patch') && (names.has('create_file') || names.has('search_replace'))) {
+        hints.apply_patch = `This tool is unavailable; use ${['create_file', 'search_replace']
+            .filter((name) => names.has(name))
+            .join(' or ')} instead.`;
+    }
+    return hints;
+}
+function unknownToolMessage(name, registry, hints) {
+    const available = registry.map((entry) => entry.name).join(', ');
+    const hint = Object.hasOwn(hints, name) ? ` ${hints[name]}` : '';
+    return `Unknown tool "${name}". Available: ${available}.${hint}`;
+}
+export function describeTool(tool) {
+    let parameters;
+    const targetSchema = tool.canonicalParameters ?? tool.parameters;
+    if (isZodToolParameterSchema(targetSchema)) {
+        try {
+            parameters = z.toJSONSchema(targetSchema, { io: 'input' });
+        }
+        catch {
+            parameters = { unconvertible: true };
+        }
+    }
+    else if (targetSchema && typeof targetSchema === 'object') {
+        parameters = targetSchema;
+    }
+    else {
+        parameters = { unconvertible: true };
+    }
+    return {
+        name: tool.name,
+        description: tool.description,
+        parameters,
+        scriptedReturnContract: scriptedReturnContractJsonSchema(getScriptedReturnContract(tool)),
+        ...(typeof tool.scriptedReturnShape === 'string' && tool.scriptedReturnShape
+            ? { scriptedReturnShape: tool.scriptedReturnShape }
+            : {}),
+    };
+}
+const isRecord = (value) => typeof value === 'object' && value !== null;
+const isMediaContentPart = (value) => isRecord(value) && ((value.type === 'image' && 'image' in value) || (value.type === 'file' && 'file' in value));
+const mediaBytes = (value) => {
+    const payload = value.type === 'image' ? value.image : value.type === 'file' ? value.file : undefined;
+    if (isRecord(payload) && typeof payload.data === 'string') {
+        try {
+            return Buffer.from(payload.data, 'base64').byteLength;
+        }
+        catch {
+            return Buffer.byteLength(payload.data, 'utf8');
+        }
+    }
+    try {
+        return Buffer.byteLength(JSON.stringify(payload) ?? '', 'utf8');
+    }
+    catch {
+        return Number.POSITIVE_INFINITY;
+    }
+};
+const MEDIA_REFERENCE_KEY = '__term2_run_code_media_reference__';
+const isMediaReference = (value) => isRecord(value) && typeof value[MEDIA_REFERENCE_KEY] === 'string' && Object.keys(value).length === 1;
+export function createMediaReferenceStore() {
+    const attachments = new Map();
+    const byValue = new WeakMap();
+    let totalBytes = 0;
+    const capture = (value) => {
+        if (isMediaContentPart(value)) {
+            const existing = byValue.get(value);
+            if (existing !== undefined)
+                return existing ? { [MEDIA_REFERENCE_KEY]: existing } : '[media content omitted]';
+            const size = mediaBytes(value);
+            if (!Number.isFinite(size) ||
+                size > RUN_CODE_LIMITS.maxMediaBytes ||
+                attachments.size >= RUN_CODE_LIMITS.maxMediaAttachments ||
+                totalBytes + size > RUN_CODE_LIMITS.maxMediaTotalBytes) {
+                byValue.set(value, null);
+                return `[media content omitted: attachment exceeds the ${RUN_CODE_LIMITS.maxMediaBytes}-byte per-image or ${RUN_CODE_LIMITS.maxMediaTotalBytes}-byte per-run limit]`;
+            }
+            const token = `run_code_media_${randomUUID()}`;
+            byValue.set(value, token);
+            attachments.set(token, value);
+            totalBytes += size;
+            return { [MEDIA_REFERENCE_KEY]: token };
+        }
+        if (Array.isArray(value))
+            return value.map(capture);
+        if (isRecord(value))
+            return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, capture(entry)]));
+        return value;
+    };
+    const resolve = (value) => {
+        if (isMediaReference(value))
+            return attachments.get(value[MEDIA_REFERENCE_KEY]) ?? value;
+        if (Array.isArray(value))
+            return value.map(resolve);
+        if (isRecord(value))
+            return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, resolve(entry)]));
+        return value;
+    };
+    return { capture, resolve };
+}
+const containsMediaContent = (value, ancestors = new Set()) => {
+    if (isMediaContentPart(value))
+        return true;
+    if (!isRecord(value) && !Array.isArray(value))
+        return false;
+    if (ancestors.has(value))
+        return false;
+    ancestors.add(value);
+    const found = Array.isArray(value)
+        ? value.some((entry) => containsMediaContent(entry, ancestors))
+        : Object.values(value).some((entry) => containsMediaContent(entry, ancestors));
+    ancestors.delete(value);
+    return found;
+};
+const truncate = (text, limit) => {
+    if (text.length <= limit)
+        return text;
+    let prefix = text.slice(0, limit);
+    if (/[\uD800-\uDBFF]$/.test(prefix))
+        prefix = prefix.slice(0, -1);
+    return `${prefix}\n[truncated: result exceeded ${limit} characters]`;
+};
+export const serializeResult = async (result, limit, toolName, callsCompleted) => {
+    const execution = getRunCodeExecutionResult(result);
+    if (execution && result instanceof String)
+        result = String(result);
+    if (typeof result === 'string') {
+        const clipped = truncate(result, limit);
+        if (result.length <= limit)
+            return { ok: true, result: clipped };
+        let retrieval;
+        try {
+            retrieval = { fullOutputPath: await saveOutputArtifact(result, { filenamePrefix: 'tool-overflow' }) };
+        }
+        catch {
+            retrieval = { unavailable: true };
+        }
+        return { ok: true, result: clipped, recovery: { result: clipped, truncated: true, ...retrieval } };
+    }
+    try {
+        const encoded = JSON.stringify(result);
+        if (encoded === undefined)
+            return { ok: true, result: null };
+        if (encoded.length <= limit)
+            return { ok: true, result: result };
+        if (containsMediaContent(result))
+            return { ok: true, result: `[truncated: media result exceeded ${limit} characters; media content omitted]` };
+        let retrieval = '';
+        try {
+            const artifactPath = await saveOutputArtifact(encoded, { filenamePrefix: 'tool-overflow' });
+            retrieval = `Full output saved to: ${artifactPath}. `;
+        }
+        catch {
+            retrieval = 'Full output could not be saved; the omitted result is unavailable. ';
+        }
+        const callUnit = callsCompleted === 1 ? 'call' : 'calls';
+        return {
+            ok: false,
+            error: `Tool "${toolName}" result exceeded ${limit} characters and could not be delivered to script. ${retrieval}${callsCompleted} nested tool ${callUnit} completed — inspect state before retrying; tool effects have already completed.`,
+        };
+    }
+    catch {
+        return { ok: true, result: truncate(String(result), limit) };
+    }
+};
+function getConversationSessionId(context) {
+    if (!context || typeof context !== 'object')
+        return undefined;
+    const runContext = context.context;
+    if (!runContext || typeof runContext !== 'object')
+        return undefined;
+    const sessionId = runContext.sessionId;
+    return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
+}
+function writeNestedCallRecord(tool, sessionId, outcome) {
+    const logPath = process.env.TERM2_NESTED_CALL_LOG;
+    if (!logPath || !sessionId)
+        return;
+    try {
+        appendFileSync(logPath, `${JSON.stringify({ tool, sessionId, timestamp: new Date().toISOString(), outcome })}\n`, 'utf8');
+    }
+    catch {
+        // Experiment-only logging must never affect tool execution.
+    }
+}
+const PATH_TOOLS = new Set([
+    'read_file',
+    'create_file',
+    'search_replace',
+    'apply_patch',
+    'grep',
+    'glob',
+    'read_code_outline',
+    'code_context_search',
+]);
+export async function bindPreparedAuthority(toolName, params, cwd, executionContext) {
+    const isRemote = executionContext?.isRemote() ?? false;
+    try {
+        // Only filesystem tools need a remote filesystem probe. Keep the existing
+        // remote behavior for unrelated capabilities rather than making (for
+        // example) a web call depend on a remote `realpath` utility.
+        if (isRemote && !PATH_TOOLS.has(toolName))
+            return { kind: 'bound', physicalRoot: cwd, params };
+        const sshService = executionContext?.getSSHService();
+        if (isRemote && !sshService)
+            throw new Error('Remote filesystem service is unavailable');
+        const requireAuthorityPath = isRemote
+            ? (value, semantics) => requireRemotePhysicalPath(value, cwd, sshService, semantics)
+            : (value, semantics) => requirePhysicalPath(value, cwd, semantics);
+        const physicalRoot = await requireAuthorityPath(cwd);
+        return {
+            kind: 'bound',
+            physicalRoot,
+            params: await bindPreparedArguments(toolName, params, requireAuthorityPath),
+        };
+    }
+    catch (error) {
+        return {
+            kind: 'denied',
+            message: `Cannot establish physical path authority: ${error instanceof Error ? error.message : String(error)}`,
+        };
+    }
+}
+async function requirePhysicalPath(value, cwd, semantics = 'referent') {
+    const physicalPath = await resolveWorkspacePathPhysically(value, cwd);
+    if (physicalPath === undefined)
+        throw new Error(`Unresolved path: ${value}`);
+    if (semantics === 'unlink-source') {
+        const lexicalPath = resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true });
+        const stats = await lstat(lexicalPath);
+        if (stats.isSymbolicLink())
+            throw new Error(`Symlink unlink source is unsupported: ${value}`);
+    }
+    return physicalPath;
+}
+/**
+ * Remote counterpart of `requirePhysicalPath`. The remote command canonicalizes
+ * the nearest existing ancestor, preserves a missing suffix, and rejects both
+ * dangling links and unlinking a symlink itself. Its NUL-delimited result means
+ * a valid remote pathname containing a newline is still unambiguous locally;
+ * do not capture that pathname in command substitution, which strips trailing
+ * newlines.
+ */
+async function requireRemotePhysicalPath(value, cwd, sshService, semantics = 'referent') {
+    const lexicalPath = resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true });
+    const sourceCheck = semantics === 'unlink-source' ? 'if [ -L "$original" ]; then exit 42; fi\n' : '';
+    const command = [
+        `original=${quoteShellArg(lexicalPath)}`,
+        'candidate=$original',
+        "suffix=''",
+        sourceCheck.trimEnd(),
+        // Do this once before walking missing ancestors. Otherwise an absent or
+        // incompatible utility can make every probe fail and look like a path that
+        // merely does not exist.
+        'if ! command -v realpath >/dev/null 2>&1 || ! realpath -e -z -- / >/dev/null 2>&1; then exit 45; fi',
+        'while true; do',
+        '  if realpath -e -- "$candidate" >/dev/null 2>&1; then',
+        '    if [ -z "$suffix" ]; then',
+        '      realpath -e -z -- "$candidate" || exit 46',
+        '    else',
+        // A successful realpath of an unsearchable directory does not establish
+        // authority over a missing child below it. Refuse rather than append the
+        // child lexically.
+        '      if ! [ -d "$candidate" ] || ! [ -x "$candidate" ] || ! cd -P "$candidate"; then exit 46; fi',
+        '      printf \'%s%s\\0\' "$PWD" "$suffix"',
+        '    fi',
+        '    exit',
+        '  fi',
+        '  if [ -L "$candidate" ]; then exit 43; fi',
+        // Do not interpret a failed realpath of an existing path as a missing leaf:
+        // permission and other resolution errors must not be converted into a
+        // lexical suffix.
+        '  if [ -e "$candidate" ]; then exit 46; fi',
+        '  parent=${candidate%/*}',
+        '  if [ -z "$parent" ]; then parent=/; fi',
+        '  if [ "$parent" = "$candidate" ]; then exit 44; fi',
+        '  suffix="/${candidate##*/}$suffix"',
+        '  candidate=$parent',
+        'done',
+    ]
+        .filter(Boolean)
+        .join('\n');
+    const result = await sshService.executeCommand(command);
+    if (result.exitCode === 42)
+        throw new Error(`Symlink unlink source is unsupported: ${value}`);
+    if (result.exitCode === 43)
+        throw new Error(`Unresolved path: ${value}`);
+    if (result.exitCode === 45)
+        throw new Error(`Remote canonicalizer is unavailable or unsupported: ${value}`);
+    if (result.exitCode === 46)
+        throw new Error(`Remote canonicalizer could not resolve path safely: ${value}`);
+    if (result.exitCode !== 0)
+        throw new Error(`Unresolved path: ${value}`);
+    const terminator = result.stdout.indexOf('\0');
+    if (terminator < 1 || terminator !== result.stdout.length - 1) {
+        throw new Error(`Invalid remote physical path response: ${value}`);
+    }
+    const physicalPath = result.stdout.slice(0, terminator);
+    if (!physicalPath.startsWith('/'))
+        throw new Error(`Invalid remote physical path response: ${value}`);
+    return physicalPath;
+}
+async function bindPreparedArguments(toolName, params, bindPhysicalPath) {
+    if (!params || typeof params !== 'object' || Array.isArray(params) || !PATH_TOOLS.has(toolName))
+        return params;
+    const record = params;
+    const bindPath = async (value, semantics = 'referent') => typeof value === 'string' ? bindPhysicalPath(value, semantics) : value;
+    if (toolName === 'apply_patch' && typeof record.patch === 'string')
+        return { ...record, patch: await bindPatchPaths(record.patch, bindPath) };
+    return 'path' in record ? { ...record, path: await bindPath(record.path) } : params;
+}
+async function bindPatchPaths(patch, bindPath) {
+    let parsed;
+    try {
+        parsed = parseUpstreamApplyPatch(patch);
+    }
+    catch {
+        return patch;
+    }
+    const targets = parsed.operations.flatMap((operation) => {
+        const moveTo = 'moveTo' in operation ? operation.moveTo : undefined;
+        const semantics = operation.type === 'delete_file' || moveTo ? 'unlink-source' : 'referent';
+        return [{ path: operation.path, semantics }, ...(moveTo ? [{ path: moveTo, semantics: 'referent' }] : [])];
+    });
+    let targetIndex = 0;
+    const lines = patch.replace(/\r\n?/g, '\n').split('\n');
+    const prefixes = ['*** Add File: ', '*** Update File: ', '*** Delete File: ', '*** Move to: '];
+    for (let index = 0; index < lines.length; index += 1) {
+        const prefix = prefixes.find((candidate) => lines[index].startsWith(candidate));
+        if (!prefix)
+            continue;
+        const target = targets[targetIndex++];
+        const bound = await bindPath(target.path, target.semantics);
+        lines[index] = prefix + String(bound);
+    }
+    return lines.join('\n');
+}
+export function withAbortSignal(context, signal, extra = {}) {
+    return context && typeof context === 'object'
+        ? { ...context, signal, ...extra }
+        : { signal, ...extra };
+}
+export function mergeAbortSignals(callerSignal, hostSignal) {
+    if (!callerSignal || callerSignal === hostSignal)
+        return callerSignal ?? hostSignal;
+    const controller = new AbortController();
+    const abort = () => {
+        callerSignal.removeEventListener('abort', abort);
+        hostSignal.removeEventListener('abort', abort);
+        controller.abort();
+    };
+    if (callerSignal.aborted || hostSignal.aborted) {
+        controller.abort();
+        return controller.signal;
+    }
+    callerSignal.addEventListener('abort', abort, { once: true });
+    hostSignal.addEventListener('abort', abort, { once: true });
+    return controller.signal;
+}
+async function isParallelSafe(tool, params, context) {
+    const declared = tool.parallelSafe;
+    if (declared === undefined || declared === false)
+        return false;
+    if (declared === true)
+        return true;
+    try {
+        return (await declared(params, context)) === true;
+    }
+    catch {
+        return false;
+    }
+}
+import { createRunCodeExecution, } from './run-code-execution.js';
+import { emitRunCodeCompletionTelemetry } from './run-code-telemetry.js';
+const createBridgeRunId = (() => {
+    let next = 0;
+    return () => `run_code_bridge_${++next}`;
+})();
+/**
+ * Product-specific runtime for one final wrapped registry snapshot.
+ *
+ * The host remains deliberately product-neutral. This module owns the other
+ * half of the seam: discovery of scriptable members, nested admission and
+ * approval, call/action ledgers, attachment references, normalization, and
+ * completion telemetry. Consequently a caller cannot accidentally execute
+ * only half of the lifecycle (for example, admit calls without finalizing
+ * receipts) by assembling the pieces itself.
+ */
+export function createRunCodeRuntime(options) {
+    // Snapshot and filter once. Discovery and dispatch therefore cannot drift
+    // if a caller mutates its registry while an invocation is in flight.
+    const registry = options.registry.filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
+    const unknownToolHints = createUnknownToolHints(options.registry, options.directToolNames ?? []);
+    const discovery = () => registry;
+    const execute = async (input) => {
+        const { loggingService } = options;
+        const approvalRegistry = options.approvalPolicyRegistry;
+        // The owner is session-scoped while the registry is rebuilt with an agent.
+        // Reassert the complete wrapped graph at the execution seam so an owner
+        // attached after construction observes the same graph as this invocation.
+        if (options.nestedApprovalOwner && options.graphIdentity) {
+            options.nestedApprovalOwner.bindGraph(options.graphIdentity);
+        }
+        const callerSignal = input.context?.signal ?? input.signal;
+        const bridgeRunId = createBridgeRunId();
+        const startedAt = Date.now();
+        const calls = [];
+        const receipts = [];
+        const pendingReceiptByCallId = new Map();
+        const abortedCallIds = new Set();
+        const agentCallIndexes = new Map();
+        const abortedAgentCallIds = new Set();
+        let rejectedSeq = 0;
+        const output = [];
+        const consoleValues = [];
+        const sessionId = getConversationSessionId(input.context);
+        const mediaReferences = createMediaReferenceStore();
+        // A script can catch a rejected `describe` and keep running, so the rejection
+        // cannot fail the run or enter the call ledger. It is carried to the
+        // execution instead, which is the only place the diagnostic survives.
+        let rejectedUnknownName;
+        const record = (tool, outcome, started, directlyCallable, callId, diagnostic, reason, recovery) => {
+            calls.push({
+                tool,
+                outcome,
+                durationMs: Date.now() - started,
+                directlyCallable,
+                ...(callId ? { callId } : {}),
+                ...(diagnostic ? { diagnostic } : {}),
+                ...(reason ? { reason: clipReason(reason) } : {}),
+                ...(recovery ? { recovery } : {}),
+            });
+            if (outcome !== 'describe') {
+                writeNestedCallRecord(tool, sessionId, outcome === 'ok' ? 'success' : outcome === 'approval_required' ? 'denied-by-approval' : 'failure');
+            }
+        };
+        const failed = (message) => ({
+            kind: 'result',
+            result: { ok: false, error: message },
+        });
+        const recordReceipt = (callId, tool, outcome, reason) => {
+            if (abortedCallIds.has(callId))
+                return;
+            const pendingIndex = pendingReceiptByCallId.get(callId);
+            const value = { callId, tool, outcome, ...(reason ? { reason: clipReason(reason) } : {}) };
+            if (pendingIndex !== undefined) {
+                receipts[pendingIndex] = value;
+                pendingReceiptByCallId.delete(callId);
+            }
+            else
+                receipts.push(value);
+        };
+        const recordAgentCall = (member, started, callId, outcome, reason) => {
+            if (abortedAgentCallIds.has(callId) && outcome !== 'unknown')
+                return;
+            let index = agentCallIndexes.get(callId);
+            if (index === undefined) {
+                index = calls.length;
+                agentCallIndexes.set(callId, index);
+                calls.push({ tool: `agent.${member}`, outcome: 'unknown', durationMs: 0, callId });
+                if (member === 'start')
+                    recordReceipt(callId, 'agent.start', 'unknown');
+            }
+            calls[index] = {
+                tool: `agent.${member}`,
+                outcome,
+                durationMs: Date.now() - started,
+                callId,
+                ...(reason ? { reason: clipReason(reason) } : {}),
+            };
+            if (member === 'start') {
+                const actionOutcome = outcome === 'ok' ? 'applied' : outcome === 'error' ? 'failed' : 'unknown';
+                recordReceipt(callId, 'agent.start', actionOutcome, reason);
+            }
+        };
+        const tools = {
+            binding: {
+                name: 'tools',
+                kind: 'namespace',
+                members: [...new Set([...registry.map((tool) => tool.name), TOOL_NAME_DESCRIBE])],
+                unknownMemberHints: unknownToolHints,
+            },
+            limits: {
+                maxCalls: RUN_CODE_LIMITS.maxCalls,
+                maxConcurrency: RUN_CODE_LIMITS.maxConcurrency,
+                limitExceededMessage: `Tool call limit reached (${RUN_CODE_LIMITS.maxCalls} calls per script run).`,
+            },
+            overBudget: ({ usedCalls, maxCalls }, rejected) => {
+                record(rejected.tool.name, 'unknown', rejected.started, undefined, undefined, 'call_budget');
+                if (isActionTool(rejected.tool.name)) {
+                    rejectedSeq += 1;
+                    recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, rejected.tool.name, 'unknown', 'call budget exhausted before dispatch');
+                }
+                return failed(`Tool call limit reached (${maxCalls} calls per script run; ${usedCalls} calls admitted, ${Math.max(0, maxCalls - usedCalls)} remaining). Return the partial results you collected and start another run_code call only for unattempted work; Do not repeat completed tool effects.`);
+            },
+            onAdmitted: (prepared, context) => {
+                if (!isActionTool(prepared.tool.name))
+                    return;
+                const callId = `${bridgeRunId}:${context.callId}`;
+                pendingReceiptByCallId.set(callId, receipts.length);
+                receipts.push({ callId, tool: prepared.tool.name, outcome: 'unknown' });
+            },
+            onAborted: (prepared, context, reason) => {
+                const callId = `${bridgeRunId}:${context.callId}`;
+                abortedCallIds.add(callId);
+                record(prepared.tool.name, 'unknown', prepared.started, undefined, callId);
+                if (isActionTool(prepared.tool.name))
+                    recordReceipt(callId, prepared.tool.name, 'unknown', reason);
+            },
+            prepare: async (payload) => {
+                const started = Date.now();
+                const name = typeof payload.member === 'string' ? payload.member : '';
+                const tool = registry.find((candidate) => candidate.name === name);
+                if (name === TOOL_NAME_DESCRIBE && typeof payload.params === 'string') {
+                    const described = registry.find((candidate) => candidate.name === payload.params);
+                    if (!described) {
+                        rejectedUnknownName = payload.params;
+                        return failed(unknownToolMessage(payload.params, registry, unknownToolHints));
+                    }
+                    record(name, 'describe', started);
+                    const describedValue = isMcpToolDefinition(described)
+                        ? describeMcpTool(described[MCP_TOOL_BINDING])
+                        : describeTool(described);
+                    return { kind: 'result', result: { ok: true, result: describedValue } };
+                }
+                if (!tool) {
+                    record(name || '(unnamed)', 'unknown_tool', started, undefined, undefined, 'unknown_tool');
+                    if (isActionTool(name)) {
+                        rejectedSeq += 1;
+                        recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'failed', `Unknown tool "${name}"`);
+                    }
+                    return failed(unknownToolMessage(name, registry, unknownToolHints));
+                }
+                const targetSchema = tool.canonicalParameters ?? tool.parameters;
+                let normalized = payload.params ?? {};
+                if (isMcpToolDefinition(tool)) {
+                    const validationError = validateMcpArguments(tool[MCP_TOOL_BINDING].descriptor.inputSchema, normalized);
+                    if (validationError) {
+                        record(name, 'invalid_params', started, undefined, undefined, 'invalid_nested_input');
+                        return failed(`Invalid parameters for "${name}": ${validationError}`);
+                    }
+                }
+                try {
+                    normalized = normalizeToolParameters(normalized, targetSchema);
+                }
+                catch {
+                    normalized = payload.params ?? {};
+                }
+                if (isZodToolParameterSchema(targetSchema)) {
+                    const parsed = targetSchema.safeParse(normalized);
+                    if (!parsed.success) {
+                        record(name, 'invalid_params', started, undefined, undefined, 'invalid_nested_input');
+                        const issues = parsed.error?.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`).join('; ') ??
+                            'invalid parameters';
+                        if (isActionTool(name)) {
+                            rejectedSeq += 1;
+                            recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'failed', `Invalid parameters: ${issues}`);
+                        }
+                        return failed(`Invalid parameters for "${name}": ${issues}\nSignature: ${renderCompactSignature(tool)}`);
+                    }
+                    normalized = parsed.data;
+                }
+                // Parse the freeform envelope before approval evaluation: the policy
+                // intentionally requires approval when it cannot inspect malformed input.
+                if (name === TOOL_NAME_APPLY_PATCH && typeof normalized?.patch === 'string') {
+                    try {
+                        parseUpstreamApplyPatch(normalized.patch);
+                    }
+                    catch (error) {
+                        const message = error instanceof Error ? error.message : String(error);
+                        record(name, 'invalid_params', started, undefined, undefined, 'invalid_nested_input');
+                        if (isActionTool(name)) {
+                            rejectedSeq += 1;
+                            recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'failed', `Invalid parameters: ${message}`);
+                        }
+                        return failed(`Invalid parameters for "${name}": ${message}`);
+                    }
+                }
+                const authorityRoot = options.getCwd();
+                const authority = await bindPreparedAuthority(name, normalized, authorityRoot, options.executionContext);
+                if (authority.kind === 'denied') {
+                    record(name, 'approval_required', started, isDirectlyCallable(tool));
+                    if (isActionTool(name)) {
+                        rejectedSeq += 1;
+                        recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'not_applied', authority.message);
+                    }
+                    return failed(authority.message);
+                }
+                return {
+                    tool,
+                    params: authority.params,
+                    originalParams: normalized,
+                    authorityRoot,
+                    authorityMeaning: JSON.stringify(authority),
+                    parallelSafe: await isParallelSafe(tool, normalized, input.context),
+                    started,
+                };
+            },
+            lane: (prepared) => (prepared.parallelSafe ? 'default' : 'serial'),
+            invoke: async (prepared, callContext) => {
+                const callId = `${bridgeRunId}:${callContext.callId}`;
+                const nestedContext = withAbortSignal(input.context, mergeAbortSignals(callerSignal, callContext.signal), {
+                    scripted: true,
+                });
+                const revalidateAuthority = async () => {
+                    const currentRoot = options.getCwd();
+                    const authority = await bindPreparedAuthority(prepared.tool.name, prepared.originalParams, currentRoot, options.executionContext);
+                    return (authority.kind === 'bound' &&
+                        currentRoot === prepared.authorityRoot &&
+                        JSON.stringify(authority) === prepared.authorityMeaning);
+                };
+                const revalidate = async () => (await approvalRegistry.evaluate({
+                    toolName: prepared.tool.name,
+                    args: prepared.params,
+                    context: input.context,
+                })).kind;
+                // The factory leaves scripted post-execute pauses to this owner, so
+                // approval waits participate in the worker clock and cancellation.
+                const executePrepared = async () => {
+                    const details = { toolCall: { callId } };
+                    const executeAgain = async () => {
+                        if (nestedContext.signal?.aborted)
+                            throw new Error('Tool execution was cancelled.');
+                        return prepared.tool.execute(prepared.params, nestedContext, details);
+                    };
+                    const result = await executeAgain();
+                    const pause = prepared.tool.postExecutePause;
+                    const descriptor = pause?.describe(prepared.params, result, details);
+                    if (!pause || !descriptor)
+                        return result;
+                    const context = { params: prepared.params, result, details, executeAgain };
+                    const reject = () => (pause.resolve ? pause.resolve(context, 'reject') : result);
+                    if (!options.nestedApprovalOwner)
+                        return reject();
+                    let postDecision = 'reject';
+                    tools.onWaiting?.(callContext);
+                    try {
+                        const resolution = await options.nestedApprovalOwner.request({
+                            requestId: `${callId}:post-execute`,
+                            sessionId: sessionId ?? 'unknown',
+                            graphIdentity: options.graphIdentity ?? options.registry,
+                            outerRunId: bridgeRunId,
+                            nestedCallId: callId,
+                            toolName: prepared.tool.name,
+                            preparedArguments: prepared.params,
+                            authorityContext: input.context,
+                            approval: {
+                                agentName: 'Nested run_code',
+                                ...descriptor,
+                                rawInterruption: null,
+                                callId,
+                                workspaceRoot: prepared.authorityRoot,
+                            },
+                            signal: nestedContext.signal,
+                            revalidateAuthority,
+                            revalidate,
+                            grant: ({ answer }) => {
+                                if (descriptor.deniedRead && isDeniedReadApproveAnswer(answer))
+                                    postDecision = answer;
+                                else if (!descriptor.deniedRead && answer === 'y')
+                                    postDecision = 'approve';
+                                else
+                                    throw new Error('Tool execution was not approved.');
+                            },
+                            dispatch: async () => {
+                                tools.onResumed?.(callContext);
+                                return pause.resolve ? pause.resolve(context, postDecision) : executeAgain();
+                            },
+                        });
+                        if (resolution.kind === 'approved')
+                            return resolution.result;
+                        await reject();
+                        if (resolution.kind === 'failed')
+                            throw resolution.error;
+                        return result;
+                    }
+                    finally {
+                        tools.onResumed?.(callContext);
+                    }
+                };
+                const decision = await approvalRegistry.evaluate({
+                    toolName: prepared.tool.name,
+                    args: prepared.params,
+                    context: input.context,
+                });
+                if (decision.kind !== 'auto_approve') {
+                    if (decision.kind === 'prompt' && options.nestedApprovalOwner) {
+                        tools.onWaiting?.(callContext);
+                        try {
+                            const resolution = await options.nestedApprovalOwner.request({
+                                requestId: callId,
+                                sessionId: sessionId ?? 'unknown',
+                                graphIdentity: options.graphIdentity ?? options.registry,
+                                outerRunId: bridgeRunId,
+                                nestedCallId: callId,
+                                toolName: prepared.tool.name,
+                                preparedArguments: prepared.params,
+                                authorityContext: input.context,
+                                approval: {
+                                    agentName: 'Nested run_code',
+                                    toolName: prepared.tool.name,
+                                    argumentsText: JSON.stringify(prepared.params),
+                                    rawInterruption: null,
+                                    callId,
+                                    workspaceRoot: prepared.authorityRoot,
+                                    dockerHostControl: isDockerHostControlShellApproval(prepared.tool.name, prepared.params, sessionId ?? 'unknown', options.sessionAccess, options.nestedCompatibility),
+                                    outsideWorkspaceEdit: resolveOutsideWorkspaceEdit(prepared.tool.name, prepared.params, prepared.authorityRoot),
+                                },
+                                signal: nestedContext.signal,
+                                revalidateAuthority,
+                                revalidate,
+                                grant: (nestedDecision) => {
+                                    if (callContext.signal.aborted)
+                                        throw new Error('Tool execution was not approved.');
+                                    const applied = applyApprovalGrant({
+                                        sessionId: sessionId ?? 'unknown',
+                                        sessionAccess: options.sessionAccess,
+                                        nestedCompatibility: options.nestedCompatibility,
+                                        logger: loggingService,
+                                    }, {
+                                        answer: nestedDecision.answer,
+                                        toolName: prepared.tool.name,
+                                        rawArguments: prepared.params,
+                                        callId,
+                                    });
+                                    if (!applied.isApproved)
+                                        throw new Error('Tool execution was not approved.');
+                                },
+                                dispatch: async () => {
+                                    tools.onResumed?.(callContext);
+                                    return executePrepared();
+                                },
+                            });
+                            if (resolution.kind === 'approved')
+                                return settleResolved(prepared, resolution.result, callId);
+                            const message = 'message' in resolution ? resolution.message : String(resolution.error);
+                            record(prepared.tool.name, 'approval_required', prepared.started, isDirectlyCallable(prepared.tool), callId);
+                            if (isActionTool(prepared.tool.name))
+                                recordReceipt(callId, prepared.tool.name, 'not_applied', message);
+                            return failed(message);
+                        }
+                        finally {
+                            tools.onResumed?.(callContext);
+                        }
+                    }
+                    const outcome = decision.kind === 'unknown'
+                        ? 'unknown_policy'
+                        : decision.kind === 'error'
+                            ? 'policy_error'
+                            : decision.kind === 'interceptor_denied'
+                                ? 'interceptor_denied'
+                                : 'approval_required';
+                    record(prepared.tool.name, outcome, prepared.started, isDirectlyCallable(prepared.tool), callId, undefined, decision.kind === 'error' ? decision.message : undefined);
+                    const message = decision.kind === 'unknown'
+                        ? `"${prepared.tool.name}" has no registered approval policy and is unavailable from inside a script.`
+                        : decision.kind === 'interceptor_denied'
+                            ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script.`
+                            : decision.kind === 'error'
+                                ? `"${prepared.tool.name}" was not run: checking its arguments for approval failed: ${decision.message.replace(/[.!?]+$/, '')}. Nothing was executed; correct the arguments and call it again.`
+                                : `"${prepared.tool.name}" requires approval and is unavailable from inside a script.`;
+                    if (isActionTool(prepared.tool.name))
+                        recordReceipt(callId, prepared.tool.name, 'not_applied', message);
+                    return failed(message);
+                }
+                try {
+                    return settleResolved(prepared, await executePrepared(), callId);
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'nested_tool_failure', message);
+                    if (isActionTool(prepared.tool.name))
+                        recordReceipt(callId, prepared.tool.name, 'failed', message);
+                    return failed(message);
+                }
+            },
+        };
+        const capabilities = { tools };
+        if (options.agentBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentBridge)) {
+            capabilities.agent = createRunCodeAgentCapability({
+                ...options.agentBridge,
+                authority: options.agentSpecAuthority,
+                logger: loggingService,
+                // Session-owned child approval surfaces: without an owner the child
+                // interruption settles as the catchable interrupted error.
+                ...(options.nestedApprovalOwner
+                    ? { nestedApprovalOwner: options.nestedApprovalOwner, approvalPolicyRegistry: approvalRegistry }
+                    : {}),
+                ...(sessionId !== undefined ? { sessionId } : {}),
+                ...(options.graphIdentity ? { graphIdentity: options.graphIdentity } : {}),
+                ...(options.nestedCompatibility ? { nestedCompatibility: options.nestedCompatibility } : {}),
+                onCallAdmitted: (member, started, callId) => recordAgentCall(member, started, callId, 'unknown'),
+                onCallSettled: (member, started, callId, outcome, reason) => {
+                    if (outcome === 'unknown' && reason)
+                        abortedAgentCallIds.add(callId);
+                    recordAgentCall(member, started, callId, outcome, reason);
+                },
+            }, { bridgeRunId, context: input.context });
+        }
+        const settleResolved = async (prepared, raw, callId) => {
+            try {
+                if (isActionTool(prepared.tool.name)) {
+                    const semantic = ACTION_SEMANTICS[prepared.tool.name](raw);
+                    recordReceipt(callId, prepared.tool.name, semantic.outcome, semantic.reason);
+                }
+                const serialized = await serializeResult(mediaReferences.capture(raw), RUN_CODE_LIMITS.maxResultChars, prepared.tool.name, calls.filter((call) => call.outcome !== 'describe').length + 1);
+                if (!serialized.ok) {
+                    record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'invalid_nested_output', serialized.error);
+                    return { kind: 'result', result: serialized };
+                }
+                const contract = validateScriptedReturn(prepared.tool, serialized.result);
+                if (!contract.ok) {
+                    record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'invalid_tool_output');
+                    return {
+                        kind: 'fail',
+                        code: 'invalid_output',
+                        detail: 'invalid_tool_output',
+                        message: `Tool "${prepared.tool.name}" returned a value that violates its scripted output contract: ${contract.message}`,
+                    };
+                }
+                if (!abortedCallIds.has(callId)) {
+                    // Snapshot only the normalized, bounded script-visible value. Media references
+                    // remain inert markers; raw payloads never enter recovery or telemetry.
+                    const recovery = serialized.recovery ?? { result: JSON.parse(JSON.stringify(contract.value)) };
+                    record(prepared.tool.name, 'ok', prepared.started, undefined, callId, undefined, undefined, recovery);
+                }
+                return { kind: 'result', result: { ok: true, result: contract.value } };
+            }
+            catch (error) {
+                record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'nested_tool_failure');
+                const message = error instanceof Error ? error.message : String(error);
+                if (isActionTool(prepared.tool.name))
+                    recordReceipt(callId, prepared.tool.name, 'failed', message);
+                return failed(message);
+            }
+        };
+        loggingService.debug('run_code execution started', {
+            cwd: options.getCwd(),
+            timeout: input.timeout,
+            exposedTools: registry.length,
+            description: input.description,
+        });
+        const result = await new SandboxedCodeHostImpl().run({
+            code: input.code,
+            inputData: input.inputs,
+            capabilities,
+            limits: {
+                timeoutMs: input.timeout,
+                maxCodeBytes: RUN_CODE_LIMITS.maxCodeBytes,
+                maxOutputBytes: RUN_CODE_LIMITS.maxOutputBytes,
+                maxConsoleBytes: RUN_CODE_LIMITS.maxConsoleBytes,
+            },
+            subject: 'Script',
+            allowVoidOutput: true,
+            signal: callerSignal,
+            onConsole: (values) => {
+                consoleValues.push(values);
+                output.push(values.map((value) => (typeof value === 'string' ? value : JSON.stringify(value))).join(' '));
+            },
+        });
+        for (const [callId, index] of pendingReceiptByCallId) {
+            receipts[index] = {
+                ...receipts[index],
+                outcome: 'unknown',
+                reason: 'did not settle before the script run ended',
+            };
+            pendingReceiptByCallId.delete(callId);
+        }
+        const resolvedResult = result.ok && !result.voidOutput
+            ? { ...result, output: mediaReferences.resolve(result.output) }
+            : result;
+        const attachments = [];
+        const execution = createRunCodeExecution(resolvedResult, calls, receipts, consoleValues, attachments, rejectedUnknownName ? 'unknown_tool' : undefined);
+        emitRunCodeCompletionTelemetry(loggingService, {
+            code: input.code,
+            execution,
+            durationMs: Date.now() - startedAt,
+            timeoutMs: input.timeout,
+            sessionId,
+            runId: bridgeRunId,
+            calls,
+            receipts,
+        });
+        loggingService.debug('run_code execution finished', {
+            ok: result.ok,
+            toolCalls: calls.filter((call) => call.outcome !== 'describe').length,
+            schemaLookups: calls.filter((call) => call.outcome === 'describe').length,
+        });
+        return { execution, output };
+    };
+    return { discovery, execute };
+}
+//# sourceMappingURL=run-code-runtime.js.map

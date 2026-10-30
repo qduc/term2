@@ -1,0 +1,296 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useInput } from 'ink';
+/**
+ * How long the "press Escape again to interrupt" confirmation stays armed.
+ * Matches the double-Escape window used to clear the input buffer
+ * (`use-escape-key.ts`) so both gestures feel the same.
+ */
+const INTERRUPT_CONFIRM_TIMEOUT_MS = 2000;
+/**
+ * The bridge survives the approval-to-composer handoff, but must never turn
+ * input owned by another surface into a rejection reason.
+ */
+export const mayConsumeRejectionReasonBridge = (inputOwner) => inputOwner.kind === 'input' || inputOwner.kind === 'approval';
+export const useAppKeyboardShortcuts = ({ exitWithUsage, onCtrlCConfirmHint, pendingSkillRef, waitingForAskUserAnswer, setWaitingForAskUserAnswer, waitingForRejectionReason, setWaitingForRejectionReason, inputMode, inputValue, isProcessing, waitingForApproval, stopProcessing, handoffState, cancelHandoff, pendingLargeUncachedTurn, cycleAppModes, replaceInput, onSkillActivationCancelled, approvalShortcutsEnabled, approvalShortcutIdentity, approvalShortcutApproveAnswer, onApprove, onReject, submitRejectionReason, inputOwner, }) => {
+    // `armedRef` — not the state below — is what the key handler reads. A user can
+    // press Escape twice faster than React commits a render, so the confirmation
+    // must not depend on the re-render landing between the two presses. The state
+    // exists only to show the hint.
+    const armedRef = useRef(false);
+    const [interruptConfirmVisible, setInterruptConfirmVisible] = useState(false);
+    const interruptTimeoutRef = useRef(null);
+    // Keep the consumed request rather than a global boolean: a queue can
+    // promote its next head without ever relinquishing the approval input owner.
+    // An unrelated modal must not rearm a decision that is still settling.
+    const consumedApprovalIdentityRef = useRef(undefined);
+    const rejectionReasonBridgeRef = useRef(null);
+    const ctrlCArmedRef = useRef(false);
+    const ctrlCTimeoutRef = useRef(null);
+    const disarmInterrupt = () => {
+        armedRef.current = false;
+        if (interruptTimeoutRef.current) {
+            clearTimeout(interruptTimeoutRef.current);
+            interruptTimeoutRef.current = null;
+        }
+        setInterruptConfirmVisible(false);
+    };
+    const stateRef = useRef({
+        pendingSkillRef,
+        waitingForAskUserAnswer,
+        setWaitingForAskUserAnswer,
+        waitingForRejectionReason,
+        setWaitingForRejectionReason,
+        inputMode,
+        inputValue,
+        isProcessing,
+        waitingForApproval,
+        stopProcessing,
+        handoffState,
+        cancelHandoff,
+        pendingLargeUncachedTurn,
+        cycleAppModes,
+        replaceInput,
+        onSkillActivationCancelled,
+        approvalShortcutsEnabled,
+        approvalShortcutIdentity,
+        approvalShortcutApproveAnswer,
+        onApprove,
+        onReject,
+        submitRejectionReason,
+        inputOwner,
+        exitWithUsage,
+        onCtrlCConfirmHint,
+    });
+    stateRef.current = {
+        pendingSkillRef,
+        waitingForAskUserAnswer,
+        setWaitingForAskUserAnswer,
+        waitingForRejectionReason,
+        setWaitingForRejectionReason,
+        inputMode,
+        inputValue,
+        isProcessing,
+        waitingForApproval,
+        stopProcessing,
+        handoffState,
+        cancelHandoff,
+        pendingLargeUncachedTurn,
+        cycleAppModes,
+        replaceInput,
+        onSkillActivationCancelled,
+        approvalShortcutsEnabled,
+        approvalShortcutIdentity,
+        approvalShortcutApproveAnswer,
+        onApprove,
+        onReject,
+        submitRejectionReason,
+        inputOwner,
+        exitWithUsage,
+        onCtrlCConfirmHint,
+    };
+    const markRejectionReasonInputReady = useCallback(() => {
+        // Once the bridge has received text it remains the sole consumer through
+        // submission. Clearing it here would hand a partially buffered key burst
+        // to the editor and could lose or duplicate the remainder of that burst.
+        if (rejectionReasonBridgeRef.current === '')
+            rejectionReasonBridgeRef.current = null;
+    }, []);
+    // `inputOwner` is read here via a ref-like pattern: Ink's `isActive` option
+    // captures the value at render time, and this hook re-runs on every render,
+    // so a fresh `isActive` boolean is passed to `useInput` whenever the owner
+    // changes. The `inputOwner` value held by the closure below is therefore also
+    // current as of this render.
+    // Ctrl+C (emergency exit) remains global: it must work even while a prompt
+    // owns input. All other shortcuts are suppressed via `isActive` when a modal
+    // prompt is up, so they cannot double-fire against the prompt's own handler.
+    const handleGlobalInput = useCallback((input, key) => {
+        const current = stateRef.current;
+        if (key.ctrl && input === 'c') {
+            if (ctrlCArmedRef.current) {
+                ctrlCArmedRef.current = false;
+                if (ctrlCTimeoutRef.current)
+                    clearTimeout(ctrlCTimeoutRef.current);
+                ctrlCTimeoutRef.current = null;
+                current.exitWithUsage();
+                return;
+            }
+            const bridgedRejectionReason = rejectionReasonBridgeRef.current;
+            if (current.inputValue.length > 0 || (bridgedRejectionReason?.length ?? 0) > 0) {
+                if (bridgedRejectionReason !== null)
+                    rejectionReasonBridgeRef.current = '';
+                current.replaceInput('');
+            }
+            else if (current.isProcessing || current.waitingForApproval) {
+                current.stopProcessing();
+            }
+            else {
+                current.onCtrlCConfirmHint?.('Press Ctrl+C again to exit');
+            }
+            ctrlCArmedRef.current = true;
+            if (ctrlCTimeoutRef.current)
+                clearTimeout(ctrlCTimeoutRef.current);
+            ctrlCTimeoutRef.current = setTimeout(() => {
+                ctrlCArmedRef.current = false;
+                ctrlCTimeoutRef.current = null;
+            }, 2000);
+            return;
+        }
+        // SIGQUIT-style escape hatch when the app is wedged and cannot interrupt.
+        if (input === '\x1c' || (key.ctrl && input === '\\')) {
+            current.exitWithUsage();
+            return;
+        }
+        if (rejectionReasonBridgeRef.current !== null) {
+            // The bridge spans the approval-to-composer handoff, but it is not a
+            // global shortcut. A higher-priority surface (such as the background
+            // task manager) must receive its own keys without them becoming part of
+            // the buffered rejection reason.
+            if (!mayConsumeRejectionReasonBridge(current.inputOwner))
+                return;
+            if (!current.waitingForRejectionReason) {
+                // The bridge is only live while the rejection composition it belongs
+                // to is live. If that approval settled or was replaced (head change
+                // while the user was typing), the buffered reason is orphaned: drop it
+                // and fall through so `y`/`n` reach the replacement approval instead
+                // of the reason being buffered or submitted against it. Keep the old
+                // request consumed: a direct rejection may still be settling without
+                // ever opening a reason composer.
+                rejectionReasonBridgeRef.current = null;
+                current.replaceInput('');
+            }
+            else {
+                if (key.escape) {
+                    rejectionReasonBridgeRef.current = null;
+                    consumedApprovalIdentityRef.current = undefined;
+                    current.setWaitingForRejectionReason(false);
+                    current.replaceInput('');
+                    return;
+                }
+                if (key.return) {
+                    const reason = rejectionReasonBridgeRef.current;
+                    rejectionReasonBridgeRef.current = null;
+                    current.replaceInput('');
+                    void current.submitRejectionReason(reason);
+                    return;
+                }
+                if (key.backspace || key.delete) {
+                    const next = rejectionReasonBridgeRef.current.slice(0, -1);
+                    rejectionReasonBridgeRef.current = next;
+                    current.replaceInput(next);
+                    return;
+                }
+                if (input && !key.ctrl && !key.meta) {
+                    const next = rejectionReasonBridgeRef.current + input;
+                    rejectionReasonBridgeRef.current = next;
+                    current.replaceInput(next);
+                }
+                return;
+            }
+        }
+        if (current.inputOwner.kind === 'approval' &&
+            current.approvalShortcutsEnabled &&
+            current.approvalShortcutIdentity !== null &&
+            consumedApprovalIdentityRef.current !== current.approvalShortcutIdentity) {
+            const decision = input[0];
+            if (decision === 'y') {
+                consumedApprovalIdentityRef.current = current.approvalShortcutIdentity;
+                current.onApprove(current.approvalShortcutApproveAnswer);
+            }
+            else if (decision === 'n') {
+                consumedApprovalIdentityRef.current = current.approvalShortcutIdentity;
+                const bufferedReason = current.inputValue + input.slice(1);
+                rejectionReasonBridgeRef.current = bufferedReason;
+                if (bufferedReason)
+                    current.replaceInput(bufferedReason);
+                current.onReject();
+            }
+        }
+    }, []);
+    useInput(handleGlobalInput, { isActive: true });
+    // Non-emergency shortcuts. Suppressed entirely while a modal confirmation
+    // prompt owns input (Esc, Shift-Tab, skill/ask-user/rejection-cancel paths).
+    // This closes the Ink fan-out coupling: the prompt's own `useInput` is the
+    // sole handler for its keys while it is mounted.
+    useInput((input, key) => {
+        const current = stateRef.current;
+        if (key.escape) {
+            if (current.pendingSkillRef.current) {
+                current.pendingSkillRef.current = null;
+                current.onSkillActivationCancelled();
+                return;
+            }
+            if (current.waitingForAskUserAnswer) {
+                current.setWaitingForAskUserAnswer(false);
+                current.replaceInput('');
+                return;
+            }
+            if (current.waitingForRejectionReason) {
+                consumedApprovalIdentityRef.current = undefined;
+                current.setWaitingForRejectionReason(false);
+                current.replaceInput('');
+                return;
+            }
+            if (current.inputMode === 'text' &&
+                (current.isProcessing || current.waitingForApproval) &&
+                // A non-empty composer means Escape belongs to the clear-buffer
+                // gesture in `use-escape-key.ts`; interrupting only claims Escape once
+                // there is nothing left to clear.
+                current.inputValue.length === 0) {
+                // Interrupting a turn throws away real work, and Escape is easy to hit
+                // by accident (stray key, leftover terminal escape sequence). Require a
+                // second Escape inside a short window to confirm.
+                if (armedRef.current) {
+                    disarmInterrupt();
+                    current.stopProcessing();
+                    return;
+                }
+                armedRef.current = true;
+                setInterruptConfirmVisible(true);
+                if (interruptTimeoutRef.current)
+                    clearTimeout(interruptTimeoutRef.current);
+                interruptTimeoutRef.current = setTimeout(() => {
+                    interruptTimeoutRef.current = null;
+                    disarmInterrupt();
+                }, INTERRUPT_CONFIRM_TIMEOUT_MS);
+                return;
+            }
+            if (current.handoffState?.stage === 'entering_message') {
+                current.cancelHandoff();
+            }
+            return;
+        }
+        const isCtrlO = (key.ctrl && (input.toLowerCase() === 'o' || input === '\x0f')) || input === '\x0f';
+        if (isCtrlO) {
+            current.replaceInput('/model ');
+            return;
+        }
+        const isCtrlT = (key.ctrl && (input.toLowerCase() === 't' || input === '\x14')) || input === '\x14';
+        if (isCtrlT) {
+            current.replaceInput('/effort ');
+            return;
+        }
+        const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
+        if (!isShiftTab)
+            return;
+        if (current.pendingLargeUncachedTurn) {
+            return;
+        }
+        current.cycleAppModes();
+    }, { isActive: inputOwner.kind === 'input' });
+    // Disarm as soon as the turn ends — or as soon as the user types, since
+    // Escape then means "clear the buffer" — so an armed confirmation can never
+    // be completed by a later, unrelated Escape.
+    useEffect(() => {
+        if ((!isProcessing && !waitingForApproval) || inputValue.length > 0) {
+            disarmInterrupt();
+        }
+    }, [isProcessing, waitingForApproval, inputValue]);
+    useEffect(() => () => {
+        if (interruptTimeoutRef.current)
+            clearTimeout(interruptTimeoutRef.current);
+        if (ctrlCTimeoutRef.current)
+            clearTimeout(ctrlCTimeoutRef.current);
+    }, []);
+    return { interruptConfirmVisible, markRejectionReasonInputReady };
+};
+//# sourceMappingURL=use-app-keyboard-shortcuts.js.map

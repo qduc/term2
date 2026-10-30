@@ -1,0 +1,136 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useInputContext } from '../context/InputContext.js';
+import { useSelection } from './use-selection.js';
+import { buildSettingValueSuggestions, fetchLiveSettingValueSuggestions, filterSettingValueSuggestionsByQuery, mergeSettingValueSuggestions, } from '../utils/value-suggestions.js';
+import { isNumberSetting, isSecretSetting, isStringSetting, isUsdMicrosSetting, } from '../services/settings/settings-ui-metadata.js';
+/** USD suggestions are written as `$5`; compare them to the stored micros. */
+function dollarTextToMicros(text) {
+    const match = /^\$(\d+(?:\.\d+)?)$/.exec(text);
+    return match ? Math.round(Number(match[1]) * 1_000_000) : undefined;
+}
+const MAX_RESULTS = 10;
+export const useSettingsValueCompletion = (settingsService) => {
+    const { controller } = useInputContext();
+    const controllerFrame = controller.getSnapshot().stack.at(-1);
+    const isControllerOpen = controllerFrame?.kind === 'settings_value';
+    const isOpen = isControllerOpen;
+    const [settingsVersion, setSettingsVersion] = useState(0);
+    // Live catalog suggestions (e.g. the OpenRouter decisions list for the
+    // decision-shadow model) resolved asynchronously while the frame is open;
+    // each run cancels the previous one's still-pending result.
+    const [liveSuggestions, setLiveSuggestions] = useState(null);
+    const resolvedSettingKey = isControllerOpen ? controllerFrame.settingKey : null;
+    useEffect(() => {
+        if (!resolvedSettingKey)
+            return;
+        setLiveSuggestions(null);
+        let cancelled = false;
+        fetchLiveSettingValueSuggestions(resolvedSettingKey).then((result) => {
+            if (cancelled || result === null)
+                return;
+            setLiveSuggestions(result);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [resolvedSettingKey]);
+    // Recompute current setting value suggestions when settings change.
+    // (Useful if we later want to add "current" or dynamic suggestions.)
+    useEffect(() => {
+        const unsubscribe = settingsService.onChange(() => {
+            setSettingsVersion((v) => v + 1);
+        });
+        return unsubscribe;
+    }, [settingsService]);
+    const query = useMemo(() => {
+        if (!isControllerOpen)
+            return '';
+        return controllerFrame.binding.query;
+    }, [isControllerOpen, controllerFrame]);
+    const allSuggestions = useMemo(() => {
+        if (!resolvedSettingKey)
+            return [];
+        // settingsVersion is used to allow refresh when values change.
+        void settingsVersion;
+        const suggestions = mergeSettingValueSuggestions([...buildSettingValueSuggestions(resolvedSettingKey)], liveSuggestions);
+        // Never surface a stored credential as a suggestion.
+        if (isSecretSetting(resolvedSettingKey))
+            return suggestions;
+        try {
+            const currentValue = settingsService.getDynamic(resolvedSettingKey);
+            if (currentValue !== undefined) {
+                // Lists and maps need JSON so accepting the suggestion round-trips;
+                // String() would produce "[object Object]".
+                // USD settings are edited in dollars, so the current value is too.
+                const currentValueStr = currentValue !== null && typeof currentValue === 'object'
+                    ? JSON.stringify(currentValue)
+                    : isUsdMicrosSetting(resolvedSettingKey) && typeof currentValue === 'number'
+                        ? `$${currentValue / 1_000_000}`
+                        : String(currentValue);
+                const isListed = suggestions.some((s) => s.value === currentValueStr ||
+                    (isUsdMicrosSetting(resolvedSettingKey) && dollarTextToMicros(s.value) === currentValue));
+                if (!isListed) {
+                    suggestions.unshift({
+                        value: currentValueStr,
+                        description: 'Current value',
+                    });
+                }
+            }
+        }
+        catch {
+            // Ignore
+        }
+        return suggestions;
+    }, [resolvedSettingKey, settingsVersion, settingsService, liveSuggestions]);
+    const filteredEntries = useMemo(() => {
+        return filterSettingValueSuggestionsByQuery(allSuggestions, query, MAX_RESULTS, resolvedSettingKey ?? undefined);
+    }, [allSuggestions, query, resolvedSettingKey]);
+    const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } = useSelection(filteredEntries);
+    // Controller-owned value menus do not call the legacy `open()` initializer.
+    // Initialize them from the active setting so `/effort` starts on the value
+    // that will actually be used, rather than always highlighting the first
+    // suggestion.
+    useEffect(() => {
+        if (!isControllerOpen || !resolvedSettingKey)
+            return;
+        try {
+            const currentValue = settingsService.getDynamic(resolvedSettingKey);
+            const currentValueText = currentValue !== null && typeof currentValue === 'object' ? JSON.stringify(currentValue) : String(currentValue);
+            const currentValueIndex = filteredEntries.findIndex((item) => item.value === currentValueText ||
+                (isUsdMicrosSetting(resolvedSettingKey) && dollarTextToMicros(item.value) === currentValue));
+            setSelectedIndex(currentValueIndex >= 0 ? currentValueIndex : 0);
+        }
+        catch {
+            setSelectedIndex(0);
+        }
+    }, [isControllerOpen, controllerFrame?.id, resolvedSettingKey, filteredEntries, settingsService, setSelectedIndex]);
+    const isNumericSettings = useMemo(() => {
+        return resolvedSettingKey ? isNumberSetting(resolvedSettingKey) : false;
+    }, [resolvedSettingKey]);
+    // Free-form string: string setting with no predefined suggestions.
+    // These are settings like api keys, model names, hostnames, etc.
+    // Users should type a value freely; the empty state should not show an error.
+    const isFreeFormString = useMemo(() => {
+        if (!resolvedSettingKey)
+            return false;
+        if (!isStringSetting(resolvedSettingKey))
+            return false;
+        return buildSettingValueSuggestions(resolvedSettingKey).length === 0;
+    }, [resolvedSettingKey]);
+    return {
+        isOpen,
+        query,
+        filteredEntries,
+        selectedIndex,
+        moveUp,
+        moveDown,
+        moveHome,
+        moveEnd,
+        pageUp,
+        pageDown,
+        getSelectedItem,
+        isNumericSettings,
+        isFreeFormString,
+    };
+};
+//# sourceMappingURL=use-settings-value-completion.js.map

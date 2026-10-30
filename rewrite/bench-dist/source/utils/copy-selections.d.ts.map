@@ -1,0 +1,1 @@
+{"version":3,"file":"copy-selections.d.ts","sourceRoot":"","sources":["../../../../source/utils/copy-selections.ts"],"names":[],"mappings":"AAAA,MAAM,MAAM,aAAa,GAAG,QAAQ,CAAC;IACnC,KAAK,EAAE,MAAM,CAAC;IACd,IAAI,EAAE,MAAM,CAAC;CACd,CAAC,CAAC;AAWH,kFAAkF;AAClF,wBAAgB,uBAAuB,CAAC,IAAI,EAAE,MAAM,GAAG,MAAM,EAAE,CAgC9D;AAED,wBAAgB,mBAAmB,CAAC,QAAQ,EAAE,MAAM,GAAG,aAAa,EAAE,CAQrE"}

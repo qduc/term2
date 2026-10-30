@@ -1,0 +1,243 @@
+import { readFile, writeFile, mkdir, rm } from 'fs/promises';
+import path from 'path';
+import { applyDiff } from '../utils/apply-diff.js';
+import { quoteShellArg } from '../services/ssh-service.js';
+/**
+ * Resolves a relative path and ensures it's within the workspace, unless the
+ * caller opts out via `allowOutsideWorkspace: true`. The opt-out is used by
+ * tool execution after either normal approval or the explicit YOLO bypass.
+ * Matches the same option in `source/tools/utils.resolveWorkspacePath`.
+ */
+function resolveWorkspacePath(relativePath, baseDir = process.cwd(), options) {
+    const allowOutsideWorkspace = options?.allowOutsideWorkspace ?? false;
+    const workspaceRoot = path.resolve(baseDir);
+    const resolved = path.resolve(workspaceRoot, relativePath);
+    if (allowOutsideWorkspace) {
+        return resolved;
+    }
+    const rootPrefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : workspaceRoot + path.sep;
+    const isInside = resolved === workspaceRoot || resolved.startsWith(rootPrefix);
+    if (!isInside) {
+        throw new Error(`Operation outside workspace: ${relativePath}`);
+    }
+    return resolved;
+}
+/**
+ * Create editor implementation that performs actual file operations.
+ * Used by the native applyPatchTool from the SDK.
+ */
+export function createEditorImpl(deps) {
+    const { loggingService, settingsService, executionContext } = deps;
+    return {
+        async createFile(operation) {
+            const enableFileLogging = settingsService.get('tools.logFileOperations');
+            const { path: filePath, diff } = operation;
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
+            try {
+                // Standard modes enforce the workspace boundary in `needsApproval`;
+                // YOLO deliberately reaches this execution path without a prompt.
+                const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
+                if (enableFileLogging) {
+                    loggingService.debug('File operation started: create_file', {
+                        path: filePath,
+                        targetPath,
+                    });
+                }
+                // Validate patch before executing
+                try {
+                    applyDiff('', diff);
+                }
+                catch (validationError) {
+                    loggingService.error('Patch validation failed in createFile', {
+                        path: filePath,
+                        error: validationError?.message || String(validationError),
+                    });
+                    return {
+                        status: 'failed',
+                        output: `Invalid patch: ${validationError?.message || String(validationError)}. Please check the file path and diff format.`,
+                    };
+                }
+                // Ensure parent directory exists
+                if (isRemote && sshService) {
+                    await sshService.mkdir(path.dirname(targetPath));
+                }
+                else {
+                    await mkdir(path.dirname(targetPath), { recursive: true });
+                }
+                // Apply diff to empty content for new file
+                const content = applyDiff('', diff);
+                if (isRemote && sshService) {
+                    await sshService.writeFile(targetPath, content);
+                }
+                else {
+                    await writeFile(targetPath, content, 'utf8');
+                }
+                if (enableFileLogging) {
+                    loggingService.debug('File created', {
+                        path: filePath,
+                        contentLength: content.length,
+                    });
+                }
+                return {
+                    status: 'completed',
+                    output: `Created ${filePath}`,
+                };
+            }
+            catch (error) {
+                if (enableFileLogging) {
+                    loggingService.error('File operation failed', {
+                        type: 'create_file',
+                        path: filePath,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+                return {
+                    status: 'failed',
+                    output: error.message || String(error),
+                };
+            }
+        },
+        async updateFile(operation) {
+            const enableFileLogging = settingsService.get('tools.logFileOperations');
+            const { path: filePath, diff } = operation;
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
+            try {
+                // Standard modes enforce the workspace boundary in `needsApproval`;
+                // YOLO deliberately reaches this execution path without a prompt.
+                const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
+                if (enableFileLogging) {
+                    loggingService.debug('File operation started: update_file', {
+                        path: filePath,
+                        targetPath,
+                    });
+                }
+                // Read existing file
+                let original;
+                try {
+                    if (isRemote && sshService) {
+                        original = await sshService.readFile(targetPath);
+                    }
+                    else {
+                        original = await readFile(targetPath, 'utf8');
+                    }
+                }
+                catch (error) {
+                    if (error?.code === 'ENOENT') {
+                        if (enableFileLogging) {
+                            loggingService.error('Cannot update missing file', {
+                                path: filePath,
+                                targetPath,
+                            });
+                        }
+                        return {
+                            status: 'failed',
+                            output: `Cannot update missing file: ${filePath}`,
+                        };
+                    }
+                    throw error;
+                }
+                // Validate patch before executing
+                try {
+                    applyDiff(original, diff);
+                }
+                catch (validationError) {
+                    loggingService.error('Patch validation failed in updateFile', {
+                        path: filePath,
+                        error: validationError?.message || String(validationError),
+                    });
+                    return {
+                        status: 'failed',
+                        output: `Invalid patch: ${validationError?.message || String(validationError)}. Please check the file path and diff format.`,
+                    };
+                }
+                // Apply diff to existing content
+                const patched = applyDiff(original, diff);
+                if (isRemote && sshService) {
+                    await sshService.writeFile(targetPath, patched);
+                }
+                else {
+                    await writeFile(targetPath, patched, 'utf8');
+                }
+                if (enableFileLogging) {
+                    loggingService.debug('File updated', {
+                        path: filePath,
+                        originalLength: original.length,
+                        patchedLength: patched.length,
+                    });
+                }
+                return {
+                    status: 'completed',
+                    output: `Updated ${filePath}`,
+                };
+            }
+            catch (error) {
+                if (enableFileLogging) {
+                    loggingService.error('File operation failed', {
+                        type: 'update_file',
+                        path: filePath,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+                return {
+                    status: 'failed',
+                    output: error.message || String(error),
+                };
+            }
+        },
+        async deleteFile(operation) {
+            const enableFileLogging = settingsService.get('tools.logFileOperations');
+            const { path: filePath } = operation;
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
+            try {
+                // Standard modes enforce the workspace boundary in `needsApproval`;
+                // YOLO deliberately reaches this execution path without a prompt.
+                const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
+                if (enableFileLogging) {
+                    loggingService.debug('File operation started: delete_file', {
+                        path: filePath,
+                        targetPath,
+                    });
+                }
+                if (isRemote && sshService) {
+                    // The target path is strictly data: canonical POSIX single-quote
+                    // escaping keeps quotes, $VAR, $(...), and shell operators from
+                    // breaking out of the remote `rm` command (C6.4).
+                    await sshService.executeCommand(`rm -f ${quoteShellArg(targetPath)}`);
+                }
+                else {
+                    await rm(targetPath, { force: true });
+                }
+                if (enableFileLogging) {
+                    loggingService.debug('File deleted', {
+                        path: filePath,
+                        targetPath,
+                    });
+                }
+                return {
+                    status: 'completed',
+                    output: `Deleted ${filePath}`,
+                };
+            }
+            catch (error) {
+                if (enableFileLogging) {
+                    loggingService.error('File operation failed', {
+                        type: 'delete_file',
+                        path: filePath,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+                return {
+                    status: 'failed',
+                    output: error.message || String(error),
+                };
+            }
+        },
+    };
+}
+//# sourceMappingURL=editor-impl.js.map

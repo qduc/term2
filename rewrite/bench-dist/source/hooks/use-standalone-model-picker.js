@@ -1,0 +1,336 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ModelCatalogSession, orderedProviderIds, } from '../services/models/model-catalog-session.js';
+import { getProviderIds } from '../providers/index.js';
+import { resolveProviderCredentials } from '../utils/ai/provider-credentials.js';
+import { getFavoriteModelInfos, serializeFavorite, toggleFavoriteModel } from '../services/models/model-favorites.js';
+import { commitNicknameEdit, getNicknameEntries, getNicknameLabels, getNicknameModelInfos, removeNicknameTarget, } from '../services/models/model-nicknames.js';
+import { nextModelTab, pinnedModelsForTab, previousModelTab, selectModelsForTab, } from '../services/models/model-tabs.js';
+import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
+/**
+ * Drives `ModelSelectionMenu` outside the composer's autocomplete machinery
+ * (`useInputContext`/`MenuController`), for the pre-app picker host. It
+ * mirrors `useModelSelection`'s catalog/favorites/nicknames/navigation
+ * behavior — the same services and the same cross-provider fuzzy filter —
+ * but owns its own query state directly instead of
+ * projecting them from a composer buffer, since there is no composer at
+ * this point in the boot sequence.
+ */
+export const useStandaloneModelPicker = (deps) => {
+    const { loggingService, settingsService, modelFetcher, initialProvider, lockProvider } = deps;
+    const catalogSession = useMemo(() => new ModelCatalogSession({ settingsService, loggingService, fetcher: modelFetcher }), [settingsService, loggingService, modelFetcher]);
+    const [query, setQuery] = useState(deps.initialQuery ?? '');
+    const [catalogs, setCatalogs] = useState(() => new Map());
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [warning, setWarning] = useState(null);
+    const [selectedIndex, setSelectedIndex] = useState(0);
+    const [modelTab, setModelTab] = useState('all');
+    const provider = lockProvider ?? null;
+    const providerIds = useMemo(() => {
+        if (lockProvider)
+            return [lockProvider];
+        const ordered = orderedProviderIds(settingsService, getProviderIds());
+        if (!initialProvider || !ordered.includes(initialProvider))
+            return ordered;
+        return [initialProvider, ...ordered.filter((id) => id !== initialProvider)];
+    }, [initialProvider, lockProvider, settingsService]);
+    const [scrollOffset, setScrollOffset] = useState(0);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const [favoritesRevision, setFavoritesRevision] = useState(0);
+    const [nicknamesRevision, setNicknamesRevision] = useState(0);
+    const [nicknameDraft, setNicknameDraft] = useState(null);
+    const shouldPreselectRef = useRef(true);
+    const favoriteModelInfos = useMemo(() => getFavoriteModelInfos(settingsService), 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, favoritesRevision]);
+    const favoriteKeys = useMemo(() => new Set(favoriteModelInfos.map((m) => serializeFavorite(m.provider, m.id))), [favoriteModelInfos]);
+    const nicknameLabels = useMemo(() => getNicknameLabels(settingsService), 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, nicknamesRevision]);
+    const nicknameModelInfos = useMemo(() => getNicknameModelInfos(settingsService), 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, nicknamesRevision]);
+    const nicknameKeys = useMemo(() => new Set(nicknameModelInfos.map((model) => serializeFavorite(model.provider, model.id))), [nicknameModelInfos]);
+    useEffect(() => {
+        catalogSession.begin();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    useEffect(() => {
+        let disposed = false;
+        let remaining = providerIds.length;
+        const failures = [];
+        setCatalogs(new Map()); // eslint-disable-line react-hooks/set-state-in-effect
+        setSelectedIndex(0);
+        setScrollOffset(0);
+        setError(null);
+        setWarning(null);
+        setLoading(remaining > 0);
+        const settle = () => {
+            remaining -= 1;
+            if (!disposed && remaining === 0) {
+                setLoading(false);
+                setWarning(failures.length > 0 ? `Some providers failed: ${failures.join(', ')}` : null);
+            }
+        };
+        for (const providerId of providerIds) {
+            const credentials = resolveProviderCredentials(settingsService, providerId);
+            if (credentials.required && !credentials.configured) {
+                const configuredSelection = settingsService.get('agent.modelSelection');
+                const configuredModel = configuredSelection.model;
+                const unavailable = lockProvider && configuredSelection.provider === providerId && configuredModel
+                    ? [
+                        {
+                            id: configuredModel,
+                            provider: providerId,
+                            unavailableReason: credentials.unavailableReason ?? 'missing-credentials',
+                        },
+                    ]
+                    : [];
+                setCatalogs((current) => new Map(current).set(providerId, unavailable));
+                settle();
+                continue;
+            }
+            catalogSession
+                .load(providerId)
+                .then((result) => {
+                if (disposed || result.kind === 'stale')
+                    return;
+                const models = result.models.map((model) => ({ ...model, provider: model.provider || providerId }));
+                setCatalogs((current) => new Map(current).set(providerId, models));
+            })
+                .catch(() => {
+                failures.push(providerId);
+            })
+                .finally(settle);
+        }
+        return () => {
+            disposed = true;
+        };
+    }, [providerIds, catalogSession, refreshKey, settingsService, lockProvider]);
+    const refresh = useCallback(() => {
+        for (const providerId of providerIds)
+            catalogSession.refresh(providerId);
+        setRefreshKey((k) => k + 1);
+    }, [providerIds, catalogSession]);
+    const filteredModels = useMemo(() => {
+        const configuredProvider = settingsService.get('agent.modelSelection').provider;
+        const configuredModel = settingsService.get('agent.modelSelection').model;
+        const unavailableConfigured = !lockProvider &&
+            typeof configuredProvider === 'string' &&
+            typeof configuredModel === 'string' &&
+            configuredModel &&
+            !providerIds.includes(configuredProvider)
+            ? [
+                {
+                    id: configuredModel,
+                    provider: configuredProvider,
+                    unavailableReason: resolveProviderCredentials(settingsService, configuredProvider).unavailableReason ??
+                        'missing-credentials',
+                },
+            ]
+            : [];
+        const source = mergeUnifiedModels(providerIds, catalogs, lockProvider
+            ? []
+            : [...pinnedModelsForTab(modelTab, favoriteModelInfos, nicknameModelInfos), ...unavailableConfigured]);
+        const tabModels = lockProvider ? source : selectModelsForTab(source, modelTab, { favoriteKeys, nicknameKeys });
+        return filterUnifiedModels(tabModels, query);
+    }, [
+        providerIds,
+        catalogs,
+        lockProvider,
+        favoriteModelInfos,
+        nicknameModelInfos,
+        favoriteKeys,
+        nicknameKeys,
+        modelTab,
+        query,
+        settingsService,
+    ]);
+    const filteredModelsRef = useRef(filteredModels);
+    const selectedIndexRef = useRef(selectedIndex);
+    filteredModelsRef.current = filteredModels;
+    selectedIndexRef.current = selectedIndex;
+    useEffect(() => {
+        /* eslint-disable react-hooks/set-state-in-effect */
+        setScrollOffset(0);
+        if (filteredModels.length === 0) {
+            setSelectedIndex(0);
+            return;
+        }
+        if (shouldPreselectRef.current) {
+            const currentModelValue = settingsService.get('agent.modelSelection').model;
+            const currentProviderValue = settingsService.get('agent.modelSelection').provider;
+            if (typeof currentModelValue === 'string' && currentModelValue) {
+                const index = filteredModels.findIndex((m) => m.id === currentModelValue &&
+                    (typeof currentProviderValue !== 'string' || m.provider === currentProviderValue));
+                if (index >= 0) {
+                    setSelectedIndex(index);
+                    shouldPreselectRef.current = false;
+                    return;
+                }
+            }
+            if (!loading) {
+                shouldPreselectRef.current = false;
+            }
+        }
+        // Retaining a lower selection would make auto-scroll undo the reset.
+        setSelectedIndex(0);
+        /* eslint-enable react-hooks/set-state-in-effect */
+    }, [filteredModels, loading, settingsService]);
+    useEffect(() => {
+        const maxHeight = 10;
+        if (selectedIndex < scrollOffset) {
+            setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
+        }
+        else if (selectedIndex >= scrollOffset + maxHeight) {
+            setScrollOffset(selectedIndex - maxHeight + 1);
+        }
+    }, [selectedIndex, scrollOffset]);
+    useEffect(() => {
+        if (!nicknameDraft)
+            return;
+        const modelKey = serializeFavorite(nicknameDraft.provider, nicknameDraft.modelId);
+        const stillEligible = !nicknameDraft.existingNickname || nicknameKeys.has(modelKey);
+        const stillListed = stillEligible &&
+            filteredModels.some((m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId);
+        if (!stillListed)
+            setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
+    }, [filteredModels, nicknameDraft, nicknameKeys]);
+    const typeQuery = useCallback((text) => {
+        if (!text)
+            return;
+        setQuery((prev) => prev + text);
+    }, []);
+    const backspaceQuery = useCallback(() => {
+        setQuery((prev) => prev.slice(0, -1));
+    }, []);
+    const moveUp = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex((prev) => {
+            if (filteredModels.length === 0)
+                return 0;
+            return prev > 0 ? prev - 1 : filteredModels.length - 1;
+        });
+    }, [filteredModels.length]);
+    const switchModelTab = useCallback((direction = 'next') => {
+        if (lockProvider)
+            return;
+        shouldPreselectRef.current = false;
+        setModelTab((tab) => (direction === 'previous' ? previousModelTab(tab) : nextModelTab(tab)));
+        setSelectedIndex(0);
+        setScrollOffset(0);
+    }, [lockProvider]);
+    const moveDown = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex((prev) => {
+            if (filteredModels.length === 0)
+                return 0;
+            return prev < filteredModels.length - 1 ? prev + 1 : 0;
+        });
+    }, [filteredModels.length]);
+    const moveHome = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex(0);
+    }, []);
+    const moveEnd = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex(Math.max(0, filteredModels.length - 1));
+    }, [filteredModels.length]);
+    const pageUp = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex((prev) => Math.max(0, prev - 10));
+    }, []);
+    const pageDown = useCallback(() => {
+        shouldPreselectRef.current = false;
+        setSelectedIndex((prev) => (filteredModels.length === 0 ? 0 : Math.min(filteredModels.length - 1, prev + 10)));
+    }, [filteredModels.length]);
+    const getSelectedItem = useCallback(() => {
+        const currentModels = filteredModelsRef.current;
+        if (currentModels.length === 0)
+            return undefined;
+        const safeIndex = Math.min(selectedIndexRef.current, currentModels.length - 1);
+        return currentModels[safeIndex];
+    }, []);
+    const toggleFavorite = useCallback(() => {
+        const selected = getSelectedItem();
+        if (!selected)
+            return;
+        toggleFavoriteModel(settingsService, selected.provider, selected.id);
+        setFavoritesRevision((revision) => revision + 1);
+    }, [getSelectedItem, settingsService]);
+    const startNicknameEdit = useCallback(() => {
+        const selected = getSelectedItem();
+        if (!selected)
+            return;
+        const existing = getNicknameEntries(settingsService).find((entry) => entry.provider.toLowerCase() === selected.provider.toLowerCase() && entry.modelId === selected.id);
+        setNicknameDraft({
+            provider: selected.provider,
+            modelId: selected.id,
+            text: existing?.nickname ?? '',
+            existingNickname: existing != null,
+            error: null,
+            pendingReplace: null,
+        });
+    }, [getSelectedItem, settingsService]);
+    const typeNicknameDraft = useCallback((text) => {
+        if (!text)
+            return;
+        setNicknameDraft((draft) => draft ? { ...draft, text: draft.text + text, error: null, pendingReplace: null } : draft);
+    }, []);
+    const backspaceNicknameDraft = useCallback(() => {
+        setNicknameDraft((draft) => draft ? { ...draft, text: draft.text.slice(0, -1), error: null, pendingReplace: null } : draft);
+    }, []);
+    const commitNicknameDraft = useCallback(() => {
+        if (!nicknameDraft)
+            return;
+        const result = commitNicknameEdit(settingsService, nicknameDraft, getProviderIds());
+        if (!result.saved) {
+            setNicknameDraft({ ...nicknameDraft, error: result.error, pendingReplace: result.pendingReplace });
+            return;
+        }
+        setNicknameDraft(null);
+        setNicknamesRevision((revision) => revision + 1);
+    }, [nicknameDraft, settingsService]);
+    const cancelNicknameDraft = useCallback(() => setNicknameDraft(null), []);
+    const removeNicknameDraft = useCallback(() => {
+        if (!nicknameDraft?.existingNickname)
+            return;
+        removeNicknameTarget(settingsService, nicknameDraft);
+        setNicknameDraft(null);
+        setNicknamesRevision((revision) => revision + 1);
+    }, [nicknameDraft, settingsService]);
+    return {
+        query,
+        typeQuery,
+        backspaceQuery,
+        loading,
+        error,
+        warning,
+        provider,
+        modelTab,
+        switchModelTab,
+        filteredModels,
+        selectedIndex,
+        scrollOffset,
+        moveUp,
+        moveDown,
+        moveHome,
+        moveEnd,
+        pageUp,
+        pageDown,
+        getSelectedItem,
+        toggleFavorite,
+        favoriteKeys,
+        nicknameDraft,
+        nicknameLabels,
+        startNicknameEdit,
+        typeNicknameDraft,
+        backspaceNicknameDraft,
+        commitNicknameDraft,
+        cancelNicknameDraft,
+        removeNicknameDraft,
+        refresh,
+        providerScope: lockProvider,
+    };
+};
+//# sourceMappingURL=use-standalone-model-picker.js.map

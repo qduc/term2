@@ -1,0 +1,1 @@
+{"version":3,"file":"openai-root-provider-identity.d.ts","sourceRoot":"","sources":["../../../../source/services/openai-root-provider-identity.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,0BAA0B,EAAE,MAAM,0BAA0B,CAAC;AAE3E;;;GAGG;AACH,qBAAa,0BAA0B;;IAGrC,IAAI,OAAO,IAAI,QAAQ,CAAC,0BAA0B,CAAC,GAAG,IAAI,CAEzD;IAED,OAAO,CAAC,QAAQ,EAAE,0BAA0B,GAAG,IAAI,CAGlD;CACF"}

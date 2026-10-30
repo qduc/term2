@@ -1,0 +1,1 @@
+{"version":3,"file":"model-errors.d.ts","sourceRoot":"","sources":["../../../../source/contracts/model-errors.ts"],"names":[],"mappings":"AAAA,qEAAqE;AACrE,qBAAa,kBAAmB,SAAQ,KAAK;IAClC,IAAI,SAAwB;IAErC,YAAY,OAAO,EAAE,MAAM,EAAE,OAAO,CAAC,EAAE;QAAE,KAAK,CAAC,EAAE,OAAO,CAAA;KAAE,EAEzD;CACF;AAED,uEAAuE;AACvE,wBAAgB,oBAAoB,CAAC,KAAK,EAAE,OAAO,GAAG,OAAO,CAI5D"}

@@ -1,0 +1,378 @@
+import { InputSurgeGuard } from '../input-surge-guard.js';
+import { getSerializedInputBytes, LargeUncachedInputGuard, } from '../large-uncached-input-guard.js';
+import { getProvider } from '../../providers/index.js';
+import { GROK_RESPONSES_OPAQUE_TAG, OPENAI_RESPONSES_OPAQUE_TAG, isForeignProviderOpaque, providerOpaqueSourceOf, providerOpaqueTagOf, } from '../../providers/provider-opaque-compatibility.js';
+import { getProfileLabel } from '../profiles/labels.js';
+import { getMethod } from '../interruption-info.js';
+import { normalizeUserTurn } from '../../types/user-turn.js';
+import { dropUnpairedFunctionCalls, hasMalformedToolCallArguments, sanitizeMalformedToolCallArguments, } from '../tool-execution-ledger.js';
+const isOpaqueCompactionItem = (item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item))
+        return false;
+    const record = item;
+    if (record.type === 'compaction')
+        return true;
+    if (record.type !== 'provider_opaque' || !record.item || typeof record.item !== 'object')
+        return false;
+    return record.item.type === 'compaction';
+};
+/**
+ * Byte size of `JSON.stringify([...finalizedHistory, draftItem])` without
+ * re-serializing the finalized prefix. Finalized messages never change while
+ * the user types, so callers cache `historyBytes`/`historyLength` once per
+ * history identity and only re-measure the draft.
+ */
+export const combineHistoryAndDraftBytes = (historyBytes, historyLength, draftItemBytes) => (historyLength === 0 ? draftItemBytes + 2 : historyBytes + draftItemBytes + 1);
+/**
+ * Owns all input construction and guard logic for a conversation session.
+ *
+ * Decides what to send to the provider (delta vs full history, chaining vs not),
+ * handles mode-notice prepending, image-aware user-input items, provider
+ * capability queries, large-uncached-input previews, and input surge guard
+ * recording.
+ *
+ * `ConversationSession` asks this object for an input plan instead of knowing
+ * how chaining, full-history mode, images, provider capability, and large-input
+ * guards work.
+ */
+export class SessionInputPlanner {
+    #settingsService;
+    #agentClient;
+    #record;
+    #providerContinuity;
+    #providerRegistry;
+    #getProviderHistorySnapshot;
+    /** Cheap history identity — must not clone the transcript. */
+    #getHistoryIdentity;
+    #inputSurgeGuard = new InputSurgeGuard();
+    #largeUncachedInputGuard = new LargeUncachedInputGuard();
+    #outgoingSizeCache = null;
+    /** Model the most recently dispatched turn was sent to, for detecting a switch. */
+    #lastDispatchModel = null;
+    constructor(deps) {
+        this.#settingsService = deps.settingsService;
+        this.#agentClient = deps.agentClient;
+        this.#record = deps.record;
+        this.#providerContinuity = deps.providerContinuity;
+        this.#providerRegistry = deps.providerRegistry;
+        this.#getProviderHistorySnapshot = deps.getProviderHistorySnapshot;
+        this.#getHistoryIdentity = deps.getHistoryIdentity;
+    }
+    /**
+     * Inspect the input for a potential input surge condition.
+     * Used by the session after building a plan to decide whether to block.
+     */
+    inspectForSurge(input, kind) {
+        return this.#inputSurgeGuard.inspect(input, { kind });
+    }
+    /**
+     * Preview what the input surge guard would decide for the given input.
+     *
+     * Does not mutate any state or consume the pending mode notice.
+     */
+    previewInputSurge(input, context) {
+        const turn = normalizeUserTurn(input);
+        const { streamInput, inputSurgeKind } = this.build(turn, {
+            includeTurn: true,
+            pendingModeNotice: context?.pendingModeNotice ?? null,
+        });
+        return this.#inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind, preview: true });
+    }
+    /**
+     * Record a successful input delivery for both surge and uncached-input guards.
+     */
+    recordSuccess(input, options) {
+        this.#inputSurgeGuard.recordSuccessfulInput(input, options);
+        this.#largeUncachedInputGuard.recordSuccessfulInput({
+            input,
+            now: Date.now(),
+            provider: this.#getProviderForGuard(),
+            model: this.#getModelForGuard(),
+            reasoningEffort: this.#getReasoningEffortForGuard(),
+            mode: this.#getTrafficMode(),
+        });
+    }
+    /**
+     * Reset both surge and uncached-input guards (e.g. after undo or import).
+     */
+    reset() {
+        this.#inputSurgeGuard.reset();
+        this.#largeUncachedInputGuard.reset();
+        this.#outgoingSizeCache = null;
+        this.#lastDispatchModel = null;
+    }
+    /**
+     * Records the model the just-built plan was actually dispatched to. The next
+     * `build()` call compares this against the then-current model to catch a
+     * mid-conversation model switch before it reuses a stale `previous_response_id`.
+     *
+     * Deliberately not folded into `build()` itself: `build()` must stay pure
+     * because `previewInputSurge()` calls it without dispatching anything.
+     */
+    recordDispatchModel() {
+        this.#lastDispatchModel = this.#getModelForGuard();
+    }
+    /**
+     * Mark a resumed session on the large-uncached-input guard.
+     */
+    markResumedSession(options) {
+        this.#largeUncachedInputGuard.markResumedSession(options);
+    }
+    /**
+     * Mark an undo/rewind on the large-uncached-input guard.
+     */
+    markUndoOrRewind() {
+        this.#largeUncachedInputGuard.markUndoOrRewind();
+    }
+    /**
+     * Seed the input surge guard baseline for testing.
+     */
+    seedInputSurgeBaseline(data, kind) {
+        this.recordSuccess(data, { kind, previousInput: undefined });
+    }
+    /**
+     * Build an input plan for the given user turn.
+     *
+     * @param turn - The user turn to build input for (already normalized by the session).
+     * @param options.includeTurn - Whether to include the turn in the outgoing history.
+     *   When `true` the turn is appended to the reconciled history as a user-input item.
+     *   When `false` only the reconciled history is used (the turn is already in the store).
+     * @param options.pendingModeNotice - An optional mode notice to prepend to the turn text.
+     * @returns A plan describing what to send to the provider.
+     */
+    build(turn, options) {
+        const provider = this.#getProviderForGuard() ?? 'openai';
+        const dynamicSupportsChaining = getMethod(this.#agentClient, 'supportsConversationChaining');
+        const supportsChaining = dynamicSupportsChaining
+            ? dynamicSupportsChaining.call(this.#agentClient)
+            : getProvider(provider, this.#providerRegistry)?.capabilities?.supportsConversationChaining ?? false;
+        const history = this.#record.getReconciledHistory();
+        const targetProvider = provider;
+        const targetOpaqueLane = targetProvider === 'openai'
+            ? OPENAI_RESPONSES_OPAQUE_TAG
+            : targetProvider === 'grok'
+                ? GROK_RESPONSES_OPAQUE_TAG
+                : targetProvider === 'codex'
+                    ? OPENAI_RESPONSES_OPAQUE_TAG
+                    : targetProvider;
+        const foreignOpaque = history.find((item) => isOpaqueCompactionItem(item) &&
+            providerOpaqueTagOf(item) !== undefined &&
+            isForeignProviderOpaque(item, targetOpaqueLane, targetProvider));
+        const foreignOpaqueSource = foreignOpaque && (providerOpaqueSourceOf(foreignOpaque) ?? providerOpaqueTagOf(foreignOpaque));
+        if (foreignOpaqueSource) {
+            return {
+                streamInput: [],
+                inputSurgeKind: 'full_history',
+                effectiveTurn: turn,
+                refusal: {
+                    kind: 'foreign_provider_opaque_history',
+                    sourceProvider: foreignOpaqueSource,
+                    targetProvider,
+                },
+                providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),
+            };
+        }
+        if (options.replayFromHistory) {
+            const statelessHistory = sanitizeMalformedToolCallArguments(dropUnpairedFunctionCalls(history));
+            return {
+                streamInput: statelessHistory,
+                inputSurgeKind: 'full_history',
+                effectiveTurn: turn,
+                providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),
+            };
+        }
+        const effectiveTurn = options.includeTurn ? this.#turnWithModeNotice(turn, options.pendingModeNotice) : turn;
+        const outgoingHistory = options.includeTurn ? [...history, this.#makeUserInputItem(effectiveTurn)] : history;
+        // When the history contains a function_call with malformed JSON arguments
+        // (e.g. from a stream interrupted mid-response), provider-side chaining is
+        // unreliable — the previous response may carry the malformed tool call.
+        // Fall back to stateless mode where the arguments can be sanitized before
+        // sending.
+        const hasMalformedArgs = hasMalformedToolCallArguments(outgoingHistory);
+        // Unpaid tool debt means previous_response_id still requires function_call
+        // outputs. A text-only delta would 400 ("No tool output found for function
+        // call …"). Drop the chain and send self-contained full history instead.
+        const continuityAvailable = this.#providerContinuity.prepareNewTurn(outgoingHistory.length);
+        // A held previous_response_id was minted by whatever model produced it.
+        // If the user switched models since that turn, the anchor still passes
+        // every other chaining check locally but the provider 400s
+        // ("Invalid previous_response_id") because the ID does not belong to the
+        // model we are about to call. Drop the chain and send full history
+        // instead of risking that round trip.
+        const currentModel = this.#getModelForGuard();
+        const hasModelMismatch = this.#lastDispatchModel !== null && currentModel !== null && this.#lastDispatchModel !== currentModel;
+        const useChaining = supportsChaining && !hasMalformedArgs && !hasModelMismatch && continuityAvailable;
+        const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
+        const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
+        // Stateless (full-history) inputs must be self-contained: the Responses
+        // API rejects a previous_response_id-less input containing a function_call
+        // without a paired output. Recovery may fail to find every in-flight tool
+        // output (lost deltas), so drop orphaned calls as a last-resort safety net.
+        // Malformed JSON arguments (from interrupted streams) are also repaired so
+        // the provider API accepts the request.
+        const statelessHistory = useChaining
+            ? null
+            : sanitizeMalformedToolCallArguments(dropUnpairedFunctionCalls(outgoingHistory));
+        return {
+            streamInput: useChaining
+                ? typeof chainedInput === 'string'
+                    ? chainedInput
+                    : [chainedInput]
+                : statelessHistory,
+            inputSurgeKind: useChaining ? 'delta' : 'full_history',
+            effectiveTurn,
+            providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),
+        };
+    }
+    /**
+     * Preview what the large-uncached-input guard would decide for the given input.
+     *
+     * Does not mutate any state or consume the pending mode notice.
+     *
+     * Cost model while typing:
+     * 1. Session risk check (`mightWarn`) — free; skips everything when a warn
+     *    is impossible (active chat, same config).
+     * 2. Finalized history is measured once per history identity and cached —
+     *    finalized messages never change while the user types.
+     * 3. Each preview only re-sizes the draft turn and combines it with the
+     *    cached history bytes (no full-history `JSON.stringify`).
+     */
+    previewLargeUncachedInput(input, now, context) {
+        const at = now ?? Date.now();
+        const riskContext = {
+            now: at,
+            provider: this.#getProviderForGuard(),
+            model: this.#getModelForGuard(),
+            reasoningEffort: this.#getReasoningEffortForGuard(),
+            mode: this.#getTrafficMode(),
+        };
+        if (!this.#largeUncachedInputGuard.mightWarn(riskContext)) {
+            return {
+                action: 'allow',
+                warningKey: '',
+                reasons: [],
+                estimatedTokens: 0,
+                estimatedBytes: 0,
+            };
+        }
+        const turn = normalizeUserTurn(input);
+        const effectiveTurn = this.#turnWithModeNotice(turn, context?.pendingModeNotice ?? null);
+        const { estimatedBytes, contentKey } = this.#estimateOutgoingInputSize(effectiveTurn);
+        return this.#largeUncachedInputGuard.inspect({
+            estimatedBytes,
+            contentKey,
+            ...riskContext,
+        });
+    }
+    // ── Private helpers ──────────────────────────────────────────────
+    /**
+     * Size the next outgoing payload using a cache of the finalized history.
+     * Only the draft turn is re-serialized on cache hits.
+     */
+    #estimateOutgoingInputSize(effectiveTurn) {
+        const cache = this.#getOutgoingSizeCache();
+        if (cache.useChaining) {
+            if (effectiveTurn.images?.length) {
+                const item = this.#makeUserInputItem(effectiveTurn);
+                // Chained image turns send `[userItem]`, not the bare text.
+                const estimatedBytes = getSerializedInputBytes([item]);
+                return { estimatedBytes, contentKey: `${cache.key}\nimg:${estimatedBytes}` };
+            }
+            const text = effectiveTurn.text ?? '';
+            const estimatedBytes = getSerializedInputBytes(text);
+            return { estimatedBytes, contentKey: `${cache.key}\n${text}` };
+        }
+        const draftItem = this.#makeUserInputItem(effectiveTurn);
+        const draftItemBytes = getSerializedInputBytes(draftItem);
+        const estimatedBytes = combineHistoryAndDraftBytes(cache.finalizedHistoryBytes, cache.finalizedHistoryLength, draftItemBytes);
+        return {
+            estimatedBytes,
+            contentKey: `${cache.key}\n${effectiveTurn.text ?? ''}\n${draftItemBytes}`,
+        };
+    }
+    #getOutgoingSizeCache() {
+        const key = this.#outgoingSizeCacheKey();
+        if (this.#outgoingSizeCache?.key === key) {
+            return this.#outgoingSizeCache;
+        }
+        const provider = this.#getProviderForGuard() ?? 'openai';
+        const dynamicSupportsChaining = getMethod(this.#agentClient, 'supportsConversationChaining');
+        const supportsChaining = dynamicSupportsChaining
+            ? dynamicSupportsChaining.call(this.#agentClient)
+            : getProvider(provider, this.#providerRegistry)?.capabilities?.supportsConversationChaining ?? false;
+        const history = this.#record.getReconciledHistory();
+        // The draft user turn is never a function_call, so malformed-arg detection
+        // on history alone matches build(includeTurn: true).
+        const hasMalformedArgs = hasMalformedToolCallArguments(history);
+        const useChaining = supportsChaining && !hasMalformedArgs && this.#providerContinuity.isChainingAvailable(history.length + 1);
+        if (useChaining) {
+            this.#outgoingSizeCache = {
+                key,
+                useChaining: true,
+                finalizedHistoryBytes: 0,
+                finalizedHistoryLength: 0,
+            };
+            return this.#outgoingSizeCache;
+        }
+        const finalizedHistory = sanitizeMalformedToolCallArguments(dropUnpairedFunctionCalls(history));
+        this.#outgoingSizeCache = {
+            key,
+            useChaining: false,
+            finalizedHistoryBytes: getSerializedInputBytes(finalizedHistory),
+            finalizedHistoryLength: finalizedHistory.length,
+        };
+        return this.#outgoingSizeCache;
+    }
+    #outgoingSizeCacheKey() {
+        const historyIdentity = this.#getHistoryIdentity?.() ?? this.#getProviderHistorySnapshot?.()?.identity ?? 'unknown-history';
+        // Continuity can flip full-history vs delta without a history revision.
+        const continuity = `${this.#providerContinuity.previousResponseId ?? ''}:${this.#providerContinuity.chainingBroken ? 1 : 0}`;
+        const provider = this.#getProviderForGuard() ?? '';
+        return `${historyIdentity}|${continuity}|${provider}`;
+    }
+    #getTrafficMode() {
+        if (!this.#settingsService)
+            return 'standard';
+        return getProfileLabel(String(this.#settingsService.get('app.activeProfileId')));
+    }
+    #getModelForGuard() {
+        return this.#settingsService?.get('agent.modelSelection').model ?? null;
+    }
+    #getReasoningEffortForGuard() {
+        return this.#settingsService?.get('agent.reasoningEffort') ?? null;
+    }
+    #getCurrentProvider(nullable) {
+        const fn = getMethod(this.#agentClient, 'getProvider');
+        const result = fn ? fn.call(this.#agentClient) : this.#settingsService?.get('agent.modelSelection').provider;
+        return nullable ? result ?? null : result;
+    }
+    #getProviderForGuard() {
+        return this.#getCurrentProvider(true);
+    }
+    #makeUserInputItem(turn) {
+        const images = turn.images ?? [];
+        if (images.length === 0) {
+            return { role: 'user', type: 'message', content: turn.text ?? '' };
+        }
+        const content = [];
+        if (turn.text) {
+            content.push({ type: 'input_text', text: turn.text });
+        }
+        for (const image of images) {
+            content.push({
+                type: 'input_image',
+                image: `data:${image.mimeType};base64,${image.data}`,
+                detail: 'auto',
+            });
+        }
+        return { role: 'user', type: 'message', content };
+    }
+    #turnWithModeNotice(turn, notice) {
+        if (!notice?.trim()) {
+            return turn;
+        }
+        const text = turn.text ? `${notice}\n\n${turn.text}` : notice;
+        return { ...turn, text };
+    }
+}
+//# sourceMappingURL=session-input-planner.js.map

@@ -1,0 +1,195 @@
+import { OPENAI_RESPONSES_OPAQUE_TAG, isForeignProviderOpaque } from './provider-opaque-compatibility.js';
+/**
+ * The Codex Responses adapter's application-to-wire conversion. Keep this
+ * switch exhaustive: a new application input variant must be represented here
+ * or rejected before it can become malformed Responses input.
+ */
+export function toCodexResponsesInput(input) {
+    // Codex native compaction produces OpenAI-lane opaque items. Replay those
+    // verbatim. A foreign lane's blob is the ordinary residue of a provider
+    // switch: drop it and keep replaying the rest. See
+    // `provider-opaque-compatibility.ts`.
+    return input
+        .filter((item) => !isForeignProviderOpaque(item, OPENAI_RESPONSES_OPAQUE_TAG, 'codex'))
+        .map((item) => (item.type === 'provider_opaque' ? item.item : toCodexResponsesItem(item)))
+        .map((item) => {
+        // Codex Responses 400s with "System messages are not allowed". The
+        // application stores synthetic items (local compaction checkpoints,
+        // recovery error context) as system so they are not attributed to the
+        // user or assistant; map them to user on the wire. The item text
+        // already marks them untrusted historical data, not instructions — do
+        // not fold them into `instructions`, which would grant instruction
+        // authority. `provider_opaque` items replay verbatim above and never
+        // reach this mapping.
+        if (isRecord(item) && item.type === 'message' && item.role === 'system') {
+            return { ...item, role: 'user' };
+        }
+        if (isRecord(item) && item.role === 'system') {
+            throw new Error('Codex Responses input must not contain system messages');
+        }
+        return item;
+    });
+}
+export function toCodexResponsesItem(item) {
+    switch (item.type) {
+        case 'message':
+            return {
+                type: 'message',
+                role: item.role,
+                content: item.content.map((part) => toCodexMessagePart(item.role, part)),
+            };
+        case 'reasoning': {
+            const metadata = codexNativeMetadata(item.providerMetadata);
+            return {
+                ...metadata,
+                type: 'reasoning',
+                ...(item.id ? { id: item.id } : {}),
+                summary: item.text ? [{ type: 'summary_text', text: item.text }] : [],
+            };
+        }
+        case 'tool_call':
+            return {
+                type: item.toolType === 'custom' ? 'custom_tool_call' : 'function_call',
+                call_id: requireNonEmptyString(item.id, 'tool call id'),
+                name: requireNonEmptyString(item.name, 'tool call name'),
+                ...(item.toolType === 'custom' ? { input: item.arguments } : { arguments: item.arguments }),
+            };
+        case 'tool_result':
+            return {
+                type: item.toolType === 'custom' ? 'custom_tool_call_output' : 'function_call_output',
+                call_id: requireNonEmptyString(item.id, 'tool result id'),
+                output: toCodexToolResultOutput(item.output),
+            };
+        case 'provider_opaque':
+            // Filtered out in `toCodexResponsesInput`; reaching here means a new
+            // caller bypassed that filter, which would put a foreign payload on the
+            // wire.
+            throw new Error(`Refusing to serialize provider_opaque from '${item.provider}' into a Codex request: opaque items are only valid on the provider that produced them`);
+        default:
+            return assertNever(item, 'StreamedModelTurnInput');
+    }
+}
+/** Converts every supported message part without coercing objects to strings. */
+function toCodexMessagePart(role, part) {
+    // input_text/output_text appear only in legacy callers; normalize them
+    // explicitly instead of treating their object value as an image.
+    const rawPart = part;
+    if (rawPart.type === 'text' || rawPart.type === 'input_text' || rawPart.type === 'output_text') {
+        return { type: role === 'assistant' ? 'output_text' : 'input_text', text: rawPart.text };
+    }
+    if (role === 'system' || role === 'assistant') {
+        throw new Error(`Unsupported Codex ${role} message content: image parts are not supported.`);
+    }
+    const imagePart = part;
+    return {
+        type: 'input_image',
+        ...toCodexImageReference(imagePart.image, 'message image'),
+        ...(imagePart.detail ? { detail: imagePart.detail } : {}),
+    };
+}
+export function toCodexToolResultOutput(output) {
+    if (typeof output === 'string')
+        return output;
+    return output.map((part) => {
+        switch (part.type) {
+            case 'text':
+                return { type: 'input_text', text: part.text };
+            case 'image':
+                return {
+                    type: 'input_image',
+                    ...toCodexToolResultImage(part.image, 'tool result image'),
+                    ...(part.detail ? { detail: part.detail } : {}),
+                };
+            case 'file':
+                return { type: 'input_file', ...toCodexFileReference(part.file) };
+            default:
+                return assertNever(part, 'StreamedModelToolResultPart');
+        }
+    });
+}
+function toCodexImageReference(image, context) {
+    if (image === undefined) {
+        throw new Error(`Unsupported Codex ${context}: missing image reference.`);
+    }
+    if (typeof image === 'string')
+        return { image_url: image };
+    if (isRecord(image) && typeof image.id === 'string')
+        return { file_id: image.id };
+    throw new Error(`Unsupported Codex ${context}: expected a URL or file id.`);
+}
+function toCodexToolResultImage(image, context) {
+    if (typeof image === 'string')
+        return { image_url: image };
+    if (!isRecord(image))
+        throw new Error(`Unsupported Codex ${context}: missing image reference.`);
+    if (typeof image.id === 'string' || typeof image.fileId === 'string') {
+        return { file_id: typeof image.fileId === 'string' ? image.fileId : image.id };
+    }
+    if (typeof image.url === 'string')
+        return { image_url: image.url };
+    if (typeof image.data === 'string' || image.data instanceof Uint8Array) {
+        const data = typeof image.data === 'string' ? image.data : Buffer.from(image.data).toString('base64');
+        const mediaType = typeof image.mediaType === 'string' ? image.mediaType : 'application/octet-stream';
+        return { image_url: `data:${mediaType};base64,${data}` };
+    }
+    throw new Error(`Unsupported Codex ${context}: expected URL, file id, or image data.`);
+}
+function toCodexFileReference(file) {
+    if (typeof file === 'string')
+        return { file_id: file };
+    if (!isRecord(file))
+        throw new Error('Unsupported Codex tool result file: missing file reference.');
+    const filename = typeof file.filename === 'string' ? { filename: file.filename } : {};
+    if (typeof file.id === 'string')
+        return { file_id: file.id, ...filename };
+    if (typeof file.url === 'string')
+        return { file_url: file.url, ...filename };
+    if (typeof file.data === 'string' || file.data instanceof Uint8Array) {
+        if (typeof file.filename !== 'string') {
+            throw new Error('Unsupported Codex tool result file: inline data requires a filename.');
+        }
+        return {
+            file_data: typeof file.data === 'string' ? file.data : Buffer.from(file.data).toString('base64'),
+            filename: file.filename,
+        };
+    }
+    throw new Error('Unsupported Codex tool result file: expected file id, URL, or inline data.');
+}
+const LEGACY_CODEX_REASONING_METADATA = new Set(['encrypted_content']);
+/**
+ * Codex-native metadata must be explicitly namespaced. Older persisted Codex
+ * reasoning stored encrypted_content directly, so retain only that narrowly
+ * characterized compatibility spelling. Foreign provider markers must fail
+ * before they can become invalid Codex wire fields.
+ */
+function codexNativeMetadata(metadata) {
+    if (!metadata)
+        return {};
+    if ('codex' in metadata) {
+        const nested = metadata.codex;
+        if (!isRecord(nested))
+            throw new Error('Unsupported Codex reasoning metadata: codex must be an object.');
+        const foreignKeys = Object.keys(metadata).filter((key) => key !== 'codex');
+        if (foreignKeys.length > 0) {
+            throw new Error(`Unsupported foreign reasoning metadata for Codex: ${foreignKeys.join(', ')}.`);
+        }
+        return { ...nested };
+    }
+    const foreignKeys = Object.keys(metadata).filter((key) => !LEGACY_CODEX_REASONING_METADATA.has(key));
+    if (foreignKeys.length > 0) {
+        throw new Error(`Unsupported foreign reasoning metadata for Codex: ${foreignKeys.join(', ')}.`);
+    }
+    return { ...metadata };
+}
+function requireNonEmptyString(value, context) {
+    if (!value)
+        throw new Error(`Unsupported Codex ${context}: expected a non-empty string.`);
+    return value;
+}
+function isRecord(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function assertNever(value, context) {
+    throw new Error(`Unsupported ${context}: ${JSON.stringify(value)}`);
+}
+//# sourceMappingURL=codex-turn-converter.js.map

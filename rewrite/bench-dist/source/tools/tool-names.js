@@ -1,0 +1,16 @@
+export const TOOL_NAME_DISCORD_SEND = 'discord_send';
+export const TOOL_NAME_APPLY_PATCH = 'apply_patch';
+export const TOOL_NAME_SEARCH_REPLACE = 'search_replace';
+export const TOOL_NAME_CREATE_FILE = 'create_file';
+export const TOOL_NAME_READ_CODE_OUTLINE = 'read_code_outline';
+export const TOOL_NAME_CODE_CONTEXT_SEARCH = 'code_context_search';
+export const TOOL_NAME_ASK_USER = 'ask_user';
+export const TOOL_NAME_PROPOSE_GOAL = 'propose_goal';
+export const TOOL_NAME_GOAL_CHECK = 'goal_check';
+export const TOOL_NAME_MEMORY_LIST = 'memory_list';
+export const TOOL_NAME_MEMORY_GET = 'memory_get';
+export const TOOL_NAME_MEMORY_SEARCH = 'memory_search';
+export const TOOL_NAME_MEMORY_CREATE = 'memory_create';
+export const TOOL_NAME_MEMORY_UPDATE = 'memory_update';
+export const TOOL_NAME_MEMORY_DELETE = 'memory_delete';
+//# sourceMappingURL=tool-names.js.map

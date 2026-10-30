@@ -1,0 +1,81 @@
+import path from 'path';
+import process from 'process';
+import { publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
+/**
+ * Owns the single filesystem root every tool resolves against.
+ *
+ * Tools call `getCwd()` at execution time rather than capturing a root, so
+ * re-pointing this object re-points shell, the file tools, and — because the
+ * shell sandbox derives its write allowlist from the same value — the set of
+ * paths the session may write at all. That is the whole mechanism behind the
+ * worktree tools: an *active workspace* is a lease on top of the session's home
+ * root, never a mutation of `process.cwd()`, which is process-global and would
+ * retarget background jobs already running under the old root.
+ */
+export class ExecutionContext {
+    sshService;
+    remoteDir;
+    activeWorkspace;
+    constructor(sshService, remoteDir) {
+        this.sshService = sshService;
+        this.remoteDir = remoteDir;
+    }
+    isRemote() {
+        return !!this.sshService;
+    }
+    getSSHService() {
+        return this.sshService;
+    }
+    getCwd() {
+        if (this.isRemote() && this.remoteDir) {
+            return this.remoteDir;
+        }
+        return this.activeWorkspace ?? process.cwd();
+    }
+    /** The root the session started in, regardless of any active workspace lease. */
+    getHomeWorkspace() {
+        if (this.isRemote() && this.remoteDir) {
+            return this.remoteDir;
+        }
+        return process.cwd();
+    }
+    /** The leased root, or undefined when the session is operating in its home root. */
+    getActiveWorkspace() {
+        return this.activeWorkspace;
+    }
+    /**
+     * Leases `root` as the active workspace. Callers are responsible for
+     * validating that the path is a real, resolved working tree; this class only
+     * enforces the invariants that make the root unambiguous.
+     */
+    enterWorkspace(root) {
+        if (this.isRemote()) {
+            throw new Error('Cannot enter a local workspace in remote mode: the remote directory owns the execution root.');
+        }
+        if (!path.isAbsolute(root)) {
+            throw new Error(`Active workspace must be an absolute path, received: ${root}`);
+        }
+        publishActiveWorkspaceRoot(root);
+        this.activeWorkspace = root;
+    }
+    /** Releases the lease, returning the session to its home root. */
+    exitWorkspace() {
+        publishActiveWorkspaceRoot(undefined);
+        this.activeWorkspace = undefined;
+    }
+    /**
+     * Run-local root for a child subagent (or any concurrent owner that must not
+     * retarget the session). Same absolute-path lease as {@link enterWorkspace},
+     * but does **not** publish {@link publishActiveWorkspaceRoot} — concurrent
+     * pins therefore cannot stomp the parent session's process-wide fallback.
+     */
+    static pin(root) {
+        if (!path.isAbsolute(root)) {
+            throw new Error(`Active workspace must be an absolute path, received: ${root}`);
+        }
+        const ctx = new ExecutionContext();
+        ctx.activeWorkspace = root;
+        return ctx;
+    }
+}
+//# sourceMappingURL=execution-context.js.map

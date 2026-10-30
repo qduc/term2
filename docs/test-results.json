@@ -27427,6 +27427,48 @@
         }
       ],
       "notes": "Layer guard passed with 490 allowlisted source edges. Typecheck and inventory passed. Fake-server first request matched immutable headless-plain-answer after excluding only instructions and tools. Tracer also verified six lossless input cases, explicit previousResponseId/disableChaining, completion-only tool signature/final arguments emitted once, stream-only fallback, metadata/IDs, binding cache identity, failed-factory eviction, and owned/borrowed disposal. Sol approved source commit 897464124749d0d89eef233a5ee9dc0905f3f930 before the rebase; adapter code is unchanged by the guard rebase. Old CLI parity 6/6 was recorded before rebase. No full CLI integration/e2e or hosted CI run was performed locally; PR CI remains pending."
+    },
+    {
+      "id": "2026-10-30-port-a2-final-rebase",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:49:28Z",
+      "commit": "4bd14054",
+      "tree": null,
+      "revision_kind": "final A2 source after rebase onto A1 PR93 merge; source unchanged from Sol-approved adapter",
+      "base_commit": "54d71fc27dbef778e798781c0f1093e734871797",
+      "task_ids": [
+        "2026-10-30-port-a2-adapter"
+      ],
+      "suite": "A2 final rebase typecheck, guard, inventory, fake-provider tracer, worktree build and old CLI parity",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; XDG_STATE_HOME=/tmp/term2-a2-xdg pnpm exec tsx /tmp/term2-a2-tracer.mts; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated A2 worktree. Fake OpenAI-compatible provider over loopback. Network-enabled additional sandbox permissions allowed subprocess IPC after default sandbox denied tsx pipe setup."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-tracer.mts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-independent-review.md"
+        }
+      ],
+      "notes": "Typecheck passed. Layer guard passed with 490 allowlisted source edges; inventory passed. Fake-provider request matched headless-plain-answer excluding instructions/tools; six lossless round-trips, previousResponseId/disableChaining, completion-only tool metadata/final-argument reconciliation and stream-only fallback passed. Worktree CLI built and parity passed 9/9. Sol independently approved unchanged adapter patch based on commit 897464124749d0d89eef233a5ee9dc0905f3f930. No full CLI integration/e2e or hosted CI run claimed."
     }
   ]
 }

@@ -27385,6 +27385,48 @@
         }
       ],
       "notes": "Tracer comparison matched headless-plain-answer after removing system instructions and tools. It asserts six lossless input cases, explicit previousResponseId/disableChaining, partId/reasoning metadata, completion-only tool signature and final raw arguments, one emission for matching streamed/final tool call, stream-only fallback, cache identity, async rejection eviction, and owned/borrowed disposal. Sol independently reproduced the completion-only signature probe, reran the full tracer, and approved source commit 897464124749d0d89eef233a5ee9dc0905f3f930; review report at /tmp/term2-a2-independent-review.md. The separate common layer guard correction remains pending; its exact earlier failure is recorded in 2026-10-30-port-a2-adapter."
+    },
+    {
+      "id": "2026-10-30-port-a2-postguard-rebase",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:16:25Z",
+      "commit": "3d654ce60cf525fbab70ee0eef97a3d4becb5c20",
+      "tree": null,
+      "revision_kind": "clean source commit after rebase onto merged guard correction",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-a2-adapter"
+      ],
+      "suite": "A2 final post-rebase typecheck, layer guard, inventory and fake-provider tracer",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; XDG_STATE_HOME=/tmp/term2-a2-xdg pnpm exec tsx /tmp/term2-a2-tracer.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Clean source commit in the isolated worktree rebased onto origin/main PR91 merge; local fake OpenAI-compatible HTTP server; network-enabled additional sandbox permissions for subprocesses."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-evidence-postguard.json"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a2-independent-review.md"
+        }
+      ],
+      "notes": "Layer guard passed with 490 allowlisted source edges. Typecheck and inventory passed. Fake-server first request matched immutable headless-plain-answer after excluding only instructions and tools. Tracer also verified six lossless input cases, explicit previousResponseId/disableChaining, completion-only tool signature/final arguments emitted once, stream-only fallback, metadata/IDs, binding cache identity, failed-factory eviction, and owned/borrowed disposal. Sol approved source commit 897464124749d0d89eef233a5ee9dc0905f3f930 before the rebase; adapter code is unchanged by the guard rebase. Old CLI parity 6/6 was recorded before rebase. No full CLI integration/e2e or hosted CI run was performed locally; PR CI remains pending."
     }
   ]
 }

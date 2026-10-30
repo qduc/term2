@@ -29838,6 +29838,38 @@
       "failures": [],
       "evidence": [],
       "notes": "At exact b6a, rewrite tsc and layer guard 527 pass; retained settings 5/5, budget 3/3 and network dual/background/nested running+late/kill 5/5 pass. Sol independent bounded acceptance 10/10 affected actual checks includes network durable-answer other-owner poison fencing grant, cached decision, stored allow and S/U/closeLog; see /tmp/term2-c3a-stage5-settings-independent-review.md. N main d204 previously passed all five CI jobs including native actual sandbox; these controlled checks do not establish external provider availability or complete stage5/#76, C3b, P2/C4."
+    },
+    {
+      "id": "2026-10-30-rewrite-readability-guardrails",
+      "timestamp": "2026-10-30T22:25:00Z",
+      "commit": "158777e17a0957a8c83448f3248c6b1ff51fa4d4",
+      "tree": "41d2222629f863af14463557a4195a05f8318cc2",
+      "revision_kind": "clean commit",
+      "base_commit": "cf5ffa367e7d6e9204a23078ad62d04927401709",
+      "task_ids": [
+        "2026-10-30-rewrite-readability-guardrails"
+      ],
+      "suite": "Rewrite readability guardrails",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/scripts/check-complexity.mjs; node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts (x3); negative runs with maxSourceEdges 526, foreground ceiling 1300 and maxHops 28",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree .worktrees/guardrails, local fake provider."
+      },
+      "result": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "rewrite tsc passes; layer guard 527; complexity check passes with 38 files and 5 ceilings; hops bench reports 29 hops through 7 files on three consecutive runs. Negative runs: allowlist budget 526 and foreground ceiling 1300 each fail check-complexity with exit 1 and the expected message; maxHops 28 fails hops.mts with the expected assertion. Budget restored before commit."
     }
   ]
 }

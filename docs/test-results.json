@@ -29216,6 +29216,39 @@
       "failures": [],
       "evidence": [],
       "notes": "Typechecks, guard 527, inventory, no-unit guard, retained real approval and SIGKILL benches, build and immutable parity 9/9 passed. Temporary real duplicate call ID, compaction approval/recovery, real read-folder grant (including stale, fsync and cancel negatives), and 13 accepted/50 rejected source grant choices passed. Expected injected fsync failure was observed. Actual edit, Docker and sandbox denied-read grant effects are not claimed. Settlement delta independent review pending. Earlier restart PTY 6/7 had /proc children ENOENT, reproduced on clean base 62f68b80."
+    },
+    {
+      "id": "2026-10-30-c1-integrated-verification",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T18:12:03Z",
+      "commit": "15a9d0294e7348770c5d4ab105ff4c0ebb025148",
+      "tree": "88d89823832cb0f70acc315217e7298ce86f85ea",
+      "revision_kind": "integrated source",
+      "base_commit": "86d2e5f4cd8da34d32efa0d492c0537521554ce5",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "integrated adopted engine verification",
+      "command": "pnpm exec tsc --noEmit; pnpm exec tsc --noEmit -p rewrite/tsconfig.json; pnpm exec tsc --noEmit -p rewrite/tsconfig.native-tracer.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm check:no-unit-tests; pnpm exec tsx rewrite/bench/c1-adopted-approval.mts; pnpm exec tsx rewrite/bench/c1-adopted-kill.mts; SKIP_BUILD_BACKUP=1 pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; local fixture providers."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Integrated production source matches 485712c8. Typechecks, guard 527, inventory, no-unit guard, retained real approval and SIGKILL benches, build and immutable parity 9/9 passed. Independent delta review pending. Previous native restart PTY 6/7 failure /proc children ENOENT also reproduced on clean base 62f68b80; no final rerun claimed."
     }
   ]
 }

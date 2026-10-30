@@ -431,6 +431,7 @@ export class CanonicalSessionLog implements SessionLog {
         throw new Error('session_bound is immutable once written');
       }
     }
+    validatePendingRevisionSequence([...this.#entries.map((entry) => entry.fact), ...facts]);
     const previousSeq = this.lastSeq;
     const sidecars = facts.filter((fact) => SIDECAR_EVENT_TYPES.has(fact.type as LogEvent['type']));
     for (const fact of sidecars) this.#writer.append(fact as LogEvent);
@@ -493,7 +494,21 @@ function loadEntries(id: string, root: string): SessionLogEntry[] {
   if (entries.filter((entry) => entry.fact.type === 'session_bound').length > 1) {
     throw new Error(`conversation ${id} has more than one immutable session_bound fact`);
   }
+  validatePendingRevisionSequence(entries.map((entry) => entry.fact));
   return entries;
+}
+
+function validatePendingRevisionSequence(facts: readonly StoredSessionFact[]): void {
+  const revisions = new Map<string, number>();
+  for (const fact of facts) {
+    if (fact.type !== 'session_interaction_pending') continue;
+    const key = JSON.stringify([fact.turnId, fact.interaction.interactionId, fact.generation]);
+    const previous = revisions.get(key);
+    if (previous !== undefined && fact.interaction.revision <= previous) {
+      throw new Error('session interaction pending revision must increase for its turn, identity, and generation');
+    }
+    revisions.set(key, fact.interaction.revision);
+  }
 }
 
 /** Source's existing decoder/replay path, including provider-native item preservation. */

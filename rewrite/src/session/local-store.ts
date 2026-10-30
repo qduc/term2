@@ -116,13 +116,12 @@ export class LocalSessionStore implements SessionStore {
           )?.fact;
         if (
           pendingFact?.type === 'session_interaction_pending' &&
-          pendingFact.settleOnRecovery === 'child_interrupted' &&
-          pendingFact.child
+          pendingFact.settleOnRecovery === 'child_interrupted'
         ) {
           facts.push({
             type: 'subagent_interrupted',
-            agentId: pendingFact.child.agentId,
-            role: pendingFact.child.role,
+            agentId: pendingFact.child?.agentId ?? pending.interaction.descriptor.agentName,
+            role: pendingFact.child?.role ?? pending.interaction.descriptor.agentName,
             finalText: 'Child interaction interrupted by daemon restart.',
           });
         }

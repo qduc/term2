@@ -27725,10 +27725,10 @@
       "id": "2026-10-30-port-a5-turn-prompt",
       "recorded_on": "2026-10-30",
       "run_at": "2026-10-30T15:07:00Z",
-      "commit": "afeef243230c8060c05d8f0f6cba78f6ea7db51a",
-      "tree": "c265d00e875331c6fb6b032918c54c204808e39c",
+      "commit": "4fb218135094d226c288e8b0d4b5b5265a1b8c0d",
+      "tree": "9c7d7ffcd63677869711705fb0b187e2285dd109",
       "revision_kind": "clean source commit; evidence documentation appended afterward",
-      "base_commit": "5130f32b16ef1a80a9a37acb9f90a7a29a526cea",
+      "base_commit": "ba3f0a8582d87cafc87776cc033c2604cd92a2a8",
       "task_ids": [
         "2026-10-30-port-a5-turn-prompt"
       ],

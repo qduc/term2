@@ -65,17 +65,27 @@ The assistant orients you in the code, asks about unresolved decisions, requests
 approval for one small change, implements and verifies it, then returns control.
 Interfaces and consequential design decisions remain yours to author.
 
-Pair is instruction-only: it inherits Standard's tools and enforcement. Approval
+Pair is instruction-only: it retains the former Standard tool/context composition and enforcement. Approval
 and step size are model instructions, not additional runtime restrictions. Switch
-back with `/profile standard`. The workflow is restored with the saved profile.
+back to the default with `/profile bare`. The workflow is restored with the saved profile.
 
 ## Bare profile and unattended runs
 
-`--profile bare` selects a small shell-first surface. Persist it with
-`app.activeProfileId: "builtin:bare"` in settings.json. `--profile full` selects
-`builtin:standard` for the session. CLI overrides do not persist. The configured
-default remains Standard. Positional prompts without `--auto-approve` implicitly
-select Bare unless Orchestrator or Mentor is persisted.
+Bare is the default for fresh sessions, including interactive and auto-approved runs.
+`--profile bare` explicitly selects it; CLI overrides do not persist. Standard is
+retired, not offered in the picker, and has no selectable full-context definition.
+Old `--profile standard`, `--profile full`, `/profile standard`, `/profile full`,
+and saved `builtin:standard` selections resolve to canonical `builtin:bare`.
+Old sessions without a profile or enabled legacy mode also use Bare. History and
+settings files are not bulk-rewritten: runtime selection and new session headers
+use Bare, including resume and rollover. Unknown profile IDs still fail normally.
+
+Explicit Plan, Pair, Mentor, and Orchestrator selections retain their previous
+full-context/tool compositions; they do not inherit Bare's minimal composition.
+Configured profiles are honored even for positional prompts without
+`--auto-approve`. Leaving Plan/Mentor/Orchestrator returns to Bare; `/bare` and
+`/lite` are idempotent while Bare is active. Changes to/from Bare still require
+clearing existing interactive history through the confirmation flow.
 
 Lite was merged into Bare on 2026-10-24. Every Lite entry point now selects
 `builtin:bare`: `--lite`, `--profile lite`, `/lite` (alongside `/bare`),
@@ -84,10 +94,8 @@ sessions recorded as Lite, and gateway mode `lite`. The legacy `app.liteMode` fl
 reads `true` while Bare is active. The [merge notes](./lite-bare-merge.md) record
 the rationale, request-size measurements, and known gaps.
 
-Bare uses a short prompt. AGENTS.md is not injected: the prompt directs the
-model to read the checkout's AGENTS.md and `~/.agents/AGENTS.md` when it starts
-working in a checkout, and scoped instructions before editing. The same applies to
-remote sessions through the remote shell. Bare includes the skills catalog
+Bare uses a short prompt and injects local project/global AGENTS.md instructions.
+For remote sessions, project instructions are read through the remote shell. Bare includes the skills catalog
 (the model loads a skill by reading its SKILL.md through the shell) and a short
 environment line (OS, shell, cwd, home, date; no top-level tree). Delegation uses
 the existing subagent runtime when the session supplies it; authority restrictions still apply.
@@ -96,7 +104,7 @@ Missing capabilities must be reported, not silently skipped.
 Bare's ordinary context defaults stay unchanged. A host-local, project-scoped
 `personal-context.json` opt-in in the project memory store can add only a bounded
 personal-memory section, refreshed before each provider request, without the
-Standard/global-memory prompt. See [personal memory context](../reference/personal-memory-context.md)
+full-context/global-memory prompt. See [personal memory context](../reference/personal-memory-context.md)
 for scope, opt-out and privacy; no profile switch is required.
 
 Bare carries no tool for what the shell can do: file reads, search, edits, and
@@ -155,7 +163,7 @@ is unavailable or inconclusive, Bare goal-driven runs block completion (exit 2),
 report the cause, and retain the active goal. Other headless profiles finish with
 “independent verification not performed” and retain an active durable goal. A
 concrete verification failure still requests repair or blocks completion.
-Interactive Bare uses the same configured completion gate as Standard; other
+Interactive Bare uses the configured completion gate; other
 profiles retain their interactive verification behavior.
 
 `agent.backgroundWaitTimeoutMs` bounds the overall headless background drain,

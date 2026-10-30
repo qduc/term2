@@ -2028,7 +2028,18 @@ fs.createWriteStream = (filename, options) => {
       },
     );
 
-    it.each(['flag', 'config'])(
+    it.each([
+      'flag',
+      'config',
+      'default',
+      'standard-config',
+      'legacy-default',
+      'standard',
+      'full',
+      'lite',
+      'standard-resume',
+      'legacy-resume',
+    ])(
       'bare profile via %s keeps a small tool surface, project guidance, and versioned session identity',
       async (selection) => {
         // realpath: macOS tmpdir is a /var symlink, and the CLI reports the resolved cwd.
@@ -2081,15 +2092,57 @@ fs.createWriteStream = (filename, options) => {
               ],
         );
         writeSettings(testDir, {
-          app: { activeProfileId: selection === 'config' ? 'builtin:bare' : 'builtin:standard' },
+          ...(selection === 'config' ? { app: { activeProfileId: 'builtin:bare' } } : {}),
+          ...(selection === 'standard-config' ? { app: { activeProfileId: 'builtin:standard' } } : {}),
+          ...(selection === 'legacy-default'
+            ? { app: { liteMode: false, planMode: false, mentorMode: false, orchestratorMode: false } }
+            : {}),
           agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
           providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
         });
+        const settingsBefore = fs.readFileSync(
+          path.join(resolveSettingsDirectory({ homeDir: testDir }), 'settings.json'),
+          'utf8',
+        );
+        const resumeId = 'saved-standard';
+        const resumePath = path.join(testDir, `${resumeId}.jsonl`);
+        const savedHistory = selection.endsWith('-resume')
+          ? [
+              {
+                v: 3,
+                seq: 1,
+                ts: '2026-01-01T00:00:00.000Z',
+                event: {
+                  type: 'session_init',
+                  id: resumeId,
+                  createdAt: '2026-01-01T00:00:00.000Z',
+                  projectPath: repo,
+                  ...(selection === 'standard-resume'
+                    ? { activeProfileId: 'builtin:standard' }
+                    : { appMode: { liteMode: false, planMode: false, mentorMode: false, orchestratorMode: false } }),
+                },
+              },
+              {
+                v: 3,
+                seq: 2,
+                ts: '2026-01-01T00:00:01.000Z',
+                event: {
+                  type: 'user_message',
+                  message: { id: 'old-user', sender: 'user', text: 'SAVED_STANDARD_HISTORY_SENTINEL' },
+                },
+              },
+            ]
+              .map((event) => JSON.stringify(event))
+              .join('\n') + '\n'
+          : '';
+        if (savedHistory) fs.writeFileSync(resumePath, savedHistory);
         try {
           const result = await spawnCli(
             [
               cliPath(),
               ...(selection === 'flag' ? ['--profile', 'bare'] : []),
+              ...(['standard', 'full', 'lite'].includes(selection) ? ['--profile', selection] : []),
+              ...(savedHistory ? ['--resume', resumeId] : []),
               '--auto-approve',
               '--json',
               'Write a result file',
@@ -2104,7 +2157,14 @@ fs.createWriteStream = (filename, options) => {
             JSON.stringify(lastWireToolExchange(mock.capturedRequests())),
           ).toBe(true);
           expect(fs.readFileSync(path.join(repo, 'result.txt'), 'utf8')).toBe('bare edit succeeded\n');
+          expect(
+            fs.readFileSync(path.join(resolveSettingsDirectory({ homeDir: testDir }), 'settings.json'), 'utf8'),
+          ).toBe(settingsBefore);
           const request = mock.capturedRequests()[0];
+          if (savedHistory) {
+            expect(JSON.stringify(request.messages)).toContain('SAVED_STANDARD_HISTORY_SENTINEL');
+            expect(fs.readFileSync(resumePath, 'utf8').startsWith(savedHistory)).toBe(true);
+          }
           const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
           // Bare has no editors or activate_skill: the shell does both.
           expect(names).toEqual(['goal_check', 'run_code', 'run_subagent', 'shell']);
@@ -2124,7 +2184,7 @@ fs.createWriteStream = (filename, options) => {
             .join('\n');
           expect(system.length).toBeLessThan(4000);
           expect(system).toContain('Unattended mode: Never ask');
-          // Like pi, Bare injects AGENTS.md (global and project) instead of carrying policy.
+          // Bare's existing instruction injection stays unchanged by the default switch.
           expect(system).toContain('PROJECT_GUIDANCE_SENTINEL');
           expect(system).toContain('GLOBAL_GUIDANCE_SENTINEL');
           expect(system).toContain('report blocked');
@@ -2153,7 +2213,7 @@ fs.createWriteStream = (filename, options) => {
             .trim()
             .split('\n')
             .map((line) => JSON.parse(line).event);
-          expect(events[0]).toMatchObject({
+          expect(events.filter((event) => event.type === 'session_init').at(-1)).toMatchObject({
             type: 'session_init',
             activeProfileId: 'builtin:bare',
             activeProfileVersion: emitted[0].activeProfileVersion,
@@ -2167,7 +2227,7 @@ fs.createWriteStream = (filename, options) => {
       },
     );
 
-    it.each(['full', 'bare'])(
+    it.each(['pair', 'bare', 'full', 'standard'])(
       'headless %s completion in an unsupported workspace reports missing verification',
       async (profile) => {
         const mock = await startModelMock(['mock-alpha'], (n) =>
@@ -2210,12 +2270,12 @@ fs.createWriteStream = (filename, options) => {
             createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
             testDir,
           );
-          expect(result.status, result.stderr).toBe(profile === 'bare' ? 2 : 0);
+          expect(result.status, result.stderr).toBe(profile === 'pair' ? 0 : 2);
           expect(result.stdout).toContain(
-            profile === 'bare' ? 'Completion verification blocked' : 'independent verification not performed',
+            profile === 'pair' ? 'independent verification not performed' : 'Completion verification blocked',
           );
           expect(result.stdout).toContain('durable goal remains active');
-          expect(result.stderr).toContain(`Profile: ${profile}`);
+          expect(result.stderr).toContain(`Profile: ${['standard', 'full'].includes(profile) ? 'bare' : profile}`);
         } finally {
           await mock.close();
         }

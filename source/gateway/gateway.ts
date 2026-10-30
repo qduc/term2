@@ -884,7 +884,7 @@ export class Term2Gateway {
     if (body.mode !== undefined) {
       const profileId = (
         {
-          standard: 'builtin:standard',
+          standard: 'builtin:bare',
           bare: 'builtin:bare',
           // Lite was merged into Bare; the wire name stays accepted.
           lite: 'builtin:bare',
@@ -2969,7 +2969,7 @@ export function sessionConfigProjection(session: ServerSession): Record<string, 
   const sessionPolicy = session.resources.settings.toolPolicy ?? {};
   const activeProfileId = get('app.activeProfileId', undefined);
   const modeByProfileId: Record<string, string> = {
-    'builtin:standard': 'standard',
+    'builtin:standard': 'bare',
     'builtin:bare': 'bare',
     'builtin:plan': 'plan',
     'builtin:mentor': 'mentor',
@@ -2990,9 +2990,7 @@ export function sessionConfigProjection(session: ServerSession): Record<string, 
     modelId: selection.model,
     reasoningEffort: get('agent.reasoningEffort', snapshot.reasoningEffort ?? 'default'),
     mode:
-      (activeProfileId === undefined ? undefined : modeByProfileId[String(activeProfileId)]) ??
-      snapshot.mode ??
-      'standard',
+      (activeProfileId === undefined ? undefined : modeByProfileId[String(activeProfileId)]) ?? snapshot.mode ?? 'bare',
     toolPolicy,
     defaultsRevision: snapshot.defaultsRevision,
   };
@@ -3001,7 +2999,7 @@ export function sessionConfigProjection(session: ServerSession): Record<string, 
     providerId: settings.providerId ?? 'unknown',
     modelId: settings.modelId ?? 'unknown',
     reasoningEffort: settings.reasoningEffort ?? 'default',
-    mode: settings.mode ?? 'standard',
+    mode: settings.mode ?? 'bare',
     toolPolicy,
     configRevision: crypto.createHash('sha256').update(JSON.stringify(settings)).digest('hex'),
     defaultsRevision: settings.defaultsRevision ?? 'unknown',

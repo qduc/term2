@@ -41,8 +41,8 @@ it('resumes repeated questions once per decision and settles cancellation before
     command: process.execPath,
     // ask_user needs a Profile with user interaction; Bare (what --lite now
     // selects) has none. --lite still bypasses the home-directory start guard
-    // (cwd is HOME here), and --profile full overrides the Profile it selects.
-    args: [join(process.cwd(), 'dist/cli.js'), '--lite', '--profile', 'full'],
+    // (cwd is HOME here), and --profile pair overrides the Profile it selects.
+    args: [join(process.cwd(), 'dist/cli.js'), '--lite', '--profile', 'pair'],
     cwd: lease.root,
     cols: 120,
     rows: 40,

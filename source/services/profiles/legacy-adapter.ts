@@ -1,6 +1,7 @@
 import type { ProfileId, SavedAppMode } from './types.js';
 
-export const STANDARD_PROFILE_ID = 'builtin:standard' as const;
+/** Retired Standard Profile; existing selections now use Bare. */
+export const LEGACY_STANDARD_PROFILE_ID = 'builtin:standard' as const;
 export const BARE_PROFILE_ID = 'builtin:bare' as const;
 /** Retired Lite Profile; saved settings, sessions, and commands that name it select Bare. */
 export const LEGACY_LITE_PROFILE_ID = 'builtin:lite' as const;
@@ -10,7 +11,9 @@ export const ORCHESTRATOR_PROFILE_ID = 'builtin:orchestrator' as const;
 
 /** Map a retired built-in Profile ID to the Profile that replaced it. */
 export function canonicalProfileId(profileId: string): string {
-  return profileId === LEGACY_LITE_PROFILE_ID ? BARE_PROFILE_ID : profileId;
+  return [LEGACY_LITE_PROFILE_ID, LEGACY_STANDARD_PROFILE_ID, 'builtin:full'].includes(profileId)
+    ? BARE_PROFILE_ID
+    : profileId;
 }
 
 /** Compatibility projection for persisted settings; Profile identity remains canonical. */
@@ -19,7 +22,7 @@ export function profileIdFromLegacyMode(mode: Partial<SavedAppMode> | undefined)
   if (mode?.liteMode) return BARE_PROFILE_ID;
   if (mode?.planMode) return PLAN_PROFILE_ID;
   if (mode?.mentorMode) return MENTOR_PROFILE_ID;
-  return STANDARD_PROFILE_ID;
+  return BARE_PROFILE_ID;
 }
 
 export function legacyModeFromProfileId(profileId: string): SavedAppMode {
@@ -34,7 +37,6 @@ export function legacyModeFromProfileId(profileId: string): SavedAppMode {
     case MENTOR_PROFILE_ID:
       return { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: true };
     case 'builtin:pair':
-    case STANDARD_PROFILE_ID:
       return { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: false };
     default:
       throw new Error(`Cannot project unknown Profile '${profileId}' to legacy mode flags`);
@@ -74,7 +76,7 @@ export function profileIdFromLegacyModeSetting(
       return false;
     }
   })?.[1];
-  return activeField === field ? STANDARD_PROFILE_ID : (currentProfileId as ProfileId);
+  return activeField === field ? BARE_PROFILE_ID : (currentProfileId as ProfileId);
 }
 
 export const legacyModeAdapter = Object.freeze({

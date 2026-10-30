@@ -8,7 +8,7 @@ interface StandardModeConfirmationPromptProps {
 }
 
 const StandardModeConfirmationPrompt: FC<StandardModeConfirmationPromptProps> = (props) => (
-  <ConfirmPrompt question="Switch to standard mode?" {...props} />
+  <ConfirmPrompt question="Switch to Bare mode?" {...props} />
 );
 
 export default StandardModeConfirmationPrompt;

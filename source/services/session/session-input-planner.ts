@@ -429,7 +429,7 @@ export class SessionInputPlanner {
   }
 
   #getTrafficMode(): string {
-    if (!this.#settingsService) return 'standard';
+    if (!this.#settingsService) return 'bare';
     return getProfileLabel(String(this.#settingsService.get('app.activeProfileId')));
   }
 

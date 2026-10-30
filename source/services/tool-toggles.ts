@@ -85,14 +85,6 @@ const PROFILE_TOGGLE_CONFLICTS: Record<string, { label: string; toggles: readonl
       SETTING_KEYS.TOOLS_MENTOR_ENABLED,
     ],
   },
-  'builtin:standard': {
-    label: 'Standard',
-    toggles: [
-      SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
-      SETTING_KEYS.TOOLS_SHELL_ENABLED,
-      SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED,
-    ],
-  },
   'builtin:plan': {
     label: 'Plan',
     toggles: [

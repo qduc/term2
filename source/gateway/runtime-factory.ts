@@ -25,6 +25,7 @@ import type { ProviderContinuity } from '../services/provider-continuity.js';
 import type { OpenAICandidateObserver } from '../services/openai-candidate-observer.js';
 import type { ToolExecutionLifecyclePort } from '../tools/types.js';
 import { AgentClient } from '../lib/agent-client.js';
+import { resolveProfile } from '../services/profiles/resolver.js';
 import { installPlanModeInterceptor } from '../services/plan-mode-interceptor.js';
 import type { ModelSettingsReasoningEffort } from '../services/models/reasoning-effort.js';
 
@@ -342,6 +343,8 @@ function createDefaultSettings(
   settings.set('agent.modelSelection', { model: defaults.modelId, provider: defaults.providerId }, { persist: false });
   if (snapshot) {
     settings.set('agent.reasoningEffort', snapshot.reasoningEffort as never, { persist: false });
+    // Restore the saved selection, not today's default (including retired aliases).
+    settings.set('app.activeProfileId', resolveProfile(`builtin:${snapshot.mode}`).identity.id, { persist: false });
   }
   settings.set('agent.maxParallelToolCalls', maxParallelToolCalls, { persist: false });
   return settings;

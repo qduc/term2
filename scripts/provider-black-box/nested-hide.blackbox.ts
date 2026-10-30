@@ -48,6 +48,7 @@ describe('P1 nested hide result chain', () => {
     const outsideDir = realpathSync(mkdtempSync(join('/tmp', 'term2-m4-hide-p1-outside-')));
     const approvedPath = join(outsideDir, 'approved.txt');
     const settings = createMockSettingsService({
+      'app.activeProfileId': 'builtin:pair',
       'shell.autoApproveMode': 'off',
       'agent.modelSelection': { model: 'm4-hide-model', provider: providerId },
       'app.searchViaShell': 'off',

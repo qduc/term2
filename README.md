@@ -66,7 +66,7 @@ This README tracks `main`; npm releases may lag behind it. Check `term2 --versio
 
 Continue a saved session headlessly with `term2 --resume <session-id> "Follow-up prompt"` (or use `last` instead of an ID). Add `--fork` to keep the original session unchanged.
 
-`--profile bare` selects the minimal-prompt profile with subagent delegation; the former Lite options (`--lite`, `-l`, `/lite`, and `--profile lite`) now select Bare too.
+Bare is the default minimal-prompt profile with subagent delegation. Standard is retired: old `standard`/`full` profile selections and saved Standard sessions now resolve to Bare. The former Lite options (`--lite`, `-l`, `/lite`, and `--profile lite`) now select Bare too.
 
 A command-line prompt runs non-interactively, with tool execution disabled by default. `--auto-approve` enables tools without interactive confirmation; use it only when you intend unattended execution. See [scripting](https://qduc.github.io/term2/using-term2/non-interactive/) and [SSH setup](https://qduc.github.io/term2/remote/ssh/).
 

@@ -279,7 +279,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     }
   };
 
-  const activeProfileId = config.settingsService?.get('app.activeProfileId') ?? 'builtin:standard';
+  const activeProfileId = config.settingsService?.get('app.activeProfileId') ?? 'builtin:bare';
   const profileMetadata = getProfileMetadata(activeProfileId);
   if (config.json) stdout.write(JSON.stringify({ type: 'session_start', ...profileMetadata }) + '\n');
   config.logger?.info('Headless session started', { eventType: 'session.start', ...profileMetadata });

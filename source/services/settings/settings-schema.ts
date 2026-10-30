@@ -396,8 +396,8 @@ export const AppSettingsSchema = z.object({
   // liteMode: selects the Bare profile (Lite was merged into Bare)
   // planMode: when enabled, forces read-only operation (Plan mode)
   // orchestratorMode: prompt-guided delegation workflow; standard tools remain available for cache stability
-  // Standard mode is the default (all flags false): full capabilities with auto-approve for apply_patch
-  activeProfileId: z.string().optional().default('builtin:standard'),
+  // Bare is the default; legacy mode flags are compatibility projections.
+  activeProfileId: z.string().optional().default('builtin:bare'),
   mentorMode: z.boolean().optional().default(false),
   liteMode: z.boolean().optional().default(false),
   planMode: z.boolean().optional().default(false),
@@ -1278,7 +1278,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   },
   app: {
     shellPath: undefined,
-    activeProfileId: 'builtin:standard',
+    activeProfileId: 'builtin:bare',
     mentorMode: false,
     liteMode: false,
     planMode: false,

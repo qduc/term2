@@ -72,10 +72,15 @@ export class ScopedSandboxRunner implements ShellSandboxRunner {
       // A helper killed unexpectedly cannot run SandboxManager.reset itself.
       if (process.platform !== 'win32' && child.pid) {
         try {
-          process.kill(-child.pid, 'SIGTERM');
+          process.kill(-child.pid, 'SIGKILL');
         } catch {
           /* already gone */
         }
+      }
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* already gone */
       }
       try {
         rmSync(helperTemp, { recursive: true, force: true });

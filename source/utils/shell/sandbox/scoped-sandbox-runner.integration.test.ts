@@ -99,6 +99,42 @@ describe('scoped sandbox helpers', () => {
       rmSync(fixture, { recursive: true, force: true });
     }
   }, 10_000);
+  it('kills a still-running helper after its IPC disconnects', async () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'term2-helper-test-'));
+    const marker = join(fixture, 'pid');
+    const helper = join(fixture, 'helper.mjs');
+    writeFileSync(
+      helper,
+      `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(
+        marker,
+      )}, String(process.pid)); process.on('SIGTERM', () => {}); process.on('message', x => { if (x.type === 'availability') process.send({version:1,type:'result',id:x.id,result:{type:'available'}}, () => { process.disconnect(); setInterval(() => {}, 1000); }); });`,
+    );
+    let lost = false;
+    const scope = createScopedSandboxNetworkAccess({ workspaceRoot: fixture, requestApproval: async () => false });
+    const runner = new ScopedSandboxRunner(
+      scope,
+      () => {
+        lost = true;
+      },
+      async () => {},
+      pathToFileURL(helper),
+    );
+    try {
+      await runner.availability();
+      const pid = Number(readFileSync(marker, 'utf8'));
+      await vi.waitFor(
+        () => {
+          expect(lost).toBe(true);
+          expect(() => process.kill(pid, 0)).toThrow();
+        },
+        { timeout: 5000 },
+      );
+      expect(await scope.request({ host: 'blocked.example' })).toBe(false);
+    } finally {
+      await runner.dispose();
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  }, 10_000);
   it('terminates an unresponsive helper during graph disposal', async () => {
     const fixture = mkdtempSync(join(tmpdir(), 'term2-helper-test-'));
     const marker = join(fixture, 'temp-path');

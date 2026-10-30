@@ -26921,6 +26921,41 @@
         "https://github.com/qduc/term2/commit/c9d8cf8d671281f66a31eb44168d9d676176e21f"
       ],
       "notes": "Build, inventory, rewrite typecheck and layer guard passed; old CLI parity matched 6/6 goldens. The probed golden was byte-identical to the G1 base after revert. Workflow Prettier and diff checks passed. The restored commit has not yet been pushed, so its hosted CI remains pending."
+    },
+    {
+      "id": "2026-10-30-port-g2-rebased-final-local",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:17:57Z",
+      "commit": "dfe03a0fe0de0b54f73daf702379c2c8df7d03b9",
+      "tree": null,
+      "revision_kind": "clean rebased G2 source and evidence commits; hosted CI pending",
+      "base_commit": "47190949fed9244632512a9f55175670892f1a96",
+      "task_ids": [
+        "2026-10-30-port-g2-ci-gates"
+      ],
+      "suite": "G2 rebased combined-state build, inventory, parity and static gates",
+      "command": "pnpm build; node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; pnpm exec prettier --check .github/workflows/ci.yml; git diff --quiet origin/main...HEAD -- rewrite/parity/goldens/",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Rebased worktree dependencies; additional sandbox permissions for child processes."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "https://github.com/qduc/term2/commit/dfe03a0fe0de0b54f73daf702379c2c8df7d03b9"
+      ],
+      "notes": "On the combined G2/G3 state, root CLI build, inventory, old CLI parity 6/6, rewrite typecheck, workflow formatting and exact no-golden-diff check passed. Layer guard passed with 490 allowlisted source edges. No golden files differ from rebased main 47190949fed9244632512a9f55175670892f1a96. Hosted CI and final independent review on the rebased head remain pending."
     }
   ]
 }

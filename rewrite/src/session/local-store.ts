@@ -571,7 +571,7 @@ export class LocalSessionStore implements SessionStore {
         ...log
           .entries()
           .filter((entry) => entry.seq > fromSeq && entry.seq <= current.lastSeq)
-          .map((entry) => ({ kind: 'fact' as const, entry })),
+          .map((entry) => ({ kind: 'fact' as const, entry: structuredClone(entry) })),
       );
       drain();
       return () => {

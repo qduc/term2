@@ -115,6 +115,9 @@ jobs:
           for target in turn tool; do RETRY_TARGET="$target" pnpm exec tsx rewrite/bench/c3a-retry-effects.mts; done
           for target in turn tool; do RETRY_TARGET="$target" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-retry-fsync.mts; done
           node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-retry-kill.mts
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-background-interrupt.mts
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-held-tool.mts
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-toolkill.mts
           for failure in none session_interaction_pending session_interaction_resolved; do FAIL_TYPE="$failure" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-postexecute.mts; done
           pnpm exec tsx rewrite/bench/c3a-input-fsync.mts
           PROBE_MODE=unknown pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts

@@ -48,6 +48,7 @@ export interface AdoptedSubmissionPort {
   submit(input: AdoptedSubmissionInput, options?: AdoptedSubmissionOptions): Promise<Admission>;
   decide(command: AdoptedInteractionCommand): Promise<void>;
   retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult>;
+  interruptFromUser(): Promise<void>;
 }
 export interface AdoptedAdmissionContext extends SessionDriverContext {
   admit(

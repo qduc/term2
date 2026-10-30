@@ -55,6 +55,8 @@ export function createAdoptedForeground(options: {
     droppedInput?: UserTurn;
   }) => void;
   makeInput: (turnId: TurnInput['turnId']) => TurnInput;
+  /** Request cancellation of this handle's source-owned background work. */
+  cancelBackground?: () => void;
   /** Combined store handles publish canonical facts themselves. */
   publishFacts?: boolean;
 }) {
@@ -69,6 +71,7 @@ export function createAdoptedForeground(options: {
   let cancellation = new AbortController();
   let poisoned: unknown;
   let closing = false;
+  let interrupting: Promise<void> | undefined;
   let shutdownPromise: Promise<void> | undefined;
   let decisionTail = Promise.resolve();
   let decideCurrent: ((command: AdoptedInteractionCommand) => Promise<void>) | undefined;
@@ -865,10 +868,61 @@ export function createAdoptedForeground(options: {
   return {
     driver,
     submission: {
+      interruptFromUser(): Promise<void> {
+        if (closing || context.state().status === 'closed')
+          return Promise.reject(new Error('Session handle is closed'));
+        if (interrupting) return interrupting;
+        if (!options.cancelBackground) return Promise.reject(new Error('User interrupt is not supported'));
+        let resolve!: () => void;
+        let reject!: (error: unknown) => void;
+        const operation = new Promise<void>((ok, fail) => {
+          resolve = ok;
+          reject = fail;
+        });
+        interrupting = operation;
+        const foreground = driver.cancel();
+        void foreground.catch(() => {});
+        let failure: unknown;
+        let failed = false;
+        try {
+          const result: unknown = options.cancelBackground();
+          if (
+            result != null &&
+            (typeof result === 'object' || typeof result === 'function') &&
+            typeof (result as { then?: unknown }).then === 'function'
+          ) {
+            void Promise.resolve(result).catch(() => {});
+            throw new TypeError('Background cancellation must be synchronous');
+          }
+        } catch (error) {
+          failed = true;
+          failure = error;
+        }
+        void (async () => {
+          try {
+            await foreground;
+          } catch (error) {
+            if (!failed) failure = error;
+            failed = true;
+          }
+          if (failed) throw failure;
+        })().then(
+          () => {
+            if (interrupting === operation) interrupting = undefined;
+            resolve();
+          },
+          (error) => {
+            if (interrupting === operation) interrupting = undefined;
+            reject(error);
+          },
+        );
+        return operation;
+      },
       retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult> {
         if (target !== 'turn' && target !== 'tool') return Promise.reject(new Error('Invalid retry target'));
         if (closing || context.state().status === 'closed')
           return Promise.resolve({ kind: 'rejected', reason: 'closed' });
+        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         if (poisoned !== undefined) return Promise.reject(poisoned);
         if (!context.state().retryEligibility[target]) return Promise.resolve({ kind: 'ineligible', target });
         const hasToolResult = () => {
@@ -948,6 +1002,7 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       decide(command: AdoptedInteractionCommand): Promise<void> {
+        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         const owned = structuredClone(command);
         const operation = decisionTail
           .then(() => {
@@ -975,6 +1030,7 @@ export function createAdoptedForeground(options: {
       },
       submit(value: AdoptedSubmissionInput, submitOptions?: AdoptedSubmissionOptions): Promise<Admission> {
         if (closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
+        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         const captured = captureAdoptedInput(value.input);
         if (context.state().status === 'closed') return Promise.resolve({ kind: 'rejected', reason: 'closed' });
         const existing = pending.get(value.requestId);
@@ -1016,6 +1072,7 @@ export function createAdoptedForeground(options: {
         await serial;
         await completion;
         await writeTail;
+        if (interrupting) await interrupting;
       })();
       return shutdownPromise;
     },

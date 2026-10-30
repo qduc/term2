@@ -35,6 +35,21 @@ export class ShellChildRegistry {
   }
 }
 
+/** A failed graph capability rejects children registered after invalidation. */
+export class InvalidatableShellChildRegistry extends ShellChildRegistry {
+  #invalid = false;
+
+  override add(child: ChildProcess): void {
+    super.add(child);
+    if (this.#invalid) super.killAll();
+  }
+
+  invalidate(): void {
+    this.#invalid = true;
+    super.killAll();
+  }
+}
+
 /** Process-exit cleanup retains the union of every session registry. */
 export function killAllShellChildrenAtProcessExit(): void {
   for (const child of processChildren) signalChild(child);

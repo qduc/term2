@@ -285,6 +285,7 @@ export const getAgentDefinition = (
     /** Root-session-only output store + watch layer for background jobs. */
     backgroundShellOutput?: BackgroundShellOutputBundle;
     shellChildRegistry?: ShellChildRegistry;
+    scopedSandbox?: import('./utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
     /** False for non-interactive / headless sessions where user prompts cannot be answered. */
@@ -333,6 +334,7 @@ export const getAgentDefinition = (
     backgroundShellRegistry,
     backgroundShellOutput,
     shellChildRegistry,
+    scopedSandbox,
     allowBackgroundShell = true,
     allowAskUser = true,
     sessionBrowser,
@@ -496,6 +498,9 @@ export const getAgentDefinition = (
     backgroundShellWatches: rootBackgroundShellOutput?.watches,
     configureCheckIn: setTaskCheckInPolicy,
     shellChildRegistry,
+    shellSandboxRunner: scopedSandbox?.runner,
+    registerSandboxNetworkPauseController: scopedSandbox?.registerPauseController,
+    sandboxChildRegistry: scopedSandbox?.childRegistry,
     readOnly,
     allowUnsandboxed: deps.allowUnsandboxed,
   });

@@ -258,7 +258,7 @@ describe('crash after tool effect but before the tool result', () => {
     // released build omitted it from the next request entirely.
     expect(resumedSerialized).toContain(TOOL_CALL_ID);
     expect(
-      resumedBody.messages?.filter((message) => message.tool_calls?.some((call) => call.id === TOOL_CALL_ID)),
+      resumedBody.messages?.flatMap((message) => message.tool_calls ?? []).filter((call) => call.id === TOOL_CALL_ID),
     ).toHaveLength(1);
     const recoveredResults = resumedBody.messages?.filter(
       (message) => message.role === 'tool' && message.tool_call_id === TOOL_CALL_ID,

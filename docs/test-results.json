@@ -29348,6 +29348,38 @@
       "failures": [],
       "evidence": [],
       "notes": "Focused repeated-question PTY 1/1 after source commit and immutable old CLI parity 9/9 passed; typechecks, 527-edge guard, inventory, no-unit guard and build passed on source-equivalent pre-commit tree. Independent Sol exact-source review and focused PTY 1/1 passed; wrong call ID and impossible newer baseline each timed out as expected before answer, and built-channel unset/malformed checks passed. Source hook commands lint-staged --diff HEAD^ and check-no-unit-tests passed; automatic hooks unavailable because dependency install skipped scripts. Temporary negative probe rejected wrong ID and stale revision, accepted fresh target, and showed no writes with harness env unset. Artificial delayed-listener experiment reproduced CI signature but does not establish exact CI cause; see /tmp/term2-pty-repeated-question-diagnosis.md."
+    },
+    {
+      "id": "2026-10-30-c3a-stage1-foreground",
+      "timestamp": "2026-10-30T19:19:31.462893+00:00",
+      "commit": "1da7e709e132ca8978786e28bce6bd1f4814a32a",
+      "tree": "9faef3439418a12db094fe52ebcc74eefa1dab17",
+      "revision_kind": "source commit; runtime f25 source equivalent except formatter-only changes",
+      "base_commit": "52f5bdecbf53a3c817048317dfffd9092fa554a3",
+      "task_ids": [
+        "2026-10-30-c3a-stage1-foreground"
+      ],
+      "suite": "C3a stage 1 bounded foreground, lifecycle and parity",
+      "command": "root, rewrite and native tracer tsc; layer guard; inventory; no-unit guard; lint-staged --diff HEAD^; old CLI build and parity; C1 approval and kill; retained C3a benches; independent runtime and lifecycle probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, local controlled providers, network-enabled sandbox for loopback. Automatic Husky hook was absent; equivalent hook commands ran explicitly."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Exact 1da root/rewrite/native typechecks pass; inventory and 527-edge guard pass on f25 (formatter-only differences); old CLI parity 9/9 on f25, unchanged nine goldens. Runtime f25 16/16 controlled processes; C1 approval/kill and retained benches on 9a, followed by f25 subscription correction and focused reruns. Independent Sol review: /tmp/term2-c3a-stage1-independent-review.md; runtime details: /tmp/term2-c3a-stage1-runtime-evidence.md. Initial 9a inventory failed on missing user_input_accepted record; corrected in dd. Initial parity lacked dist; build script encountered missing tsc/PATH and pnpm self-install path; direct local tsc plus post-build assets succeeded and parity passed. Initial sandbox no-unit command spawn EPERM passed with network-enabled sandbox. This is bounded stage 1, not issue #76 completion; interactions, retry, cancellation breadth and facade remain stages 2–5."
     }
   ]
 }

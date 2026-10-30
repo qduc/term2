@@ -29870,6 +29870,38 @@
       "failures": [],
       "evidence": [],
       "notes": "rewrite tsc passes; layer guard 527; complexity check passes with 38 files and 5 ceilings; hops bench reports 29 hops through 7 files on three consecutive runs. Negative runs: allowlist budget 526 and foreground ceiling 1300 each fail check-complexity with exit 1 and the expected message; maxHops 28 fails hops.mts with the expected assertion. Budget restored before commit."
+    },
+    {
+      "id": "2026-10-30-rewrite-foreground-command-split",
+      "timestamp": "2026-10-30T22:40:00Z",
+      "commit": "7139d91906160f092583896fd85d9c954c92e249",
+      "tree": "8280f8292da0c9c3a3aab37dfe33dca9b6aafc99",
+      "revision_kind": "clean commit",
+      "base_commit": "a835ae7ea2d0e82bac0bb16808e5de50ea325a6b",
+      "task_ids": [
+        "2026-10-30-rewrite-foreground-command-split"
+      ],
+      "suite": "Adopted foreground command split (behavior-preserving)",
+      "command": "Full local port-job suite: rewrite tsc, layer guard, complexity check, hops bench and every rewrite/bench adopted bench mode run in CI (60 lines)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree .worktrees/fg-split; the 60-line suite ran on the identical code tree before the rebase onto a835ae7e, which changed only the budget JSON format. After the rebase, rewrite tsc, the layer guard, the complexity check and hops were rerun."
+      },
+      "result": {
+        "passed": 60,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Same 60/60 baseline on the unsplit guardrails head 2dcc67ad. Author run and independent rerun both reported 60/60. Hops stays at 29 hops through 7 files. foreground.ts drops from 1346 to 1005 lines; five new files hold 66 to 104 lines each."
     }
   ]
 }

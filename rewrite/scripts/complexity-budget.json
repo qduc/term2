@@ -3,8 +3,8 @@
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/session/adopted/foreground.ts": {
-      "lines": 1346,
-      "reason": "Mixes session commands with turn driving; being split by command."
+      "lines": 1005,
+      "reason": "Turn driving and interaction handling still share one closure; a second split separates them."
     },
     "rewrite/src/engine/adopted/index.ts": {
       "lines": 877,

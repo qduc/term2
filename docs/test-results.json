@@ -27178,6 +27178,39 @@
         "/tmp/term2-a1-failure-probe.mts"
       ],
       "notes": "On G2 merge base 5fdbb10c00c83f4c05d507c0da771c80edd52513, rewrite typecheck passed; layer guard passed with 490 allowlisted source edges; inventory passed (136 settings tracked); durable settings/session/runtime and failed-persistence probes passed. Source commit df7ff1f4bd505f0fb74c67e05c09b9bc2f4105bd has byte-identical adapter files to Sol-approved source fed84efbbac36c373bd81d36854c9b86d3e34249. No additional parity or tracer rerun was needed because the adapter files are unchanged. Full CLI integration/e2e suites not run."
+    },
+    {
+      "id": "2026-10-30-port-a1-g3-rebase-verification",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:38:22Z",
+      "commit": "60806d36e99896716fe7695caa5cad13596087ba",
+      "tree": null,
+      "revision_kind": "A1 source rebased onto G3 merge origin/main 990edb4e6350b7a4b6914171ec0c730e2591fa2e",
+      "base_commit": "990edb4e6350b7a4b6914171ec0c730e2591fa2e",
+      "task_ids": [
+        "2026-10-30-port-a1-config-settings-adapter"
+      ],
+      "suite": "A1 final G3-rebase typecheck, layer guard, inventory, old CLI build and parity",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Existing worktree dependencies; child-process checks used network-enabled additional sandbox permissions."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "After rebase onto G3, rewrite typecheck passed; corrected layer guard passed with 490 allowlisted source edges; inventory passed (136 settings, 10 covered); old CLI build passed and parity passed 9/9 scenarios. Adapter files remain byte-identical to Sol-approved source fed84efbbac36c373bd81d36854c9b86d3e34249. Focused durable settings, watch, session isolation, runtime mode, and failed-persistence probes passed on the prior G2 rebased source; no adapter file changed in this ledger-only rebase. Full CLI integration/e2e suites not run."
     }
   ]
 }

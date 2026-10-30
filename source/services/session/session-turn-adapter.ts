@@ -93,6 +93,7 @@ export class SessionTurnAdapter {
   #hookTurnId: string | undefined;
   #compactionFailureNotified = false;
   #activeRecoveryBudget: RetryRecoveryBudget | undefined;
+  #adoptedTurnActive: object | undefined;
   #attempt: TurnAttempt | undefined;
   #turnSignal: AbortSignal | undefined;
   #input: TurnAttempt | string | UserTurn = '';
@@ -192,7 +193,7 @@ export class SessionTurnAdapter {
     input: TurnAttempt | string | UserTurn,
     options: InitialTurnRunOptions = {},
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
-    if (this.#liveRun) throw new Error('A conversation turn is already active');
+    if (this.#liveRun || this.#adoptedTurnActive) throw new Error('A conversation turn is already active');
     this.#syncPolicyRegistry();
     this.#input = input;
     this.#options = options;
@@ -206,17 +207,7 @@ export class SessionTurnAdapter {
     this.#liveRun = new LiveRun(runId, this.deps.postExecutePending, async (emit) => {
       this.#emit = emit;
       try {
-        await this.deps.agentClient.runTurn({
-          prepare: (signal) => this.#prepare(signal),
-          beginSegment: () => this.deps.record.beginSegment(),
-          acceptEvent: (event) => this.#acceptEvent(event),
-          acceptToolDispatch: (callId) => this.deps.record.markDispatched(callId),
-          acceptSegment: (stream) => this.#acceptSegment(stream),
-          consume: (stream) => this.#consume(stream),
-          interrupted: (stream) => this.#resolveInteraction(stream),
-          completed: (stream) => this.#completed(stream),
-          recover: (error) => this.#recover(error),
-        });
+        await this.deps.agentClient.runTurn(this.#turnSession());
         return this.#outcome;
       } catch (error) {
         const failure = contextCompactionFailureCategory(error);
@@ -231,6 +222,103 @@ export class SessionTurnAdapter {
       }
     });
     return yield* this.#observe();
+  }
+
+  /** The application runtime drives these callbacks; this object does not start a run. */
+  #turnSession(): ConversationTurnSession {
+    return {
+      prepare: (signal) => this.#prepare(signal),
+      beginSegment: () => this.deps.record.beginSegment(),
+      acceptEvent: (event) => this.#acceptEvent(event),
+      acceptToolDispatch: (callId) => this.deps.record.markDispatched(callId),
+      acceptSegment: (stream) => this.#acceptSegment(stream),
+      consume: (stream) => this.#consume(stream),
+      interrupted: (stream) => this.#resolveInteraction(stream),
+      completed: (stream) => this.#completed(stream),
+      recover: (error) => this.#recover(error),
+    };
+  }
+
+  /**
+   * Bind the existing preparation, history and projection callbacks to an
+   * externally driven application turn. The returned session never invokes
+   * runTurn itself. Until interaction ownership is installed by the adopted
+   * coordinator, an interrupted run fails closed rather than starting another
+   * source loop.
+   * @internal
+   */
+  beginAdoptedTurn(
+    input: string | UserTurn,
+    emit: (event: ConversationEvent) => void,
+    options: InitialTurnRunOptions = {},
+  ): {
+    session: ConversationTurnSession;
+    finish: () => TurnOutcome;
+  } {
+    if (this.#liveRun || this.#adoptedTurnActive) throw new Error('A conversation turn is already active');
+    const authority = {};
+    this.#adoptedTurnActive = authority;
+    this.#syncPolicyRegistry();
+    this.#input = input;
+    this.#options = options;
+    this.#attempt = undefined;
+    this.#state = undefined;
+    this.#policy = undefined;
+    this.#activeRecoveryBudget = undefined;
+    this.#outcome = { kind: 'failed' };
+    this.#emit = emit;
+    const callbacks = this.#turnSession();
+    const assertCurrent = () => {
+      if (this.#adoptedTurnActive !== authority) throw new Error('Adopted turn is stale');
+    };
+    return {
+      session: {
+        ...callbacks,
+        prepare: (signal) => {
+          assertCurrent();
+          return callbacks.prepare(signal);
+        },
+        beginSegment: (stream) => {
+          assertCurrent();
+          callbacks.beginSegment(stream);
+        },
+        acceptEvent: (event) => {
+          assertCurrent();
+          callbacks.acceptEvent(event);
+        },
+        acceptToolDispatch: (callId) => {
+          assertCurrent();
+          callbacks.acceptToolDispatch(callId);
+        },
+        acceptSegment: (stream) => {
+          assertCurrent();
+          callbacks.acceptSegment(stream);
+        },
+        consume: (stream) => {
+          assertCurrent();
+          return callbacks.consume(stream);
+        },
+        interrupted: async () => {
+          assertCurrent();
+          throw new Error('Adopted interaction handling is not installed');
+        },
+        completed: (stream) => {
+          assertCurrent();
+          return callbacks.completed(stream);
+        },
+        recover: (error) => {
+          assertCurrent();
+          return callbacks.recover(error);
+        },
+      },
+      finish: () => {
+        assertCurrent();
+        this.#adoptedTurnActive = undefined;
+        this.#attempt?.close();
+        this.#emit = () => undefined;
+        return this.#outcome;
+      },
+    };
   }
 
   /** An answer resolves the owned wait; it never starts a continuation run. */

@@ -122,6 +122,14 @@ export interface ContextCheckpointCreatedEvent {
   item: ProviderInputItem;
 }
 
+export interface UserInputAcceptedEvent {
+  type: 'user_input_accepted';
+  version: 1;
+  turnId: string;
+  userMessageRef: EventReference;
+  snapshot: StateSnapshot;
+}
+
 export interface UserMessageEvent {
   type: 'user_message';
   message: UserMessage;
@@ -402,6 +410,7 @@ export type LogEvent =
   | EventsRetractedEvent
   | ContextCheckpointCreatedEvent
   | UserMessageEvent
+  | UserInputAcceptedEvent
   | ToolStartedLogEvent
   | ToolResultLogEvent
   | CommandMessageLogEvent

@@ -21,12 +21,14 @@ export function createAppAdoptedEngine(options: {
     | 'agentOverride'
   >;
   readonly toolOptions?: AdoptedToolRegistryOptions;
+  readonly bindSessionClient?: (client: AgentClient) => void;
 }) {
   const tools = createAdoptedToolRegistry([], options.toolOptions);
   const assembleAgent = createAppAgentAssembler(tools, options.toolOptions);
   const engine = createAdoptedEngine({
     deps: { models: options.models, tools, settings: options.settings },
     clientOptions: options.clientOptions,
+    bindSessionClient: options.bindSessionClient,
     assembleAgent,
     validateTurnInput(input, agent, providerId) {
       if (

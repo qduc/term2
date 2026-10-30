@@ -228,6 +228,7 @@ export function createAdoptedEngine(options: {
     | 'agentOverride'
   >;
   readonly assembleAgent: NonNullable<ConstructorParameters<typeof AgentClient>[0]['assembleAgent']>;
+  readonly bindSessionClient?: (client: AgentClient) => void;
   readonly validateTurnInput: (
     input: TurnInput,
     ...args: Parameters<NonNullable<ConstructorParameters<typeof AgentClient>[0]['validateApplicationAgent']>>
@@ -334,7 +335,7 @@ export function createAdoptedEngine(options: {
       waitForSettlement: (signal) => (signal?.aborted ? Promise.reject(aborted()) : Promise.resolve()),
     };
   };
-  return {
+  const engine: AdoptedEngine = {
     async waitForAdmission(signal) {
       const combined = AbortSignal.any([signal, disposalController.signal]);
       while (true) {
@@ -849,4 +850,28 @@ export function createAdoptedEngine(options: {
       client.dispose();
     },
   };
+  try {
+    const result: unknown = options.bindSessionClient?.(client);
+    if (
+      result != null &&
+      (typeof result === 'object' || typeof result === 'function') &&
+      typeof (result as { then?: unknown }).then === 'function'
+    ) {
+      void Promise.resolve(result).catch(() => {});
+      throw new TypeError('bindSessionClient must be synchronous');
+    }
+  } catch (error) {
+    try {
+      detachCompactionObserver();
+    } catch {
+      /* Preserve the binding error. */
+    }
+    try {
+      client.dispose();
+    } catch {
+      /* Preserve the binding error. */
+    }
+    throw error;
+  }
+  return engine;
 }

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
@@ -258,6 +258,7 @@ async function writeSettings(
   const settings: Record<string, unknown> = {
     agent: {
       modelSelection: { model: route.model, provider: route.provider },
+      ...(route.alternateProvider ? { favoriteModels: [`${route.provider}/${route.model}`] } : {}),
       transport: 'url' in server ? 'websocket' : 'http',
       retryAttempts: 0,
       maxTurns: 4,
@@ -404,8 +405,18 @@ async function startInteractive(
   extraArgs: readonly string[] = [],
 ): Promise<PtyChildDriver> {
   expect(workspace.env.TERM2_CONVERSATIONS_DIR).toBe(workspace.paths.conversationsDir);
+  const selectedCli = process.env.TERM2_TEST_CLI;
   const child = await workspace.start({
-    args: ['--lite', '--provider', route.provider, '--model', route.model, ...extraArgs],
+    ...(selectedCli ? { command: process.execPath } : {}),
+    args: [
+      ...(selectedCli ? [resolve(selectedCli)] : []),
+      '--lite',
+      '--provider',
+      route.provider,
+      '--model',
+      route.model,
+      ...extraArgs,
+    ],
     env: { TERM2_CONVERSATIONS_DIR: workspace.paths.conversationsDir },
   });
   activeChildren.push(child);
@@ -1431,6 +1442,25 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
         expect(server.requests).toHaveLength(1);
         expect(JSON.stringify(server.requests)).not.toContain('try the switched provider');
         expect(JSON.stringify(server.requests)).not.toContain(COMPACTION_CIPHERTEXT);
+        await switched.waitForComposerValue('try the switched provider', { afterRevision: 0 });
+        for (let remaining = 'try the switched provider'.length - 1; remaining >= 0; remaining--) {
+          await switched.write('\u007f');
+          await switched.waitForComposerValue('try the switched provider'.slice(0, remaining), { afterRevision: 0 });
+        }
+        await switched.write(`/model ${COMPACTION_ROUTE.model}`);
+        await switched.waitForVisibleOutput('Select model');
+        await switched.waitForVisibleOutput('gpt-5.6-luna');
+        await switched.write('\r');
+        await switched.waitForVisibleOutput(`Set model to ${COMPACTION_ROUTE.model} (${COMPACTION_ROUTE.provider})`);
+        const liveIdle = await switched.waitForIdleInput();
+        await submitPrompt(switched, 'continue in same process');
+        await switched.waitForVisibleOutput('COMPACTION-RESUMED');
+        await switched.waitForIdleInput({ after: liveIdle });
+        const liveRequests = server.requests.filter((request) => request.method === 'POST');
+        expect(liveRequests).toHaveLength(2);
+        const liveInput = inputItems(asRecord(liveRequests[1]?.body)?.input);
+        expect(inputText(liveInput)).toContain('continue in same process');
+        expect(inputText(liveInput)).not.toContain('try the switched provider');
         await exitInteractive(switched);
       });
 

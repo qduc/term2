@@ -29110,6 +29110,627 @@
         "/home/qduc/coord/term2/tasks/personal-memory-injection/integration-actual-bare.mjs"
       ],
       "notes": "PASS. Recalculated actualprojectScopeKey/hash matches configured/nightlymemoryroot. Previouslyabsent project personal-context.json exclusively created exact{\"enabled\":true}, uid1000/mode0600; no globaloptin. Fresh actualBare+codex/gpt-6.1-terra assembly7/2009 with no global/body/no modelrequest. Existingrecordfile signatures, selector/config/unitfile hashes, timer properties, currentcontrol/bridgekernelpeer generations and4protectedruntime dist manifests unchanged. No edits to protectedactiveconversation-time-gap or sharedservices/selector/profile/coordinatornotes. Snapshotnot a cutoverbackup or quietownership. Codexcache investigation external/pending; no cache-driven source/config changes."
+    },
+    {
+      "id": "2026-10-30-memory-append-exploratory",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": null,
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "precommit_dirty_snapshot",
+      "source_tree": null,
+      "suite": "precommit-exploratory-verification",
+      "command": "pnpm typecheck; pnpm build; NODE_ENV=test focused integration and provider CLI; pnpm lint; pnpm test:provider-black-box; pnpm test:integration; pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-typecheck.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-build.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-focused.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-cli.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-broad-typecheck.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-lint.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-provider.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-integration.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-static.log"
+      ],
+      "notes": "Dirty base04 exploratory snapshot, not a cleancommit run; production behavior subsequently committed3744dd59 with comment/testreadiness/doc changes. Focusedfilesystem9pass, CodexCLI2pass22requests; fullprovider226pass1skip30files, integration434pass1skip41filespass1skip, static28pass7files. Typecheck/buildpass. Lint0errors31warnings then existingledgerformatfailure. Partial coverage did not establish OpenAI chainedcorrection; later preacceptance finding/repair recorded separately. Aggregate counts intentionallynull across disjoint tiers."
+    },
+    {
+      "id": "2026-10-30-memory-append-typecheck",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "typescript",
+      "command": "pnpm typecheck",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-final-typecheck.log"
+      ],
+      "notes": "Exit0 at clean source fa0fd31971105e2ad7b08ecb9672917365adc9f7. Build also succeeded in pnpm test:provider-black-box; counts not applicable."
+    },
+    {
+      "id": "2026-10-30-memory-append-lint",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "lint",
+      "command": "pnpm lint",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 1,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "docs/test-results.json",
+          "test": "prettier --check .",
+          "expected": "formatted JSON",
+          "actual": "Existing ledger rejected on candidate and exact base; no ESLint errors."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-final-lint.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-base-ledger-format.log"
+      ],
+      "notes": "Exit1. ESLint0errors31warnings. Only Prettier docs/test-results.json fails; exact base ledger also rejected with git show04af6e4:docs/test-results.json | pnpm exec prettier --check --stdin-filepath docs/test-results.json (exit1). Historical bytes preserved; changed production/test/doc files formatted."
+    },
+    {
+      "id": "2026-10-30-memory-append-provider",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "provider-black-box",
+      "command": "pnpm test:provider-black-box",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 227,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 30,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-final-provider.log"
+      ],
+      "notes": "Exit0. Includes3new builtCLI33request journeys: CodexWSsol/luna and OpenAIHTTPluna. Initialoptin, unchanged, edit, finaldelete, readd, corrupt/reset/repair, resume, optout. Exact historical prefix equality, human body, leading instructions and data framing asserted."
+    },
+    {
+      "id": "2026-10-30-memory-append-integration",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "integration",
+      "command": "pnpm test:integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 434,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 41,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-final-integration.log"
+      ],
+      "notes": "Exit0.42files total including1skipped; includes9filesystem personalmemory integration checks."
+    },
+    {
+      "id": "2026-10-30-memory-append-static",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "repository-static-guards",
+      "command": "pnpm test",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-final-static.log"
+      ],
+      "notes": "Exit0. No permanent unit tests added."
+    },
+    {
+      "id": "2026-10-30-memory-append-e2e-first",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "3744dd5937571be43107d19dce44f2b7880e825d",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "precommit_dirty_snapshot_then_source_commit",
+      "source_tree": null,
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 57,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 10,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart.e2e.test.ts:172",
+          "test": "reloads changed compiled core in the same PTY process, retaining history and an empty latest leaf",
+          "expected": "composer consumes restored slash setting",
+          "actual": "Timed out5000ms composer acknowledgement afterrevision2; gotrevision3."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-e2e.log"
+      ],
+      "notes": "Pre-repair run started with dirty docs/test hygiene on3744 source. Known same-host restart harness signature; matching ancestral releaseCI run and zero intervening diff in restart test/harness/idlehelper. Retained as failed observation, not counted as full e2e pass."
+    },
+    {
+      "id": "2026-10-30-memory-append-e2e-restart-rerun",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "3744dd5937571be43107d19dce44f2b7880e825d",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": null,
+      "suite": "focused-e2e",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts scripts/restart.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-e2e-restart-rerun.log"
+      ],
+      "notes": "Exit0 focused rerun before OpenAI repair. Matches recorded ancestral flake2026-10-29-release-040-recovery-docs-ci-initial atf2744a2; not a repair of unrelated restart behavior.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-30-memory-append-e2e-first"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-30-memory-append-e2e",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "e2e",
+      "command": "pnpm test:e2e",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 57,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 10,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/restart.e2e.test.ts:172",
+          "test": "reloads changed compiled core in the same PTY process, retaining history and an empty latest leaf",
+          "expected": "composer consumes restored slash setting",
+          "actual": "Timed out5000ms composer acknowledgement afterrevision2; gotrevision3."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-final-e2e.log"
+      ],
+      "notes": "Exit1 full repairedsource rerun. Same known restart.e2e172composerrevision2got3timeout5000ms under simultaneousintegration load; all other57tests pass includingfakeCodexnetwork. Not presented as fullgreen; focusedrepaired rerun below and historicalunchanged-owner evidence support knownflake classification, not a fix."
+    },
+    {
+      "id": "2026-10-30-memory-append-e2e-final-restart-rerun",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "focused-e2e",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.e2e.config.ts scripts/restart.e2e.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-final-e2e-restart-rerun.log"
+      ],
+      "notes": "Exit0 focused rerun at repairedsource; full tier retained its knownfixturefailure, not claimed green.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-30-memory-append-e2e"
+        ]
+      }
+    },
+    {
+      "id": "2026-10-30-memory-append-openai-red",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "3744dd5937571be43107d19dce44f2b7880e825d",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "test_only_dirty_extension_on_committed_source",
+      "source_tree": null,
+      "suite": "provider-regression-red",
+      "command": "NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/personal-memory-context.blackbox.ts -t openai",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 2,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/personal-memory-context.blackbox.ts:103",
+          "test": "OpenAIHTTPluna edited snapshot on chained human turn",
+          "expected": "1new data notice",
+          "actual": "0notices at edit step; human text alone."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-openai-red.log"
+      ],
+      "notes": "Test-only extension against built3744dist: journalcaptured edited snapshot, OpenAI sharedchainfilter dropped sibling data notice. Before acceptance, not escapeddefect. fa0fd319 fixes entire trailing user/systemtiming block; provider full green above resolves."
+    },
+    {
+      "id": "2026-10-30-memory-append-generated",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "bounded-generated-history",
+      "command": "pnpm verify:generated --target history --runs 1000",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-final-generated.log"
+      ],
+      "notes": "Exit0;3existing propertiesx1000cases (seeds721406013,-1499976815,-177455270). Not a model call, exhaustive proof, or new permanent unit test."
+    },
+    {
+      "id": "2026-10-30-memory-append-timing",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "temporary-projection-probe",
+      "command": "node --import tsx /home/qduc/coord/term2/tasks/personal-memory-injection/append-timing-probe.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-timing-probe.log"
+      ],
+      "notes": "Two-day gap: normalized user personal/system timing/user human remain intact past sharedfilter; opaque app comparison state stripped. Bounded seam check, not CLI acceptance."
+    },
+    {
+      "id": "2026-10-30-memory-append-real-workflow",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "copied-real-memory-built-cli",
+      "command": "node --import tsx /home/qduc/coord/term2/tasks/personal-memory-injection/append-real-workflow.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-real-workflow.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-real-workflow-results.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-private/memory-before.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-private/memory-after.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-private/final-wire.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-real-workflow-final-readiness-failed.log"
+      ],
+      "notes": "Final successful rerun after isolated resume-readiness fixture correction; failedattempt retained. Bare/default saved session then optin, modelgpt6.1terra.7actual personal-summary copies,10loopbackrequests(9WS1nativeHTTP). Initial2309UTF16chars, edit2201, deletion2095, withdrawal387; unchangedaddsnone, nativeopaque appstate stripped, optout/restartnoduplicate. Actualstore SHA256manifest unchanged. Private wire may contain summaries; do not publish. No backendcachemeasurement/realprovidercalls."
+    },
+    {
+      "id": "2026-10-30-memory-append-steer-local",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "inflight-and-local-compaction-cli",
+      "command": "node --import tsx /home/qduc/coord/term2/tasks/personal-memory-injection/append-steer-local.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-steer-local.log",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-steer-local-results.json"
+      ],
+      "notes": "ActualOpenAIHTTPCLI: changingstore during tool-only continuation addsnone, humansteer appendsoneCHARLIE correction with existing steeringframing, localreducingcompaction preserves comparisonstate/no duplicate, restart originalhistory safe, subsequentDELTA correction once. Existing steeringmultiuser provenance cannot journal localcheckpoint; baseline sourceRef logic unchanged. Independent separateplainlocalworkflow verifies durablecheckpoint."
+    },
+    {
+      "id": "2026-10-30-memory-append-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": [
+        "2026-10-30-personal-memory-append-context"
+      ],
+      "commit": "fa0fd31971105e2ad7b08ecb9672917365adc9f7",
+      "base_commit": "04af6e40883c7876bdbd90c3422dbe770a32c698",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "cc716fa4d3e13dda53cc8400fb61b58c22797493",
+      "suite": "independent-verification",
+      "command": "worker azure-peach-110: separate worktree install/build,3provider journeys,9filesystem checks, plainlocal durable/resume/correction, additional source/evidence review",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0 (launcher also reports 11.20.0)",
+        "runner_env": null,
+        "notes": "Isolated worktree and scratch CLI state; loopback provider fixtures only. No live provider, runtime, service, or memory writes."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-independent-report.md",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-independent-plain-local-results.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-independent-steering-results.json",
+        "/home/qduc/coord/term2/tasks/personal-memory-injection/append-independent-native-results.json"
+      ],
+      "notes": "ACCEPT exact repairedsourcefa0fd31971105e2ad7b08ecb9672917365adc9f7; initial3744rejected for concrete OpenAI notice loss. Independent successful reruns resolve preacceptance finding. Read report for exact commands/counts and timing admission probe. No verification costs inferred.",
+      "comparison": {
+        "resolves_run_ids": [
+          "2026-10-30-memory-append-openai-red"
+        ]
+      }
     }
   ]
 }

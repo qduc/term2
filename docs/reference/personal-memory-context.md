@@ -63,7 +63,10 @@ No extra model call, timer, digest file, or per-turn refresh event is added.
 Saved `personal_memory_context` events attach snapshots by host human-input
 timestamp, including when a steering event precedes its user log row. Resume
 reuses those exact snapshots, never reconstructing old turns from current memory.
-Local checkpoints retain the comparison state in protected human items. Native
+Local checkpoints retain the comparison state in protected human items. As before,
+local compaction can succeed without journaling a checkpoint when source references
+are unavailable (observed with several steered user rows sharing one assistant turn).
+A restart then restores original history rather than the compacted summary. Native
 Codex checkpoints carry application-only comparison metadata; it is stripped
 before provider serialization, so an unchanged post-compaction turn adds no notice.
 The existing manual native-compaction path does not journal its opaque checkpoint:
@@ -72,8 +75,9 @@ correct changed/withdrawn state; this feature does not repair general compaction
 persistence.
 
 Unchanged historical provider messages and leading instructions are not rewritten
-when personal memories change. Codex and OpenAI Responses chaining keep the entire trailing human-message block,
-including the data notice and existing timing notice, rather than only the last human message. This preserves
+when personal memories change. Codex and OpenAI Responses chaining keep the entire
+trailing human-message block, including the data notice and existing timing notice,
+rather than only the last human message. This preserves
 prefix eligibility; it does **not** guarantee a backend cache hit or measured token
 savings. Installing this version changes the old leading-instruction layout once;
 existing sessions without snapshot events receive their first current snapshot at

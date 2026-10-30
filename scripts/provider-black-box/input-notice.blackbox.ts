@@ -104,6 +104,7 @@ it.skipIf(process.platform !== 'linux')('retries the original pasted image and c
     const retried = JSON.stringify(requests[1]!.input);
     expect(retried.match(/FIRST_NOTICE_INPUT/g)).toHaveLength(1);
     expect(retried.match(/iVBORw0KGgoAAAANSUhEUg/g)).toHaveLength(1);
+    expect(requests[1]!.input).toEqual(requests[0]!.input);
     expect(requests[1]!.previous_response_id).toBeUndefined();
     complete(1);
     await child.waitForVisibleOutput('NOTICE_DONE_1');

@@ -42,6 +42,7 @@ export type SessionDriverContext = {
   state(): SessionState;
   /** Permanently reject mutations after partial runtime/persistence failure. */
   poison(error: unknown): void;
+  assertHealthy(): void;
   reserveSettings(): () => void;
   /** Replace state only after the caller has durably appended the supplied facts. */
   commit(facts: readonly SessionFact[]): Promise<readonly import('./index.js').LogEntry[]>;
@@ -422,6 +423,9 @@ export class LocalSessionStore implements SessionStore {
       },
       poison: (error) => {
         mutationFailure ??= error ?? new Error('Session mutation failed');
+      },
+      assertHealthy: () => {
+        if (mutationFailure !== undefined) throw mutationFailure;
       },
       commit: async (facts) => {
         if (mutationFailure !== undefined) throw mutationFailure;

@@ -923,6 +923,11 @@ export function createAdoptedForeground(options: {
         });
       },
       history(command: HistoryMutation): Promise<HistoryMutationResult> {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (poisoned !== undefined) return Promise.reject(poisoned);
         if (closing || context.state().status === 'closed')
           return Promise.reject(new Error('Session handle is closed'));
@@ -966,6 +971,8 @@ export function createAdoptedForeground(options: {
           if (!restored) return { kind: 'stale' };
           const committedGeneration = runtime.generationGuard.capture();
           await commit([]);
+          context.assertHealthy();
+          if (poisoned !== undefined) throw poisoned;
           if (closing || signal.aborted || !runtime.generationGuard.isCurrent(committedGeneration))
             return { kind: 'stale' };
           return {
@@ -1036,6 +1043,11 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       setRuntimeSettings(input: RuntimeSettingMutation) {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (poisoned !== undefined) return Promise.reject(poisoned);
         let command: RuntimeSettingMutation;
         try {
@@ -1097,6 +1109,8 @@ export function createAdoptedForeground(options: {
                 ? settings.reasoningEffort
                 : settings.temperature;
             await commit([{ type: 'settings_changed', key, value, sessionMutation: 1 }]);
+            context.assertHealthy();
+            if (poisoned !== undefined) throw poisoned;
             if (closing || signal.aborted) throw new Error('Settings became stale');
             return { kind: 'applied' as const, settings };
           } catch (error) {

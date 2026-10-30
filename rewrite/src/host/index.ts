@@ -2,9 +2,9 @@
  * host/ — transport and access, nothing else.
  *
  * Hands clients a `Connection` to a session. The in-process host is what
- * the TUI uses; the server host exposes the same contract over HTTP for the
- * web client, ACP and Discord. Auth, pairing and workspace admission live
- * here; turn logic does not.
+ * the TUI uses. A server host, not built yet, will expose the same contract
+ * over HTTP for the gateway's web client, ACP and Discord. Auth, pairing and
+ * workspace admission live here; turn logic does not.
  * Depends on: protocol, session, config.
  */
 

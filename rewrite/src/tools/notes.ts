@@ -14,14 +14,13 @@ function noteName(raw: unknown): string {
 
 const notePath = (ctx: ToolContext, name: string): string => path.join(ctx.workspace.root, `${name}.txt`);
 
-/** Read-only and idempotent, so it runs without approval and is re-run safely after a crash. */
+/** Read-only, so it runs without approval. */
 export const readNote: Tool<ReadInput> = {
   spec: {
     name: 'read_note',
     description: 'Read a note from the workspace.',
     inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
   },
-  idempotent: true,
   parse: (raw) => ({ name: noteName(raw) }),
   approval: () => ({ kind: 'none' }),
   async execute(input, ctx) {
@@ -33,7 +32,7 @@ export const readNote: Tool<ReadInput> = {
   },
 };
 
-/** Writes a file, so it asks first and is never re-run blindly after a crash. */
+/** Writes a file, so it asks first. */
 export const writeNote: Tool<WriteInput> = {
   spec: {
     name: 'write_note',
@@ -44,7 +43,6 @@ export const writeNote: Tool<WriteInput> = {
       required: ['name', 'text'],
     },
   },
-  idempotent: false,
   parse(raw) {
     const text = (raw as { text?: unknown } | null)?.text;
     if (typeof text !== 'string') throw new Error('text must be a string');

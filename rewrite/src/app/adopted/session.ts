@@ -41,6 +41,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
     let cancelBackground: (() => void) | undefined;
     let ownedClient: AgentClient | undefined;
     let graphModels: AdoptedModelRegistry | undefined;
+    let grantHumanRunBudgetExtension: (() => { granted: boolean; extensionsGranted: number }) | undefined;
     try {
       const engineOptions = synchronous(options.engine(context), 'engine options');
       const runtimeOptions = synchronous(options.runtime(context), 'runtime options');
@@ -69,6 +70,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
         bindSessionClient(boundClient) {
           ownedClient = boundClient;
           const client = boundClient;
+          grantHumanRunBudgetExtension = () => client.grantRunBudgetExtension();
           cancelBackground = () => {
             let failure: unknown;
             let failed = false;
@@ -138,6 +140,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
           setOverride: binding.setRuntimeOverride,
           snapshot: () => ownedClient!.getRuntimeSettingsSnapshot(),
         },
+        grantHumanRunBudgetExtension,
         makeInput(turnId) {
           const state = context.state();
           const prompt = owned.turnPrompt();

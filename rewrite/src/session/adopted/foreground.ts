@@ -38,6 +38,13 @@ import {
   type HistoryMutationResult,
 } from './submission.js';
 
+export class RunBudgetExtensionRefused extends Error {
+  constructor() {
+    super('No further budget extension is available.');
+    this.name = 'RunBudgetExtensionRefused';
+  }
+}
+
 /**
  * Installs the source collaborators on the exact engine which owns their client.
  * This first foreground capability rejects tools and interactive commands until
@@ -69,6 +76,8 @@ export function createAdoptedForeground(options: {
     setOverride(command: RuntimeSettingMutation): void;
     snapshot(): RuntimeSettingsSnapshot;
   };
+  /** Human grant on the exact client owning this foreground. */
+  grantHumanRunBudgetExtension?: () => { granted: boolean; extensionsGranted: number };
   /** Combined store handles publish canonical facts themselves. */
   publishFacts?: boolean;
 }) {
@@ -270,6 +279,7 @@ export function createAdoptedForeground(options: {
           controlAnswer?: string;
           validateSource?: () => void;
           postExecute?: boolean;
+          runBudget: boolean;
         }
       | undefined;
     let signalInteraction!: () => void;
@@ -327,7 +337,13 @@ export function createAdoptedForeground(options: {
         failReady = reject;
       });
       void ready.catch(() => {});
-      const owner: NonNullable<typeof interaction> = { dto, checkpointReady, setCheckpoint, ready };
+      const owner: NonNullable<typeof interaction> = {
+        dto,
+        checkpointReady,
+        setCheckpoint,
+        ready,
+        runBudget: isRunBudgetInteraction(address),
+      };
       interaction = owner;
       notifyInteraction();
       const callId = dto.descriptor.callId as ToolCallId | undefined;
@@ -688,6 +704,12 @@ export function createAdoptedForeground(options: {
         return;
       }
       if (!decision) throw new Error('Interaction did not resolve');
+      if (owner.runBudget && controlAnswer === 'y') {
+        if (!isCurrent() || interaction !== owner) throw new Error('Interaction is stale');
+        owner.validateSource?.();
+        const grant = options.grantHumanRunBudgetExtension?.();
+        if (!grant?.granted) throw new RunBudgetExtensionRefused();
+      }
       await commit([
         {
           type: 'session_interaction_resolved',

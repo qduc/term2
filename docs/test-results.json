@@ -26644,6 +26644,39 @@
       ],
       "evidence": [],
       "notes": "Identical 4 failures with and without the override. Signature for the scratch-write case: shell write to <tmp>/scratch/term2-nodejs/outside.txt answered 'Tool execution was not approved ... use --auto-approve'. Same test name appears in earlier failures (2026-10-24-generated-verification-* runs); bwrap is not installed in this container. Classified as pre-existing environment failures, not caused by the override."
+    },
+    {
+      "id": "2026-10-30-port-g1-build-guard",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T12:39:00Z",
+      "commit": "2525064bf0c2bf7674cfef000af05331e40030f3",
+      "tree": null,
+      "revision_kind": "source commit; evidence recorded separately",
+      "base_commit": "a99172d1",
+      "task_ids": [
+        "2026-10-30-port-g1-build-guard"
+      ],
+      "suite": "rewrite G1 build, tracer, layer guard, typecheck, inventory and old CLI parity",
+      "command": "node rewrite/scripts/build.mjs; node rewrite/dist/rewrite/src/app/tracer.js; node rewrite/scripts/check-layers.mjs; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Worktree dependencies; network-enabled additional sandbox permissions for nested child processes. Old CLI built from unchanged source/."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Tracer 14/14; layer guard passed with 480 allowlisted source edges; inventory passed; old CLI parity 6/6. Before commit, temporary probes produced: rewrite/src/tools/adopted/g1-probe.ts (tools/) directly imports source/gateway/gateway.ts (host/); rewrite/src/tools/g1-probe.ts imports source/tools/types.ts outside adopted/. Both probes removed. Initial tracer attempts in default sandbox failed at scenario 2 with child did not report a session, empty stdout and SIGKILL. A minimal Node spawnSync child that writes hello then kills itself returned error EPERM, signal SIGKILL and empty stdout in that sandbox; with network-enabled additional permissions it returned hello and SIGKILL without error. The successful tracer was run under the latter permissions. Full integration/e2e suites not run locally."
     }
   ]
 }

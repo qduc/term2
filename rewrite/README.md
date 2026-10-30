@@ -87,6 +87,14 @@ plan" doc.
   provider request and the workspace files against `parity/goldens/`. Goldens
   are recorded only from the old architecture.
 
+The layer guard follows imports from `src/<layer>/adopted/` into `source/` and
+checks every reached source layer against the table above. Existing dependency
+edges within `source/` that cross those rules are recorded one edge per line in
+`scripts/source-edge-allowlist.json`; the guard rejects newly added edges and
+prints stale entries for cleanup. It also reports reached source files missing
+from the map. Only adopted adapters may import `source/`, and `source/` cannot
+import from `rewrite/`.
+
 ```sh
 node rewrite/parity/inventory.mjs
 node rewrite/parity/run.mjs check --cli dist/cli.js          # old CLI: must stay green
@@ -97,11 +105,17 @@ TERM2_TEST_CLI=<new build>/cli.js pnpm test:integration      # CLI-level suite a
 
 ## Checks
 
-These use the root `node_modules` (for `@types/node` and `tsc`), so run
-`pnpm install` at the repository root first.
+These use the root project's TypeScript options and dependencies, so run
+`pnpm install` at the repository root first. The build keeps repository-relative
+paths beneath `rewrite/dist/`; adopted imports therefore resolve to the emitted
+`source/` tree beside `rewrite/`.
 
 ```sh
 pnpm exec tsc -p rewrite/tsconfig.json                 # typecheck
 node rewrite/scripts/check-layers.mjs                  # dependency direction
-pnpm exec tsc -p rewrite/tsconfig.build.json && node rewrite/dist/app/tracer.js
+node rewrite/scripts/build.mjs && node rewrite/dist/rewrite/src/app/tracer.js
 ```
+
+The build script emits the TypeScript tree and copies the runtime assets just as
+the root build does: prompts come from `source/prompts/` and provider presets
+from `source/providers/provider-presets.json`.

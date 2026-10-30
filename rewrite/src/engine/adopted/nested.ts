@@ -87,6 +87,7 @@ export function createRunNested(binding: AdoptedNestedBinding): ToolContext['run
       prepared.agent.model !== request.model.model ||
       prepared.options.providerId !== request.model.provider ||
       prepared.agent.instructions !== request.instructions ||
+      (request.reasoning !== undefined && request.reasoning !== prepared.agent.modelSettings?.reasoning?.effort) ||
       !isDeepStrictEqual(
         prepared.agent.tools.map((tool) => tool.name),
         request.toolNames,

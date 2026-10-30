@@ -96,6 +96,7 @@ it('edits and retracts pending steering while one turn crosses two manual approv
     await child.waitForState((s) => s.output.slice(deleteMarker).includes('select queued'));
     complete(0, [call('loop-first')]);
     await child.waitForVisibleOutput('Allow this action?');
+    await expect(readFile(join(lease.root, 'approval-effects.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     await child.write('y');
     await child.waitForState(() => requests.length === 2);
     const next = JSON.stringify(requests[1]);
@@ -112,6 +113,7 @@ it('edits and retracts pending steering while one turn crosses two manual approv
     const secondApprovalMarker = child.getOutput().length;
     complete(1, [call('loop-second')]);
     await child.waitForState((s) => s.output.slice(secondApprovalMarker).includes('Allow this action?'));
+    expect(await readFile(join(lease.root, 'approval-effects.txt'), 'utf8')).toBe('x');
     await child.write('y');
     await child.waitForState(() => requests.length === 3);
     complete(2, [message('TWO_APPROVALS_DONE')]);

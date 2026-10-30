@@ -29018,6 +29018,72 @@
       "failures": [],
       "evidence": [],
       "notes": "Sol accepted integrated source and ledger merge: test bytes match reviewed f9f2d174, main task bytes and test-results object prefix preserved. Prior independent 2/2 applies to unchanged test; integrated author 5/5 recorded separately. No independent integrated process rerun claimed."
+    },
+    {
+      "id": "2026-10-30-c1-adopted-candidate",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T17:38:58Z",
+      "commit": "58666b54c241610cf64cede5a70934c23b037107",
+      "tree": "f6ed4c3d697af04d9fda77574c3655b11e235a7b",
+      "revision_kind": "candidate source",
+      "base_commit": "62f68b80ddb86e7e023a16d91837c2c55f694646",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "adopted engine source verification",
+      "command": "pnpm exec tsc --noEmit; pnpm exec tsc --noEmit -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm exec tsx rewrite/bench/c1-adopted-approval.mts; pnpm exec tsx rewrite/bench/c1-adopted-kill.mts; pnpm exec tsx /tmp/term2-c1-real-duplicate-batch.mts; pnpm exec tsx /tmp/c1-independent-compact-approval.mts; pnpm exec tsx /tmp/c1-independent-compact-recovery.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, local fixture providers; temporary probes are not retained repository fixtures."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Root/rewrite typechecks, guard 527, inventory, retained approval/C2 and actual SIGKILL benches, duplicate ID and real compaction approval/recovery probes passed on this SHA. Source pre-commit hooks passed. Independent review and remaining matrix are pending. Earlier 6/7 restart e2e had /proc ENOENT; same failure reproduced on clean base 62f68b80. Earlier parity 9/9 and native tracer passed before final source corrections; no final-SHA rerun claimed here."
+    },
+    {
+      "id": "2026-10-30-c1-independent-review-and-parity",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T17:41:00Z",
+      "commit": "58666b54c241610cf64cede5a70934c23b037107",
+      "tree": "f6ed4c3d697af04d9fda77574c3655b11e235a7b",
+      "revision_kind": "independently reviewed candidate",
+      "base_commit": "62f68b80ddb86e7e023a16d91837c2c55f694646",
+      "task_ids": [
+        "2026-10-30-c1-adopted-engine"
+      ],
+      "suite": "independent source review and CLI parity",
+      "command": "SKIP_BUILD_BACKUP=1 pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; independent source and lifecycle reviews",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; independent Sol reviews and local fixtures."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Existing immutable CLI parity 9/9 on exact SHA. Independent Sol source and lifecycle reviews passed exact SHA with scoped real-source probes; remaining acceptance cases remain open as listed in candidate task record."
     }
   ]
 }

@@ -28952,6 +28952,72 @@
         "exit_code": 0
       },
       "notes": "Sol accepted no findings; selected 2/2 in 7.47s, two --lite --profile full launches. Actual probe before tracked change then scripted PASS is stale-blocked; unchanged workspace INCONCLUSIVE blocked. Four requests per case and sole active goal_changed. No changed-goal/FAIL repair/lateness/cancellation claim."
+    },
+    {
+      "id": "2026-10-30-c3a-goal-stale-integrated",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T17:16:59Z",
+      "commit": "39f0b10f629d4b20366b43ec6d288732ad6ba053",
+      "tree": "bfd927435b1571411602e0d2887758db95b23312",
+      "revision_kind": "integrated source plus prior evidence before final documentation",
+      "base_commit": "e0c41780d916bdb705cf3d4140dd7e760e087690",
+      "task_ids": [
+        "2026-10-30-c3a-goal-stale"
+      ],
+      "suite": "integrated old CLI goal evidence",
+      "command": "TERM2_TEST_CLI=/tmp/c3a-goal-stale-cli.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/goal-stale.blackbox.ts scripts/provider-black-box/goal-success.blackbox.ts scripts/provider-black-box/goal-verification.blackbox.ts scripts/provider-black-box/goal-stop.blackbox.ts --maxWorkers=1; node rewrite/parity/run.mjs check; pnpm exec tsc -p rewrite/tsconfig.json --pretty false; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated real CLI PTY/local provider; scripted verifier."
+      },
+      "result": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 4,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Integrated selected goals 5/5, old nine parity 9/9, rewrite tsc, 520 guard and inventory passed. Goal-stale test byte-identical independently approved f9f2d174; merge preserves main ledger then appends own prior entries. Integrated independent merge review pending. Changed goal, FAIL/repair, lateness/cancellation and new Session remain unproven."
+    },
+    {
+      "id": "2026-10-30-c3a-goal-stale-integrated-review",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T17:17:20Z",
+      "commit": "39f0b10f629d4b20366b43ec6d288732ad6ba053",
+      "tree": "bfd927435b1571411602e0d2887758db95b23312",
+      "revision_kind": "integrated source independently reviewed",
+      "base_commit": "e0c41780d916bdb705cf3d4140dd7e760e087690",
+      "task_ids": [
+        "2026-10-30-c3a-goal-stale"
+      ],
+      "suite": "independent integrated merge review",
+      "command": "git diff f9f2d174 39f0b10f -- scripts/provider-black-box/goal-stale.blackbox.ts; git diff --check; verify ledger prefixes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol read-only review."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Sol accepted integrated source and ledger merge: test bytes match reviewed f9f2d174, main task bytes and test-results object prefix preserved. Prior independent 2/2 applies to unchanged test; integrated author 5/5 recorded separately. No independent integrated process rerun claimed."
     }
   ]
 }

@@ -8,10 +8,19 @@ import type { UserMessage } from '../../../../source/types/message.js';
 import type { InputSurgeApproval } from '../../../../source/services/input-surge-approval.js';
 import { normalizeUserTurn, type UserTurn } from '../../../../source/types/user-turn.js';
 import { normalizedBodyHash } from './conversation-log.js';
+import type { SessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
 import type { TurnId } from '../../engine/index.js';
 import type { ToolCallId } from '../../model/index.js';
-import type { Admission, ClientRequestId, InteractionId, SessionEventReference } from '../index.js';
+import type {
+  Admission,
+  ClientRequestId,
+  InteractionId,
+  LogEntry,
+  SessionEventReference,
+  SessionFact,
+} from '../index.js';
 import type { SessionDriverContext } from '../local-store.js';
+import type { TurnControl } from './turn-control.js';
 
 export interface AdoptedSubmissionInput {
   readonly requestId: ClientRequestId;
@@ -81,6 +90,17 @@ export interface AdoptedAdmissionContext extends SessionDriverContext {
     | Extract<Admission, { kind: 'duplicate' | 'rejected' }>
   >;
   activate(receipt: AdoptedAdmissionReceipt): Promise<void>;
+}
+
+/** What the foreground hands every submission command it builds. */
+export interface AdoptedCommandDeps {
+  readonly context: AdoptedAdmissionContext;
+  readonly runtime: SessionRuntimeInternals;
+  readonly turn: TurnControl;
+  /** Durably appends the buffered log events and these facts. */
+  commit(facts: readonly SessionFact[]): Promise<readonly LogEntry[]>;
+  /** Marks the session poisoned and returns the stored error. */
+  poison(error: unknown): unknown;
 }
 
 /** Own the normalized input before any asynchronous admission work. */

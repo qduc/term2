@@ -1,8 +1,3 @@
-import {
-  parseRuntimeMutation,
-  type RuntimeSettingMutation,
-  type RuntimeSettingsSnapshot,
-} from '../../../../source/services/settings/session-runtime-settings.js';
 /** Bounded foreground composition. Interaction and scheduling commands are not installed here. */
 import crypto from 'node:crypto';
 import { toTerminalEvent } from '../../../../source/services/conversation/conversation-result-builder.js';
@@ -12,8 +7,6 @@ import type { SessionRuntimeInternals } from '../../../../source/services/sessio
 import { parseToolCallArguments } from '../../../../source/services/tool-call-arguments.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../../../../source/services/interruption-info.js';
 import { isRunBudgetInteraction } from '../../../../source/services/agent-runtime/run-budget.js';
-import { rewindRemovedUserCount } from '../../../../source/services/conversation/conversation-replay.js';
-import { ConversationStore } from '../../../../source/services/conversation/conversation-store.js';
 import { injectSkillIntoTurn } from '../../../../source/types/user-turn.js';
 import { decideInteraction, projectPendingInteraction } from '../../../../source/gateway/interaction-protocol.js';
 import type { PendingInteractionDto } from '../../../../source/gateway/interaction-protocol.js';
@@ -24,19 +17,20 @@ import type { ApprovalDecision, TurnCheckpoint, TurnInput } from '../../engine/i
 import type { ToolCallId } from '../../model/index.js';
 import type { SessionDriver } from '../local-store.js';
 import type { Admission, SessionFact, SessionUpdate } from '../index.js';
-import { loadCanonicalRetryTarget } from './conversation-log.js';
+import { createHistoryCommands } from './history-command.js';
+import { createInterruptCommand } from './interrupt-command.js';
+import { createRetryCommand } from './retry-command.js';
+import { createSettingsCommand, type AdoptedRuntimeSettings } from './settings-command.js';
 import {
   captureAdoptedInput,
   type AdoptedAdmissionContext,
   type AdoptedAdmissionReceipt,
+  type AdoptedCommandDeps,
   type AdoptedSubmissionInput,
   type AdoptedSubmissionOptions,
   type AdoptedInteractionCommand,
-  type AdoptedRetryTarget,
-  type AdoptedRetryResult,
-  type HistoryMutation,
-  type HistoryMutationResult,
 } from './submission.js';
+import { createTurnControl } from './turn-control.js';
 
 export class RunBudgetExtensionRefused extends Error {
   constructor() {
@@ -71,11 +65,7 @@ export function createAdoptedForeground(options: {
   makeInput: (turnId: TurnInput['turnId']) => TurnInput;
   /** Request cancellation of this handle's source-owned background work. */
   cancelBackground?: () => void;
-  runtimeSettings?: {
-    supports(command: RuntimeSettingMutation): boolean;
-    setOverride(command: RuntimeSettingMutation): void;
-    snapshot(): RuntimeSettingsSnapshot;
-  };
+  runtimeSettings?: AdoptedRuntimeSettings;
   /** Human grant on the exact client owning this foreground. */
   grantHumanRunBudgetExtension?: () => { granted: boolean; extensionsGranted: number };
   /** Combined store handles publish canonical facts themselves. */
@@ -85,32 +75,17 @@ export function createAdoptedForeground(options: {
   runtime.state.importState(options.restored);
   const listeners = new Set<(update: SessionUpdate) => void>();
   const pending = new Map<string, { hash: string; result: Promise<Admission> }>();
-  let serial = Promise.resolve();
-  const historyOperations = new Map<string, Promise<HistoryMutationResult>>();
-  let completion: Promise<void> = Promise.resolve();
-  let active: AdoptedTurnRun | undefined;
-  let activePostExecuteRunId: string | undefined;
-  let cancellation = new AbortController();
-  let poisoned: unknown;
-  let closing = false;
-  let interrupting: Promise<void> | undefined;
-  let settingMutation = false;
-  let releaseSettings: (() => void) | undefined;
-  const settingPending = new Map<
-    string,
-    Promise<{ kind: 'applied'; settings: RuntimeSettingsSnapshot } | { kind: 'unsupported' }>
-  >();
+  const turn = createTurnControl({ engine, runtime });
   let shutdownPromise: Promise<void> | undefined;
-  let decisionTail = Promise.resolve();
   let decideCurrent: ((command: AdoptedInteractionCommand) => Promise<void>) | undefined;
   const buffered: LogEvent[] = [];
   const poison = (error: unknown): unknown => {
-    poisoned = error ?? new Error('Session mutation failed');
-    context.poison(poisoned);
-    return poisoned;
+    turn.poisoned = error ?? new Error('Session mutation failed');
+    context.poison(turn.poisoned);
+    return turn.poisoned;
   };
   const capture = (event: LogEvent) => {
-    if (poisoned !== undefined) return;
+    if (turn.poisoned !== undefined) return;
     try {
       buffered.push(structuredClone(event));
     } catch (error) {
@@ -137,7 +112,7 @@ export function createAdoptedForeground(options: {
   let writeTail = Promise.resolve();
   const commit = (facts: readonly SessionFact[]) => {
     const operation = writeTail.then(async () => {
-      if (poisoned !== undefined) throw new FatalPersistenceError(poisoned);
+      if (turn.poisoned !== undefined) throw new FatalPersistenceError(turn.poisoned);
       const count = buffered.length;
       try {
         const entries = await context.commit([...buffered.slice(0, count), ...facts]);
@@ -165,13 +140,9 @@ export function createAdoptedForeground(options: {
     compact: unsupported,
     setModel: unsupported,
     async cancel() {
-      cancellation.abort();
-      cancellation = new AbortController();
-      runtime.generationGuard.invalidate();
-      if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-      active?.cancel();
-      await serial;
-      await completion;
+      turn.stop();
+      await turn.serial;
+      await turn.completion;
     },
     subscribe(_fromSeq, listener) {
       listeners.add(listener);
@@ -183,9 +154,9 @@ export function createAdoptedForeground(options: {
     signal: AbortSignal,
     inputSurgeApproval?: AdoptedSubmissionOptions['inputSurgeApproval'],
   ): Promise<Admission> => {
-    if (poisoned !== undefined) throw poisoned;
-    await completion;
-    if (active) await active.waitForSettlement(signal);
+    if (turn.poisoned !== undefined) throw turn.poisoned;
+    await turn.completion;
+    if (turn.active) await turn.active.waitForSettlement(signal);
     await engine.waitForAdmission(signal);
     signal.throwIfAborted();
     const admitted = await context.admit(submitted, {
@@ -465,9 +436,7 @@ export function createAdoptedForeground(options: {
         setReady();
       } catch (error) {
         failReady(error);
-        runtime.generationGuard.invalidate();
-        runtime.postExecutePending.closeRun(bound.postExecuteRunId);
-        active?.cancel();
+        turn.cancelRun(bound.postExecuteRunId);
         throw error;
       }
       const decisions = await parked;
@@ -737,19 +706,15 @@ export function createAdoptedForeground(options: {
       const decisions = new Map<ToolCallId, ApprovalDecision>();
       if (owner.dto.descriptor.callId) decisions.set(owner.dto.descriptor.callId as ToolCallId, decision);
       const view = engine.resume(checkpoint, decisions);
-      active = view;
+      turn.active = view;
       deliverView(view);
     };
     try {
       unregister = engine.registerTurnBridge(receipt.turnId, { generation: token, isCurrent }, (boundControl) => {
         control = boundControl;
-        activePostExecuteRunId = bound.postExecuteRunId;
+        turn.activePostExecuteRunId = bound.postExecuteRunId;
         watcher = watchPostExecute();
-        void watcher.catch(() => {
-          runtime.generationGuard.invalidate();
-          if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-          active?.cancel();
-        });
+        void watcher.catch(() => turn.cancelRun());
         return {
           ...bound.session,
           async prepare(s) {
@@ -802,7 +767,7 @@ export function createAdoptedForeground(options: {
       watcherStop.abort();
       runtime.postExecutePending.closeRun(bound.postExecuteRunId);
       await watcher.catch(() => {});
-      if (activePostExecuteRunId === bound.postExecuteRunId) activePostExecuteRunId = undefined;
+      if (turn.activePostExecuteRunId === bound.postExecuteRunId) turn.activePostExecuteRunId = undefined;
       unregister();
       bound.finish();
       await commit([
@@ -821,8 +786,8 @@ export function createAdoptedForeground(options: {
       ]);
       throw error;
     }
-    active = run;
-    completion = (async () => {
+    turn.active = run;
+    turn.completion = (async () => {
       let terminal: Extract<SessionUpdate, { kind: 'live' }>['event'] | undefined;
       try {
         let view = run;
@@ -925,357 +890,58 @@ export function createAdoptedForeground(options: {
         watcherStop.abort();
         runtime.postExecutePending.closeRun(bound.postExecuteRunId);
         await watcher.catch(() => {});
-        if (activePostExecuteRunId === bound.postExecuteRunId) activePostExecuteRunId = undefined;
+        if (turn.activePostExecuteRunId === bound.postExecuteRunId) turn.activePostExecuteRunId = undefined;
         decideCurrent = undefined;
         unregister();
-        if (active === run) active = undefined;
+        if (turn.active === run) turn.active = undefined;
       }
     })();
     // Observe failure immediately; later submissions still await the original promise.
-    void completion.catch(() => {});
+    void turn.completion.catch(() => {});
     return { kind: 'started', turnId: receipt.turnId };
   };
+  const commandDeps: AdoptedCommandDeps = { context, runtime, turn, commit, poison };
+  const history = createHistoryCommands(commandDeps);
+  const interrupt = createInterruptCommand(commandDeps, {
+    foreground: () => driver.cancel(),
+    background: options.cancelBackground?.bind(options),
+  });
+  const settings = createSettingsCommand(commandDeps, options.runtimeSettings);
+  const retry = createRetryCommand(commandDeps, launch);
   return {
     driver,
     submission: {
-      listRewindTargets() {
-        if (closing) return Promise.reject(new Error('Session handle is closed'));
-        return serial.then(() => {
-          if (closing) throw new Error('Session handle is closed');
-          return structuredClone(runtime.state.listRewindTargets());
-        });
-      },
-      history(command: HistoryMutation): Promise<HistoryMutationResult> {
-        try {
-          context.assertHealthy();
-        } catch (error) {
-          return Promise.reject(error);
-        }
-        if (poisoned !== undefined) return Promise.reject(poisoned);
-        if (closing || context.state().status === 'closed')
-          return Promise.reject(new Error('Session handle is closed'));
-        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
-        const owned = structuredClone(command);
-        if (!owned || typeof owned !== 'object' || !['undo_last', 'undo_count', 'rewind'].includes(owned.kind))
-          return Promise.reject(new Error('Invalid history command'));
-        const key = JSON.stringify(
-          owned.kind === 'undo_count'
-            ? [owned.kind, owned.count]
-            : owned.kind === 'rewind'
-            ? [owned.kind, owned.targetId]
-            : [owned.kind],
-        );
-        const existing = historyOperations.get(key);
-        if (existing) return existing;
-        const operation = serial.then(async (): Promise<HistoryMutationResult> => {
-          context.assertHealthy();
-          if (closing) throw new Error('Session handle is closed');
-          if (poisoned !== undefined) throw poisoned;
-          const reservation = runtime.state.reserveHistoryMutation(owned);
-          if (reservation.kind !== 'reserved') return reservation;
-          // Close the old callback gate before awaiting any physical settlement.
-          cancellation.abort();
-          cancellation = new AbortController();
-          const signal = cancellation.signal;
-          runtime.generationGuard.invalidate();
-          const token = runtime.generationGuard.capture();
-          if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-          active?.cancel();
-          await decisionTail;
-          await completion;
-          if (active) await active.waitForSettlement(signal);
-          await engine.waitForAdmission(signal);
-          if (closing || signal.aborted || !runtime.generationGuard.isCurrent(token)) return { kind: 'stale' };
-          let restored: ReturnType<typeof reservation.apply>;
-          try {
-            restored = reservation.apply();
-          } catch (error) {
-            throw poison(error ?? new Error('History mutation failed'));
-          }
-          if (!restored) return { kind: 'stale' };
-          const committedGeneration = runtime.generationGuard.capture();
-          await commit([]);
-          context.assertHealthy();
-          if (poisoned !== undefined) throw poisoned;
-          if (closing || signal.aborted || !runtime.generationGuard.isCurrent(committedGeneration))
-            return { kind: 'stale' };
-          return {
-            kind: 'applied',
-            restored: { text: restored.text, ...(restored.images ? { images: restored.images } : {}) },
-          };
-        });
-        serial = operation.then(
-          () => undefined,
-          () => undefined,
-        );
-        historyOperations.set(key, operation);
-        void operation
-          .finally(() => {
-            if (historyOperations.get(key) === operation) historyOperations.delete(key);
-          })
-          .catch(() => {});
-        return operation;
-      },
-      interruptFromUser(): Promise<void> {
-        if (closing || context.state().status === 'closed')
-          return Promise.reject(new Error('Session handle is closed'));
-        if (interrupting) return interrupting;
-        if (!options.cancelBackground) return Promise.reject(new Error('User interrupt is not supported'));
-        let resolve!: () => void;
-        let reject!: (error: unknown) => void;
-        const operation = new Promise<void>((ok, fail) => {
-          resolve = ok;
-          reject = fail;
-        });
-        interrupting = operation;
-        const foreground = driver.cancel();
-        void foreground.catch(() => {});
-        let failure: unknown;
-        let failed = false;
-        try {
-          const result: unknown = options.cancelBackground();
-          if (
-            result != null &&
-            (typeof result === 'object' || typeof result === 'function') &&
-            typeof (result as { then?: unknown }).then === 'function'
-          ) {
-            void Promise.resolve(result).catch(() => {});
-            throw new TypeError('Background cancellation must be synchronous');
-          }
-        } catch (error) {
-          failed = true;
-          failure = error;
-        }
-        void (async () => {
-          try {
-            await foreground;
-          } catch (error) {
-            if (!failed) failure = error;
-            failed = true;
-          }
-          if (failed) throw failure;
-        })().then(
-          () => {
-            if (interrupting === operation) interrupting = undefined;
-            resolve();
-          },
-          (error) => {
-            if (interrupting === operation) interrupting = undefined;
-            reject(error);
-          },
-        );
-        return operation;
-      },
-      setRuntimeSettings(input: RuntimeSettingMutation) {
-        try {
-          context.assertHealthy();
-        } catch (error) {
-          return Promise.reject(error);
-        }
-        if (poisoned !== undefined) return Promise.reject(poisoned);
-        let command: RuntimeSettingMutation;
-        try {
-          command = parseRuntimeMutation(input);
-        } catch (error) {
-          return Promise.reject(error);
-        }
-        const key =
-          command.kind === 'model'
-            ? JSON.stringify(['model', command.selection.provider, command.selection.model])
-            : command.kind === 'reasoning'
-            ? JSON.stringify(['reasoning', command.effort])
-            : JSON.stringify(['temperature', command.temperature ?? null]);
-        const existing = settingPending.get(key);
-        if (existing) return existing;
-        if (!options.runtimeSettings || !options.runtimeSettings.supports(command))
-          return Promise.resolve({ kind: 'unsupported' as const });
-        if (closing || interrupting || context.state().status === 'closed')
-          return Promise.reject(new Error('Session is unavailable'));
-        if (poisoned !== undefined) return Promise.reject(poisoned);
-        if (!settingMutation) {
-          try {
-            releaseSettings = context.reserveSettings();
-          } catch (error) {
-            return Promise.reject(error);
-          }
-          settingMutation = true;
-        }
-        const operation = serial.then(async () => {
-          context.assertHealthy();
-          if (closing || poisoned !== undefined) throw new Error('Session is unavailable');
-          cancellation.abort();
-          cancellation = new AbortController();
-          const signal = cancellation.signal;
-          runtime.generationGuard.invalidate();
-          if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-          active?.cancel();
-          await decisionTail;
-          await completion;
-          if (active) await active.waitForSettlement(signal);
-          await engine.waitForAdmission(signal);
-          signal.throwIfAborted();
-          if (closing || poisoned !== undefined) throw new Error('Session is unavailable');
-          try {
-            options.runtimeSettings!.setOverride(command);
-            if (command.kind === 'model') runtime.runtimeController.setModelSelection(command.selection);
-            else if (command.kind === 'reasoning') runtime.runtimeController.setReasoningEffort(command.effort);
-            else runtime.runtimeController.setTemperature(command.temperature);
-            const settings = options.runtimeSettings!.snapshot();
-            const key =
-              command.kind === 'model'
-                ? 'agent.modelSelection'
-                : command.kind === 'reasoning'
-                ? 'agent.reasoningEffort'
-                : 'agent.temperature';
-            const value =
-              command.kind === 'model'
-                ? settings.selection
-                : command.kind === 'reasoning'
-                ? settings.reasoningEffort
-                : settings.temperature;
-            await commit([{ type: 'settings_changed', key, value, sessionMutation: 1 }]);
-            context.assertHealthy();
-            if (poisoned !== undefined) throw poisoned;
-            if (closing || signal.aborted) throw new Error('Settings became stale');
-            return { kind: 'applied' as const, settings };
-          } catch (error) {
-            poison(error ?? new Error('Settings mutation failed'));
-            runtime.generationGuard.invalidate();
-            if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-            active?.cancel();
-            throw poisoned;
-          }
-        });
-        serial = operation.then(
-          () => undefined,
-          () => undefined,
-        );
-        const promise = operation.finally(() => {
-          settingPending.delete(key);
-          if (!settingPending.size) {
-            settingMutation = false;
-            releaseSettings?.();
-            releaseSettings = undefined;
-          }
-        });
-        settingPending.set(key, promise);
-        return promise;
-      },
-      retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult> {
-        try {
-          context.assertHealthy();
-        } catch (error) {
-          return Promise.reject(error);
-        }
-        if (target !== 'turn' && target !== 'tool') return Promise.reject(new Error('Invalid retry target'));
-        if (closing || context.state().status === 'closed')
-          return Promise.resolve({ kind: 'rejected', reason: 'closed' });
-        if (interrupting || settingMutation) return Promise.reject(new Error('Session mutation is in progress'));
-        if (poisoned !== undefined) return Promise.reject(poisoned);
-        if (!context.state().retryEligibility[target]) return Promise.resolve({ kind: 'ineligible', target });
-        const hasToolResult = () => {
-          const preview = new ConversationStore();
-          for (const item of runtime.record.getHistory()) preview.addImportedItem(item);
-          return preview.peekLastToolOutput() !== null;
-        };
-        if (target === 'tool' && !hasToolResult()) return Promise.resolve({ kind: 'ineligible', target });
-        cancellation.abort();
-        cancellation = new AbortController();
-        const signal = cancellation.signal;
-        runtime.generationGuard.invalidate();
-        if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-        active?.cancel();
-        const operation = serial.then(async (): Promise<AdoptedRetryResult> => {
-          context.assertHealthy();
-          if (poisoned !== undefined) throw poisoned;
-          await decisionTail;
-          await completion;
-          if (active) await active.waitForSettlement(signal);
-          await engine.waitForAdmission(signal);
-          signal.throwIfAborted();
-          runtime.pendingInteraction.clear();
-          if (closing) return { kind: 'rejected', reason: 'closed' };
-          if (!context.state().retryEligibility[target]) return { kind: 'ineligible', target };
-          if (target === 'tool' && !hasToolResult()) return { kind: 'ineligible', target };
-          const original = loadCanonicalRetryTarget(context.id, context.root);
-          if (target === 'turn' && !original) return { kind: 'ineligible', target };
-          if (target === 'tool' && !runtime.state.peekLastToolOutput()) {
-            throw poison(new Error('Canonical retry eligibility disagrees with source state'));
-          }
-          const before = structuredClone(runtime.record.getHistory());
-          const rewound =
-            target === 'turn'
-              ? runtime.state.retryLastUserTurn({ logUndo: false })
-              : runtime.state.retryLastToolOutput();
-          if (!rewound) {
-            throw poison(new Error('Canonical retry eligibility disagrees with source state'));
-          }
-          const turnId = crypto.randomUUID() as TurnInput['turnId'];
-          const token = runtime.generationGuard.capture();
-          const snapshot = runtime.state.getCurrentSnapshot();
-          try {
-            rewindRemovedUserCount(before, snapshot.history);
-          } catch (error) {
-            throw poison(error);
-          }
-          const fact: SessionFact =
-            target === 'turn'
-              ? { type: 'user_turn_retried', version: 1, userMessageRef: original!.userMessageRef, snapshot }
-              : { type: 'tool_output_rewound', version: 1, snapshot };
-          await commit([fact, { type: 'session_turn_started', version: 1, turnId, clientRequestId: null }]);
-          if (signal.aborted || closing || !runtime.generationGuard.isCurrent(token)) {
-            await commit([{ type: 'session_turn_ended', version: 1, turnId, outcome: 'cancelled' }]);
-            throw new Error('Retry became stale');
-          }
-          const retainedUser = target === 'tool' ? loadCanonicalRetryTarget(context.id, context.root) : original;
-          const admitted = await launch(
-            {
-              turnId,
-              input: retainedUser?.submittedTurn ?? { text: '' },
-              ...(retainedUser ? { userMessageRef: retainedUser.userMessageRef } : {}),
-            },
-            token,
-            signal,
-            true,
-          );
-          if (admitted.kind !== 'started') throw new Error('Retry did not start');
-          return admitted;
-        });
-        serial = operation.then(
-          () => undefined,
-          () => undefined,
-        );
-        return operation;
-      },
+      ...history,
+      ...interrupt,
+      ...settings,
+      ...retry,
       decide(command: AdoptedInteractionCommand): Promise<void> {
         try {
           context.assertHealthy();
         } catch (error) {
           return Promise.reject(error);
         }
-        if (poisoned !== undefined) return Promise.reject(poisoned);
-        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
+        if (turn.poisoned !== undefined) return Promise.reject(turn.poisoned);
+        if (turn.interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         const owned = structuredClone(command);
-        const operation = decisionTail
+        const operation = turn.decisionTail
           .then(() => {
             context.assertHealthy();
-            if (closing || !decideCurrent) throw new Error('No current interaction');
+            if (turn.closing || !decideCurrent) throw new Error('No current interaction');
             return decideCurrent(owned);
           })
           .catch(async (error) => {
             if (isFatalPersistenceError(error)) {
-              runtime.generationGuard.invalidate();
-              if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-              active?.cancel();
+              turn.cancelRun();
               try {
-                await completion;
+                await turn.completion;
               } catch {
                 /* Preserve the persistence error. */
               }
             }
             throw error;
           });
-        decisionTail = operation.then(
+        turn.decisionTail = operation.then(
           () => undefined,
           () => undefined,
         );
@@ -1287,9 +953,10 @@ export function createAdoptedForeground(options: {
         } catch (error) {
           return Promise.reject(error);
         }
-        if (poisoned !== undefined) return Promise.reject(poisoned);
-        if (closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
-        if (interrupting || settingMutation) return Promise.reject(new Error('Session mutation is in progress'));
+        if (turn.poisoned !== undefined) return Promise.reject(turn.poisoned);
+        if (turn.closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
+        if (turn.interrupting || turn.settingMutation)
+          return Promise.reject(new Error('Session mutation is in progress'));
         const captured = captureAdoptedInput(value.input);
         if (context.state().status === 'closed') return Promise.resolve({ kind: 'rejected', reason: 'closed' });
         const existing = pending.get(value.requestId);
@@ -1308,13 +975,9 @@ export function createAdoptedForeground(options: {
           );
         }
         const submitted = { requestId: value.requestId, input: captured.input };
-        const signal = cancellation.signal;
+        const signal = turn.cancellation.signal;
         const inputSurgeApproval = submitOptions?.inputSurgeApproval;
-        const result = serial.then(() => execute(submitted, signal, inputSurgeApproval));
-        serial = result.then(
-          () => undefined,
-          () => undefined,
-        );
+        const result = turn.queue(() => execute(submitted, signal, inputSurgeApproval));
         pending.set(value.requestId, { hash: captured.hash, result });
         void result.finally(() => pending.delete(value.requestId)).catch(() => {});
         return result;
@@ -1322,23 +985,19 @@ export function createAdoptedForeground(options: {
     },
     failPersistence(error: unknown): void {
       poison(error);
-      cancellation.abort();
-      runtime.generationGuard.invalidate();
-      if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-      active?.cancel();
+      turn.cancellation.abort();
+      turn.cancelRun();
     },
     shutdown(): Promise<void> {
       shutdownPromise ??= (async () => {
-        closing = true;
-        cancellation.abort();
-        runtime.generationGuard.invalidate();
-        if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
-        active?.cancel();
-        await decisionTail;
-        await serial;
-        await completion;
+        turn.closing = true;
+        turn.cancellation.abort();
+        turn.cancelRun();
+        await turn.decisionTail;
+        await turn.serial;
+        await turn.completion;
         await writeTail;
-        if (interrupting) await interrupting;
+        if (turn.interrupting) await turn.interrupting;
       })();
       return shutdownPromise;
     },

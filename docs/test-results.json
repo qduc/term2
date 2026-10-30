@@ -29572,6 +29572,38 @@
       "failures": [],
       "evidence": [],
       "notes": "Root/rewrite typechecks, inventory, 527-edge guard and actual Session+Engine retained bench pass. Private admission position/sequence ordering and fresh generation verified; independent Sol review /tmp/term2-c3a-stage5-capture-independent-review.md verifies reentrant producer, accepted-input fsync failure and live/historical subscriber mutation isolation. Earlier source 0866 allowed legacy subscriber mutation; negative control reproduced, 76cf fixed live and 6640 fixed historical. P2 semantic projection, legacy sidecar sequence gaps and full C4 acceptance remain open."
+    },
+    {
+      "id": "2026-10-30-c3a-capture-main-integration",
+      "timestamp": "2026-10-30T20:49:11Z",
+      "commit": "0191ff5a1d8bfd37412a1cb53195d34e2d7f6b0c",
+      "tree": "9e569987647445588b6f09f1953a30318ad44a38",
+      "revision_kind": "merge commit",
+      "base_commit": "5f329234f914622c5bb7a63456a7fa19fd689213",
+      "task_ids": [
+        "2026-10-30-c3a-capture-p1"
+      ],
+      "suite": "C3a capture after stage 5 Slice A integration",
+      "command": "rewrite tsc; rewrite layer guard and inventory; node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-capture.mts; git diff --check and ledger parse",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; network-enabled local provider."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Merged main 5f329 with both append-only verification histories preserved. Capture production files and bench identical to previously independently reviewed source. Rewrite typecheck, 527-edge layer check, inventory and real Session/Engine capture bench pass. P2 semantic projection and full C4 acceptance remain open."
     }
   ]
 }

@@ -1701,7 +1701,12 @@ export class AgentClient {
   }
 
   async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
-    const start = await this.#prepareApplicationTurn(userInput, options);
+    const start = await this.#prepareApplicationTurn(
+      userInput,
+      options,
+      Boolean(this.#modelBinding),
+      this.#modelBinding?.trackDetachedRead,
+    );
     const stream = this.#applicationRunLoop.startStream(start.agent, start.input, start.options);
     this.#observeCompletion(stream, userInput, this.#agentConfig.getProvider(), this.#agentConfig.getModel());
     return stream;

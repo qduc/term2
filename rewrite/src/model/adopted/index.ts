@@ -674,7 +674,14 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
         },
       };
     },
-    createScoped: (ref, deps) => makeBinding(ref, true, deps),
+    createScoped: (ref, deps) => {
+      const binding = makeBinding(ref, true, deps);
+      trackIdentity(Promise.resolve(binding.original), (model) => {
+        const previous = workerIdentities.get(model) ?? { owned: false, borrowed: false };
+        workerIdentities.set(model, { ...previous, borrowed: true });
+      });
+      return binding;
+    },
     providerDefinition,
     fetchModels: (providerId, signal) =>
       sourceFetchModels(

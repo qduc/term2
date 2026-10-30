@@ -290,26 +290,30 @@ export class MentorRunner {
           `Please check that all required credentials and provider settings are set.`,
       );
     }
-    const streamedModel = await mentorSession.ensureModel(mentorProvider, (providerId) => {
-      const definition = this.#modelBinding
-        ? this.#modelBinding.providerDefinition(providerId)
-        : getProvider(providerId);
-      if (!definition?.createStreamedModel) throw new Error(`${providerId} has no streamed model`);
-      if (this.#modelBinding)
-        return this.#modelBinding.scopedModel(
-          { provider: providerId, model: mentorModelName },
-          {
-            settingsService: this.#settings,
-            loggingService: this.#logger,
-            sessionContextService: this.#sessionContextService,
-          },
-        );
-      return definition.createStreamedModel(mentorModelName, {
-        settingsService: this.#settings,
-        loggingService: this.#logger,
-        sessionContextService: this.#sessionContextService,
-      });
-    });
+    const streamedModel = await mentorSession.ensureModel(
+      mentorProvider,
+      (providerId) => {
+        const definition = this.#modelBinding
+          ? this.#modelBinding.providerDefinition(providerId)
+          : getProvider(providerId);
+        if (!definition?.createStreamedModel) throw new Error(`${providerId} has no streamed model`);
+        if (this.#modelBinding)
+          return this.#modelBinding.scopedModel(
+            { provider: providerId, model: mentorModelName },
+            {
+              settingsService: this.#settings,
+              loggingService: this.#logger,
+              sessionContextService: this.#sessionContextService,
+            },
+          );
+        return definition.createStreamedModel(mentorModelName, {
+          settingsService: this.#settings,
+          loggingService: this.#logger,
+          sessionContextService: this.#sessionContextService,
+        });
+      },
+      this.#modelBinding && signal ? { signal, onDetached: this.#modelBinding.trackDetachedRead } : undefined,
+    );
     if (!streamedModel)
       throw new Error(`${providerDef.label || mentorProvider} is configured but could not be initialized.`);
 

@@ -672,16 +672,23 @@ export function createAdoptedEngine(options: {
           if (nativeCompaction) logical.compactions.push(nativeCompaction);
           const history: Item[] = [];
           const compactions: Array<{ summaryId: Item['id']; replaced: number }> = [];
+          const matched = new Set<(typeof logical.compactions)[number]>();
           for (const [index, sourceItem] of sourceHistory.entries()) {
             const converted = convertSourceItems([sourceItem], input.model.provider);
             const evidence = logical.compactions.find(
-              (candidate) => candidate.index === index && same(candidate.checkpoint, sourceItem),
+              (candidate) =>
+                !matched.has(candidate) &&
+                same(candidate.checkpoint, sourceItem) &&
+                (candidate.index === index ||
+                  sourceHistory.filter((item) => same(candidate.checkpoint, item)).length === 1),
             );
-            if (evidence && converted.length === 1)
+            if (evidence && converted.length === 1) {
+              matched.add(evidence);
               compactions.push({ summaryId: converted[0]!.id, replaced: evidence.replaced });
+            }
             history.push(...converted);
           }
-          logical.compactions = [];
+          logical.compactions = logical.compactions.filter((candidate) => !matched.has(candidate));
           logical.queue.push({
             type: 'segment_committed',
             segmentId: logical.segment,

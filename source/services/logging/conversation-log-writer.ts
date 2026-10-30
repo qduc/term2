@@ -49,6 +49,8 @@ export interface AtomicConversationLogWriter extends ConversationLogWriter {
   openExisting(meta: Omit<SessionInitEvent, 'type'>): void;
   /** Writes all facts in one newline-terminated storage envelope and fsyncs it before returning. */
   appendBatch<T extends { readonly type: string }>(facts: readonly T[]): Promise<readonly LogEnvelope<T>[]>;
+  /** Delete the canonical file and sidecar while retaining this writer's exclusive lock. */
+  deleteSessionFiles(): Promise<void>;
 }
 
 export class LockConflictError extends Error {
@@ -697,6 +699,50 @@ class ConversationLogWriterImpl implements ConversationLogWriter, AtomicConversa
         this.#recordFailure(err);
         throw err;
       }
+    }
+  }
+
+  async deleteSessionFiles(): Promise<void> {
+    if (this.#closed || this.#fd === null) throw new Error('conversation log writer is not open');
+    this.#throwIfFailed();
+    this.#closed = true;
+    let failure: unknown = null;
+    try {
+      this.#fileSystem.fsyncSync(this.#fd);
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      this.#fileSystem.closeSync(this.#fd);
+    } catch (error) {
+      failure ??= error;
+    }
+    this.#fd = null;
+    failure ??= this.#closeDeltaFd();
+    if (failure === null) {
+      try {
+        this.#fileSystem.unlinkSync(deltaPath(this.#dir, this.#sessionId));
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'ENOENT') failure = error;
+      }
+    }
+    if (failure === null) {
+      try {
+        this.#fileSystem.unlinkSync(logPath(this.#dir, this.#sessionId));
+        const directoryFd = this.#fileSystem.openSync(this.#dir, 'r');
+        try {
+          this.#fileSystem.fsyncSync(directoryFd);
+        } finally {
+          this.#fileSystem.closeSync(directoryFd);
+        }
+      } catch (error) {
+        failure = error;
+      }
+    }
+    releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+    if (failure !== null) {
+      this.#recordFailure(failure);
+      throw failure;
     }
   }
 

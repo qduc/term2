@@ -998,28 +998,30 @@ export function forkConversation(sourceId: string, newId: string): boolean {
     .readFileSync(srcPath, 'utf-8')
     .split('\n')
     .filter((line) => line.trim());
-  const parsedLines = lines.map((line) => {
+  const tokens = lines.map((line) => {
     try {
-      return decodeLogEnvelope(JSON.parse(line) as unknown);
+      const parsed = JSON.parse(line) as unknown;
+      const batch = expandSessionFactBatchEnvelope(parsed);
+      if (batch) return { raw: null, envelopes: batch };
+      const envelope = decodeLogEnvelope(parsed);
+      return { raw: null, envelopes: envelope ? [envelope] : [] };
     } catch {
-      return null;
+      return { raw: line, envelopes: [] };
     }
   });
-  const identities = resolveEnvelopeIdentities(
-    parsedLines.filter((envelope): envelope is PersistedLogEnvelope => envelope !== null),
-    sourceId,
-    { deduplicateExplicitEventIds: false },
-  );
+  const parsedLines = tokens.flatMap((token) => token.envelopes);
+  const identities = resolveEnvelopeIdentities(parsedLines, sourceId, { deduplicateExplicitEventIds: false });
   let identityIndex = 0;
   let latestInit: PersistedLogEnvelope | null = null;
   let highWaterSeq = 0;
-  const forkedLines = lines.map((line, index) => {
-    const envelope = parsedLines[index];
-    if (!envelope) return line;
-    const identified = identities[identityIndex++]!;
-    if (Number.isSafeInteger(envelope.seq) && envelope.seq > highWaterSeq) highWaterSeq = envelope.seq;
-    if (!isTruncatedLogEvent(identified.event) && identified.event.type === 'session_init') latestInit = identified;
-    return JSON.stringify(identified);
+  const forkedLines = tokens.flatMap((token) => {
+    if (!token.envelopes.length) return [token.raw ?? ''];
+    return token.envelopes.map((envelope) => {
+      const identified = identities[identityIndex++]!;
+      if (Number.isSafeInteger(envelope.seq) && envelope.seq > highWaterSeq) highWaterSeq = envelope.seq;
+      if (!isTruncatedLogEvent(identified.event) && identified.event.type === 'session_init') latestInit = identified;
+      return JSON.stringify(identified);
+    });
   });
   const initEnvelope = latestInit as PersistedLogEnvelope | null;
   if (!initEnvelope || isTruncatedLogEvent(initEnvelope.event) || initEnvelope.event.type !== 'session_init') {
@@ -1096,7 +1098,8 @@ export function hasConversationContent(id: string): boolean {
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       const envelope = decodeLogEnvelope(parsed);
-      if (envelope?.event && CONTENT_EVENT_TYPES.has(envelope.event.type)) {
+      const logical = expandSessionFactBatchEnvelope(parsed) ?? (envelope ? [envelope] : []);
+      if (logical.some((entry) => CONTENT_EVENT_TYPES.has(entry.event.type))) {
         return true;
       }
     } catch {

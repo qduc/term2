@@ -116,6 +116,6 @@ export type SessionSummary = Pick<SessionState, 'id' | 'status' | 'workspace' | 
 export interface SessionStore {
   create(workspace: Workspace, model: ModelRef, binding?: SessionBinding): Promise<Session>;
   /** Replays the canonical log and durably marks an unfinished prior process interrupted before returning. */
-  open(id: SessionId): Promise<Session>;
+  open(id: SessionId, expectedBinding?: SessionBinding): Promise<Session>;
   list(cursor?: string): Promise<{ readonly sessions: readonly SessionSummary[]; readonly nextCursor: string | null }>;
 }

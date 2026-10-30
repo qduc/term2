@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ModelRef } from '../model/index.js';
+import type { Item, ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import type {
   Session,
@@ -18,10 +18,12 @@ import {
   CanonicalSessionLog,
   auditCanonicalConversation,
   loadCanonicalConversation,
+  normalizedBodyHash,
   type CanonicalSessionLog as CanonicalLog,
   type SessionBinding,
 } from './adopted/conversation-log.js';
-import { initialState, projectLifecycle, statusFromLegacyAudit, withTranscript } from './reducer.js';
+import { SessionIndexService } from './adopted/conversation-index.js';
+import { initialState, newestAdmission, projectLifecycle, statusFromLegacyAudit, withTranscript } from './reducer.js';
 
 export type SessionDriver = Pick<
   Session,
@@ -40,6 +42,7 @@ export type SessionStoreOptions = {
   readonly defaultWorkspace: Workspace;
   readonly defaultModel: ModelRef;
   readonly admissionTtlMs?: number;
+  readonly fileSystem?: Parameters<typeof CanonicalSessionLog.create>[0]['fileSystem'];
   /** Adopted source runtime driver; the store remains the only log writer. */
   readonly driverFactory: (context: SessionDriverContext) => SessionDriver;
 };
@@ -53,21 +56,46 @@ export class LocalSessionStore implements SessionStore {
   async create(workspace: Workspace, model: ModelRef, binding?: SessionBinding): Promise<Session> {
     fs.mkdirSync(this.#options.root, { recursive: true });
     const id = `ses_${crypto.randomUUID()}` as SessionId;
+    return this.createWithId(id, workspace, model, binding);
+  }
+
+  /** Proof/adapter composition keeps the source runtime's already-selected ID. */
+  async createWithId(
+    id: SessionId,
+    workspace: Workspace,
+    model: ModelRef,
+    binding?: SessionBinding,
+    metadata: Partial<import('./adopted/conversation-log.js').CanonicalSessionLogOptions['metadata']> = {},
+  ): Promise<Session> {
+    fs.mkdirSync(this.#options.root, { recursive: true });
     const log = CanonicalSessionLog.create({
       root: this.#options.root,
       id,
-      metadata: { projectPath: workspace.root, model: model.model, provider: model.provider },
+      metadata: { projectPath: workspace.root, model: model.model, provider: model.provider, ...metadata },
       workspace,
       model,
       ...(binding ? { binding } : {}),
       logger: this.#options.logger,
+      fileSystem: this.#options.fileSystem,
     });
     return this.#makeSession(id, log, replayState(id, log, this.#options));
   }
 
-  async open(id: SessionId): Promise<Session> {
+  async open(id: SessionId, expectedBinding?: SessionBinding): Promise<Session> {
+    if (expectedBinding) {
+      const existing = CanonicalSessionLog.readOnly(this.#options.root, id);
+      const binding = existing.find((entry) => entry.fact.type === 'session_bound')?.fact;
+      if (binding?.type !== 'session_bound' || !sameBinding(binding.binding, expectedBinding)) {
+        throw new Error('session binding does not match the expected owner/workspace/grant');
+      }
+    }
     // Acquire the existing source writer lock before replay and reconciliation.
-    const log = CanonicalSessionLog.open({ root: this.#options.root, id, logger: this.#options.logger });
+    const log = CanonicalSessionLog.open({
+      root: this.#options.root,
+      id,
+      logger: this.#options.logger,
+      fileSystem: this.#options.fileSystem,
+    });
     try {
       let state = replayState(id, log, this.#options);
       if (state.status === 'closed') throw new Error(`session ${id} is closed`);
@@ -126,7 +154,7 @@ export class LocalSessionStore implements SessionStore {
             turnId: admission.turnId,
             result,
           });
-        } else if (admission.disposition === 'started' && !terminal) {
+        } else if (!terminal && (admission.disposition === 'started' || started)) {
           facts.push({
             type: 'session_admission_settled',
             version: 1,
@@ -199,8 +227,67 @@ export class LocalSessionStore implements SessionStore {
     return { sessions, nextCursor: start + page.length < names.length && page.length ? page.at(-1)! : null };
   }
 
+  /** Delete only explicitly closed sessions whose fixed retention deadline has passed. */
+  async expireClosed(
+    now = new Date(),
+  ): Promise<{ readonly deleted: readonly string[]; readonly errors: readonly { id: string; message: string }[] }> {
+    const deleted: string[] = [];
+    const errors: { id: string; message: string }[] = [];
+    const names = fs.existsSync(this.#options.root)
+      ? fs.readdirSync(this.#options.root).filter((name) => name.endsWith('.jsonl'))
+      : [];
+    for (const name of names) {
+      const id = name.slice(0, -'.jsonl'.length);
+      let snapshot: readonly import('./adopted/conversation-log.js').SessionLogEntry[];
+      try {
+        snapshot = CanonicalSessionLog.readOnly(this.#options.root, id);
+      } catch (error) {
+        errors.push({ id, message: error instanceof Error ? error.message : String(error) });
+        continue;
+      }
+      if (!isRetentionEligible(snapshot, now.getTime())) continue;
+      let locked: CanonicalLog | undefined;
+      try {
+        locked = CanonicalSessionLog.open({
+          root: this.#options.root,
+          id,
+          logger: this.#options.logger,
+          fileSystem: this.#options.fileSystem,
+        });
+        if (!isRetentionEligible(locked.entries(), now.getTime())) {
+          await locked.dispose();
+          continue;
+        }
+        await locked.deleteFiles();
+        deleted.push(id);
+      } catch (error) {
+        if (locked) {
+          try {
+            await locked.dispose();
+          } catch {
+            /* keep the original delete error */
+          }
+        }
+        errors.push({ id, message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    if (deleted.length) {
+      try {
+        const result = await new SessionIndexService({
+          conversationsDir: this.#options.root,
+          backend: 'direct',
+        }).reconcile();
+        if (!result.ok) errors.push({ id: '*index*', message: result.error ?? 'session index reconciliation failed' });
+      } catch (error) {
+        errors.push({ id: '*index*', message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { deleted, errors };
+  }
+
   #makeSession(id: SessionId, log: CanonicalLog, state: SessionState): Session {
     let current = state;
+    const pendingAdmissions = new Map<string, { hash: string; turnId: string; admitted: Promise<void> }>();
     const context: SessionDriverContext = {
       id,
       log,
@@ -208,13 +295,73 @@ export class LocalSessionStore implements SessionStore {
       commit: async (facts) => {
         const entries = await log.append(facts);
         for (const entry of entries) current = projectLifecycle(current, entry);
+        const restored = loadCanonicalConversation(id, log.root);
+        current = withTranscript(
+          current,
+          { history: restored.history, messages: restored.messages },
+          restored.history as unknown as Item[],
+        );
       },
     };
     const driver = this.#options.driverFactory(context);
     return {
       id,
       state: () => current,
-      submit: (...args) => driver.submit(...args),
+      submit: async (requestId, items) => {
+        if (current.status === 'closed') return { kind: 'rejected', reason: 'closed' };
+        const hash = normalizedBodyHash(items);
+        const pending = pendingAdmissions.get(requestId);
+        if (pending) {
+          if (pending.hash !== hash) return { kind: 'rejected', reason: 'request_conflict' };
+          await pending.admitted;
+          return { kind: 'duplicate', turnId: pending.turnId as never };
+        }
+        const prior = newestAdmission(current, requestId, Date.now());
+        if (prior)
+          return prior.normalizedBodyHash === hash
+            ? { kind: 'duplicate', turnId: prior.turnId }
+            : { kind: 'rejected', reason: 'request_conflict' };
+        const turnId = crypto.randomUUID();
+        const createdAt = new Date().toISOString();
+        const expiresAt = new Date(Date.now() + (this.#options.admissionTtlMs ?? 60_000)).toISOString();
+        const text = items
+          .map((item) =>
+            item.type === 'user_message'
+              ? item.content.map((part) => (part.type === 'text' ? part.text : '')).join('')
+              : '',
+          )
+          .join('\n');
+        let resolveAdmitted!: () => void;
+        let rejectAdmitted!: (error: unknown) => void;
+        const admitted = new Promise<void>((resolve, reject) => {
+          resolveAdmitted = resolve;
+          rejectAdmitted = reject;
+        });
+        pendingAdmissions.set(requestId, { hash, turnId, admitted });
+        try {
+          const commit = context.commit([
+            { type: 'user_message', message: { id: crypto.randomUUID(), sender: 'user', text } },
+            {
+              type: 'session_admitted',
+              version: 1,
+              clientRequestId: requestId,
+              normalizedBodyHash: hash,
+              turnId,
+              disposition: 'started',
+              createdAt,
+              expiresAt,
+            },
+            { type: 'session_turn_started', version: 1, turnId, clientRequestId: requestId },
+          ]);
+          commit.then(resolveAdmitted, rejectAdmitted);
+          await commit;
+        } catch (error) {
+          pendingAdmissions.delete(requestId);
+          throw error;
+        }
+        pendingAdmissions.delete(requestId);
+        return driver.submit(requestId, items);
+      },
       decide: (decision: SessionDecision) => driver.decide(decision),
       cancel: () => driver.cancel(),
       retry: () => driver.retry(),
@@ -226,10 +373,29 @@ export class LocalSessionStore implements SessionStore {
         closedAt = new Date().toISOString(),
         retentionEligibleAt = new Date(Date.parse(closedAt) + 30 * 86400000).toISOString(),
       ) => {
+        if (current.status === 'closed') return;
         await context.commit([{ type: 'session_closed', version: 1, closedAt, retentionEligibleAt }]);
       },
     };
   }
+}
+
+function sameBinding(actual: SessionBinding | undefined, expected: SessionBinding): boolean {
+  return (
+    !!actual &&
+    actual.ownerUserId === expected.ownerUserId &&
+    actual.workspaceId === expected.workspaceId &&
+    actual.grantVersion === expected.grantVersion &&
+    actual.fingerprint === expected.fingerprint
+  );
+}
+
+function isRetentionEligible(
+  entries: readonly import('./adopted/conversation-log.js').SessionLogEntry[],
+  now: number,
+): boolean {
+  const close = [...entries].reverse().find((entry) => entry.fact.type === 'session_closed')?.fact;
+  return close?.type === 'session_closed' && Date.parse(close.retentionEligibleAt) <= now;
 }
 
 function replayState(

@@ -12,11 +12,12 @@ import {
   sanitizePendingInteractionDto,
   type PendingInteractionDto,
 } from '../../../../source/gateway/interaction-protocol.js';
-import type {
-  LogEvent,
-  LogEnvelope,
-  PersistedLogEvent,
-  SessionInitEvent,
+import {
+  SIDECAR_EVENT_TYPES,
+  type LogEvent,
+  type LogEnvelope,
+  type PersistedLogEvent,
+  type SessionInitEvent,
 } from '../../../../source/services/logging/conversation-log-events.js';
 import {
   createConversationLogWriter,
@@ -321,8 +322,9 @@ export type CanonicalSessionLogOptions = {
   readonly model: ModelRef;
   readonly binding?: SessionBinding;
   readonly logger: Parameters<typeof createConversationLogWriter>[0]['logger'];
+  readonly fileSystem?: Parameters<typeof createConversationLogWriter>[0]['fileSystem'];
 };
-export type CanonicalSessionLogOpenOptions = Pick<CanonicalSessionLogOptions, 'root' | 'id' | 'logger'>;
+export type CanonicalSessionLogOpenOptions = Pick<CanonicalSessionLogOptions, 'root' | 'id' | 'logger' | 'fileSystem'>;
 
 /** One canonical JSONL log, with the source writer's lock/liveness rules. */
 export class CanonicalSessionLog implements SessionLog {
@@ -330,6 +332,7 @@ export class CanonicalSessionLog implements SessionLog {
   readonly root: string;
   readonly #writer: AtomicConversationLogWriter;
   #entries: SessionLogEntry[];
+  #appendTail: Promise<void> = Promise.resolve();
 
   private constructor(id: string, root: string, writer: AtomicConversationLogWriter, entries: SessionLogEntry[]) {
     this.id = id;
@@ -348,6 +351,7 @@ export class CanonicalSessionLog implements SessionLog {
       dir: root,
       logger: options.logger,
       saveLast: () => undefined,
+      fileSystem: options.fileSystem,
     });
     const init: Omit<SessionInitEvent, 'type'> = {
       ...options.metadata,
@@ -383,6 +387,7 @@ export class CanonicalSessionLog implements SessionLog {
       dir: root,
       logger: options.logger,
       saveLast: () => undefined,
+      fileSystem: options.fileSystem,
     });
     writer.openExisting({ ...init, id });
     try {
@@ -410,23 +415,47 @@ export class CanonicalSessionLog implements SessionLog {
   }
 
   async append(facts: readonly SessionFact[]): Promise<readonly SessionLogEntry[]> {
+    const operation = this.#appendTail.then(() => this.#appendNow(facts));
+    this.#appendTail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
+  }
+
+  async #appendNow(facts: readonly SessionFact[]): Promise<readonly SessionLogEntry[]> {
     if (facts.length === 0) return [];
-    for (const fact of facts) validateSessionFact(fact);
-    const stored = await this.#writer.appendBatch(facts);
-    const entries = stored.map((entry) => validateStoredEntry(entry as unknown as PersistedLogEnvelope));
-    this.#entries = [...this.#entries, ...entries];
-    return entries;
+    for (const fact of facts) {
+      validateSessionFact(fact);
+      if (fact.type === 'session_bound' && this.#entries.some((entry) => entry.fact.type === 'session_bound')) {
+        throw new Error('session_bound is immutable once written');
+      }
+    }
+    const previousSeq = this.lastSeq;
+    const sidecars = facts.filter((fact) => SIDECAR_EVENT_TYPES.has(fact.type as LogEvent['type']));
+    for (const fact of sidecars) this.#writer.append(fact as LogEvent);
+    const durable = facts.filter((fact) => !SIDECAR_EVENT_TYPES.has(fact.type as LogEvent['type']));
+    if (durable.length) await this.#writer.appendBatch(durable);
+    this.#entries = loadEntries(this.id, this.root);
+    return this.#entries.filter((entry) => entry.seq > previousSeq);
   }
 
   async *read(fromSeq = 0): AsyncIterable<SessionLogEntry> {
+    await this.#appendTail;
     for (const entry of this.#entries) if (entry.seq > fromSeq) yield entry;
   }
 
   async flush(): Promise<void> {
+    await this.#appendTail;
     await this.#writer.flush();
   }
   async dispose(): Promise<void> {
+    await this.#appendTail;
     await this.#writer.close();
+  }
+  async deleteFiles(): Promise<void> {
+    await this.#appendTail;
+    await this.#writer.deleteSessionFiles();
   }
 }
 
@@ -460,7 +489,11 @@ function assertCanonicalFile(root: string, id: string, mustExist: boolean): void
 function loadEntries(id: string, root: string): SessionLogEntry[] {
   const envelopes = readConversationLogEnvelopesFromDirectory(id, root);
   if (!envelopes) throw new Error(`conversation ${id} could not be read`);
-  return envelopes.map(validateStoredEntry);
+  const entries = envelopes.map(validateStoredEntry);
+  if (entries.filter((entry) => entry.fact.type === 'session_bound').length > 1) {
+    throw new Error(`conversation ${id} has more than one immutable session_bound fact`);
+  }
+  return entries;
 }
 
 /** Source's existing decoder/replay path, including provider-native item preservation. */

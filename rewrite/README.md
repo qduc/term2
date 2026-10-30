@@ -113,3 +113,30 @@ pnpm exec tsc -p rewrite/tsconfig.native-tracer.json && node rewrite/bench-dist/
 The build script emits the TypeScript tree and copies the runtime assets just as
 the root build does: prompts come from `source/prompts/` and provider presets
 from `source/providers/provider-presets.json`.
+
+## C2 canonical-log proof
+
+The bounded C2 entry composes the existing source CLI/non-interactive runner
+with `LocalSessionStore`; it is not the production CLI. Build the proof graph,
+copy the source runtime assets beside it, then run old-writer/new-session resume
+parity and the real approval-kill process proof:
+
+```sh
+pnpm exec tsc -p rewrite/tsconfig.c2-proof.json
+cp -r source/prompts rewrite/bench-dist/source/
+mkdir -p rewrite/bench-dist/source/providers
+cp source/providers/provider-presets.json rewrite/bench-dist/source/providers/
+node rewrite/parity/run.mjs check --cli dist/cli.js --first-cli dist/cli.js --resumed-cli rewrite/bench-dist/rewrite/bench/c2-proof-cli.js resume-follow-up
+node rewrite/bench/c2-approval-kill.mjs
+node rewrite/bench/c2-answer-kill.mjs
+node rewrite/bench/c2-storage-failure.mjs
+node rewrite/bench/c2-boundary-failure.mjs
+```
+
+The proof CLI persists source materialized events and lifecycle boundaries
+through the C2 store. Its approval-kill barrier exists only in the bench
+composition. It does not cover the later C1 pre-tool-dispatch durability gate.
+The fault matrix distinguishes failures before write, after admission, and at
+pending/final event boundaries. A failed fsync may leave a complete atomic
+terminal batch when the write reached the kernel first; the caller still
+receives failure and the transaction is never partially projected.

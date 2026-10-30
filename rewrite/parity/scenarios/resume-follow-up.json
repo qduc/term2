@@ -1,0 +1,9 @@
+{
+  "id": "resume-follow-up",
+  "description": "A resumed conversation replays its history to the model before the follow-up prompt.",
+  "runs": [
+    { "args": ["remember the word kiwi"] },
+    { "args": ["--resume", "{{LAST_CONVERSATION}}", "which word did I ask you to remember?"] }
+  ],
+  "provider": [{ "text": "Noted: kiwi." }, { "text": "You asked me to remember kiwi." }]
+}

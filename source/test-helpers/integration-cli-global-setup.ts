@@ -8,6 +8,14 @@ import { prepareCliCompileCache } from './cli-compile-cache.js';
 
 export default function setup(project: TestProject): (() => void) | undefined {
   const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
+  if (process.env.TERM2_TEST_CLI) {
+    // Run the CLI-level suite against another build, e.g. the rewrite during the port
+    // (rewrite/README.md). Only tests that drive the CLI from outside honour this.
+    const cliPath = path.resolve(projectRoot, process.env.TERM2_TEST_CLI);
+    fs.accessSync(cliPath, fs.constants.R_OK);
+    project.provide('integrationCliPath', cliPath);
+    return prepareCliCompileCache(project, cliPath);
+  }
   if (process.env.TERM2_CI_PREBUILT_CLI === '1') {
     // run-ci-lane is invoked only after the workflow's fresh production build.
     // Exercise that same shipped artifact instead of compiling a second CLI.

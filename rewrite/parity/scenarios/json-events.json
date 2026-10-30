@@ -1,0 +1,10 @@
+{
+  "id": "json-events",
+  "description": "--json prints the run as newline-delimited JSON events instead of plain text.",
+  "runs": [{ "args": ["--json", "--auto-approve", "list the files"] }],
+  "seed": { "a.txt": "alpha\n" },
+  "provider": [
+    { "toolCalls": [{ "name": "shell", "arguments": { "command": "ls", "description": "List files" } }] },
+    { "text": "There is one file: a.txt." }
+  ]
+}

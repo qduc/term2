@@ -26507,6 +26507,143 @@
         "/home/qduc/coord/term2/tasks/release-040/evidence/recovery"
       ],
       "notes": "Post-acceptance website release entry moved into published releases;27 pages/internal links pass. Pages40898190846 success https://github.com/qduc/term2/actions/runs/40898190846; matching CI40898190880 success attempt2 https://github.com/qduc/term2/actions/runs/40898190880 (initial same restart timeout retained); live published heading verified, pending heading absent, compatibility/live-validation caveats retained.\n ; website-build.log and pages-live.html. No separate frontend deployment."
+    },
+    {
+      "id": "2026-10-30-rewrite-skeleton-typecheck",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T10:25:00Z",
+      "commit": "805b0125fdbcbe22b47d757a13f6096e7abfa30e",
+      "tree": "e3d3f061fbe6c577c7528e7436d74ea4174f6e74",
+      "revision_kind": "clean committed source",
+      "base_commit": "a36c369",
+      "task_ids": [
+        "2026-10-30-rewrite-interface-skeleton"
+      ],
+      "suite": "rewrite/ typecheck and layer-direction guard",
+      "command": "tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.44-fc-v185",
+        "node_version": "v22.22.0",
+        "pnpm_version": "10.28.0",
+        "notes": "Cloud container, global tsc 6.0.2; repository node_modules not installed. Root typecheck/lint/test tiers not run: rewrite/ is outside root tsconfig include and imports nothing from source/."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Guard negative check: a temporary clients/ -> session/ import made check-layers exit 1 with 'clients/ may not import session/'; reverted before commit."
+    },
+    {
+      "id": "2026-10-30-rewrite-tracer-bullet",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T10:45:00Z",
+      "commit": "dde41aa094e7f819133c97ce97fcc3ca72b1d71c",
+      "tree": "59e7658a5daeb75a2962ea33cff4411d3d97d719",
+      "revision_kind": "clean committed source",
+      "base_commit": "a36c369",
+      "task_ids": [
+        "2026-10-30-rewrite-tracer-bullet"
+      ],
+      "suite": "rewrite/ tracer bullet (typecheck, layer guard, three-scenario tracer with real SIGKILL child processes)",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; pnpm exec tsc -p rewrite/tsconfig.build.json && node rewrite/dist/app/tracer.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.44-fc-v185",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Cloud container; root deps installed with pnpm install --frozen-lockfile --ignore-scripts. Root test tiers not run: no file under source/ changed."
+      },
+      "result": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "14 tracer assertions across 3 scenarios. Fault injection on built output: forcing reconcile to never resume failed scenario 2 ('reopened turn resumes from its checkpoint and completes'); forcing it to always resume failed scenario 3 ('reopened session is interrupted'). Both restored; clean rebuild passes. The layer guard caught host/ importing model/ during development, fixed by moving command handling to protocol/commands.ts."
+    },
+    {
+      "id": "2026-10-30-port-parity-checks",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T11:10:00Z",
+      "commit": "e4bb1dfcb920d1bc280d11458d8cfd5fe6bb2b6e",
+      "tree": "596a6ebf582d22b1fdbbc22e617b38ffae966ee9",
+      "revision_kind": "clean committed source",
+      "base_commit": "a36c369",
+      "task_ids": [
+        "2026-10-30-port-parity-checks"
+      ],
+      "suite": "rewrite/parity inventory check and parity scenarios against dist/cli.js",
+      "command": "node rewrite/parity/inventory.mjs; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.44-fc-v185",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Cloud container; deps via pnpm install --frozen-lockfile --ignore-scripts; dist/ built with pnpm build at this commit's source (source/ unchanged except the test helper)."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Inventory: 315 tracked features, check passes. Parity: 6/6 scenarios match goldens on repeated runs. Fault injection: changing '- Be concise.' to '- Be brief.' in a copied build's prompts/bare.md failed the 3 bare-profile scenarios at system prompt character 216; deleting tool:grep from the tracker and marking slash:quit ported without a scenario produced exactly those 2 inventory problems."
+    },
+    {
+      "id": "2026-10-30-cli-headless-test-cli-override",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T10:42:00Z",
+      "commit": null,
+      "tree": null,
+      "revision_kind": "pre-commit working tree (only integration-cli-global-setup.ts changed vs a36c369 in source/)",
+      "base_commit": "a36c369",
+      "task_ids": [
+        "2026-10-30-port-parity-checks"
+      ],
+      "suite": "cli-headless integration with and without TERM2_TEST_CLI=dist/cli.js",
+      "command": "TERM2_TEST_CLI=dist/cli.js vitest run --config vitest.integration.config.ts source/cli-headless.integration.test.ts; same without the variable",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.44-fc-v185",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Cloud container; deps via pnpm install --frozen-lockfile --ignore-scripts; dist/ built with pnpm build at this commit's source (source/ unchanged except the test helper)."
+      },
+      "result": {
+        "passed": 29,
+        "failed": 4,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [
+        "bare profile via flag keeps a small tool surface, project guidance, and versioned session identity",
+        "bare profile via config keeps a small tool surface, project guidance, and versioned session identity",
+        "bare retains the outside-workspace edit approval boundary without asking headlessly",
+        "bare permits explicit sandbox scratch writes without approval"
+      ],
+      "evidence": [],
+      "notes": "Identical 4 failures with and without the override. Signature for the scratch-write case: shell write to <tmp>/scratch/term2-nodejs/outside.txt answered 'Tool execution was not approved ... use --auto-approve'. Same test name appears in earlier failures (2026-10-24-generated-verification-* runs); bwrap is not installed in this container. Classified as pre-existing environment failures, not caused by the override."
     }
   ]
 }

@@ -38,6 +38,9 @@ export default tseslint.config(
       // Standalone Next.js app with its own toolchain and tsconfig; root
       // project-aware linting does not apply to it.
       'web-client/**',
+      // Interface-only rewrite skeleton with its own tsconfig and checks
+      // (rewrite/README.md); it is outside the root tsconfig project.
+      'rewrite/**',
     ],
   },
   eslint.configs.recommended,

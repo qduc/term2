@@ -731,6 +731,7 @@ export function createAdoptedEngine(options: {
         },
         async recover(error) {
           const retry = await bridge.recover(error);
+          if (retry) logical.compactions = [];
           if (!retry) logical.failure = error;
           return retry;
         },

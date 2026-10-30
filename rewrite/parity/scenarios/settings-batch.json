@@ -1,0 +1,45 @@
+{
+  "id": "settings-batch",
+  "description": "A headless run reflects model, generation, profile, and tool-toggle settings in the provider request and CLI output.",
+  "runs": [
+    {
+      "args": ["--auto-approve", "say hello"]
+    }
+  ],
+  "settings": {
+    "agent": {
+      "modelSelection": {
+        "model": "mock-alpha",
+        "provider": "mockprov"
+      },
+      "reasoningEffort": "high",
+      "temperature": 0.2,
+      "maxOutputTokens": 1234
+    },
+    "app": {
+      "activeProfileId": "builtin:pair"
+    },
+    "tools": {
+      "shell": {
+        "enabled": false
+      },
+      "web": {
+        "enabled": false
+      },
+      "memory": {
+        "enabled": false
+      },
+      "fileWrite": {
+        "enabled": false
+      },
+      "subagents": {
+        "enabled": false
+      }
+    }
+  },
+  "provider": [
+    {
+      "text": "Hello there."
+    }
+  ]
+}

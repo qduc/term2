@@ -5,6 +5,7 @@ import {
   type AdoptedToolRegistry,
   type AdoptedToolRegistryOptions,
 } from '../../tools/adopted/index.js';
+import { turnPrompt, type TurnPrompt } from '../../session/adopted/turn-prompt.js';
 
 export type AppAgentBuildOptions = Parameters<typeof buildAgent>[0];
 
@@ -13,6 +14,8 @@ export type AppAgentToolAssembly = {
   readonly agentBuild: AgentBuildResult;
   /** Adapter over the exact final `agent.tools` objects in `agentBuild`. */
   readonly registry: AdoptedToolRegistry;
+  /** Resolve prompt data from this generation at each model request boundary. */
+  readonly turnPrompt: () => TurnPrompt;
 };
 
 /** Build the application agent once, then adapt its final source tool graph. */
@@ -26,5 +29,6 @@ export function createAppToolRegistry(
   return {
     agentBuild,
     registry: createAdoptedToolRegistry(definitions, adapterOptions),
+    turnPrompt: () => turnPrompt(agentBuild.agent),
   };
 }

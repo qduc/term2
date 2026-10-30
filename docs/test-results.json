@@ -27869,6 +27869,60 @@
         }
       ],
       "notes": "Alternate legacy-default mentor probe passed, as did other focused probes, guard 520, rewrite and source builds, typechecks and old goldens 9/9. Admin test passed in previous run, then failed twice at this head with the same native shutdown assertion; identical failure reproduced on A3 ancestor f746e25825ba532c1cdf60ef7c13b556b58b261b with pnpm exec vitest run --config vitest.integration.config.ts source/services/completion-verification/completion-verification.integration.test.ts -t 'the built-in administrative entry point' (1 failed, 38 skipped), Node v24.19.0 and better-sqlite3 12.4.1; no relevant completion-verification, scripts, package or lockfile differences to merged base. Temporary probes removed. Independent Sol approved source 78bd9980; actual alternate default, original agent/ledger/tools and continuation identity, seven temporary probes, two verifier integration cases, clean typechecks, guard and five negative guard fixtures passed. Review: /tmp/term2-a4-independent-review.md. Full integration/e2e suites not run."
+    },
+    {
+      "id": "2026-10-30-port-a4-integrated",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:19:08Z",
+      "commit": "84e9864ba1da18d1892d0e1246dd2cf26aab007d",
+      "tree": "1d6688781c21ddfcad81d54af7c2b34de79dc3d5",
+      "revision_kind": "clean integrated source commit with temporary untracked integration probes",
+      "base_commit": "19bcef77064131521ed50eac48278258db8f7e0b",
+      "task_ids": [
+        "2026-10-30-port-a4-nested-seam"
+      ],
+      "suite": "A4 integrated type, layer and focused behavior verification",
+      "command": "pnpm typecheck; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm exec vitest run --config vitest.integration.config.ts source/services/workflow-evolution/runtime.integration.test.ts source/services/session/background-subagent-ui-routing.integration.test.ts; pnpm exec vitest run --config vitest.integration.config.ts source/services/completion-verification/completion-verification.integration.test.ts -t 'real verifier|verifier rejects'; pnpm exec vitest run --config vitest.integration.config.ts source/services/subagents/a4-probe.integration.test.ts source/services/subagents/a4-verifier-probe.integration.test.ts source/services/subagents/a4-healing-probe.integration.test.ts source/services/subagents/a4-alternate-probe.integration.test.ts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; network-enabled additional sandbox permissions for local subprocess IPC; temporary deterministic integration probes removed afterward."
+      },
+      "result": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 37,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-child-mentor-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-verifier-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-healing-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-alternate-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-independent-review.md"
+        }
+      ],
+      "notes": "Both typechecks, guard 520 and inventory passed. Existing focused integration 4/4 and temporary driver probes 8/8 passed; 37 other verifier tests deliberately deselected. Approved A4 source diff versus its original base is byte-identical to integrated diff versus main. Nine old CLI goldens and native tracer passed before integration; admin native shutdown failure and base reproduction are recorded in the preceding A4 run. Independent Sol approved original source 78bd9980; hosted CI pending."
     }
   ]
 }

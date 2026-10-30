@@ -6,7 +6,7 @@
  * Depends on: model (ToolSpec), config.
  */
 
-import type { ToolSpec } from '../model/index.js';
+import type { Item, ToolSpec } from '../model/index.js';
 import type { SettingsReader } from '../config/index.js';
 
 export type Workspace = {
@@ -28,12 +28,14 @@ export type Risk = 'low' | 'medium' | 'high';
 
 export type ApprovalRequirement =
   | { readonly kind: 'none' }
-  | { readonly kind: 'ask'; readonly summary: string; readonly risk: Risk; readonly detail?: string }
+  | { readonly kind: 'ask'; readonly summary: string; readonly risk?: Risk; readonly detail?: string }
   | { readonly kind: 'deny'; readonly reason: string };
 
 export type ToolResult = {
   readonly output: string;
   readonly isError: boolean;
+  /** Provider-facing structured tool output, such as image parts from read_file. */
+  readonly providerOutput?: Extract<Item, { readonly type: 'tool_result' }>['providerOutput'];
   /** Structured data for clients (diffs, file lists). Never sent to the model. */
   readonly display?: unknown;
 };
@@ -43,7 +45,7 @@ export interface Tool<Input = unknown> {
   /** Throws on invalid input; the engine reports that to the model as a tool error. */
   parse(raw: unknown): Input;
   /** Decides before execution. Pure: no side effects. */
-  approval(input: Input, ctx: ToolContext): ApprovalRequirement;
+  approval(input: Input, ctx: ToolContext): ApprovalRequirement | Promise<ApprovalRequirement>;
   execute(input: Input, ctx: ToolContext): Promise<ToolResult>;
   /** Safe to re-run after a crash between start and result. Drives resume behaviour. */
   readonly idempotent: boolean;

@@ -76,6 +76,15 @@ export type ToolSpec = {
   readonly description: string;
   /** JSON Schema for the tool input. */
   readonly inputSchema: Readonly<Record<string, unknown>>;
+  /** Provider-native custom declaration when the model uses a grammar input surface. */
+  readonly modelTool?: {
+    readonly type: 'custom';
+    readonly format: {
+      readonly type: 'grammar';
+      readonly syntax: 'lark';
+      readonly definition: string;
+    };
+  };
 };
 
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';

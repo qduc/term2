@@ -27561,6 +27561,56 @@
         }
       ],
       "notes": "Independent review exposed blocked input retained in canonical history and duplicate rollback delivery. Exact admission reference, retraction, source undo snapshot and settlement are committed atomically, with one-shot delivery. Independent rollback 4/4 (normal, duplicate, write failure, fsync failure), runtime 13/13, retry 14/14, decision 3/3 and old CLI parity 9/9 passed. Rewrite and proof typechecks and layer guard 491 passed. Four pre-existing unmapped source files reported. Independent reviewer approved this source after all four process benches, native tracer, inventory, typechecks and old-first proof resume 1/1 passed. Review: /tmp/c2-independent/final-review.md. Hosted CI for this head pending; prior 98a5920 CI passed. Queue orchestration is C3b scope."
+    },
+    {
+      "id": "2026-10-30-port-a3-integrated",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T14:41:54Z",
+      "commit": "524ebae9bd193a2b927455b82525ff61a53d756d",
+      "tree": "c19ea5fbe111f5f7fc95f8aa5eb5104d7abac6df",
+      "revision_kind": "clean integrated source commit before documentation correction",
+      "base_commit": "ecdd9f7b1cddd3f9f6763e13a5d15151b78b6e03",
+      "task_ids": [
+        "2026-10-30-port-a3-adopted-tools"
+      ],
+      "suite": "A3 integrated assembly, parity and layer verification",
+      "command": "pnpm typecheck; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec tsx /tmp/term2-a3-full-buildagent-probe.mts; pnpm exec tsx /tmp/term2-a3-adapter-probe.mts; pnpm exec tsx /tmp/term2-a3-async-approval-probe.mts; node rewrite/scripts/build.mjs; pnpm exec tsc -p rewrite/tsconfig.native-tracer.json; node rewrite/bench-dist/rewrite/bench/native-tracer/tracer.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated A3 worktree; network-enabled additional sandbox permissions for subprocess IPC."
+      },
+      "result": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a3-full-buildagent-probe.mts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a3-adapter-probe.mts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a3-async-approval-probe.mts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a3-guard-second-pass-review.md"
+        }
+      ],
+      "notes": "Guard passed 524 exact baseline edges with no unmapped files; nine old CLI parity scenarios passed. Actual buildAgent run_code batch matches G3 golden, PNG provider output survives A2 conversion, strict/custom declarations and adapter cancellation pass. Native tracer passed at documented bench-dist path after an initial command pointed at the wrong output path and failed MODULE_NOT_FOUND. Sol independently approved this integrated source; five synthetic forbidden-edge checks, fatal/multimodal/call identity and helper probes passed. Review: /tmp/term2-a3-independent-review.md. Hosted CI pending; full integration/e2e suites not run."
     }
   ]
 }

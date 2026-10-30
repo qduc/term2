@@ -62,7 +62,8 @@ async function* loop(
     if (signal.aborted) return yield { type: 'turn_ended', outcome: { kind: 'cancelled' } };
 
     if (pending.length > 0) {
-      const ask = askFor(deps, input, pending, decisions);
+      const ask = await askFor(deps, input, pending, decisions, signal);
+      if (signal.aborted) return yield { type: 'turn_ended', outcome: { kind: 'cancelled' } };
       if (ask.length > 0) {
         return yield { type: 'turn_ended', outcome: { kind: 'suspended', approvals: ask, checkpoint: checkpoint() } };
       }
@@ -73,6 +74,7 @@ async function* loop(
         const result = await executeCall(deps, input, call, decisions.get(call.callId), signal, (chunk) => {
           progress.push({ type: 'tool_progress', callId: call.callId, chunk });
         });
+        if (signal.aborted) return yield { type: 'turn_ended', outcome: { kind: 'cancelled' } };
         yield* progress;
         yield { type: 'tool_finished', callId: call.callId, result };
         const item: Item = {
@@ -144,25 +146,28 @@ function toolContext(deps: EngineDeps, input: TurnInput): Omit<ToolContext, 'sig
   return { workspace: input.workspace, settings: deps.settings };
 }
 
-function askFor(
+async function askFor(
   deps: EngineDeps,
   input: TurnInput,
   pending: readonly PendingCall[],
   decisions: ReadonlyMap<ToolCallId, ApprovalDecision>,
-): ApprovalRequest[] {
-  const ctx = { ...toolContext(deps, input), signal: new AbortController().signal, progress: () => {} };
-  return pending.flatMap((call): ApprovalRequest[] => {
-    if (decisions.has(call.callId)) return [];
+  signal: AbortSignal,
+): Promise<ApprovalRequest[]> {
+  const ctx = { ...toolContext(deps, input), signal, progress: () => {} };
+  const requests: ApprovalRequest[] = [];
+  for (const call of pending) {
+    if (decisions.has(call.callId)) continue;
     const tool = deps.tools.get(call.toolName);
-    if (!tool) return [];
+    if (!tool) continue;
     let requirement;
     try {
-      requirement = tool.approval(tool.parse(call.input), ctx);
+      requirement = await tool.approval(tool.parse(call.input), ctx);
     } catch {
-      return [];
+      continue;
     }
-    return requirement.kind === 'ask' ? [{ callId: call.callId, toolName: call.toolName, requirement }] : [];
-  });
+    if (requirement.kind === 'ask') requests.push({ callId: call.callId, toolName: call.toolName, requirement });
+  }
+  return requests;
 }
 
 async function executeCall(
@@ -181,7 +186,8 @@ async function executeCall(
   const ctx: ToolContext = { ...toolContext(deps, input), signal, progress };
   try {
     const parsed = tool.parse(call.input);
-    const requirement = tool.approval(parsed, ctx);
+    const requirement = await tool.approval(parsed, ctx);
+    if (signal.aborted) return { output: 'Operation aborted', isError: true };
     if (requirement.kind === 'deny') return { output: `denied: ${requirement.reason}`, isError: true };
     const result = await tool.execute(parsed, ctx);
     return { output: result.output, isError: result.isError };

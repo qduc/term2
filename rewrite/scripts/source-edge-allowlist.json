@@ -488,5 +488,6 @@
   "tools/types.ts -> services/logging/conversation-log-events.ts (tools -> session)",
   "utils/ai/provider-credentials.ts -> services/settings/custom-provider-normalization.ts (shared -> config)",
   "utils/ai/provider-credentials.ts -> services/settings/settings-schema.ts (shared -> config)",
-  "utils/error-helpers.ts -> services/retry/retry-error-classification.ts (shared -> engine)"
+  "utils/error-helpers.ts -> services/retry/retry-error-classification.ts (shared -> engine)",
+  "contracts/conversation.ts -> services/agent-runtime/run-budget.ts (shared -> engine)"
 ]

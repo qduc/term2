@@ -52,7 +52,7 @@ export type WireInteraction = {
     readonly callId: string;
     readonly toolName: string;
     readonly summary: string;
-    readonly risk: 'low' | 'medium' | 'high';
+    readonly risk?: 'low' | 'medium' | 'high';
     readonly agentId?: string;
   }[];
 };

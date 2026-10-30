@@ -28,7 +28,7 @@ export type Risk = 'low' | 'medium' | 'high';
 
 export type ApprovalRequirement =
   | { readonly kind: 'none' }
-  | { readonly kind: 'ask'; readonly summary: string; readonly risk: Risk; readonly detail?: string }
+  | { readonly kind: 'ask'; readonly summary: string; readonly risk?: Risk; readonly detail?: string }
   | { readonly kind: 'deny'; readonly reason: string };
 
 export type ToolResult = {
@@ -43,7 +43,7 @@ export interface Tool<Input = unknown> {
   /** Throws on invalid input; the engine reports that to the model as a tool error. */
   parse(raw: unknown): Input;
   /** Decides before execution. Pure: no side effects. */
-  approval(input: Input, ctx: ToolContext): ApprovalRequirement;
+  approval(input: Input, ctx: ToolContext): ApprovalRequirement | Promise<ApprovalRequirement>;
   execute(input: Input, ctx: ToolContext): Promise<ToolResult>;
   /** Safe to re-run after a crash between start and result. Drives resume behaviour. */
   readonly idempotent: boolean;

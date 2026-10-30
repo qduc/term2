@@ -43,7 +43,7 @@ function factEvent(sessionId: string, entry: LogEntry): WireEvent | null {
               callId: approval.callId,
               toolName: approval.toolName,
               summary: bounded(approval.requirement.summary),
-              risk: approval.requirement.risk,
+              ...(approval.requirement.risk ? { risk: approval.requirement.risk } : {}),
               ...(approval.agentId ? { agentId: approval.agentId } : {}),
             })),
           },
@@ -120,7 +120,7 @@ export const projection: Projection = {
               callId: approval.callId,
               toolName: approval.toolName,
               summary: bounded(approval.requirement.summary),
-              risk: approval.requirement.risk,
+              ...(approval.requirement.risk ? { risk: approval.requirement.risk } : {}),
             })),
           }
         : null,

@@ -1,0 +1,30 @@
+{
+  "maxSourceEdges": 527,
+  "maxLines": 500,
+  "fileCeilings": {
+    "rewrite/src/session/adopted/foreground.ts": {
+      "lines": 1346,
+      "reason": "Mixes session commands with turn driving; being split by command."
+    },
+    "rewrite/src/engine/adopted/index.ts": {
+      "lines": 877,
+      "reason": "Not yet reviewed for a job seam."
+    },
+    "rewrite/src/session/local-store.ts": {
+      "lines": 827,
+      "reason": "Not yet reviewed for a job seam."
+    },
+    "rewrite/src/model/adopted/index.ts": {
+      "lines": 748,
+      "reason": "Not yet reviewed for a job seam."
+    },
+    "rewrite/src/session/adopted/conversation-log.ts": {
+      "lines": 627,
+      "reason": "Not yet reviewed for a job seam."
+    }
+  },
+  "messagePath": {
+    "maxHops": 29,
+    "maxFiles": 7
+  }
+}

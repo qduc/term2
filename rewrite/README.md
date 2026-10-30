@@ -63,6 +63,26 @@ compaction, progress events are buffered until a tool returns, an idempotent
 tool that needs approval is asked again after a crash, and each checkpoint
 stores the full turn input.
 
+## Keeping it readable
+
+The point of this rewrite is that a person can follow it. Three checks in CI
+keep that measurable through `scripts/complexity-budget.json`:
+
+- `scripts/check-complexity.mjs` fails when the source-edge allowlist grows, or
+  when a file passes 500 lines. The line limit is a prompt to look for a second
+  job, not a target: split along a real seam, or, when a file reads better
+  whole, give it a ceiling with a one-line reason. When something gets smaller,
+  the check prints the new number to record.
+- `bench/hops.mts` sends one message and follows its async chain from Session
+  submit to the provider call. It fails when the path gets longer (hops, where
+  consecutive frames in one file count once) or touches more files. Today the
+  path is 29 hops through 7 files. Most of those hops are callbacks bouncing
+  between `source/lib/agent-client.ts` and `application-run-loop.ts`.
+- At the end of each phase, a fresh reader gets only this README and each
+  layer's `index.ts`, and explains how a message travels and where an approval
+  waits. Whatever they get wrong gets fixed in the structure or the docs before
+  the next phase starts.
+
 ## Porting: completeness and parity
 
 `parity/` holds the two checks that gate the port of `source/` onto these
@@ -106,6 +126,8 @@ paths beneath `rewrite/dist/`; adopted imports therefore resolve to the emitted
 ```sh
 pnpm exec tsc -p rewrite/tsconfig.json                 # production typecheck
 node rewrite/scripts/check-layers.mjs                  # production dependency direction
+node rewrite/scripts/check-complexity.mjs              # size budgets only shrink
+node --import tsx rewrite/bench/hops.mts               # one message's path stays short
 node rewrite/scripts/build.mjs                         # production build
 pnpm exec tsx rewrite/bench/c1-adopted-approval.mts   # real adopted approval and canonical replay
 pnpm exec tsx rewrite/bench/c1-adopted-kill.mts       # parked approval process-kill recovery

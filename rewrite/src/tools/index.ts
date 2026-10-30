@@ -34,6 +34,8 @@ export type ApprovalRequirement =
 export type ToolResult = {
   readonly output: string;
   readonly isError: boolean;
+  /** Provider-facing structured tool output, such as image parts from read_file. */
+  readonly providerOutput?: readonly Readonly<Record<string, unknown>>[];
   /** Structured data for clients (diffs, file lists). Never sent to the model. */
   readonly display?: unknown;
 };

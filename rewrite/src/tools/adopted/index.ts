@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { normalizeToolInput } from '../../../../source/lib/tool-invoke.js';
+import { isCancellationError, isHarnessInvariantError } from '../../../../source/lib/harness-invariant-error.js';
 import { coerceToText } from '../../../../source/tools/format-helpers.js';
 import type { AnyToolDefinition, ToolRegistry as SourceToolRegistry } from '../../../../source/tools/types.js';
 import type { ToolSpec } from '../../model/index.js';
@@ -44,6 +45,8 @@ export type AdoptedToolRegistryOptions = {
     definition: AdoptedOriginalToolDefinition,
     input: unknown,
   ) => AdoptedInvocation;
+  /** Preserve source-engine fatal control flow when the app owns its error class. */
+  isMaxTurnsExceeded?: (error: unknown) => boolean;
 };
 
 /** Reviewed read-only tools that are safe to repeat if a caller explicitly retries them. */
@@ -56,6 +59,7 @@ const IDEMPOTENT_READ_ONLY_TOOLS = new Set([
   'web_search',
   'web_fetch',
 ]);
+let nextDisplayCallId = 0;
 
 function isZodSchema(schema: unknown): schema is RuntimeSchema {
   return typeof (schema as { safeParse?: unknown } | null)?.safeParse === 'function';
@@ -127,15 +131,28 @@ function approvalFor(
     const serialized = JSON.stringify(input);
     return {
       kind: 'ask',
-      summary: `${definition.name}${serialized ? ` ${serialized}` : ''}`,
+      summary: definition.name,
+      ...(serialized ? { detail: serialized } : {}),
     };
   };
   return Promise.resolve(approval).then(wrap);
 }
 
-function displayFor(definition: AdoptedOriginalToolDefinition, input: unknown, result: unknown): unknown {
+function displayFor(
+  definition: AdoptedOriginalToolDefinition,
+  input: unknown,
+  result: unknown,
+  details?: unknown,
+): unknown {
   const output = coerceToText(result);
-  const callId = `adopted:${definition.name}`;
+  const detailRecord = details && typeof details === 'object' ? (details as Record<string, unknown>) : undefined;
+  const toolCall = detailRecord?.toolCall;
+  const suppliedCallId =
+    toolCall && typeof toolCall === 'object' ? (toolCall as { callId?: unknown }).callId : undefined;
+  const callId =
+    typeof suppliedCallId === 'string' && suppliedCallId.length > 0
+      ? suppliedCallId
+      : `adopted:${definition.name}:${(nextDisplayCallId++).toString(36)}`;
   const item = {
     type: 'function_call_output',
     toolName: definition.name,
@@ -149,6 +166,58 @@ function displayFor(definition: AdoptedOriginalToolDefinition, input: unknown, r
     : messages;
 }
 
+function isProviderOutput(value: unknown): value is readonly Readonly<Record<string, unknown>>[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every((part) => {
+    if (!part || typeof part !== 'object' || Array.isArray(part)) return false;
+    const record = part as Record<string, unknown>;
+    if (record.type === 'text') return typeof record.text === 'string';
+    if (record.type === 'image') {
+      if (!('image' in record)) return false;
+      const image = record.image;
+      if (typeof image === 'string' || image === undefined) return true;
+      if (!image || typeof image !== 'object' || Array.isArray(image)) return false;
+      const reference = image as Record<string, unknown>;
+      return (
+        typeof reference.id === 'string' ||
+        typeof reference.url === 'string' ||
+        typeof reference.fileId === 'string' ||
+        typeof reference.data === 'string' ||
+        reference.data instanceof Uint8Array
+      );
+    }
+    if (record.type === 'file') {
+      if (!('file' in record)) return false;
+      const file = record.file;
+      if (typeof file === 'string') return true;
+      if (!file || typeof file !== 'object' || Array.isArray(file)) return false;
+      const reference = file as Record<string, unknown>;
+      return (
+        typeof reference.id === 'string' ||
+        typeof reference.url === 'string' ||
+        ((typeof reference.data === 'string' || reference.data instanceof Uint8Array) &&
+          typeof reference.mediaType === 'string' &&
+          typeof reference.filename === 'string')
+      );
+    }
+    return false;
+  });
+}
+
+function displaySafely(
+  definition: AdoptedOriginalToolDefinition,
+  input: unknown,
+  result: unknown,
+  details?: unknown,
+): unknown {
+  try {
+    return displayFor(definition, input, result, details);
+  } catch {
+    // Presentation is passive: a formatter failure must not retry a completed side effect.
+    return undefined;
+  }
+}
+
 function adaptTool(definition: AdoptedOriginalToolDefinition, options: AdoptedToolRegistryOptions): Tool<unknown> {
   return {
     spec: toolSpec(definition),
@@ -157,26 +226,36 @@ function adaptTool(definition: AdoptedOriginalToolDefinition, options: AdoptedTo
     approval: (input, toolContext) => approvalFor(definition, input, toolContext, options),
     async execute(input, toolContext): Promise<ToolResult> {
       const invocation = options.invocation?.(toolContext, definition, input) ?? defaultInvocation(toolContext);
+      let result: unknown;
       try {
-        const result = await definition.execute(input, invocation.context, invocation.details);
-        return {
-          output: coerceToText(result),
-          isError:
-            typeof result === 'object' &&
-            result !== null &&
-            'isError' in result &&
-            typeof (result as { isError?: unknown }).isError === 'boolean'
-              ? Boolean((result as { isError: boolean }).isError)
-              : false,
-          display: displayFor(definition, input, result),
-        };
+        result = await definition.execute(input, invocation.context, invocation.details);
       } catch (error) {
+        if (
+          toolContext.signal.aborted ||
+          isCancellationError(error) ||
+          isHarnessInvariantError(error) ||
+          options.isMaxTurnsExceeded?.(error)
+        ) {
+          throw error;
+        }
         return {
-          output: error instanceof Error ? error.message : String(error),
+          output: `Error: ${error instanceof Error ? error.message : String(error)}`,
           isError: true,
-          display: displayFor(definition, input, error),
+          display: displaySafely(definition, input, error, invocation.details),
         };
       }
+      return {
+        output: coerceToText(result),
+        isError:
+          typeof result === 'object' &&
+          result !== null &&
+          'isError' in result &&
+          typeof (result as { isError?: unknown }).isError === 'boolean'
+            ? Boolean((result as { isError: boolean }).isError)
+            : false,
+        ...(isProviderOutput(result) ? { providerOutput: result } : {}),
+        display: displaySafely(definition, input, result, invocation.details),
+      };
     },
   };
 }

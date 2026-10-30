@@ -5,6 +5,7 @@ import type {
   StreamedModelTurnInput,
   StreamedModelTurnOutput,
   StreamedModelTurnRequest,
+  StreamedModelToolResultPart,
 } from '../../../../source/contracts/streamed-model-turn.js';
 import type {
   ILoggingService,
@@ -75,6 +76,44 @@ function sameJson(left: unknown, right: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+function isToolResultParts(
+  value: readonly Readonly<Record<string, unknown>>[],
+): value is readonly StreamedModelToolResultPart[] {
+  return (
+    value.length > 0 &&
+    value.every((part) => {
+      if (part.type === 'text') return typeof part.text === 'string';
+      if (part.type === 'image') {
+        if (!('image' in part)) return false;
+        const image = part.image;
+        if (typeof image === 'string' || image === undefined) return true;
+        if (!isRecord(image)) return false;
+        return (
+          typeof image.id === 'string' ||
+          typeof image.url === 'string' ||
+          typeof image.fileId === 'string' ||
+          typeof image.data === 'string' ||
+          image.data instanceof Uint8Array
+        );
+      }
+      if (part.type === 'file') {
+        if (!('file' in part)) return false;
+        const file = part.file;
+        if (typeof file === 'string') return true;
+        if (!isRecord(file)) return false;
+        return (
+          typeof file.id === 'string' ||
+          typeof file.url === 'string' ||
+          ((typeof file.data === 'string' || file.data instanceof Uint8Array) &&
+            typeof file.mediaType === 'string' &&
+            typeof file.filename === 'string')
+        );
+      }
+      return false;
+    })
+  );
 }
 
 function parseArguments(raw: string): unknown {
@@ -213,7 +252,7 @@ function itemToInput(item: Item): StreamedModelTurnInput {
       return {
         type: 'tool_result',
         id: item.callId,
-        output: item.output,
+        output: item.providerOutput && isToolResultParts(item.providerOutput) ? item.providerOutput : item.output,
         ...(item.toolType ? { toolType: item.toolType } : {}),
       };
     case 'summary':
@@ -291,12 +330,21 @@ function toProviderRequest(request: ModelRequest, signal: AbortSignal): Streamed
       ? { previousResponseId: continuation }
       : {}),
     input: request.input.map(itemToInput),
-    tools: request.tools.map((tool) => ({
-      type: 'function',
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.inputSchema,
-    })),
+    tools: request.tools.map((tool) =>
+      tool.modelTool
+        ? {
+            type: tool.modelTool.type,
+            name: tool.name,
+            description: tool.description,
+            format: tool.modelTool.format,
+          }
+        : {
+            type: 'function',
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
+          },
+    ),
     ...(request.reasoning ? { reasoning: { effort: request.reasoning } } : {}),
     ...(request.maxOutputTokens !== undefined ? { maxTokens: request.maxOutputTokens } : {}),
     signal,

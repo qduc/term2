@@ -1,5 +1,5 @@
 import type { Item, ItemId, ToolCallId } from '../model/index.js';
-import type { ToolContext } from '../tools/index.js';
+import type { ToolContext, ToolResult } from '../tools/index.js';
 import type {
   ApprovalDecision,
   ApprovalRequest,
@@ -83,6 +83,7 @@ async function* loop(
           callId: call.callId,
           output: result.output,
           isError: result.isError,
+          ...(result.providerOutput ? { providerOutput: result.providerOutput } : {}),
         };
         produced.push(item);
         pending = pending.filter((candidate) => candidate.callId !== call.callId);
@@ -177,7 +178,7 @@ async function executeCall(
   decision: ApprovalDecision | undefined,
   signal: AbortSignal,
   progress: (chunk: string) => void,
-): Promise<{ output: string; isError: boolean }> {
+): Promise<ToolResult> {
   const tool = deps.tools.get(call.toolName);
   if (!tool) return { output: `unknown tool "${call.toolName}"`, isError: true };
   if (decision?.kind === 'reject') {
@@ -189,8 +190,7 @@ async function executeCall(
     const requirement = await tool.approval(parsed, ctx);
     if (signal.aborted) return { output: 'Operation aborted', isError: true };
     if (requirement.kind === 'deny') return { output: `denied: ${requirement.reason}`, isError: true };
-    const result = await tool.execute(parsed, ctx);
-    return { output: result.output, isError: result.isError };
+    return await tool.execute(parsed, ctx);
   } catch (error) {
     return { output: error instanceof Error ? error.message : String(error), isError: true };
   }

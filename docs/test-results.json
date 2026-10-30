@@ -27682,6 +27682,44 @@
       "failures": [],
       "evidence": [],
       "notes": "Rewrite typecheck, layer guard (524 allowlisted edges), and parity inventory passed."
+    },
+    {
+      "id": "2026-10-30-c3a-evidence-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:03:29Z",
+      "commit": "5d926d759adac061f9614aff05a24d433373b48d",
+      "tree": "b84523369ff658ca4fc249f2346e22b20bcf9474",
+      "revision_kind": "clean source commit; independently reviewed with documentation head 492bd04c",
+      "base_commit": "5130f32b16ef1a80a9a37acb9f90a7a29a526cea",
+      "task_ids": [
+        "2026-10-30-c3a-evidence-interactive"
+      ],
+      "suite": "independent selected CLI interactive evidence",
+      "command": "TERM2_TEST_CLI=/tmp/term2-c3a-review-selected.mjs pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/turn-decisions.blackbox.ts scripts/provider-black-box/conversation-loop.blackbox.ts --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol review; selected marker wrapper imports built old CLI."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-c3a-review-selected.mjs"
+        }
+      ],
+      "notes": "Sol accepted source and documentation with no findings; both PTY scenarios passed in 4.11s and marker recorded two invocations. First parked approval had no effect file, second had x, and completion boundaries had x and xx. Nine existing goldens untouched. This resolves the earlier pending independent review, without expanding coverage claims."
     }
   ]
 }

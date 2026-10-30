@@ -27611,6 +27611,107 @@
         }
       ],
       "notes": "Guard passed 524 exact baseline edges with no unmapped files; nine old CLI parity scenarios passed. Actual buildAgent run_code batch matches G3 golden, PNG provider output survives A2 conversion, strict/custom declarations and adapter cancellation pass. Native tracer passed at documented bench-dist path after an initial command pointed at the wrong output path and failed MODULE_NOT_FOUND. Sol independently approved this integrated source; five synthetic forbidden-edge checks, fatal/multimodal/call identity and helper probes passed. Review: /tmp/term2-a3-independent-review.md. Hosted CI pending; full integration/e2e suites not run."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "base_commit": "5130f32b16ef1a80a9a37acb9f90a7a29a526cea",
+      "task_ids": [
+        "2026-10-30-port-a4-nested-seam"
+      ],
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated A4 worktree; network-enabled additional sandbox permissions for local subprocess IPC; deterministic fixtures."
+      },
+      "id": "2026-10-30-port-a4-first-source",
+      "run_at": "2026-10-30T15:03:00Z",
+      "commit": "e44b3f42c76a8484454dc048ec107aa6479e21cf",
+      "tree": "997566068981fc3ff90313d68a353d8bffc22092",
+      "revision_kind": "source commit with temporary untracked integration probes",
+      "suite": "A4 first source verification",
+      "command": "pnpm typecheck; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec vitest run --config vitest.integration.config.ts source/services/completion-verification/completion-verification.integration.test.ts source/services/workflow-evolution/runtime.integration.test.ts source/services/session/background-subagent-ui-routing.integration.test.ts source/services/subagents/a4-probe.integration.test.ts source/services/subagents/a4-verifier-probe.integration.test.ts source/services/subagents/a4-healing-probe.integration.test.ts",
+      "command_complete": true,
+      "result": {
+        "passed": 48,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 6,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-child-mentor-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-verifier-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-healing-probe.ts"
+        }
+      ],
+      "notes": "Focused integration 48/48, guard 520, inventory and old CLI goldens 9/9 passed. Temporary probes removed after execution. An earlier workflow test run failed because standalone composition lacked the new driver; explicit injection corrected it. An initial mentor probe fixture used removed settings and failed validation; corrected fixture passed. Rewrite build and native tracer passed on pre-commit source."
+    },
+    {
+      "recorded_on": "2026-10-30",
+      "base_commit": "5130f32b16ef1a80a9a37acb9f90a7a29a526cea",
+      "task_ids": [
+        "2026-10-30-port-a4-nested-seam"
+      ],
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated A4 worktree; network-enabled additional sandbox permissions for local subprocess IPC; deterministic fixtures."
+      },
+      "id": "2026-10-30-port-a4-alternate-default",
+      "run_at": "2026-10-30T15:07:08Z",
+      "commit": "78bd9980dadfd371c4dbca9231b7d13fc774ce87",
+      "tree": "f24e957d4ff81e0764513409414cb3bac8394457",
+      "revision_kind": "source commit with temporary untracked integration probes",
+      "suite": "A4 alternate default and focused integration rerun",
+      "command": "pnpm typecheck; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/scripts/build.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js; pnpm exec vitest run --config vitest.integration.config.ts [three existing integration files and four temporary probes]",
+      "command_complete": true,
+      "result": {
+        "passed": 48,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 6,
+        "files_failed": 1,
+        "files_skipped": 0,
+        "exit_code": 1
+      },
+      "failures": [
+        {
+          "test": "completion-verification.integration.test.ts: built-in administrative entry point",
+          "signature": "Node RemoveEnvironmentCleanupHook assertion env != nullptr in better-sqlite3 Statement::~Statement at subprocess shutdown; exit code null rather than 0"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-child-mentor-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-verifier-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-healing-probe.ts"
+        },
+        {
+          "kind": "machine_local",
+          "path": "/tmp/term2-a4-alternate-probe.ts"
+        }
+      ],
+      "notes": "Alternate legacy-default mentor probe passed, as did other focused probes, guard 520, rewrite and source builds, typechecks and old goldens 9/9. Admin test passed in previous run, then failed twice at this head with the same native shutdown assertion; identical failure reproduced on A3 ancestor f746e25825ba532c1cdf60ef7c13b556b58b261b with pnpm exec vitest run --config vitest.integration.config.ts source/services/completion-verification/completion-verification.integration.test.ts -t 'the built-in administrative entry point' (1 failed, 38 skipped), Node v24.19.0 and better-sqlite3 12.4.1; no relevant completion-verification, scripts, package or lockfile differences to merged base. Temporary probes removed. Independent Sol approved source 78bd9980; actual alternate default, original agent/ledger/tools and continuation identity, seven temporary probes, two verifier integration cases, clean typechecks, guard and five negative guard fixtures passed. Review: /tmp/term2-a4-independent-review.md. Full integration/e2e suites not run."
     }
   ]
 }

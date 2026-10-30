@@ -29998,6 +29998,38 @@
       "failures": [],
       "evidence": [],
       "notes": "Adds the closed-session rejection and tighter bench assertions: set rejects after closeLog with no goal after session_closed; achieve asserts the turn's assistant_journal_item precedes goal_changed; fsync asserts fatal_persistence caused by the injected error; propose-race names the execute-time refusal it hits."
+    },
+    {
+      "id": "2026-10-30-rewrite-foreground-interaction-split",
+      "timestamp": "2026-10-30T23:35:00Z",
+      "commit": "ac2b992647c86f453c8f95a13c0034eded40e30a",
+      "tree": "9f5641d28ad383244bdee8d2f3319d13065e49f6",
+      "revision_kind": "clean commit",
+      "base_commit": "f1e1916ef68c359200d9cf152483b29cc8dd2c88",
+      "task_ids": [
+        "2026-10-30-rewrite-foreground-interaction-split"
+      ],
+      "suite": "Adopted foreground split step 2: turn interaction (behavior-preserving)",
+      "command": "Full local port-job suite (60 lines) plus the six c3a-goal modes and root tsc (67 lines)",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree .worktrees/fg-split-2, local fake provider, clean tree."
+      },
+      "result": {
+        "passed": 67,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Hops stays within budget. foreground.ts 1007 to 585 lines; turn-interaction.ts 492. The follow-up rename commit 84d151d3 (requestDecision, askedForDecision; names only) was checked with rewrite tsc, the complexity check, c3a-interactions repeat/batch/reject/ask-nav/ask-cancel, c3a-memory plain/approval, c3a-postexecute none/session_interaction_pending and c1-adopted-approval, all passing."
     }
   ]
 }

@@ -6,7 +6,7 @@
  * Depends on: model (ToolSpec), config.
  */
 
-import type { ToolSpec } from '../model/index.js';
+import type { Item, ToolSpec } from '../model/index.js';
 import type { SettingsReader } from '../config/index.js';
 
 export type Workspace = {
@@ -35,7 +35,7 @@ export type ToolResult = {
   readonly output: string;
   readonly isError: boolean;
   /** Provider-facing structured tool output, such as image parts from read_file. */
-  readonly providerOutput?: readonly Readonly<Record<string, unknown>>[];
+  readonly providerOutput?: Extract<Item, { readonly type: 'tool_result' }>['providerOutput'];
   /** Structured data for clients (diffs, file lists). Never sent to the model. */
   readonly display?: unknown;
 };

@@ -26710,6 +26710,39 @@
       "failures": [],
       "evidence": [],
       "notes": "14/14 isolated guard fixtures; actual A1 settings and A2 model adapters passed when copied temporarily together and removed; required tools/adopted -> gateway and non-adopted -> source/tools/types probes rejected. Rewrite tracer 14/14, inventory and old CLI parity 6/6 passed; guard reports 490 allowlisted edges. Twelve additions are existing source imports newly exposed by ownership mapping or shared context; two former ask-user-constants edges removed after shared remapping. No integration/e2e suites run. Independent review pending. Source commit debc7493521d68fab8075e023565af02c67ccb0c."
+    },
+    {
+      "id": "2026-10-30-port-guard-exact-file-fix",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T13:04:00Z",
+      "commit": null,
+      "tree": null,
+      "revision_kind": "pre-commit working tree; source committed as f7551eb11f92035c16f5f7c6001761bdea2ab340",
+      "base_commit": "debc7493521d68fab8075e023565af02c67ccb0c",
+      "task_ids": [
+        "2026-10-30-port-guard-followup"
+      ],
+      "suite": "exact source ownership matcher and guard regression",
+      "command": "python /tmp/guard-exact-fixtures.py; python /tmp/term2-g1-independent/probes.py rewrite/scripts/check-layers.mjs; node rewrite/scripts/check-layers.mjs; pnpm exec tsc -p rewrite/tsconfig.json; temporary combined A1/A2 adapter guard probe",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux 6.18.57",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Worktree-local dependencies; temporary isolated synthetic fixture roots and temporary copied adapters removed."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Seven exact/sibling fixtures passed: exact gateway and tools shared contracts accepted, .tsx siblings rejected in host and tools layers; model-service and service-interfaces exact rows accepted, unmapped model-service.tsx listed. All 14 earlier guard fixtures passed; combined actual A1/A2 adapters passed; layer guard 490 and typecheck passed. This addresses independent review of debc7493; full tracer and parity evidence for that earlier source is in 2026-10-30-port-guard-followup."
     }
   ]
 }

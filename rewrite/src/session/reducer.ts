@@ -1,3 +1,4 @@
+import { normalizedModelSelection } from './adopted/settings.js';
 import type { Item, ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { AdmissionRecord, LogEntry, Project, SessionId, SessionState } from './index.js';
@@ -31,6 +32,18 @@ export const projectLifecycle: Project = (state, entry: LogEntry) => {
   if (state.status === 'closed' && fact.type !== 'session_closed') return next;
 
   switch (fact.type) {
+    case 'session_settings_initialized':
+      return { ...next, model: fact.model };
+    case 'settings_changed':
+      if (fact.key === 'agent.modelSelection') {
+        const model = normalizedModelSelection(fact.value);
+        if (model) return { ...next, model };
+      }
+      if (fact.key === 'agent.model' && typeof fact.value === 'string')
+        return { ...next, model: { ...state.model, model: fact.value } };
+      if (fact.key === 'agent.provider' && typeof fact.value === 'string')
+        return { ...next, model: { ...state.model, provider: fact.value } };
+      return next;
     case 'session_bound':
       return { ...next, workspace: fact.workspace, model: fact.model, binding: fact.binding ?? null };
     case 'session_admitted': {

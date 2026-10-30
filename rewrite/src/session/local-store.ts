@@ -41,6 +41,10 @@ export type SessionDriverContext = {
   readonly root: string;
   readonly log: SessionLog;
   state(): SessionState;
+  /** Permanently reject mutations after partial runtime/persistence failure. */
+  poison(error: unknown): void;
+  assertHealthy(): void;
+  reserveSettings(): () => void;
   /** Replace state only after the caller has durably appended the supplied facts. */
   commit(facts: readonly SessionFact[]): Promise<readonly import('./index.js').LogEntry[]>;
 };
@@ -373,6 +377,10 @@ export class LocalSessionStore implements SessionStore {
     adopted: boolean,
   ): Promise<{ session: Session; submission?: AdoptedSubmissionPort }> {
     let current = state;
+    let mutationFailure: unknown;
+    let constructing = true;
+    let settingsReserved = false;
+    let closingLog = false;
     const pendingAdmissions = new Map<string, { hash: string; turnId: string; admitted: Promise<void> }>();
     type Update = import('./index.js').SessionUpdate;
     type Captured = import('./index.js').CapturedSessionUpdate;
@@ -416,7 +424,22 @@ export class LocalSessionStore implements SessionStore {
       root: log.root,
       log,
       state: () => current,
+      reserveSettings: () => {
+        if (settingsReserved || closingLog || mutationFailure !== undefined)
+          throw new Error('Session mutation is unavailable');
+        settingsReserved = true;
+        return () => {
+          settingsReserved = false;
+        };
+      },
+      poison: (error) => {
+        mutationFailure ??= error ?? new Error('Session mutation failed');
+      },
+      assertHealthy: () => {
+        if (mutationFailure !== undefined) throw mutationFailure;
+      },
       commit: async (facts) => {
+        if (mutationFailure !== undefined) throw mutationFailure;
         const entries = await log.append(facts);
         for (const entry of entries) current = projectLifecycle(current, entry);
         const restored = loadCanonicalConversation(id, log.root, 'live');
@@ -425,7 +448,8 @@ export class LocalSessionStore implements SessionStore {
           { history: restored.history, messages: restored.messages },
           restored.history as unknown as Item[],
         );
-        enqueue(entries.map((entry) => ({ kind: 'fact', entry })));
+        if (!constructing) enqueue(entries.map((entry) => ({ kind: 'fact', entry })));
+        if (mutationFailure !== undefined) throw mutationFailure;
         return entries;
       },
     };
@@ -434,6 +458,8 @@ export class LocalSessionStore implements SessionStore {
     const adoptedContext: AdoptedAdmissionContext = {
       ...context,
       admit: async ({ requestId, input }, message) => {
+        if (mutationFailure !== undefined) throw mutationFailure;
+        if (settingsReserved || closingLog) throw new Error('Session mutation is in progress');
         if (handleClosed || current.status === 'closed') return { kind: 'rejected', reason: 'closed' };
         const { input: owned, hash } = captureAdoptedInput(input);
         const ownedMessage = structuredClone(message);
@@ -516,6 +542,7 @@ export class LocalSessionStore implements SessionStore {
       adopted && this.#options.adoptedHandleFactory
         ? await this.#options.adoptedHandleFactory(adoptedContext)
         : undefined;
+    constructing = false;
     const driver = combined?.driver ?? this.#options.driverFactory(context);
     const rawSubmission = adopted
       ? combined?.submission ?? this.#options.adoptedSubmissionFactory!(adoptedContext)
@@ -534,6 +561,10 @@ export class LocalSessionStore implements SessionStore {
       },
       retry: (target) =>
         handleClosed ? Promise.resolve({ kind: 'rejected', reason: 'closed' }) : rawSubmission.retry(target),
+      setRuntimeSettings: (command) => {
+        if (handleClosed) return Promise.reject(new Error('Session handle is closed'));
+        return rawSubmission.setRuntimeSettings(command);
+      },
       interruptFromUser: () => {
         if (handleClosed) return Promise.reject(new Error('Session handle is closed'));
         return rawSubmission.interruptFromUser();
@@ -720,9 +751,16 @@ export class LocalSessionStore implements SessionStore {
         retentionEligibleAt = new Date(Date.parse(closedAt) + 30 * 86400000).toISOString(),
       ) => {
         ensureOpen();
+        context.assertHealthy();
+        if (settingsReserved || closingLog) throw new Error('Session mutation is in progress');
         if (current.status === 'closed') return;
-        await combined?.closeNetwork?.();
-        await context.commit([{ type: 'session_closed', version: 1, closedAt, retentionEligibleAt }]);
+        closingLog = true;
+        try {
+          await combined?.closeNetwork?.();
+          await context.commit([{ type: 'session_closed', version: 1, closedAt, retentionEligibleAt }]);
+        } finally {
+          closingLog = false;
+        }
       },
     };
     return { session, ...(submission ? { submission } : {}) };

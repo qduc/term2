@@ -1,4 +1,8 @@
 import type {
+  RuntimeSettingMutation,
+  RuntimeSettingsSnapshot,
+} from '../../../../source/services/settings/session-runtime-settings.js';
+import type {
   SettingKey,
   SettingValue,
   SettingsChange,
@@ -21,6 +25,19 @@ export type AdoptedSettingsOptions = LegacySettingsOptions & {
 };
 
 const pairedServices = new WeakMap<SettingsReader, ISettingsService>();
+const bindingOrigins = new WeakMap<
+  SettingsReader,
+  { source: AdoptedSettingsSource; scope: SettingsScope; overrides: ReadonlyMap<SettingKey, SettingValue> }
+>();
+export function forkAdoptedSettingsBinding(
+  settings: SettingsReader,
+  service: ISettingsService,
+  initial: RuntimeSettingsSnapshot,
+) {
+  const origin = bindingOrigins.get(settings);
+  if (!origin || pairedServices.get(settings) !== service) throw new Error('Expected paired adopted settings');
+  return origin.source.forSessionBinding(origin.scope, origin.overrides, initial);
+}
 export function isAdoptedSettingsPair(settings: SettingsReader, service: ISettingsService): boolean {
   return pairedServices.get(settings) === service;
 }
@@ -52,15 +69,24 @@ export class AdoptedSettingsSource implements SettingsSource {
   forSessionBinding(
     scope: SettingsScope,
     overrides: ReadonlyMap<SettingKey, SettingValue> = new Map(),
+    runtimeInitial?: RuntimeSettingsSnapshot,
   ): {
     readonly settings: SettingsWriter;
     readonly service: ISettingsService;
+    readonly setRuntimeOverride: (mutation: RuntimeSettingMutation) => void;
   } {
     const readable = new Set(scope.readable);
     const writable = new Set(scope.writable);
     // Each session owns its own copy. A caller can safely reuse or mutate its
     // input map after this point without changing another session's view.
-    const sessionOverrides = new Map([...overrides].map(([key, value]) => [key, snapshot(value)!]));
+    const sessionOverrides = new Map<SettingKey, SettingValue | undefined>(
+      [...overrides].map(([key, value]) => [key, snapshot(value)]),
+    );
+    if (runtimeInitial) {
+      sessionOverrides.set('agent.modelSelection' as SettingKey, snapshot(runtimeInitial.selection));
+      sessionOverrides.set('agent.reasoningEffort' as SettingKey, runtimeInitial.reasoningEffort);
+      sessionOverrides.set('agent.temperature' as SettingKey, runtimeInitial.temperature);
+    }
     const watchers = new Set<{
       readonly listener: (change: SettingsChange) => void;
       readonly lastSeen: Map<SettingKey, SettingValue | undefined>;
@@ -205,7 +231,23 @@ export class AdoptedSettingsSource implements SettingsSource {
       onChange: watchSource,
     } as ISettingsService;
     pairedServices.set(settings, service);
-    return { settings, service };
+    bindingOrigins.set(settings, {
+      source: this,
+      scope: { readable: [...readable], writable: [...writable] },
+      overrides: new Map([...overrides].map(([key, value]) => [key, snapshot(value)!])),
+    });
+    const setRuntimeOverride = (mutation: RuntimeSettingMutation) => {
+      if (!runtimeInitial) throw new Error('Not a runtime-owned settings binding');
+      const [key, value] =
+        mutation.kind === 'model'
+          ? ['agent.modelSelection', mutation.selection]
+          : mutation.kind === 'reasoning'
+          ? ['agent.reasoningEffort', mutation.effort]
+          : ['agent.temperature', mutation.temperature];
+      sessionOverrides.set(key as SettingKey, snapshot(value as SettingValue | undefined));
+      // The exact client setter below owns the only refresh for this change.
+    };
+    return { settings, service, setRuntimeOverride };
   }
 }
 

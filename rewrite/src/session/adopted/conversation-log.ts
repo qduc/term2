@@ -1,3 +1,9 @@
+import { ModelSelectionSchema } from '../../../../source/services/settings/model-selection.js';
+import {
+  validateSettingsBaseline,
+  validateMarkedSettings,
+  type SessionSettingsInitialized,
+} from '../../../../source/services/settings/session-runtime-settings.js';
 import { projectNetworkFacts, validateNetworkFact, type NetworkFact } from './network.js';
 /**
  * Adopt the source conversation JSONL record boundary for the new session
@@ -132,7 +138,7 @@ export type SessionLifecycleFact =
       readonly retentionEligibleAt: string;
     };
 
-export type SessionFact = ExistingConversationLogEvent | SessionLifecycleFact | NetworkFact;
+export type SessionFact = ExistingConversationLogEvent | SessionLifecycleFact | SessionSettingsInitialized | NetworkFact;
 /** Unknown and truncated legacy events are retained verbatim at the decoder boundary. */
 export type StoredSessionFact = SessionFact;
 export type SessionEventReference = { readonly logId: string; readonly eventId: string };
@@ -144,6 +150,7 @@ export type SessionLogEntry = {
 };
 
 const LIFECYCLE_TYPES = new Set([
+  'session_settings_initialized',
   'session_network_requested',
   'session_network_resolved',
   'session_bound',
@@ -194,6 +201,9 @@ export function validateSessionFact(value: unknown): asserts value is SessionFac
   }
   if (value['version'] !== 1) throw new Error(`invalid ${value['type']} fact version`);
   switch (value['type']) {
+    case 'session_settings_initialized':
+      validateSettingsBaseline(value);
+      return;
     case 'session_network_requested':
     case 'session_network_resolved':
       validateNetworkFact(value);
@@ -447,6 +457,7 @@ export class CanonicalSessionLog implements SessionLog {
       }
     }
     validatePendingRevisionSequence([...this.#entries.map((entry) => entry.fact), ...facts]);
+    validateSettingsSequence([...this.#entries.map((entry) => entry.fact), ...facts]);
     projectNetworkFacts([...this.#entries.map((entry) => entry.fact), ...facts]);
     const previousSeq = this.lastSeq;
     const sidecars = facts.filter((fact) => SIDECAR_EVENT_TYPES.has(fact.type as LogEvent['type']));
@@ -511,8 +522,41 @@ function loadEntries(id: string, root: string): SessionLogEntry[] {
     throw new Error(`conversation ${id} has more than one immutable session_bound fact`);
   }
   validatePendingRevisionSequence(entries.map((entry) => entry.fact));
+  validateSettingsSequence(entries.map((entry) => entry.fact));
   projectNetworkFacts(entries.map((entry) => entry.fact));
   return entries;
+}
+
+function validateSettingsSequence(facts: readonly StoredSessionFact[]): void {
+  let bound = false;
+  let baseline = false;
+  let model: { provider: string; model: string } | undefined;
+  for (const fact of facts) {
+    if (fact.type === 'session_bound') {
+      bound = true;
+      model = fact.model;
+    }
+    if (fact.type === 'settings_changed') {
+      if (Object.hasOwn(fact, 'sessionMutation')) {
+        validateMarkedSettings(fact as unknown as Record<string, unknown>);
+        if (!baseline) throw new Error('settings mutation before baseline');
+      }
+      if (fact.key === 'agent.modelSelection') {
+        const parsed = ModelSelectionSchema.safeParse(fact.value);
+        if (parsed.success) model = parsed.data;
+      }
+      if (fact.key === 'agent.model' && typeof fact.value === 'string' && model)
+        model = { ...model, model: fact.value };
+      if (fact.key === 'agent.provider' && typeof fact.value === 'string' && model)
+        model = { ...model, provider: fact.value };
+    }
+    if (fact.type === 'session_settings_initialized') {
+      validateSettingsBaseline(fact as unknown as Record<string, unknown>);
+      if (!bound || baseline || !model || fact.model.provider !== model.provider || fact.model.model !== model.model)
+        throw new Error('invalid session settings baseline order or model');
+      baseline = true;
+    }
+  }
 }
 
 function validatePendingRevisionSequence(facts: readonly StoredSessionFact[]): void {

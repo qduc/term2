@@ -29670,6 +29670,70 @@
       "notes": "Combined 3a957 root/rewrite typechecks, guard527, inventory, no-unit, rebuilt old CLI parity 9/9; retained history basic/held/fsync 3/3, P1 capture, C1 approval and held-tool PASS. Corrected P1 source 0b7f exact C1 actual kill/cold-reader, capture, history 3/3, rewrite tsc and guard527 PASS. Sol independent 5 actual probes plus retained 3/3 on 3a957 cover stale initial pure no-op, held actual source tool and callback mutation fence, close with no mutation, source image content/cold replay, equivalent property-order concurrent counts joining once, append/fsync failure poisoning and capture interop; exact 0b7f C1 kill and U/capture interop independently rerun PASS, U source unchanged. Source image undo preserves data/MIME/size but reconstructs UI ID/display; no original UI-ID claim. Fsync failure injected; held provider and physical tool proofs distinct. See /tmp/term2-c3a-stage5-u-author-evidence.md and /tmp/term2-c3a-stage5-history-independent-review.md. Remaining stage5 settings/lifecycle/goals/network/read and C3b/C4/K2 and full #76 remain open."
     },
     {
+      "id": "2026-10-30-c3a-stage5-settings",
+      "timestamp": "2026-10-30T21:39:29Z",
+      "commit": "e147f2558413282dbaecb67cbccc2cc7b27ee174",
+      "tree": "bdd2de18934f208ccf53a514be875e5242e4bf28",
+      "revision_kind": "source commit",
+      "base_commit": "cdfb2458",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-settings"
+      ],
+      "suite": "C3a stage 5 session settings and shared mutation poison",
+      "command": "Independent actual graph settings, canonical replay, fault, mutation interlock and shared poison integration probes; retained settings and capture integration",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, strict unhandled rejection mode, network-enabled sandbox and controlled provider. Core checks at 63802332; affected guard checks at 27bdd101; final close, cached poison and baseline fault checks at e147f255."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Sol independent bounded PASS at clean e147. Actual factory, source client, Session, Engine and canonical writer exercise graph-scoped settings, baseline and marked/unmarked replay, held physical tool settlement, partial setter and baseline fsync failure, U ordering/poison, provenance and corrupt recognized events. At 27bdd affected normal scope/partial/U-poison/cancel-gate and queued U/S/retry/decision pass; at e147 direct closeLog reentrant poison/repeated close, shared U/S cached acknowledgements and baseline fsync failure pass. Cold reopen follows surviving durable prefix; no rollback claimed. See /tmp/term2-c3a-stage5-settings-independent-review.md and /tmp/c3a-S-final-*.log. Full stage5/#76, network enforcement, C3b and complete P2/C4 remain open."
+    },
+    {
+      "id": "2026-10-30-c3a-stage5-slice-b",
+      "timestamp": "2026-10-30T20:56:37Z",
+      "commit": "37558d4d89868abeceef2984c82b0e32166b6891",
+      "tree": "2e387d8bc886f28bb381b110fe9c8216467d3270",
+      "revision_kind": "source commit",
+      "base_commit": "5f329234f914622c5bb7a63456a7fa19fd689213",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-slice-b"
+      ],
+      "suite": "C3a stage 5 Slice B human run-budget decisions and DTO validation",
+      "command": "root and rewrite tsc; layer guard; inventory; no-unit; explicit source lint; equivalent old CLI build and parity; retained budget human/refusal/fault; temporary real app cancellation and DTO controls; independent exact-source human/fault/negative/cancel-gate/refusal probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree; controlled local provider; network-enabled sandbox for process spawning. Dependencies installed ignoring scripts; no automatic source hooks were available, explicit checks ran."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Bounded human path and source DTO correction only. Author actual app human 3 requests/3 prompts with 2 continues then stop; refusal overrides exact client and leaves prompt; fsync failure denies resume and cold open interrupts; post-publication cancellation leaves 1 truthful resolution and no resume. Independent 5/5 processes passed: two real human grants with parent cap zero, duplicate/stale rejection, real writer fault, canonical LF and signed headroom controls, held fsynced resolution cancellation and fresh run, and simulated refusal. Root/rewrite types, 527-edge layer guard, inventory, no-unit, source lint and old parity 9/9 passed. Build wrapper failed nested pnpm default store access; equivalent tsc/write-build-info/copy/embed build succeeded. Independent report /tmp/term2-c3a-stage5-budget-independent-review.md. Real no-active-budget refusal, unattended parent-cap and legacy no-budget max-turn remain open for K1/C3b host; no blanket D02/stage5/#76 claim."
+    },
+    {
       "id": "2026-10-30-c3a-network-provisional",
       "timestamp": "2026-10-30T21:05:23Z",
       "commit": "a24257c83f694962965fedf9c3db64b392fa89d7",
@@ -29707,38 +29771,6 @@
       "notes": "Provisional evidence includes pre-commit snapshots and source-equivalent focused reruns: guard tier 7 files/28 tests; old CLI parity 9/9 after full dist resources (initial tsc-only run lacked resources); source/rewrite tsc and 527-edge layer check; controlled-runner app dual/idle background and capture benches; 4 focused scoped integration tests passed, real sandbox case deselected for focused run; independent actual Session/C2 failure, close, nested process and late-spawn probes. Local real-sandbox attempt failed at host uid map. CI unfiltered real sandbox test and final review/integration are required; do not treat as acceptance."
     },
     {
-      "id": "2026-10-30-c3a-stage5-slice-b",
-      "timestamp": "2026-10-30T20:56:37Z",
-      "commit": "37558d4d89868abeceef2984c82b0e32166b6891",
-      "tree": "2e387d8bc886f28bb381b110fe9c8216467d3270",
-      "revision_kind": "source commit",
-      "base_commit": "5f329234f914622c5bb7a63456a7fa19fd689213",
-      "task_ids": [
-        "2026-10-30-c3a-stage5-slice-b"
-      ],
-      "suite": "C3a stage 5 Slice B human run-budget decisions and DTO validation",
-      "command": "root and rewrite tsc; layer guard; inventory; no-unit; explicit source lint; equivalent old CLI build and parity; retained budget human/refusal/fault; temporary real app cancellation and DTO controls; independent exact-source human/fault/negative/cancel-gate/refusal probes",
-      "command_complete": true,
-      "environment": {
-        "os": "Linux",
-        "node_version": "v24.19.0",
-        "pnpm_version": "11.19.0",
-        "notes": "Isolated worktree; controlled local provider; network-enabled sandbox for process spawning. Dependencies installed ignoring scripts; no automatic source hooks were available, explicit checks ran."
-      },
-      "result": {
-        "passed": null,
-        "failed": 0,
-        "skipped": 0,
-        "files_passed": null,
-        "files_failed": 0,
-        "files_skipped": 0,
-        "exit_code": 0
-      },
-      "failures": [],
-      "evidence": [],
-      "notes": "Bounded human path and source DTO correction only. Author actual app human 3 requests/3 prompts with 2 continues then stop; refusal overrides exact client and leaves prompt; fsync failure denies resume and cold open interrupts; post-publication cancellation leaves 1 truthful resolution and no resume. Independent 5/5 processes passed: two real human grants with parent cap zero, duplicate/stale rejection, real writer fault, canonical LF and signed headroom controls, held fsynced resolution cancellation and fresh run, and simulated refusal. Root/rewrite types, 527-edge layer guard, inventory, no-unit, source lint and old parity 9/9 passed. Build wrapper failed nested pnpm default store access; equivalent tsc/write-build-info/copy/embed build succeeded. Independent report /tmp/term2-c3a-stage5-budget-independent-review.md. Real no-active-budget refusal, unattended parent-cap and legacy no-budget max-turn remain open for K1/C3b host; no blanket D02/stage5/#76 claim."
-    },
-    {
       "id": "2026-10-30-c3a-stage5-network-integrated",
       "timestamp": "2026-10-30T21:41:05Z",
       "commit": "7849fc1db189c1fbb79be8b1d5df6dc58edcaa29",
@@ -29774,6 +29806,38 @@
       ],
       "evidence": [],
       "notes": "At exact clean merge: root and rewrite typechecks, 527-edge layer guard and inventory passed. Network dual ownership, background idle, nested running/late and SIGKILL recovery passed (5/5); budget human/refusal/fsync passed (3/3). pnpm wrapper attempted inaccessible home store; direct local tsc succeeded. Independent Sol review at 50f423c1 passed bounded local scope; combined revision needs final review. Prior CI 41128676929 passed native integration at earlier e0e4a; latest-head native supported-host CI mandatory, no claim of enforcement from controlled local runner."
+    },
+    {
+      "id": "2026-10-30-c3a-stage5-settings-network-integration",
+      "timestamp": "2026-10-30T21:54:00Z",
+      "commit": "b6a4118aad128c6c8fe8a8e495f0f8754e855c2b",
+      "tree": "87eef4b1bda468be1923d01bb4ecd2d3ce131c0e",
+      "revision_kind": "source merge commit",
+      "base_commit": "d204ab1e144c97bf60d088d4f0dff2877e9344ce",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-settings-network-integration"
+      ],
+      "suite": "C3a stage 5 settings, network and budget integration",
+      "command": "rewrite tsc and layer guard; retained settings, legacy chronology, budget and network dual/background/nested/kill integration; independent affected shared authority and settings probes",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, strict unhandled rejection mode, local controlled provider and network-enabled sandbox. Direct local tsc used after pnpm attempted install in unwritable home."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "At exact b6a, rewrite tsc and layer guard 527 pass; retained settings 5/5, budget 3/3 and network dual/background/nested running+late/kill 5/5 pass. Sol independent bounded acceptance 10/10 affected actual checks includes network durable-answer other-owner poison fencing grant, cached decision, stored allow and S/U/closeLog; see /tmp/term2-c3a-stage5-settings-independent-review.md. N main d204 previously passed all five CI jobs including native actual sandbox; these controlled checks do not establish external provider availability or complete stage5/#76, C3b, P2/C4."
     }
   ]
 }

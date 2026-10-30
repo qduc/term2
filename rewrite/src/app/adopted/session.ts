@@ -1,3 +1,12 @@
+import { isDeepStrictEqual } from 'node:util';
+import { forkAdoptedSettingsBinding } from '../../config/adopted/settings.js';
+import { forkAdoptedModelRegistry, type AdoptedModelRegistry } from '../../model/adopted/index.js';
+import { projectRuntimeSettings } from '../../session/adopted/settings.js';
+import {
+  isReasoningSetting,
+  isTemperatureSetting,
+} from '../../../../source/services/settings/session-runtime-settings.js';
+import type { AgentClient } from '../../../../source/lib/agent-client.js';
 import { InvalidatableShellChildRegistry } from '../../../../source/utils/shell/shell-child-registry.js';
 import { createNetworkAuthority } from '../../session/adopted/network-authority.js';
 import { createScopedSandboxNetworkAccess } from '../../../../source/utils/shell/sandbox/scoped-sandbox-network-access.js';
@@ -34,6 +43,9 @@ export function createAppAdoptedSessionHandleFactory(options: {
     let runtime: SessionRuntimeInternals | undefined;
     let assembly: ReturnType<typeof createAppAdoptedEngine> | undefined;
     let cancelBackground: (() => void) | undefined;
+    let ownedClient: AgentClient | undefined;
+    let graphModels: AdoptedModelRegistry | undefined;
+    let grantHumanRunBudgetExtension: (() => { granted: boolean; extensionsGranted: number }) | undefined;
     const scopedChildren = new InvalidatableShellChildRegistry();
     let clientForNetwork: import('../../../../source/lib/agent-client.js').AgentClient | undefined;
     let foregroundForNetwork: ReturnType<typeof createAdoptedForeground> | undefined;
@@ -41,7 +53,9 @@ export function createAppAdoptedSessionHandleFactory(options: {
     const network = createNetworkAuthority(
       context,
       () => {
-        foregroundForNetwork?.failPersistence(new Error('Network persistence failed'));
+        const failure = new Error('Network persistence failed');
+        context.poison(failure);
+        foregroundForNetwork?.failPersistence(failure);
         scopedChildren.invalidate();
         clientForNetwork?.disposeShellChildren();
         void runner.dispose();
@@ -63,23 +77,34 @@ export function createAppAdoptedSessionHandleFactory(options: {
       },
       () => network.cancelAll('execution_ended'),
     );
-    let grantHumanRunBudgetExtension: (() => { granted: boolean; extensionsGranted: number }) | undefined;
     try {
       const engineOptions = synchronous(options.engine(context), 'engine options');
+      const runtimeOptions = synchronous(options.runtime(context), 'runtime options');
+      const hostSettings = engineOptions.clientOptions.deps.settings;
+      const reason = engineOptions.clientOptions.reasoningEffort ?? hostSettings.get('agent.reasoningEffort');
+      const temp = hostSettings.get('agent.temperature');
+      const facts = [];
+      for await (const entry of context.log.read()) facts.push(entry.fact);
+      const initial = projectRuntimeSettings(facts, {
+        selection: context.state().model,
+        reasoningEffort: isReasoningSetting(reason) ? reason : 'default',
+        ...(isTemperatureSetting(temp) ? { temperature: temp } : {}),
+      });
+      const binding = forkAdoptedSettingsBinding(engineOptions.settings, hostSettings, initial.snapshot);
+      graphModels = forkAdoptedModelRegistry(engineOptions.models, binding.service);
       assembly = createAppAdoptedEngine({
         ...engineOptions,
+        models: graphModels,
+        settings: binding.settings,
         clientOptions: {
           ...engineOptions.clientOptions,
-          deps: {
-            ...engineOptions.clientOptions.deps,
-            scopedSandbox: {
-              runner,
-              registerPauseController: scope.registerPauseController,
-              childRegistry: scopedChildren,
-            },
-          },
+          selection: initial.snapshot.selection,
+          reasoningEffort: initial.snapshot.reasoningEffort,
+          deps: { ...engineOptions.clientOptions.deps, settings: binding.service, scopedSandbox: { runner, registerPauseController: scope.registerPauseController, childRegistry: scopedChildren } },
         },
-        bindSessionClient(client) {
+        bindSessionClient(boundClient) {
+          ownedClient = boundClient;
+          const client = boundClient;
           clientForNetwork = client;
           grantHumanRunBudgetExtension = () => client.grantRunBudgetExtension();
           cancelBackground = () => {
@@ -100,13 +125,37 @@ export function createAppAdoptedSessionHandleFactory(options: {
             if (failed) throw failure;
           };
           runtime = createSessionRuntimeInternals({
-            ...synchronous(options.runtime(context), 'runtime options'),
+            ...runtimeOptions,
+            deps: { ...runtimeOptions.deps, settingsService: binding.service },
             sessionId: context.id,
             agentClient: client,
           });
         },
       });
-      if (!runtime) throw new Error('Session runtime was not bound');
+      if (!runtime || !ownedClient) throw new Error('Session runtime was not bound');
+      const actual = ownedClient.getRuntimeSettingsSnapshot();
+      if (!isDeepStrictEqual(actual, initial.snapshot))
+        throw new Error('Built client settings disagree with canonical baseline');
+      if (!initial.initialized)
+        await context.commit([
+          ...(facts.some((f) => f.type === 'session_bound')
+            ? []
+            : [
+                {
+                  type: 'session_bound' as const,
+                  version: 1 as const,
+                  workspace: context.state().workspace,
+                  model: actual.selection,
+                },
+              ]),
+          {
+            type: 'session_settings_initialized',
+            version: 1,
+            model: actual.selection,
+            reasoningEffort: actual.reasoningEffort,
+            ...(actual.temperature === undefined ? {} : { temperature: actual.temperature }),
+          },
+        ]);
       const graph = runtime;
       const originalPrepareRollover = graph.prepareRollover;
       const assertNetworkIdle = () => {
@@ -130,6 +179,16 @@ export function createAppAdoptedSessionHandleFactory(options: {
         onSourceEvent: options.onSourceEvent,
         publishFacts: false,
         cancelBackground,
+        runtimeSettings: {
+          supports: (command) =>
+            typeof (command.kind === 'model'
+              ? ownedClient!.setModelSelection
+              : command.kind === 'reasoning'
+              ? ownedClient!.setReasoningEffort
+              : ownedClient!.setTemperature) === 'function',
+          setOverride: binding.setRuntimeOverride,
+          snapshot: () => ownedClient!.getRuntimeSettingsSnapshot(),
+        },
         grantHumanRunBudgetExtension,
         makeInput(turnId) {
           const state = context.state();
@@ -193,6 +252,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
               () => foreground.shutdown(),
               () => graph.shutdown(),
               () => owned.engine.dispose(),
+              () => graphModels!.dispose(),
             ]) {
               try {
                 await cleanup();
@@ -223,6 +283,11 @@ export function createAppAdoptedSessionHandleFactory(options: {
         await assembly?.engine.dispose();
       } catch {
         /* Preserve the construction error. */
+      }
+      try {
+        await graphModels?.dispose();
+      } catch {
+        /* Preserve construction error. */
       }
       throw error;
     }

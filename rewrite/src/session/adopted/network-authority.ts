@@ -68,6 +68,9 @@ export function createNetworkAuthority(
     publish();
     failClosed();
   };
+  const healthy = () => {
+    try { context.assertHealthy(); return true; } catch { return false; }
+  };
   const requestApproval = async (
     request: SandboxNetworkAccessRequest,
     completion: Promise<SandboxNetworkCompletion>,
@@ -78,6 +81,7 @@ export function createNetworkAuthority(
     try {
       let answer: Promise<NetworkApprovalAnswer> | undefined;
       await serial(async () => {
+        context.assertHealthy();
         if (closed || poisoned || context.state().status === 'closed' || signal.aborted) return;
         const entry: Entry = {
           id: randomUUID(),
@@ -98,6 +102,7 @@ export function createNetworkAuthority(
               ...(entry.port === undefined ? {} : { port: entry.port }),
             },
           ]);
+          context.assertHealthy();
           if (signal.aborted || closed || context.state().status === 'closed') {
             await context.commit([
               {
@@ -171,6 +176,7 @@ export function createNetworkAuthority(
       !isNetworkAnswer(command.answer)
     )
       return Promise.reject(new Error('Malformed network decision'));
+    try { context.assertHealthy(); } catch (error) { return Promise.reject(error); }
     const owned = { requestId: command.requestId, generation: command.generation, answer: command.answer };
     if (closed || poisoned || context.state().status === 'closed')
       return Promise.reject(new Error('Network authority is closed'));
@@ -180,6 +186,7 @@ export function createNetworkAuthority(
         ? previous.result
         : Promise.reject(new Error('Conflicting network decision'));
     const result = serial<SandboxNetworkCompletion>(async () => {
+      context.assertHealthy();
       const entry = visible;
       if (
         closed ||
@@ -205,6 +212,7 @@ export function createNetworkAuthority(
         poison();
         throw error;
       }
+      context.assertHealthy();
       entries.delete(entry.request);
       if (entry.signal.aborted || closed || context.state().status === 'closed') {
         coordinator.cancel(entry.request);
@@ -215,7 +223,9 @@ export function createNetworkAuthority(
       try {
         coordinator.resolve(entry.request, owned.answer);
         publish();
-        return await entry.completion;
+        const completed = await entry.completion;
+        context.assertHealthy();
+        return completed;
       } finally {
         applying.delete(entry);
       }
@@ -228,7 +238,7 @@ export function createNetworkAuthority(
   };
   return {
     requestApproval,
-    isLive: () => !closed && !poisoned && context.state().status !== 'closed',
+    isLive: () => healthy() && !closed && !poisoned && context.state().status !== 'closed',
     hasPending: () => pendingRequests > 0,
     cancelAll,
     decide,

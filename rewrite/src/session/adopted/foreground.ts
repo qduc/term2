@@ -1,3 +1,8 @@
+import {
+  parseRuntimeMutation,
+  type RuntimeSettingMutation,
+  type RuntimeSettingsSnapshot,
+} from '../../../../source/services/settings/session-runtime-settings.js';
 /** Bounded foreground composition. Interaction and scheduling commands are not installed here. */
 import crypto from 'node:crypto';
 import { toTerminalEvent } from '../../../../source/services/conversation/conversation-result-builder.js';
@@ -66,6 +71,11 @@ export function createAdoptedForeground(options: {
   makeInput: (turnId: TurnInput['turnId']) => TurnInput;
   /** Request cancellation of this handle's source-owned background work. */
   cancelBackground?: () => void;
+  runtimeSettings?: {
+    supports(command: RuntimeSettingMutation): boolean;
+    setOverride(command: RuntimeSettingMutation): void;
+    snapshot(): RuntimeSettingsSnapshot;
+  };
   /** Human grant on the exact client owning this foreground. */
   grantHumanRunBudgetExtension?: () => { granted: boolean; extensionsGranted: number };
   /** Combined store handles publish canonical facts themselves. */
@@ -84,16 +94,27 @@ export function createAdoptedForeground(options: {
   let poisoned: unknown;
   let closing = false;
   let interrupting: Promise<void> | undefined;
+  let settingMutation = false;
+  let releaseSettings: (() => void) | undefined;
+  const settingPending = new Map<
+    string,
+    Promise<{ kind: 'applied'; settings: RuntimeSettingsSnapshot } | { kind: 'unsupported' }>
+  >();
   let shutdownPromise: Promise<void> | undefined;
   let decisionTail = Promise.resolve();
   let decideCurrent: ((command: AdoptedInteractionCommand) => Promise<void>) | undefined;
   const buffered: LogEvent[] = [];
+  const poison = (error: unknown): unknown => {
+    poisoned = error ?? new Error('Session mutation failed');
+    context.poison(poisoned);
+    return poisoned;
+  };
   const capture = (event: LogEvent) => {
     if (poisoned !== undefined) return;
     try {
       buffered.push(structuredClone(event));
     } catch (error) {
-      poisoned = error;
+      poison(error);
     }
   };
   runtime.record.setJournalSink(capture);
@@ -120,12 +141,12 @@ export function createAdoptedForeground(options: {
       const count = buffered.length;
       try {
         const entries = await context.commit([...buffered.slice(0, count), ...facts]);
+        context.assertHealthy();
         buffered.splice(0, count);
         if (options.publishFacts !== false) for (const entry of entries) publish({ kind: 'fact', entry });
         return facts.length ? entries.slice(-facts.length) : [];
       } catch (error) {
-        poisoned = error;
-        throw new FatalPersistenceError(error);
+        throw new FatalPersistenceError(poison(error));
       }
     });
     writeTail = operation.then(
@@ -925,6 +946,11 @@ export function createAdoptedForeground(options: {
         });
       },
       history(command: HistoryMutation): Promise<HistoryMutationResult> {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (poisoned !== undefined) return Promise.reject(poisoned);
         if (closing || context.state().status === 'closed')
           return Promise.reject(new Error('Session handle is closed'));
@@ -942,6 +968,7 @@ export function createAdoptedForeground(options: {
         const existing = historyOperations.get(key);
         if (existing) return existing;
         const operation = serial.then(async (): Promise<HistoryMutationResult> => {
+          context.assertHealthy();
           if (closing) throw new Error('Session handle is closed');
           if (poisoned !== undefined) throw poisoned;
           const reservation = runtime.state.reserveHistoryMutation(owned);
@@ -963,12 +990,13 @@ export function createAdoptedForeground(options: {
           try {
             restored = reservation.apply();
           } catch (error) {
-            poisoned = error ?? new Error('History mutation failed');
-            throw poisoned;
+            throw poison(error ?? new Error('History mutation failed'));
           }
           if (!restored) return { kind: 'stale' };
           const committedGeneration = runtime.generationGuard.capture();
           await commit([]);
+          context.assertHealthy();
+          if (poisoned !== undefined) throw poisoned;
           if (closing || signal.aborted || !runtime.generationGuard.isCurrent(committedGeneration))
             return { kind: 'stale' };
           return {
@@ -1038,11 +1066,111 @@ export function createAdoptedForeground(options: {
         );
         return operation;
       },
+      setRuntimeSettings(input: RuntimeSettingMutation) {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
+        if (poisoned !== undefined) return Promise.reject(poisoned);
+        let command: RuntimeSettingMutation;
+        try {
+          command = parseRuntimeMutation(input);
+        } catch (error) {
+          return Promise.reject(error);
+        }
+        const key =
+          command.kind === 'model'
+            ? JSON.stringify(['model', command.selection.provider, command.selection.model])
+            : command.kind === 'reasoning'
+            ? JSON.stringify(['reasoning', command.effort])
+            : JSON.stringify(['temperature', command.temperature ?? null]);
+        const existing = settingPending.get(key);
+        if (existing) return existing;
+        if (!options.runtimeSettings || !options.runtimeSettings.supports(command))
+          return Promise.resolve({ kind: 'unsupported' as const });
+        if (closing || interrupting || context.state().status === 'closed')
+          return Promise.reject(new Error('Session is unavailable'));
+        if (poisoned !== undefined) return Promise.reject(poisoned);
+        if (!settingMutation) {
+          try {
+            releaseSettings = context.reserveSettings();
+          } catch (error) {
+            return Promise.reject(error);
+          }
+          settingMutation = true;
+        }
+        const operation = serial.then(async () => {
+          context.assertHealthy();
+          if (closing || poisoned !== undefined) throw new Error('Session is unavailable');
+          cancellation.abort();
+          cancellation = new AbortController();
+          const signal = cancellation.signal;
+          runtime.generationGuard.invalidate();
+          if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
+          active?.cancel();
+          await decisionTail;
+          await completion;
+          if (active) await active.waitForSettlement(signal);
+          await engine.waitForAdmission(signal);
+          signal.throwIfAborted();
+          if (closing || poisoned !== undefined) throw new Error('Session is unavailable');
+          try {
+            options.runtimeSettings!.setOverride(command);
+            if (command.kind === 'model') runtime.runtimeController.setModelSelection(command.selection);
+            else if (command.kind === 'reasoning') runtime.runtimeController.setReasoningEffort(command.effort);
+            else runtime.runtimeController.setTemperature(command.temperature);
+            const settings = options.runtimeSettings!.snapshot();
+            const key =
+              command.kind === 'model'
+                ? 'agent.modelSelection'
+                : command.kind === 'reasoning'
+                ? 'agent.reasoningEffort'
+                : 'agent.temperature';
+            const value =
+              command.kind === 'model'
+                ? settings.selection
+                : command.kind === 'reasoning'
+                ? settings.reasoningEffort
+                : settings.temperature;
+            await commit([{ type: 'settings_changed', key, value, sessionMutation: 1 }]);
+            context.assertHealthy();
+            if (poisoned !== undefined) throw poisoned;
+            if (closing || signal.aborted) throw new Error('Settings became stale');
+            return { kind: 'applied' as const, settings };
+          } catch (error) {
+            poison(error ?? new Error('Settings mutation failed'));
+            runtime.generationGuard.invalidate();
+            if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
+            active?.cancel();
+            throw poisoned;
+          }
+        });
+        serial = operation.then(
+          () => undefined,
+          () => undefined,
+        );
+        const promise = operation.finally(() => {
+          settingPending.delete(key);
+          if (!settingPending.size) {
+            settingMutation = false;
+            releaseSettings?.();
+            releaseSettings = undefined;
+          }
+        });
+        settingPending.set(key, promise);
+        return promise;
+      },
       retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult> {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (target !== 'turn' && target !== 'tool') return Promise.reject(new Error('Invalid retry target'));
         if (closing || context.state().status === 'closed')
           return Promise.resolve({ kind: 'rejected', reason: 'closed' });
-        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
+        if (interrupting || settingMutation) return Promise.reject(new Error('Session mutation is in progress'));
         if (poisoned !== undefined) return Promise.reject(poisoned);
         if (!context.state().retryEligibility[target]) return Promise.resolve({ kind: 'ineligible', target });
         const hasToolResult = () => {
@@ -1058,6 +1186,7 @@ export function createAdoptedForeground(options: {
         if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
         active?.cancel();
         const operation = serial.then(async (): Promise<AdoptedRetryResult> => {
+          context.assertHealthy();
           if (poisoned !== undefined) throw poisoned;
           await decisionTail;
           await completion;
@@ -1071,8 +1200,7 @@ export function createAdoptedForeground(options: {
           const original = loadCanonicalRetryTarget(context.id, context.root);
           if (target === 'turn' && !original) return { kind: 'ineligible', target };
           if (target === 'tool' && !runtime.state.peekLastToolOutput()) {
-            poisoned = new Error('Canonical retry eligibility disagrees with source state');
-            throw poisoned;
+            throw poison(new Error('Canonical retry eligibility disagrees with source state'));
           }
           const before = structuredClone(runtime.record.getHistory());
           const rewound =
@@ -1080,8 +1208,7 @@ export function createAdoptedForeground(options: {
               ? runtime.state.retryLastUserTurn({ logUndo: false })
               : runtime.state.retryLastToolOutput();
           if (!rewound) {
-            poisoned = new Error('Canonical retry eligibility disagrees with source state');
-            throw poisoned;
+            throw poison(new Error('Canonical retry eligibility disagrees with source state'));
           }
           const turnId = crypto.randomUUID() as TurnInput['turnId'];
           const token = runtime.generationGuard.capture();
@@ -1089,8 +1216,7 @@ export function createAdoptedForeground(options: {
           try {
             rewindRemovedUserCount(before, snapshot.history);
           } catch (error) {
-            poisoned = error;
-            throw error;
+            throw poison(error);
           }
           const fact: SessionFact =
             target === 'turn'
@@ -1122,11 +1248,17 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       decide(command: AdoptedInteractionCommand): Promise<void> {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (poisoned !== undefined) return Promise.reject(poisoned);
         if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
         const owned = structuredClone(command);
         const operation = decisionTail
           .then(() => {
+            context.assertHealthy();
             if (closing || !decideCurrent) throw new Error('No current interaction');
             return decideCurrent(owned);
           })
@@ -1150,9 +1282,14 @@ export function createAdoptedForeground(options: {
         return operation;
       },
       submit(value: AdoptedSubmissionInput, submitOptions?: AdoptedSubmissionOptions): Promise<Admission> {
+        try {
+          context.assertHealthy();
+        } catch (error) {
+          return Promise.reject(error);
+        }
         if (poisoned !== undefined) return Promise.reject(poisoned);
         if (closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
-        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
+        if (interrupting || settingMutation) return Promise.reject(new Error('Session mutation is in progress'));
         const captured = captureAdoptedInput(value.input);
         if (context.state().status === 'closed') return Promise.resolve({ kind: 'rejected', reason: 'closed' });
         const existing = pending.get(value.requestId);
@@ -1184,7 +1321,7 @@ export function createAdoptedForeground(options: {
       },
     },
     failPersistence(error: unknown): void {
-      poisoned ??= error;
+      poison(error);
       cancellation.abort();
       runtime.generationGuard.invalidate();
       if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);

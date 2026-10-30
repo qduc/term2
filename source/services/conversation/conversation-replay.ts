@@ -1,3 +1,4 @@
+import { isTemperatureSetting } from '../settings/session-runtime-settings.js';
 import { isDeepStrictEqual } from 'node:util';
 import { pairToolOccurrences, toolOccurrenceKey, toolOccurrenceMetadata } from './tool-occurrence.js';
 import { buildToolLedgerFromAssistantTurnItems } from './journal-to-ledger.js';
@@ -54,6 +55,7 @@ export interface RestoredState {
   model?: string;
   provider?: string;
   reasoningEffort?: string;
+  temperature?: number;
   previousResponseId: string | null;
   messages: SavedMessage[];
   history: ProviderInputItem[];
@@ -189,6 +191,7 @@ interface ReplayState {
   model?: string;
   provider?: string;
   reasoningEffort?: string;
+  temperature?: number;
   forkedFrom?: string;
   rolloverFrom?: string;
   goal?: import('../logging/conversation-log-events.js').DurableGoal;
@@ -510,7 +513,14 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       state.rolloverFrom = event.rolloverFrom ?? state.rolloverFrom;
       return;
     }
+    case 'session_settings_initialized':
+      state.model = event.model.model;
+      state.provider = event.model.provider;
+      state.reasoningEffort = event.reasoningEffort;
+      state.temperature = event.temperature;
+      return;
     case 'settings_changed': {
+      if (event.sessionMutation === 1) state.previousResponseId = null;
       switch (event.key) {
         case 'agent.modelSelection': {
           const selection = ModelSelectionSchema.safeParse(event.value);
@@ -525,6 +535,10 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
           return;
         case 'agent.provider':
           state.provider = typeof event.value === 'string' ? event.value : state.provider;
+          return;
+        case 'agent.temperature':
+          if (isTemperatureSetting(event.value)) state.temperature = event.value;
+          else if (event.value === undefined) state.temperature = undefined;
           return;
         case 'agent.reasoningEffort':
           state.reasoningEffort = typeof event.value === 'string' ? event.value : state.reasoningEffort;
@@ -1794,6 +1808,7 @@ function replayWithRetryCache(
       model: state.model,
       provider: state.provider,
       reasoningEffort: state.reasoningEffort,
+      temperature: state.temperature,
       previousResponseId: state.previousResponseId,
       messages: state.messages,
       history: state.history,

@@ -474,6 +474,10 @@ export class LocalSessionStore implements SessionStore {
       ? combined?.submission ?? this.#options.adoptedSubmissionFactory!(adoptedContext)
       : undefined;
     const submission: AdoptedSubmissionPort | undefined = rawSubmission && {
+      history: (command) =>
+        handleClosed ? Promise.reject(new Error('Session handle is closed')) : rawSubmission.history(command),
+      listRewindTargets: () =>
+        handleClosed ? Promise.reject(new Error('Session handle is closed')) : rawSubmission.listRewindTargets(),
       submit: (...args) =>
         handleClosed ? Promise.resolve({ kind: 'rejected', reason: 'closed' }) : rawSubmission.submit(...args),
       decide: (command) => {

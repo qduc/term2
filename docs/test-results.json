@@ -29298,6 +29298,367 @@
       "comparison": {
         "resolves_run_ids": ["2026-10-30-time-gap-regression-red", "2026-10-30-time-gap-regression-exploratory"]
       }
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-build",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "post-merge main build",
+      "command": "git merge --no-ff fix/time-gap-regression; pnpm build",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-merge.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-build.log"
+      ],
+      "notes": "Both accepted commits are ancestors. Entire merged tree equals accepted5a60ba85 tree; no conflict resolution/source edits. Prior independent acceptance applies unchanged."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-provider",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "main complete provider black-box",
+      "command": "pnpm test:provider-black-box",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": 231,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 32,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-provider.log"],
+      "notes": "Fresh merged build; includes all new rollover cases, personal-memory Codex/OpenAI and Bare compatibility. Skip openai-websocket.reasoning: no application-owned response traffic persisted; not passed."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-discord",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "main Discord and durable-queue integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/queue/restart.integration.test.ts",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": 124,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-discord.log"],
+      "notes": "Relevant real local network/control and persisted queue boundaries; not full integration tier."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-type-static",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "main typecheck and static guards",
+      "command": "pnpm typecheck; pnpm test",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-typecheck.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-static.log"
+      ],
+      "notes": "Typecheck exit0; static guards28pass."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-main-lint",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "main broad lint",
+      "command": "pnpm lint",
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "diagnostic": "9431ESLint errors/34warnings; exits before Prettier. All9431errors and3warnings in untracked .cache/.coord/.term2/packages artifacts; tracked0errors/31warnings.",
+          "classification": "confirmed-untracked-workspace-artifact-scan",
+          "evidence": "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-lint-ownership.json"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-lint.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-lint-ownership.json"
+      ],
+      "notes": "Same exact diagnostic/environment as recorded2026-10-30-bare-default-main-lint. Reclassified using current file ownership, not history alone. No cleanup of unrelated artifacts."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-tracked-checks",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_main_merge_commit",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "main tracked ESLint and formatting",
+      "command": "pnpm exec eslint --format json <1107 tracked code paths>; pnpm exec prettier --check --ignore-unknown <2647 tracked paths>",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-tracked-eslint.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-tracked-eslint-stderr.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-lint-ownership.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-main-tracked-prettier.log"
+      ],
+      "notes": "Tracked ESLint0errors/31actual rule warnings, plus168ignored-file warnings from explicit path invocation. Prettier passes. Scoped source verification, not a successful pnpm lint rerun."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-candidate-build",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_retained_candidate",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "retained candidate isolated install/build",
+      "command": "pnpm install --frozen-lockfile && pnpm build",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression-candidate",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-candidate-install.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-candidate-build.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-candidate-identity.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-candidate-dist-manifest.json"
+      ],
+      "notes": "New retained branch at exact merged source, own dependency install. Version0.40.0-dev+207f642. All3512dist files byte-identical to main; full manifest retained."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-candidate-provider",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_retained_candidate",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "retained candidate timing/Discord and personal-memory CLI workflows",
+      "command": "pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/conversation-time-gap-rollover.blackbox.ts scripts/provider-black-box/conversation-time-gap.blackbox.ts scripts/provider-black-box/personal-memory-context.blackbox.ts --reporter=verbose",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression-candidate",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/integration-candidate-provider.log"],
+      "notes": "Actual built candidate CLI/PTY, Discord control, persisted rollover/resume, loopback providers. Retained/legacy/invalid timing; personal opt-in/change/delete/unreadable/resume/opt-out across Codex sol/luna and OpenAI luna."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-combined",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "merge_commit_with_untracked_temporary_probe",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "candidate combined memory/timing boundary probe",
+      "command": "pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/integration-combined-context.blackbox.ts --reporter=verbose",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression-candidate",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 1,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-combined-context.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-combined-context-probe.ts"
+      ],
+      "notes": "Temporary real CLI+Discord+rollover+restart probe, externally retained and removed from checkout. In same qualifying human request: personal snapshot precedes separate timing then unchanged human input. Brief/agent capture no new memory snapshot; full memory body absent from wire."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration-candidate-lint-version",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_retained_candidate",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "candidate ordinary lint and actual CLI version",
+      "command": "pnpm lint; isolated node dist/cli.js --version",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression-candidate",
+        "runner_env": {},
+        "notes": "Isolated fixture state/loopback providers only. No live pair restart, private-state/timer edits, protected-tree rebuild, PAYG, push, publication or deployment."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-candidate-lint.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/integration-candidate-version.json"
+      ],
+      "notes": "Candidate pnpm lint passes,0errors/31warnings, Prettier passes. CLI version verified with isolated HOME/XDG/CODEX paths. Candidate clean after removing temporary probe."
     }
   ]
 }

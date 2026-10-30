@@ -16,9 +16,16 @@ on:
   pull_request:
     branches:
       - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
 
 permissions:
   contents: read
+  pull-requests: read
 
 # A newer push to main supersedes an in-flight run of an older commit;
 # cancel the stale run instead of queueing behind it.
@@ -74,10 +81,17 @@ jobs:
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
-          GOLDEN_CHANGE_ALLOWED: ${{ contains(github.event.pull_request.labels.*.name, 'golden-change') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           changed="$(git diff --name-only "$PR_BASE...$PR_HEAD" -- rewrite/parity/goldens/)"
-          if [[ -n "$changed" && "$GOLDEN_CHANGE_ALLOWED" != 'true' ]]; then
+          if [[ -n "$changed" ]]; then
+            # Query live PR state so reruns and label removals cannot reuse a stale event payload.
+            golden_change_allowed="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq 'any(.labels[]; .name == "golden-change")')"
+          else
+            golden_change_allowed='true'
+          fi
+          if [[ -n "$changed" && "$golden_change_allowed" != 'true' ]]; then
             echo "Golden changes require the golden-change label:"
             echo "$changed"
             exit 1

@@ -28109,6 +28109,40 @@
         }
       ],
       "notes": "Selected PTY 3/3, 5 marker launches, nine old parity goldens 9/9, rewrite typecheck, 520-edge guard, inventory, formatting and no-unit guard passed. ESLint reports both test files ignored by repository configuration. Source files exactly match independently reviewed 855fd52 and ab253948. Legacy reopen leakage and single unclassified second-image observation remain diagnostics, not new-build parity requirements. Further C3a matrix, blocked guard/notice and new Session remain unproven; independent integrated review pending."
+    },
+    {
+      "id": "2026-10-30-c3a-evidence-batch-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T15:31:59Z",
+      "commit": "13e251cb41e8f8055565e7c7b3cb95429a8cd0f7",
+      "tree": "407cb807e3ba9b651e6d935d4e7f3319be7c6fbd",
+      "revision_kind": "clean source commit independently reviewed with docs head 60ea0b2",
+      "base_commit": "5085596a56342bf524aee30725aa0a5bbe8b424f",
+      "task_ids": [
+        "2026-10-30-c3a-request-history",
+        "2026-10-30-c3a-input-evidence"
+      ],
+      "suite": "independent integrated old CLI evidence batch",
+      "command": "TERM2_TEST_CLI=<independent marker wrapper> pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/provider-session-resilience-continuity.blackbox.ts scripts/provider-black-box/input-notice.blackbox.ts -t \"resumes a completed conversation|refuses a switched-provider request|sends a pasted image\" --maxWorkers=1",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Independent Sol selected wrapper run against current old CLI."
+      },
+      "result": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 7,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Sol accepted integrated source and docs with no findings. Both source files match separately approved versions exactly. Selected scenarios passed 3/3 in 14.70s with five marker launches. Legacy reopen and unclassified second-image observation remain diagnostic only; remaining matrix and new Session unproven."
     }
   ]
 }

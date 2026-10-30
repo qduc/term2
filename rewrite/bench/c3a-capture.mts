@@ -167,6 +167,16 @@ assert.ok(
   'legacy listeners cannot mutate captured updates',
 );
 assert.ok(received.some((x) => x.update.kind === 'live'));
+const admitted = received.find((x) => x.update.kind === 'fact' && x.update.entry.fact.type === 'session_admitted');
+const started = received.find((x) => x.update.kind === 'fact' && x.update.entry.fact.type === 'session_turn_started');
+assert.ok(
+  admitted && started && started.position.position > admitted.position.position,
+  'private admission advances capture before later visible turn',
+);
+assert.ok(
+  started.update.entry.seq > admitted.update.entry.seq,
+  'private sequence is retained across public projection gaps',
+);
 assert.equal(stoppedCalls, 1);
 assert.ok(nested);
 assert.ok(suffix.every((x) => x.position.position > nested!.position.position));

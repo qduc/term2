@@ -1,10 +1,11 @@
 /**
  * clients/ — thin renderers of the protocol.
  *
- * TUI, headless, ACP and Discord all implement `Client`. A client reads a
- * `WireSnapshot`, folds `WireEvent`s into its own view and turns user actions
- * into `WireCommand`s. It never imports session/, engine/ or below; anything
- * it needs that the protocol lacks is a protocol change.
+ * Each client implements `Client`: headless today, and TUI, ACP and Discord
+ * as they are ported. A client reads a `WireSnapshot`, folds `WireEvent`s into
+ * its own view and turns user actions into `WireCommand`s. It never imports
+ * session/, engine/ or below; anything it needs that the protocol lacks is a
+ * protocol change.
  * Depends on: host, protocol.
  */
 

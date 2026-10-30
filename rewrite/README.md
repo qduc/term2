@@ -11,6 +11,11 @@ imports it.
 Each folder in `src/` is one layer, named after its job. A layer may only use
 the layers listed after its name, so dependencies always point down.
 
+Most layers also have an `adopted/` folder. Code there wraps the existing
+`source/` implementation behind the layer's interface, which is how the port
+reuses the old CLI while the layers are filled in. `app/adopted/` wires those
+pieces together for production.
+
 | Layer       | Job                                                         | May depend on                  |
 | ----------- | ----------------------------------------------------------- | ------------------------------ |
 | `clients/`  | Render the protocol (TUI, headless, ACP, Discord)           | host, protocol                 |
@@ -27,14 +32,19 @@ the layers listed after its name, so dependencies always point down.
 
 - **One log.** `session/` stores a single append-only log of `SessionFact`s.
   History, status, the pending approval, the queue and retry eligibility are
-  all projections of it, so there is no second journal to keep in sync.
+  all projections of it, so there is no second journal to keep in sync. The
+  fact types live in `session/adopted/conversation-log.ts`, because most of
+  them are the old CLI's conversation-log events and only adopted files may
+  import `source/`.
 - **One projection.** `protocol/` turns session updates into `WireEvent`s
-  once. The TUI uses the same protocol as the web client, through the
-  in-process host, so no client keeps its own event translator.
+  once. The TUI reaches it through the in-process host. The gateway's web
+  client, ACP and Discord will reach the same protocol through an HTTP server
+  host that is not built yet, so no client keeps its own event translator.
 - **The engine suspends instead of calling up.** An approval ends the turn run
   with a serializable `TurnCheckpoint`. The native tracer fixture may inspect
   that value, but canonical sessions never resume native checkpoints after a
-  process restart.
+  process restart. In production the adopted engine keeps the old run loop
+  parked in memory under that checkpoint, so a decision continues it.
 - **Names are jobs.** No layer is called service, adapter or orchestrator.
 
 ## Native tracer fixture
@@ -58,15 +68,41 @@ What building it changed in the interfaces:
 - `HostDeps` gained `resolveWorkspace` and `defaultModel`; creating a session
   needs both and the host had neither.
 
-Known gaps, left out on purpose: no input queue (a busy session refuses), no
-compaction, progress events are buffered until a tool returns, an idempotent
-tool that needs approval is asked again after a crash, and each checkpoint
-stores the full turn input.
+Known gaps in the fixture, left out on purpose: no input queue (a busy session refuses), no
+compaction, progress events are buffered until a tool returns, and each
+checkpoint stores the full turn input.
+
+## How a message travels
+
+1. A client turns the user's text into a `submit` `WireCommand` and sends it on
+   its host `Connection`.
+2. `protocol/commands.ts` (`applyCommand`) turns that command into
+   `Session.submit(requestId, items)`.
+3. The session (`session/local-store.ts`, with the turn driver in
+   `session/adopted/foreground.ts`) appends the admission facts, then calls
+   `Engine.start`.
+4. In production the engine is `engine/adopted/`. It runs the old CLI's
+   `AgentClient` and run loop from `source/`, which call the provider through
+   `model/adopted/`.
+5. Each fact the session appends, and each live engine event, reaches
+   subscribers as a `SessionUpdate`. The in-process host passes every update
+   through `Projection.toWire` (`protocol/projection.ts`) before the client
+   sees it.
+
+**Where an approval waits.** When a tool needs approval, the engine ends the
+turn run as suspended with a `TurnCheckpoint`, and the old run loop stays
+parked in memory. The foreground appends `session_interaction_pending`, and
+the session status becomes `awaiting_interaction`. The client answers with a
+`decide` command. `applyCommand` adds the pending interaction's revision and
+generation from session state and calls `Session.decide`, which resumes the
+parked loop. If the process dies while it waits, reopening the session ends
+that turn as interrupted; nothing resumes on its own.
 
 ## Keeping it readable
 
-The point of this rewrite is that a person can follow it. Three checks in CI
-keep that measurable through `scripts/complexity-budget.json`:
+The point of this rewrite is that a person can follow it. Two checks in CI,
+with budgets in `scripts/complexity-budget.json`, and one review step keep that
+measurable:
 
 - `scripts/check-complexity.mjs` fails when the source-edge allowlist grows, or
   when a file passes 500 lines. The line limit is a prompt to look for a second

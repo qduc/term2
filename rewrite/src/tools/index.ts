@@ -41,6 +41,7 @@ export type NestedRunRequest = {
 export type NestedRunResult = { readonly items: readonly Item[]; readonly outcome: NestedRunOutcome };
 
 export type ToolContext = {
+  /** Runs a subagent. The engine injects it, so tools never import engine/. */
   runNested(request: NestedRunRequest): Promise<NestedRunResult>;
   readonly workspace: Workspace;
   readonly settings: SettingsReader;
@@ -72,8 +73,6 @@ export interface Tool<Input = unknown> {
   /** Decides before execution. Pure: no side effects. */
   approval(input: Input, ctx: ToolContext): ApprovalRequirement | Promise<ApprovalRequirement>;
   execute(input: Input, ctx: ToolContext): Promise<ToolResult>;
-  /** Safe to re-run after a crash between start and result. Drives resume behaviour. */
-  readonly idempotent: boolean;
 }
 
 export interface ToolRegistry {

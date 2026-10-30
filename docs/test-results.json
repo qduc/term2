@@ -29902,6 +29902,38 @@
       "failures": [],
       "evidence": [],
       "notes": "Same 60/60 baseline on the unsplit guardrails head 2dcc67ad. Author run and independent rerun both reported 60/60. Hops stays at 29 hops through 7 files. foreground.ts drops from 1346 to 1005 lines; five new files hold 66 to 104 lines each."
+    },
+    {
+      "id": "2026-10-30-rewrite-docs-cold-read",
+      "timestamp": "2026-10-30T23:20:00Z",
+      "commit": "f1712612fd32e7dd4352d8127f6966c3b1a59c7d",
+      "tree": "0a5089350d1d5230a16f89d1a2b88e7a13d05049",
+      "revision_kind": "clean commit",
+      "base_commit": "835ba64d656c8e13ce0e425d4ae50df374652246",
+      "task_ids": [
+        "2026-10-30-rewrite-docs-cold-read"
+      ],
+      "suite": "Rewrite docs cold-read fixes and Tool.idempotent removal",
+      "command": "pnpm exec tsc -p rewrite/tsconfig.json --noEmit; pnpm exec tsc -p rewrite/tsconfig.native-tracer.json && node rewrite/bench-dist/rewrite/bench/native-tracer/tracer.js; pnpm exec tsc -p rewrite/tsconfig.c2-proof.json; node rewrite/scripts/check-layers.mjs; node rewrite/scripts/check-complexity.mjs; prettier --check on changed files",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v22.22.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Isolated worktree .worktrees/docs-coldread. Replaces branch port/rewrite-docs-coldread (PR #126), whose commits accidentally included rewrite/bench-dist build output; the code and docs tree is identical apart from the new bench-dist ignore rule."
+      },
+      "result": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Nothing reads Tool.idempotent, so tsc proves the removal is unobserved. A fresh reader limited to the README and layer index files answered the message-path, approval, fact-type and web-client questions correctly (rating medium); its smaller findings were fixed in this commit and not re-read. PR #126 ran all five CI jobs green on the earlier branch."
     }
   ]
 }

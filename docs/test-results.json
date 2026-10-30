@@ -29659,6 +29659,67 @@
         "/home/qduc/coord/term2/tasks/time-gap-regression/integration-candidate-version.json"
       ],
       "notes": "Candidate pnpm lint passes,0errors/31warnings, Prettier passes. CLI version verified with isolated HOME/XDG/CODEX paths. Candidate clean after removing temporary probe."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-live-pair-cutover",
+      "recorded_on": "2026-10-30",
+      "run_at": "2026-10-30T08:47:49Z",
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "207f6427a7c420722477fd71e60adc4dd30064f1",
+      "base_commit": "a03df58e751b946a4ea7cf5259d34e975cb46218",
+      "revision_kind": "clean_retained_candidate_live_runtime_activation",
+      "source_tree": "8a23f23358226c2a0a7fe20825bc2c1a3482979a",
+      "command_complete": true,
+      "suite": "guarded live coordinator/Discord pair cutover and preservation",
+      "command": "Task-local capture.py snapshots 00-06; installed startup.py select/ready; generation-checked pidfd SIGTERM bridge, clean /quit coordinator, one passive same-lineage launch per process; atomic coordEntry+bridgeEntry update; verify-preservation.py; exact continuity requestId -> proactive.outputs -> outbox reconciliation",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": null,
+        "cwd": "/home/qduc/coord/term2",
+        "runner_env": {
+          "XDG_RUNTIME_DIR": "/run/user/1000",
+          "SHELL_AUTO_APPROVE_MODE": "always",
+          "SANDBOX_ENABLED": "false"
+        },
+        "notes": "User-authorized live interruption/activation; codex/gpt-6.1-terra medium, builtin:bare. No rebuild, PAYG, push, publication, deployment, shared Herdr/service restart or fabricated human input."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "file": "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/coord-exit.json",
+          "diagnostic": "Initial immediate pane read preceded /quit-menu render, so observer assertion stopped before Enter. Exact quit selection inspected next; Enter sent once, clean exit verified. No quit text or stop retried."
+        },
+        {
+          "file": "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/continuity-verified.json",
+          "diagnostic": "Initial verifier incorrectly searched request ID directly in outbox (one proactive record/zero textual outbox matches). Reconciled actual schema via proactive.outputs IDs: one sent output, acknowledged message1565649219451092994. No send retried."
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/candidate-recheck.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/00-fresh.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/01-prestop.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/02-bridge-stopped.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/03-stopped-selection.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/04-passive-ready.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/05-pair.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/gateway-readiness.txt",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/receiver-readiness.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/startup-update-intent.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/06-continuity.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/continuity-verified.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/preservation-summary.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/cutover-evidence/panes-final.json"
+      ],
+      "notes": "Activated exact build0.40.0-dev+207f642: coordinator3646415/start345493628, bridge3646482/start345495326. Latest six-segment lineage byte-prefix preserved;627/627 old sidecar fragments exactly represented in final turns and canonical journal items, completion-occurrence matching handles repeated turn IDs.1598 protected memory/config/unit files unchanged except the two startup entry values; all modes/timer unchanged. Original99jobs/218outbox/214proactive entries unchanged; one continuity send gives99done/219sent/215proactive. Boot-armed fields aligned, no physical boot tested. Natural>=1h qualifying human input pending; legacy missing checkpoints not reconstructed. Existing implementation/integration acceptance remains separate; suites not rerun for source-free activation. Private evidence restricted; no payloads or credentials recorded here. Same repair task, no duplicate completed-task or escaped-defect record."
     }
   ]
 }

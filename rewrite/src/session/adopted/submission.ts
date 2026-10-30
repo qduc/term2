@@ -1,3 +1,7 @@
+import type {
+  RuntimeSettingMutation,
+  RuntimeSettingsSnapshot,
+} from '../../../../source/services/settings/session-runtime-settings.js';
 /** Live adopted submission authority; it is not a serializable session API. */
 import type { decideInteraction } from '../../../../source/gateway/interaction-protocol.js';
 import type { UserMessage } from '../../../../source/types/message.js';
@@ -49,6 +53,9 @@ export interface AdoptedSubmissionPort {
   decide(command: AdoptedInteractionCommand): Promise<void>;
   retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult>;
   interruptFromUser(): Promise<void>;
+  setRuntimeSettings(
+    command: RuntimeSettingMutation,
+  ): Promise<{ kind: 'applied'; settings: RuntimeSettingsSnapshot } | { kind: 'unsupported' }>;
 }
 export interface AdoptedAdmissionContext extends SessionDriverContext {
   admit(

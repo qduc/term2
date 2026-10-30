@@ -489,6 +489,16 @@ async function* modelEvents(
 type CachedBinding = AdoptedModelBinding;
 
 /** Build the `model/` view over the application's existing provider registry. */
+const registryOptions = new WeakMap<AdoptedModelRegistry, AdoptedModelRegistryOptions>();
+export function forkAdoptedModelRegistry(
+  registry: AdoptedModelRegistry,
+  settingsService: ISettingsService,
+): AdoptedModelRegistry {
+  const options = registryOptions.get(registry);
+  if (!options) throw new Error('Expected adopted model registry');
+  return createAdoptedModelRegistry({ ...options, settingsService });
+}
+
 export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions): AdoptedModelRegistry {
   const providerRegistry = options.providerRegistry ?? createProviderRegistry();
   const compactionState = options.contextCompactionSessionState ?? { disabled: false };
@@ -636,7 +646,7 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
     return binding;
   };
 
-  return {
+  const registry: AdoptedModelRegistry = {
     settingsService: options.settingsService,
     async waitForReadSettlement(signal) {
       assertActive();
@@ -727,6 +737,8 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
       await Promise.allSettled([...pendingCloses]);
     },
   };
+  registryOptions.set(registry, options);
+  return registry;
 }
 
 export const adoptedModelConversion = {

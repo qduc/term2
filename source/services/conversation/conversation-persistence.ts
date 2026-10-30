@@ -242,8 +242,17 @@ function decodeEnvelopeLines(content: string): PersistedLogEnvelope[] {
     // closing brace/newline, not only valid JSON missing its newline.
     if (index === lines.length - 1 && !content.endsWith('\n') && /"type"\s*:\s*"session_fact_batch"/.test(trimmed))
       continue;
+    let strictSettings = false;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
+      const rawEvent =
+        typeof parsed === 'object' && parsed !== null ? (parsed as { event?: unknown }).event : undefined;
+      if (typeof rawEvent === 'object' && rawEvent !== null) {
+        const candidate = rawEvent as Record<string, unknown>;
+        strictSettings =
+          candidate['type'] === 'session_settings_initialized' ||
+          (candidate['type'] === 'settings_changed' && Object.hasOwn(candidate, 'sessionMutation'));
+      }
       const eventType =
         typeof parsed === 'object' && parsed !== null && typeof (parsed as { event?: unknown }).event === 'object'
           ? (parsed as { event: { type?: unknown } }).event.type
@@ -263,12 +272,14 @@ function decodeEnvelopeLines(content: string): PersistedLogEnvelope[] {
         }
       } else {
         const envelope = decodeLogEnvelope(parsed);
+        if (strictSettings && !envelope) throw new Error('invalid session settings envelope');
         if (envelope) envelopes.push(envelope);
       }
     } catch (error) {
       // New batch integrity errors are surfaced; legacy malformed records
       // retain the decoder's established skip behavior.
       const isBatchLine = /"type"\s*:\s*"session_fact_batch"/.test(trimmed);
+      if (strictSettings) throw new Error(`conversation log line ${index + 1}: invalid session settings fact`);
       if (isBatchLine) {
         if (error instanceof Error && error.message.startsWith(`conversation log line ${index + 1}:`)) throw error;
         throw new Error(`conversation log line ${index + 1}: invalid session fact batch`);

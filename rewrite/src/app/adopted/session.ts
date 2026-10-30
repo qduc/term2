@@ -1,3 +1,12 @@
+import { isDeepStrictEqual } from 'node:util';
+import { forkAdoptedSettingsBinding } from '../../config/adopted/settings.js';
+import { forkAdoptedModelRegistry, type AdoptedModelRegistry } from '../../model/adopted/index.js';
+import { projectRuntimeSettings } from '../../session/adopted/settings.js';
+import {
+  isReasoningSetting,
+  isTemperatureSetting,
+} from '../../../../source/services/settings/session-runtime-settings.js';
+import type { AgentClient } from '../../../../source/lib/agent-client.js';
 import { createSessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
 import type { SessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
 import { createAdoptedForeground } from '../../session/adopted/foreground.js';
@@ -30,10 +39,36 @@ export function createAppAdoptedSessionHandleFactory(options: {
     let runtime: SessionRuntimeInternals | undefined;
     let assembly: ReturnType<typeof createAppAdoptedEngine> | undefined;
     let cancelBackground: (() => void) | undefined;
+    let ownedClient: AgentClient | undefined;
+    let graphModels: AdoptedModelRegistry | undefined;
     try {
+      const engineOptions = synchronous(options.engine(context), 'engine options');
+      const runtimeOptions = synchronous(options.runtime(context), 'runtime options');
+      const hostSettings = engineOptions.clientOptions.deps.settings;
+      const reason = engineOptions.clientOptions.reasoningEffort ?? hostSettings.get('agent.reasoningEffort');
+      const temp = hostSettings.get('agent.temperature');
+      const facts = [];
+      for await (const entry of context.log.read()) facts.push(entry.fact);
+      const initial = projectRuntimeSettings(facts, {
+        selection: context.state().model,
+        reasoningEffort: isReasoningSetting(reason) ? reason : 'default',
+        ...(isTemperatureSetting(temp) ? { temperature: temp } : {}),
+      });
+      const binding = forkAdoptedSettingsBinding(engineOptions.settings, hostSettings, initial.snapshot);
+      graphModels = forkAdoptedModelRegistry(engineOptions.models, binding.service);
       assembly = createAppAdoptedEngine({
-        ...synchronous(options.engine(context), 'engine options'),
-        bindSessionClient(client) {
+        ...engineOptions,
+        models: graphModels,
+        settings: binding.settings,
+        clientOptions: {
+          ...engineOptions.clientOptions,
+          selection: initial.snapshot.selection,
+          reasoningEffort: initial.snapshot.reasoningEffort,
+          deps: { ...engineOptions.clientOptions.deps, settings: binding.service },
+        },
+        bindSessionClient(boundClient) {
+          ownedClient = boundClient;
+          const client = boundClient;
           cancelBackground = () => {
             let failure: unknown;
             let failed = false;
@@ -52,13 +87,37 @@ export function createAppAdoptedSessionHandleFactory(options: {
             if (failed) throw failure;
           };
           runtime = createSessionRuntimeInternals({
-            ...synchronous(options.runtime(context), 'runtime options'),
+            ...runtimeOptions,
+            deps: { ...runtimeOptions.deps, settingsService: binding.service },
             sessionId: context.id,
             agentClient: client,
           });
         },
       });
-      if (!runtime) throw new Error('Session runtime was not bound');
+      if (!runtime || !ownedClient) throw new Error('Session runtime was not bound');
+      const actual = ownedClient.getRuntimeSettingsSnapshot();
+      if (!isDeepStrictEqual(actual, initial.snapshot))
+        throw new Error('Built client settings disagree with canonical baseline');
+      if (!initial.initialized)
+        await context.commit([
+          ...(facts.some((f) => f.type === 'session_bound')
+            ? []
+            : [
+                {
+                  type: 'session_bound' as const,
+                  version: 1 as const,
+                  workspace: context.state().workspace,
+                  model: actual.selection,
+                },
+              ]),
+          {
+            type: 'session_settings_initialized',
+            version: 1,
+            model: actual.selection,
+            reasoningEffort: actual.reasoningEffort,
+            ...(actual.temperature === undefined ? {} : { temperature: actual.temperature }),
+          },
+        ]);
       const graph = runtime;
       const owned = assembly;
       const foreground = createAdoptedForeground({
@@ -69,6 +128,16 @@ export function createAppAdoptedSessionHandleFactory(options: {
         onSourceEvent: options.onSourceEvent,
         publishFacts: false,
         cancelBackground,
+        runtimeSettings: {
+          supports: (command) =>
+            typeof (command.kind === 'model'
+              ? ownedClient!.setModelSelection
+              : command.kind === 'reasoning'
+              ? ownedClient!.setReasoningEffort
+              : ownedClient!.setTemperature) === 'function',
+          setOverride: binding.setRuntimeOverride,
+          snapshot: () => ownedClient!.getRuntimeSettingsSnapshot(),
+        },
         makeInput(turnId) {
           const state = context.state();
           const prompt = owned.turnPrompt();
@@ -91,7 +160,12 @@ export function createAppAdoptedSessionHandleFactory(options: {
         shutdown() {
           closing ??= (async () => {
             let failure: unknown;
-            for (const cleanup of [() => foreground.shutdown(), () => graph.shutdown(), () => owned.engine.dispose()]) {
+            for (const cleanup of [
+              () => foreground.shutdown(),
+              () => graph.shutdown(),
+              () => owned.engine.dispose(),
+              () => graphModels!.dispose(),
+            ]) {
               try {
                 await cleanup();
               } catch (error) {
@@ -115,6 +189,11 @@ export function createAppAdoptedSessionHandleFactory(options: {
         await assembly?.engine.dispose();
       } catch {
         /* Preserve the construction error. */
+      }
+      try {
+        await graphModels?.dispose();
+      } catch {
+        /* Preserve construction error. */
       }
       throw error;
     }

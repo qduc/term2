@@ -1096,6 +1096,16 @@ export class AgentClient {
     return () => this.#localCheckpointObservers.delete(observer);
   }
 
+  getRuntimeSettingsSnapshot(): import('../services/settings/session-runtime-settings.js').RuntimeSettingsSnapshot {
+    const reasoningEffort = this.#agentConfig.reasoningEffort ?? 'default';
+    const temperature = this.#agentConfig.temperature;
+    return {
+      selection: { provider: this.#agentConfig.getProvider(), model: this.#agentConfig.getModel() },
+      reasoningEffort,
+      ...(temperature === undefined ? {} : { temperature }),
+    };
+  }
+
   setModelSelection(selection: ModelSelection): void {
     this.#agentConfig.setModelSelection(selection);
     this.#agentConfig.refreshAgent();

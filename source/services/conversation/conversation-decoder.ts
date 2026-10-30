@@ -1,3 +1,4 @@
+import { validateMarkedSettings, validateSettingsBaseline } from '../settings/session-runtime-settings.js';
 import type {
   LogEnvelope,
   LogEvent,
@@ -221,7 +222,13 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
   switch (event['type']) {
     case 'session_init':
       return hasString(event, 'id') && hasString(event, 'createdAt');
+    case 'session_settings_initialized':
+      validateSettingsBaseline(event);
+      return true;
     case 'settings_changed':
+      if (Object.hasOwn(event, 'sessionMutation')) {
+        validateMarkedSettings(event);
+      }
       return hasString(event, 'key');
     case 'goal_changed': {
       const goal = event['goal'];
@@ -396,6 +403,12 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
     return null;
   }
   const eventObj = obj['event'] as Record<string, unknown>;
+  if (
+    eventObj['truncated'] === true &&
+    (eventObj['type'] === 'session_settings_initialized' ||
+      (eventObj['type'] === 'settings_changed' && Object.hasOwn(eventObj, 'sessionMutation')))
+  )
+    throw new Error('truncated session settings fact');
   if (
     typeof eventObj['type'] !== 'string' ||
     (eventObj['truncated'] !== true && !isStructurallyValidKnownEvent(eventObj))

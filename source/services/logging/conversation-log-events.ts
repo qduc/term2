@@ -1,3 +1,4 @@
+import type { SessionSettingsInitialized } from '../settings/session-runtime-settings.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CommandMessage } from '../../tools/types.js';
@@ -76,6 +77,7 @@ export interface SessionInitEvent {
 
 export interface SettingsChangedEvent {
   type: 'settings_changed';
+  sessionMutation?: 1;
   key: string;
   value: unknown;
 }
@@ -419,6 +421,7 @@ export type LogEvent =
   | MemoryInjectedLogEvent
   | SessionInitEvent
   | SettingsChangedEvent
+  | SessionSettingsInitialized
   | GoalChangedEvent
   | EventsRetractedEvent
   | ContextCheckpointCreatedEvent

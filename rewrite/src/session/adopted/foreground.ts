@@ -1,3 +1,8 @@
+import {
+  parseRuntimeMutation,
+  type RuntimeSettingMutation,
+  type RuntimeSettingsSnapshot,
+} from '../../../../source/services/settings/session-runtime-settings.js';
 /** Bounded foreground composition. Interaction and scheduling commands are not installed here. */
 import crypto from 'node:crypto';
 import { toTerminalEvent } from '../../../../source/services/conversation/conversation-result-builder.js';
@@ -57,6 +62,11 @@ export function createAdoptedForeground(options: {
   makeInput: (turnId: TurnInput['turnId']) => TurnInput;
   /** Request cancellation of this handle's source-owned background work. */
   cancelBackground?: () => void;
+  runtimeSettings?: {
+    supports(command: RuntimeSettingMutation): boolean;
+    setOverride(command: RuntimeSettingMutation): void;
+    snapshot(): RuntimeSettingsSnapshot;
+  };
   /** Combined store handles publish canonical facts themselves. */
   publishFacts?: boolean;
 }) {
@@ -72,6 +82,12 @@ export function createAdoptedForeground(options: {
   let poisoned: unknown;
   let closing = false;
   let interrupting: Promise<void> | undefined;
+  let settingMutation = false;
+  let releaseSettings: (() => void) | undefined;
+  const settingPending = new Map<
+    string,
+    Promise<{ kind: 'applied'; settings: RuntimeSettingsSnapshot } | { kind: 'unsupported' }>
+  >();
   let shutdownPromise: Promise<void> | undefined;
   let decisionTail = Promise.resolve();
   let decideCurrent: ((command: AdoptedInteractionCommand) => Promise<void>) | undefined;
@@ -942,11 +958,97 @@ export function createAdoptedForeground(options: {
         );
         return operation;
       },
+      setRuntimeSettings(input: RuntimeSettingMutation) {
+        let command: RuntimeSettingMutation;
+        try {
+          command = parseRuntimeMutation(input);
+        } catch (error) {
+          return Promise.reject(error);
+        }
+        const key =
+          command.kind === 'model'
+            ? JSON.stringify(['model', command.selection.provider, command.selection.model])
+            : command.kind === 'reasoning'
+            ? JSON.stringify(['reasoning', command.effort])
+            : JSON.stringify(['temperature', command.temperature ?? null]);
+        const existing = settingPending.get(key);
+        if (existing) return existing;
+        if (!options.runtimeSettings || !options.runtimeSettings.supports(command))
+          return Promise.resolve({ kind: 'unsupported' as const });
+        if (closing || interrupting || context.state().status === 'closed')
+          return Promise.reject(new Error('Session is unavailable'));
+        if (poisoned !== undefined) return Promise.reject(poisoned);
+        if (!settingMutation) {
+          try {
+            releaseSettings = context.reserveSettings();
+          } catch (error) {
+            return Promise.reject(error);
+          }
+          settingMutation = true;
+          cancellation.abort();
+          cancellation = new AbortController();
+          runtime.generationGuard.invalidate();
+          if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
+          active?.cancel();
+        }
+        const signal = cancellation.signal;
+        const operation = serial.then(async () => {
+          await decisionTail;
+          await completion;
+          if (active) await active.waitForSettlement(signal);
+          await engine.waitForAdmission(signal);
+          signal.throwIfAborted();
+          if (closing || poisoned !== undefined) throw new Error('Session is unavailable');
+          try {
+            options.runtimeSettings!.setOverride(command);
+            if (command.kind === 'model') runtime.runtimeController.setModelSelection(command.selection);
+            else if (command.kind === 'reasoning') runtime.runtimeController.setReasoningEffort(command.effort);
+            else runtime.runtimeController.setTemperature(command.temperature);
+            const settings = options.runtimeSettings!.snapshot();
+            const key =
+              command.kind === 'model'
+                ? 'agent.modelSelection'
+                : command.kind === 'reasoning'
+                ? 'agent.reasoningEffort'
+                : 'agent.temperature';
+            const value =
+              command.kind === 'model'
+                ? settings.selection
+                : command.kind === 'reasoning'
+                ? settings.reasoningEffort
+                : settings.temperature;
+            await commit([{ type: 'settings_changed', key, value, sessionMutation: 1 }]);
+            if (closing || signal.aborted) throw new Error('Settings became stale');
+            return { kind: 'applied' as const, settings };
+          } catch (error) {
+            poisoned = error ?? new Error('Settings mutation failed');
+            context.poison(poisoned);
+            runtime.generationGuard.invalidate();
+            if (activePostExecuteRunId) runtime.postExecutePending.closeRun(activePostExecuteRunId);
+            active?.cancel();
+            throw poisoned;
+          }
+        });
+        serial = operation.then(
+          () => undefined,
+          () => undefined,
+        );
+        const promise = operation.finally(() => {
+          settingPending.delete(key);
+          if (!settingPending.size) {
+            settingMutation = false;
+            releaseSettings?.();
+            releaseSettings = undefined;
+          }
+        });
+        settingPending.set(key, promise);
+        return promise;
+      },
       retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult> {
         if (target !== 'turn' && target !== 'tool') return Promise.reject(new Error('Invalid retry target'));
         if (closing || context.state().status === 'closed')
           return Promise.resolve({ kind: 'rejected', reason: 'closed' });
-        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
+        if (interrupting || settingMutation) return Promise.reject(new Error('Session mutation is in progress'));
         if (poisoned !== undefined) return Promise.reject(poisoned);
         if (!context.state().retryEligibility[target]) return Promise.resolve({ kind: 'ineligible', target });
         const hasToolResult = () => {
@@ -1054,7 +1156,7 @@ export function createAdoptedForeground(options: {
       },
       submit(value: AdoptedSubmissionInput, submitOptions?: AdoptedSubmissionOptions): Promise<Admission> {
         if (closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
-        if (interrupting) return Promise.reject(new Error('User interrupt is in progress'));
+        if (interrupting || settingMutation) return Promise.reject(new Error('Session mutation is in progress'));
         const captured = captureAdoptedInput(value.input);
         if (context.state().status === 'closed') return Promise.resolve({ kind: 'rejected', reason: 'closed' });
         const existing = pending.get(value.requestId);

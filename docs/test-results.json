@@ -28865,6 +28865,439 @@
         "/home/qduc/coord/term2/tasks/bare-default/integration-main-tracked-lint.json"
       ],
       "notes": "All tracked paths passed under normal ignore rules; diagnostic follow-up, not a successful rerun of pnpm lint."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-diagnosis",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "explicit_precommit_or_fixture_snapshot",
+      "source_tree": null,
+      "command_complete": true,
+      "suite": "historical replay and timestamp trace",
+      "command": "node replay-probe.mjs; privacy-safe session and provider projections",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {},
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/diagnosis.json",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/replay-probe.mjs",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/replay-probe.json"
+      ],
+      "notes": "Pinned historical module replayed 70 pre-target successor items with zero human baselines; actual previous input was in predecessor. Policy returns no gap for successor history, valid gap with actual prior receipt. Sanitized wire alone is not absence proof. Diagnostic counts are not test counts."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-red",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "explicit_precommit_or_fixture_snapshot",
+      "source_tree": null,
+      "command_complete": true,
+      "suite": "built CLI red proof",
+      "command": "pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/conversation-time-gap-rollover.blackbox.ts",
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "files_passed": 0,
+        "files_failed": 1,
+        "files_skipped": 0
+      },
+      "failures": [
+        {
+          "file": "scripts/provider-black-box/conversation-time-gap-rollover.blackbox.ts",
+          "test": "first qualifying human after rollover/resume",
+          "expected": "one timing notice",
+          "actual": "zero notices; expected [] to have length 1 but got 0"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/red.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/red-proof.log"
+      ],
+      "notes": "Binary built from base before source edits; only regression fixture exercised updated scenario. Source edits on disk did not rebuild this binary. Failure reached first qualifying Discord human after real rollover/resume. Earlier flag/schema setup failures are not red proof."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-exploratory",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "explicit_precommit_or_fixture_snapshot",
+      "source_tree": null,
+      "command_complete": true,
+      "suite": "fixture setup and overlapping build diagnostics",
+      "command": "focused provider Vitest invocations during fixture construction and concurrent build",
+      "exit_code": 1,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [
+        {
+          "signature": "Unknown flag --control",
+          "classification": "fixture CLI flag"
+        },
+        {
+          "signature": "PTY exited after two responses before idle",
+          "classification": "fixture passed positional timing prompt rather than --control-socket=timing"
+        },
+        {
+          "signature": "invalid_request Control rejected request",
+          "classification": "fixture missing clientRequestId / expected incorrect receipt schema"
+        },
+        {
+          "signature": "expected plain Discord text but received content-part array with untrusted provenance wrapper",
+          "classification": "fixture assertion; retained production wrapping"
+        },
+        {
+          "signature": "ERR_MODULE_NOT_FOUND dist/services/mcp/mcp-tool-source.js and dist/cli.js",
+          "classification": "fixture execution overlapped a dist rebuild; not a product regression"
+        }
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/red.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/red-corrected.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/red-final.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/red-valid.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/red-behavior.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/red-schema.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/green.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/compatibility.log"
+      ],
+      "notes": "Grouped diagnostics, not aggregate test counts. Fixture flag/request/assertion mistakes repaired without changing production behavior; missing-module failures occurred while another suite replaced dist. Later sequential clean-source full-provider run resolves these failures."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-focused-green",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "explicit_precommit_or_fixture_snapshot",
+      "source_tree": null,
+      "command_complete": true,
+      "suite": "focused timing provider workflows",
+      "command": "pnpm exec vitest run --config vitest.provider-black-box.config.ts scripts/provider-black-box/conversation-time-gap-rollover.blackbox.ts scripts/provider-black-box/conversation-time-gap.blackbox.ts",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/green-final.log"],
+      "notes": "Initial retained-checkpoint journey plus original timing/restart scenario. Before parameterized compatibility variants; do not claim this ran all later variants."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-provider-precommit",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "explicit_precommit_or_fixture_snapshot",
+      "source_tree": null,
+      "command_complete": true,
+      "suite": "provider black-box",
+      "command": "pnpm test:provider-black-box",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": 231,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 32,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/provider.log"],
+      "notes": "Started before source commit and overlapped source commit and E2E run. Passing observation retained, not represented as a clean-commit run. All three checkpoint variants passed. Skipped openai-websocket.reasoning: no application-owned response traffic persisted."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-e2e",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "explicit_precommit_or_fixture_snapshot",
+      "source_tree": null,
+      "command_complete": true,
+      "suite": "complete E2E",
+      "command": "pnpm test:e2e",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": 58,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 11,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/e2e.log"],
+      "notes": "Precommit/dirty snapshot started before source commit. Includes fake Codex and build/rollback boundary. Source repair subsequently committed; this run is not labelled clean."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-integration",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "a5a0ebb351ba4a696759607ea6b398ba19e6ab50",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "235bc6c432b99d597b696a5b4f3a31f146f6887b",
+      "command_complete": true,
+      "suite": "Discord bridge and durable queue integration",
+      "command": "pnpm test:integration source/services/discord/discord-bridge.integration.test.ts source/services/queue/restart.integration.test.ts",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": 124,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 2,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/integration.log"],
+      "notes": "Started after source commit. Includes real loopback Discord bridge/control boundary, internal rollover public identity and queue persistence/failure paths."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-static",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "a5a0ebb351ba4a696759607ea6b398ba19e6ab50",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "235bc6c432b99d597b696a5b4f3a31f146f6887b",
+      "command_complete": true,
+      "suite": "static guards",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 7,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/static.log"],
+      "notes": ""
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-provider",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "a5a0ebb351ba4a696759607ea6b398ba19e6ab50",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "235bc6c432b99d597b696a5b4f3a31f146f6887b",
+      "command_complete": true,
+      "suite": "complete clean-commit provider black-box",
+      "command": "pnpm test:provider-black-box",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": 231,
+        "failed": 0,
+        "skipped": 1,
+        "files_passed": 32,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/provider-clean-commit.log"],
+      "notes": "Sequential fresh build at exact clean source commit. All 3 rollover checkpoints (retained, legacy missing, invalid) and original timing/restart pass. Skipped openai-websocket.reasoning: no application-owned response traffic persisted. No live Discord or natural hour-long wait claimed."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-type-lint",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "a5a0ebb351ba4a696759607ea6b398ba19e6ab50",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "235bc6c432b99d597b696a5b4f3a31f146f6887b",
+      "command_complete": true,
+      "suite": "TypeScript and lint",
+      "command": "pnpm typecheck && pnpm lint",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression",
+        "runner_env": {},
+        "notes": "Disposable fixture state and loopback providers only; host timezone +07:00. No live runtime changes or external provider requests."
+      },
+      "result": {
+        "passed": null,
+        "failed": null,
+        "skipped": null,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/time-gap-regression/typecheck.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/lint.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/typecheck-final.log",
+        "/home/qduc/coord/term2/tasks/time-gap-regression/lint-final.log"
+      ],
+      "notes": "Final clean-source typecheck/lint both exit 0; lint 31 warnings and 0 errors; Prettier passed. Earlier precommit runs also passed, retained as supporting logs only."
+    },
+    {
+      "id": "2026-10-30-time-gap-regression-independent",
+      "recorded_on": "2026-10-30",
+      "run_at": null,
+      "task_ids": ["2026-10-30-time-gap-regression"],
+      "commit": "a5a0ebb351ba4a696759607ea6b398ba19e6ab50",
+      "base_commit": "bc96f19d8de7090f5460718c304f5a2cbbc4fe52",
+      "revision_kind": "clean_source_commit",
+      "source_tree": "235bc6c432b99d597b696a5b4f3a31f146f6887b",
+      "command_complete": true,
+      "suite": "independent built-CLI verification and review",
+      "command": "pnpm install --frozen-lockfile; pnpm build; focused provider blackboxes; temporary verifier-time-gap.blackbox.ts; pnpm typecheck; pnpm lint",
+      "exit_code": 0,
+      "environment": {
+        "os": "Linux 7.0.14-17-pve",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "cwd": "/home/qduc/term2/.worktrees/time-gap-regression-verifier",
+        "runner_env": {
+          "NODE_ENV": "test"
+        },
+        "notes": "Independent isolated checkout at source commit; disposable loopback fixtures only; temporary probes removed."
+      },
+      "result": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": 3,
+        "files_failed": 0,
+        "files_skipped": 0
+      },
+      "failures": [],
+      "evidence": ["/home/qduc/coord/term2/tasks/time-gap-regression/independent-verification.md"],
+      "notes": "ACCEPT from independent worker coral-shrew-364. Focused 4 tests/2 files plus independent 4 probes/1 temporary file. Reset, repeated rollover without human, backwards clock and malformed object baseline verified. Initial probe had a control conflict after clear, resolved by using PTY; not diagnosed/classified as product defect. Initial combined lint failed only temporary probe formatting; probe removed and lint rerun passed (31 warnings/0errors). Full suites and exact 1h equality not independently rerun.",
+      "comparison": {
+        "resolves_run_ids": ["2026-10-30-time-gap-regression-red", "2026-10-30-time-gap-regression-exploratory"]
+      }
     }
   ]
 }

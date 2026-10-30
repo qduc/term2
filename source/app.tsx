@@ -75,6 +75,7 @@ import {
 } from './services/conversation/conversation-persistence.js';
 import { listRecentConversations } from './services/conversation/recent-conversations.js';
 import { profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
+import { latestHumanInputAt } from './services/conversation/conversation-time-gap.js';
 import { composeSessionRolloverBrief } from './services/session-rollover/session-rollover-brief.js';
 import { formatGoalClosedByCheck } from './services/conversation/durable-goal.js';
 import type { ControlSocketServer } from './services/control-socket/control-socket.js';
@@ -494,6 +495,7 @@ const App: FC<AppProps> = ({
 
   sessionRolloverHandlerRef.current = async (request) => {
     const sourceSessionId = sessionId;
+    const humanInputBaseline = latestHumanInputAt(conversationService.getCurrentSnapshot().history);
     const taskInventory = (conversationService.backgroundTaskControl?.listDetails?.() ?? []).map((task) => ({
       kind: task.kind,
       id: task.id,
@@ -568,7 +570,7 @@ const App: FC<AppProps> = ({
       request,
       taskInventory,
     });
-    await sendSessionRolloverBrief(briefing);
+    await sendSessionRolloverBrief({ text: briefing, ...(humanInputBaseline ? { humanInputBaseline } : {}) });
   };
 
   const handoff = useHandoffFlow({

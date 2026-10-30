@@ -31,9 +31,8 @@ const timestamp = (value: unknown): number | null => {
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value ? parsed : null;
 };
 
-/** Keep the timing on its user item so replay and rewind cannot orphan a notice. */
-export function conversationTimeGap(humanInputAt: string | undefined, history: readonly unknown[]): unknown {
-  if (!humanInputAt) return undefined;
+/** Latest trustworthy human arrival, including the checkpoint carried by a rollover brief. */
+export function latestHumanInputAt(history: readonly unknown[]): string | undefined {
   let previousReceivedAt: string | undefined;
   let latest = -Infinity;
   // Released steers may execute ahead of older queued follow-ups. History order
@@ -41,15 +40,24 @@ export function conversationTimeGap(humanInputAt: string | undefined, history: r
   for (const candidate of history) {
     if (!candidate || typeof candidate !== 'object') continue;
     const item = candidate as ProviderInputItem;
-    if (item.role !== 'user' || item.humanInputAt === undefined) continue;
-    const received = timestamp(item.humanInputAt);
-    if (received === null) return undefined;
-    if (received > latest) {
-      latest = received;
-      previousReceivedAt = item.humanInputAt as string;
+    if (item.role !== 'user') continue;
+    for (const value of [item.humanInputAt, item.humanInputBaseline]) {
+      if (value === undefined) continue;
+      const received = timestamp(value);
+      if (received === null) return undefined;
+      if (received > latest) {
+        latest = received;
+        previousReceivedAt = value as string;
+      }
     }
   }
-  const gap = { previousReceivedAt, receivedAt: humanInputAt };
+  return previousReceivedAt;
+}
+
+/** Keep the timing on its user item so replay and rewind cannot orphan a notice. */
+export function conversationTimeGap(humanInputAt: string | undefined, history: readonly unknown[]): unknown {
+  if (!humanInputAt) return undefined;
+  const gap = { previousReceivedAt: latestHumanInputAt(history), receivedAt: humanInputAt };
   return formatConversationTimeGap(gap) ? gap : undefined;
 }
 

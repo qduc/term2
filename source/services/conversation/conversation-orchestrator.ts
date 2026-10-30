@@ -841,6 +841,7 @@ export class ConversationOrchestrator {
       id: this.createMessageId(),
       sender: 'user',
       ...(turn.humanInputAt ? { humanInputAt: turn.humanInputAt } : {}),
+      ...(turn.humanInputBaseline ? { humanInputBaseline: turn.humanInputBaseline } : {}),
       text: formatUserTurnForDisplay(turn),
       ...(turn.skill ? { skill: turn.skill } : {}),
       ...(options?.presentation ? { presentation: options.presentation } : {}),
@@ -1820,6 +1821,7 @@ export class ConversationOrchestrator {
           id: messageId,
           sender: 'user',
           ...(turn.humanInputAt ? { humanInputAt: turn.humanInputAt } : {}),
+          ...(turn.humanInputBaseline ? { humanInputBaseline: turn.humanInputBaseline } : {}),
           text: formatUserTurnForDisplay(turn),
           ...(turn.skill ? { skill: turn.skill } : {}),
         };

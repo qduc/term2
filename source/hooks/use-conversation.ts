@@ -496,7 +496,7 @@ export const useConversation = ({
     [sendThroughOrchestrator],
   );
   const sendSessionRolloverBrief = useCallback(
-    (briefing: string) => sendThroughOrchestrator({ text: briefing }, { presentation: 'session_rollover' }),
+    (briefing: UserTurn) => sendThroughOrchestrator(briefing, { presentation: 'session_rollover' }),
     [sendThroughOrchestrator],
   );
 

@@ -549,6 +549,9 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
         {
           text: event.message.text ?? '',
           ...(event.message.humanInputAt !== undefined ? { humanInputAt: event.message.humanInputAt } : {}),
+          ...(event.message.humanInputBaseline !== undefined
+            ? { humanInputBaseline: event.message.humanInputBaseline }
+            : {}),
         },
         { history: state.history },
       );

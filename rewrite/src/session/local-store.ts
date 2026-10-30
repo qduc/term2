@@ -522,6 +522,10 @@ export class LocalSessionStore implements SessionStore {
       : undefined;
     const submission: AdoptedSubmissionPort | undefined = rawSubmission && {
       networkApproval: rawSubmission.networkApproval,
+      history: (command) =>
+        handleClosed ? Promise.reject(new Error('Session handle is closed')) : rawSubmission.history(command),
+      listRewindTargets: () =>
+        handleClosed ? Promise.reject(new Error('Session handle is closed')) : rawSubmission.listRewindTargets(),
       submit: (...args) =>
         handleClosed ? Promise.resolve({ kind: 'rejected', reason: 'closed' }) : rawSubmission.submit(...args),
       decide: (command) => {

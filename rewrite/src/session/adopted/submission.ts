@@ -44,7 +44,18 @@ export type AdoptedRetryResult =
   | { readonly kind: 'started'; readonly turnId: TurnId }
   | { readonly kind: 'ineligible'; readonly target: AdoptedRetryTarget }
   | { readonly kind: 'rejected'; readonly reason: 'closed' };
+export type HistoryMutation =
+  | { readonly kind: 'undo_last' }
+  | { readonly kind: 'undo_count'; readonly count: number }
+  | { readonly kind: 'rewind'; readonly targetId: string };
+export type HistoryMutationResult =
+  | { readonly kind: 'applied'; readonly restored: { text: string; images?: UserTurn['images'] } }
+  | { readonly kind: 'not_found' | 'stale' };
 export interface AdoptedSubmissionPort {
+  history(command: HistoryMutation): Promise<HistoryMutationResult>;
+  listRewindTargets(): Promise<
+    readonly import('../../../../source/services/conversation/conversation-store.js').RewindTarget[]
+  >;
   submit(input: AdoptedSubmissionInput, options?: AdoptedSubmissionOptions): Promise<Admission>;
   decide(command: AdoptedInteractionCommand): Promise<void>;
   retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult>;

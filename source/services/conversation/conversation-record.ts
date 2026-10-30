@@ -106,6 +106,9 @@ export class ConversationRecord {
   listRewindTargets() {
     return this.#store.listRewindTargets();
   }
+  reserveHistoryMutation(command: Parameters<ConversationStore['reserveHistoryMutation']>[0]) {
+    return this.#store.reserveHistoryMutation(command);
+  }
   #snapshotJournal(): AssistantJournalItemLogEvent[] {
     return structuredClone(this.#journal.getEvents());
   }

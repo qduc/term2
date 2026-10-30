@@ -29638,6 +29638,38 @@
       "notes": "PR119 CI run 41126383748 failed c1-adopted-kill cold open: TypeError driver.subscribe is not a function at local-store.ts:530, reproduced at 1495. Recovery-only driver has no live subscription; c765 guards capability while canonical fact capture remains active. Unchanged C1 SIGKILL/reopen/no replay and enhanced actual recovery-only capture+closeLog pass; complete retained CI bench step, rewrite tsc and 527-edge layer guard pass. Independent Sol review and focused reruns pass; prior 6640 acceptance is corrected for this escaped regression. Other CI jobs were green. P2 and full C4 remain open."
     },
     {
+      "id": "2026-10-30-c3a-stage5-history",
+      "timestamp": "2026-10-30T21:00:36Z",
+      "commit": "0b7f38e6b61e453b35dc53a8e437f9a0a99de92f",
+      "tree": "6872f9dff4cbfc5dd8d4a3b7ac6069afd555d900",
+      "revision_kind": "source commit",
+      "base_commit": "5f329234f914622c5bb7a63456a7fa19fd689213",
+      "task_ids": [
+        "2026-10-30-c3a-stage5-history"
+      ],
+      "suite": "C3a stage 5 private undo and rewind",
+      "command": "root and rewrite tsc; layer guard; inventory; no-unit; source lint; old CLI build and parity; retained history, capture, approval and held-tool benches; independent actual graph and mutation-fence probes; corrected P1 cold-reader C1 kill and capture rechecks",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.19.0",
+        "notes": "Isolated worktree, controlled provider and network-enabled sandbox. Source 0b7f merges U with P1 cold-reader fix; broad checks at prior source 3a957 and targeted reruns at 0b7f. Install ignored scripts; automatic Husky hook absent, explicit equivalent lint and no-unit ran."
+      },
+      "result": {
+        "passed": null,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [],
+      "notes": "Combined 3a957 root/rewrite typechecks, guard527, inventory, no-unit, rebuilt old CLI parity 9/9; retained history basic/held/fsync 3/3, P1 capture, C1 approval and held-tool PASS. Corrected P1 source 0b7f exact C1 actual kill/cold-reader, capture, history 3/3, rewrite tsc and guard527 PASS. Sol independent 5 actual probes plus retained 3/3 on 3a957 cover stale initial pure no-op, held actual source tool and callback mutation fence, close with no mutation, source image content/cold replay, equivalent property-order concurrent counts joining once, append/fsync failure poisoning and capture interop; exact 0b7f C1 kill and U/capture interop independently rerun PASS, U source unchanged. Source image undo preserves data/MIME/size but reconstructs UI ID/display; no original UI-ID claim. Fsync failure injected; held provider and physical tool proofs distinct. See /tmp/term2-c3a-stage5-u-author-evidence.md and /tmp/term2-c3a-stage5-history-independent-review.md. Remaining stage5 settings/lifecycle/goals/network/read and C3b/C4/K2 and full #76 remain open."
+    },
+    {
       "id": "2026-10-30-c3a-network-provisional",
       "timestamp": "2026-10-30T21:05:23Z",
       "commit": "a24257c83f694962965fedf9c3db64b392fa89d7",

@@ -86,7 +86,9 @@ function sourceRelative(file) {
 
 function sourceLayer(file) {
   const relative = sourceRelative(file);
-  return SOURCE_LAYERS.find(([, prefix]) => relative === prefix.replace(/\/$/, '') || relative.startsWith(prefix))?.[0] ?? null;
+  return SOURCE_LAYERS.find(([, prefix]) =>
+    prefix.endsWith('/') ? relative.startsWith(prefix) : relative === prefix,
+  )?.[0] ?? null;
 }
 
 function sourceEdge(importer, target, fromLayer, toLayer) {

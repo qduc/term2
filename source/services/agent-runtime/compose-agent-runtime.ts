@@ -1,3 +1,4 @@
+import { createLegacyNestedRunDriver } from './legacy-nested-driver.js';
 import type { NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
@@ -115,6 +116,7 @@ export function createAgentRuntimeFromSubagentRuntime(deps: AgentRuntimeFromSuba
  *   adaptation path consumed by NestedSubagentRunner.
  */
 export function createAgentRuntime(deps: CreateAgentRuntimeDeps): AgentRuntimeComposition {
+  const driverFactory = deps.driverFactory ?? createLegacyNestedRunDriver;
   const nestedCompatibility = new NestedToolCompatibilityState(deps.settings);
   const toolPolicy = new SubagentToolPolicy({
     settings: deps.settings,
@@ -125,7 +127,7 @@ export function createAgentRuntime(deps: CreateAgentRuntimeDeps): AgentRuntimeCo
   });
 
   const toolFactory = new SubagentToolFactory({
-    driverFactory: deps.driverFactory,
+    driverFactory,
     settings: deps.settings,
     logger: deps.logger,
     executionContext: deps.executionContext,
@@ -145,7 +147,7 @@ export function createAgentRuntime(deps: CreateAgentRuntimeDeps): AgentRuntimeCo
   });
 
   const mentorRunner = new MentorRunner({
-    driverFactory: deps.driverFactory,
+    driverFactory,
     logger: deps.logger,
     settings: deps.settings,
     sessionContextService: deps.sessionContextService,

@@ -16,6 +16,7 @@ import { getToolInfoFromInterruption } from '../interruption-info.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { extractToolTargetPaths } from './shell-auto-approval-resolver.js';
 import { resolveOutsideWorkspaceEdit } from './approval-descriptor.js';
+import type { PendingApproval } from '../../contracts/conversation.js';
 
 export type ApprovalGrantExecutorDeps = {
   sessionId: string;
@@ -38,6 +39,60 @@ export type ApprovalGrantResult = {
   deniedReadDecision: boolean;
   parsedArguments: Record<string, unknown> | null;
 };
+
+/** Validate a disclosed grant against trusted source arguments without applying it. */
+export function validateApprovalGrant(
+  deps: ApprovalGrantExecutorDeps,
+  input: ApprovalGrantInput,
+  approval: PendingApproval,
+): void {
+  const answer = input.answer;
+  const parsed = parseToolCallArguments(input.rawArguments, {
+    callId: input.callId ?? 'control',
+    toolName: input.toolName ?? 'unknown',
+    sessionId: deps.sessionId,
+    traceId: deps.logger?.getCorrelationId() ?? 'trace-unknown',
+  }).arguments;
+  const args =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  if (answer === 'allow-folder-session') {
+    if (!supportsFolderSessionRead(input.toolName) || !resolveSessionReadFolder(input.toolName, args))
+      throw new Error('Invalid read grant target');
+  } else if (answer === 'allow-edit-file-session' || answer === 'allow-edit-folder-session') {
+    const target = resolveOutsideWorkspaceEdit(input.toolName, args);
+    if (
+      !target ||
+      !approval.outsideWorkspaceEdit ||
+      target.path !== approval.outsideWorkspaceEdit.path ||
+      target.folder !== approval.outsideWorkspaceEdit.folder
+    )
+      throw new Error('Invalid edit grant target');
+  } else if (isDockerHostControlApproveAnswer(answer)) {
+    if (
+      !approval.dockerHostControl ||
+      typeof args?.command !== 'string' ||
+      !isDockerHostControlShellApproval(
+        input.toolName,
+        args,
+        deps.sessionId,
+        deps.sessionAccess,
+        deps.nestedCompatibility,
+      )
+    )
+      throw new Error('Invalid Docker grant target');
+  } else if (isDeniedReadApproveAnswer(answer)) {
+    if (
+      !approval.deniedRead ||
+      !input.interruption ||
+      input.toolName !== 'shell' ||
+      typeof args?.command !== 'string' ||
+      (answer === 'allow-remember' && approval.deniedRead.sensitive)
+    )
+      throw new Error('Invalid denied-read grant');
+  } else {
+    throw new Error('Invalid approval grant');
+  }
+}
 
 /** The one domain seam that applies the existing approval grants. */
 export function applyApprovalGrant(deps: ApprovalGrantExecutorDeps, input: ApprovalGrantInput): ApprovalGrantResult {

@@ -1,10 +1,12 @@
 /** Live adopted submission authority; it is not a serializable session API. */
+import type { decideInteraction } from '../../../../source/gateway/interaction-protocol.js';
 import type { UserMessage } from '../../../../source/types/message.js';
 import type { InputSurgeApproval } from '../../../../source/services/input-surge-approval.js';
 import { normalizeUserTurn, type UserTurn } from '../../../../source/types/user-turn.js';
 import { normalizedBodyHash } from './conversation-log.js';
 import type { TurnId } from '../../engine/index.js';
-import type { Admission, ClientRequestId, SessionEventReference } from '../index.js';
+import type { ToolCallId } from '../../model/index.js';
+import type { Admission, ClientRequestId, InteractionId, SessionEventReference } from '../index.js';
 import type { SessionDriverContext } from '../local-store.js';
 
 export interface AdoptedSubmissionInput {
@@ -20,8 +22,26 @@ export interface AdoptedAdmissionReceipt {
 export interface AdoptedSubmissionOptions {
   readonly inputSurgeApproval?: InputSurgeApproval;
 }
+export type AdoptedInteractionIdentity = {
+  readonly turnId: TurnId;
+  readonly interactionId: InteractionId;
+  readonly revision: number;
+  readonly generation: string;
+};
+export type AdoptedInteractionCommand = AdoptedInteractionIdentity &
+  (
+    | {
+        readonly kind: 'choose';
+        readonly decisions: readonly {
+          readonly callId?: ToolCallId;
+          readonly choice: Parameters<typeof decideInteraction>[1];
+        }[];
+      }
+    | { readonly kind: 'navigate'; readonly direction: 'previous' | 'next' }
+  );
 export interface AdoptedSubmissionPort {
   submit(input: AdoptedSubmissionInput, options?: AdoptedSubmissionOptions): Promise<Admission>;
+  decide(command: AdoptedInteractionCommand): Promise<void>;
 }
 export interface AdoptedAdmissionContext extends SessionDriverContext {
   admit(

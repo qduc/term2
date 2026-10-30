@@ -111,6 +111,16 @@ export class SessionTurnAdapter {
       }
     | undefined;
   #policy: ApprovalDecisionPolicy | undefined;
+  #adoptedDecision:
+    | ((
+        terminal: ConversationTerminal,
+        address: unknown,
+      ) => Promise<{
+        answer: string;
+        rejectionReason?: string;
+        stopAfterApprovalResolution?: boolean;
+      }>)
+    | undefined;
 
   #syncPolicyRegistry(): void {
     const current = this.deps.agentClient?.getApprovalPolicyRegistry?.();
@@ -251,12 +261,24 @@ export class SessionTurnAdapter {
     input: string | UserTurn,
     emit: (event: ConversationEvent) => void,
     options: InitialTurnRunOptions = {},
+    decide?: (
+      terminal: ConversationTerminal,
+      address: unknown,
+    ) => Promise<{
+      answer: string;
+      rejectionReason?: string;
+      stopAfterApprovalResolution?: boolean;
+    }>,
   ): {
     session: ConversationTurnSession;
     finish: () => TurnOutcome;
+    postExecuteRunId: string;
+    postExecuteTerminal: (entries: readonly PostExecutePendingEntry[]) => ConversationTerminal;
   } {
     if (this.#liveRun || this.#adoptedTurnActive) throw new Error('A conversation turn is already active');
     const authority = {};
+    const postExecuteRunId = `${resolveSessionId(this.deps.sessionId)}:live:${++this.#nextLiveRunId}`;
+    this.deps.setActivePostExecuteRunId?.(postExecuteRunId);
     this.#adoptedTurnActive = authority;
     this.#syncPolicyRegistry();
     this.#input = input;
@@ -267,11 +289,14 @@ export class SessionTurnAdapter {
     this.#activeRecoveryBudget = undefined;
     this.#outcome = { kind: 'failed' };
     this.#emit = emit;
+    this.#adoptedDecision = decide;
     const callbacks = this.#turnSession();
     const assertCurrent = () => {
       if (this.#adoptedTurnActive !== authority) throw new Error('Adopted turn is stale');
     };
     return {
+      postExecuteRunId,
+      postExecuteTerminal: (entries) => this.#postExecuteApprovalTerminal(entries),
       session: {
         ...callbacks,
         prepare: (signal) => {
@@ -298,9 +323,10 @@ export class SessionTurnAdapter {
           assertCurrent();
           return callbacks.consume(stream);
         },
-        interrupted: async () => {
+        interrupted: async (stream) => {
           assertCurrent();
-          throw new Error('Adopted interaction handling is not installed');
+          if (!this.#adoptedDecision) throw new Error('Adopted interaction handling is not installed');
+          return callbacks.interrupted(stream);
         },
         completed: (stream) => {
           assertCurrent();
@@ -314,6 +340,9 @@ export class SessionTurnAdapter {
       finish: () => {
         assertCurrent();
         this.#adoptedTurnActive = undefined;
+        this.deps.postExecutePending.closeRun(postExecuteRunId);
+        this.deps.setActivePostExecuteRunId?.(null);
+        this.#adoptedDecision = undefined;
         this.#attempt?.close();
         this.#emit = () => undefined;
         return this.#outcome;
@@ -511,6 +540,16 @@ export class SessionTurnAdapter {
   async #waitForApproval(
     terminal: ConversationTerminal,
   ): Promise<{ init: ContinuationInit; policy?: ApprovalDecisionPolicy }> {
+    if (this.#adoptedDecision) {
+      const answer = await this.#adoptedDecision(terminal, this.deps.approvalFlow.getPendingInterruption());
+      return {
+        init: this.deps.approvalFlow.buildApprovalDecision(
+          answer.answer,
+          answer.rejectionReason,
+          answer.stopAfterApprovalResolution,
+        ),
+      };
+    }
     if (this.#pendingDecision) throw new Error('A decision is already waiting');
     const signal = this.#turnSignal!;
     return await new Promise((resolve, reject) => {

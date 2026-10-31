@@ -1,4 +1,4 @@
-import type { JsonValue, WireContent, WireQuestion, WireSnapshot } from '../../protocol/direct-wire.js';
+import type { JsonValue, WireBudgetRequest, WireContent, WireGrant, WireQuestion, WireSnapshot, WireTask, WireToolResult } from '../../protocol/direct-wire.js';
 
 /** Client display state. This is a view model, not a wire or persistence format. */
 export type Message = {
@@ -33,10 +33,11 @@ export type InteractionView = {
   readonly choices: readonly { readonly id: string; readonly label: string }[];
   readonly acceptsText?: boolean;
   readonly questions?: readonly WireQuestion[];
+  readonly supportedGrants?: readonly WireGrant[];
 };
 
-export type QueueItem = { readonly id: string; readonly text: string; readonly delivery: string };
-export type TaskView = { readonly id: string; readonly label: string; readonly status: string; readonly detail?: string; readonly turnId?: string; readonly agentId?: string; readonly role?: string };
+export type QueueItem = { readonly id: string; readonly text: string; readonly delivery: string; readonly content?: readonly WireContent[] };
+export type TaskView = { readonly id: string; readonly label: string; readonly status: string; readonly detail?: string; readonly turnId?: string; readonly agentId?: string; readonly role?: string; readonly wire?: WireTask };
 
 export type TuiState = {
   readonly sessionId: string;
@@ -49,12 +50,14 @@ export type TuiState = {
   readonly drafts: Readonly<Record<string, string>>;
   readonly reasoning: Readonly<Record<string, string>>;
   readonly tools: readonly ToolView[];
+  readonly unmatchedTools: readonly WireToolResult[];
+  readonly budgets: readonly WireBudgetRequest[];
   readonly interactions: readonly InteractionView[];
   readonly queue: readonly QueueItem[];
   readonly queueState: string;
+  readonly queuePauseReason?: string | null;
   readonly tasks: readonly TaskView[];
   readonly notices: readonly string[];
-  readonly liveEvents?: readonly { readonly key: string; readonly text: string }[];
   readonly usage?: string;
   readonly cost?: string;
   readonly goal?: string;

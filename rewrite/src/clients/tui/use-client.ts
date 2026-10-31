@@ -4,7 +4,6 @@ import type { WireSnapshot } from '../../protocol/direct-wire.js';
 import { reduceWireEvent } from '../../protocol/direct-reducer.js';
 import { projectSnapshot } from './direct-projection.js';
 import type { TuiState } from './state.js';
-import { presentEvent, type LiveEvent } from './event-presentation.js';
 
 type ClientConnection = DirectConnection | DirectReplayConnection;
 function initialSnapshot(connection: ClientConnection, retained?: WireSnapshot): WireSnapshot {
@@ -19,21 +18,19 @@ function initialSnapshot(connection: ClientConnection, retained?: WireSnapshot):
 export function useClient(connection: ClientConnection, retained?: WireSnapshot, onSnapshot?: (state: WireSnapshot) => void): { state: TuiState; error: string | null } {
   const callback = useRef(onSnapshot);
   callback.current = onSnapshot;
-  const [current, setCurrent] = useState(() => ({ connection, wire: initialSnapshot(connection, retained), liveEvents: [] as readonly LiveEvent[], error: null as string | null }));
-  const visible = current.connection === connection ? current : { connection, wire: initialSnapshot(connection, retained), liveEvents: [] as readonly LiveEvent[], error: null };
+  const [current, setCurrent] = useState(() => ({ connection, wire: initialSnapshot(connection, retained), error: null as string | null }));
+  const visible = current.connection === connection ? current : { connection, wire: initialSnapshot(connection, retained), error: null };
   useEffect(() => {
     let active = true;
     let wire = initialSnapshot(connection, retained);
-    let liveEvents: readonly LiveEvent[] = [];
-    setCurrent({ connection, wire, liveEvents, error: null });
+    setCurrent({ connection, wire, error: null });
     callback.current?.(wire);
     void (async () => {
       try {
         for await (const event of connection.events) {
           if (!active) return;
           wire = reduceWireEvent(wire, event);
-          liveEvents = presentEvent(liveEvents, event);
-          setCurrent({ connection, wire, liveEvents, error: null });
+          setCurrent({ connection, wire, error: null });
           callback.current?.(wire);
         }
         if (active) setCurrent(previous => previous.connection === connection ? { ...previous, error: 'Connection closed.' } : previous);
@@ -44,5 +41,5 @@ export function useClient(connection: ClientConnection, retained?: WireSnapshot,
     })();
     return () => { active = false; connection.close(); };
   }, [connection]);
-  return { state: { ...projectSnapshot(visible.wire), liveEvents: visible.liveEvents }, error: visible.error };
+  return { state: projectSnapshot(visible.wire), error: visible.error };
 }

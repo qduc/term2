@@ -6,7 +6,7 @@ import type { TaskView } from './state.js';
 export function TaskManager({ tasks, onClose, onAction }: {
   readonly tasks: readonly TaskView[];
   readonly onClose: () => void;
-  readonly onAction: (id: string, action: 'cancel' | 'check_in' | 'foreground') => Promise<void>;
+  readonly onAction: (id: string, action: 'cancel' | 'check_in' | 'foreground' | 'background') => Promise<void>;
 }): React.ReactElement {
   const [selected, setSelected] = useState(0);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -15,10 +15,10 @@ export function TaskManager({ tasks, onClose, onAction }: {
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const task = tasks.find(item => item.id === taskId);
-  const actions = ['Check in', 'Move to foreground', 'Cancel task'];
+  const actions = ['Check in', 'Move to foreground', 'Move to background', 'Cancel task'];
   const send = async (which: number) => {
     if (!task || pending.current) return;
-    const operation = (['check_in', 'foreground', 'cancel'] as const)[which];
+    const operation = (['check_in', 'foreground', 'background', 'cancel'] as const)[which];
     pending.current = true; setBusy(true); setNotice(null);
     try { await onAction(task.id, operation); setNotice(`Requested ${actions[which].toLowerCase()}; watch task status for the result.`); }
     catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
@@ -41,7 +41,11 @@ export function TaskManager({ tasks, onClose, onAction }: {
     <Text bold>{task ? `${task.label} · ${task.status}` : 'Background tasks'}</Text>
     {task ? <Box flexDirection="column">
       <Text>Task: {task.id}{task.agentId ? ` · Agent: ${task.agentId}` : ''}{task.turnId ? ` · Turn: ${task.turnId}` : ''}</Text>
+      {task.wire?.kind || task.wire?.mode ? <Text>{[task.wire.kind, task.wire.mode].filter(Boolean).join(' · ')}</Text> : null}
       {task.detail ? <Text>{task.detail}</Text> : null}
+      {task.wire?.progress ? <Text>Progress: {task.wire.progress}</Text> : null}
+      {task.wire?.result ? <Text>Result: {task.wire.result.kind}{task.wire.result.output ? `\n${task.wire.result.output}` : ''}{task.wire.result.error ? `\n${task.wire.result.error.message}` : ''}{task.wire.result.reason ? `\n${task.wire.result.reason}` : ''}</Text> : null}
+      <Text>Operations depend on the host's task-control capability.</Text>
     </Box> : null}
     {taskId && !task ? <Text>Task is no longer available.</Text> : null}
     {!taskId && !tasks.length ? <Text>No background tasks.</Text> : null}

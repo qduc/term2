@@ -54,7 +54,8 @@ export function Activity({ state }: { readonly state: TuiState }): React.ReactEl
   const active = state.tasks.filter(task => task.status === 'running' || task.status === 'awaiting_interaction').length;
   return <Box flexDirection="column">
     <Text color={theme.textSubtle}>{state.model} · {state.status}{state.usage ? ` · ${state.usage}` : ''}{state.cost ? ` · ${state.cost}` : ''}</Text>
-    {state.queueState !== 'idle' ? <Text>Queue: {state.queueState}</Text> : null}
+    {state.queueState !== 'idle' ? <Text>Queue: {state.queueState}{state.queuePauseReason ? ` · ${state.queuePauseReason}` : ''}</Text> : null}
+    {state.budgets.length ? <Text>Pending budget decisions: {state.budgets.length} · Ctrl+B</Text> : null}
     {state.goal ? <Text>Goal: {state.goal}</Text> : null}
     {state.verification ? <Text>Verification: {state.verification}</Text> : null}
     {state.lastError ? <Text color={theme.danger}>Error: {state.lastError}</Text> : null}
@@ -68,7 +69,11 @@ export function Activity({ state }: { readonly state: TuiState }): React.ReactEl
       {interaction.choices.map((choice, choiceIndex) => <Text key={choice.id}>  {choiceIndex + 1}. {choice.label}</Text>)}
       <Text color={theme.textSubtle}>/answer {index + 1} &lt;choice number&gt;{interaction.acceptsText ? ' [text]' : ''}</Text>
     </Box>)}
-    {state.liveEvents?.map(event => <Text key={event.key}>{event.text}</Text>)}
+    {state.unmatchedTools.map((tool, index) => <Box key={`${tool.executionId}:${index}`} flexDirection="column">
+      <Text>Unmatched tool result · {tool.toolName ?? 'name unavailable'} · {tool.executionId}{tool.isError ? ' · error' : ''}</Text>
+      <Text>{tool.output}</Text>
+      {tool.content?.map((part, partIndex) => <Text key={partIndex}>{part.type === 'text' ? part.text : `[image: ${part.mediaType}]`}</Text>)}
+    </Box>)}
     {state.notices.map((notice, index) => <Text key={index}>{notice}</Text>)}
   </Box>;
 }

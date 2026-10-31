@@ -22,7 +22,7 @@ const toolView = (tool: WireTool): ToolView => ({
   outcomeUnknown: tool.status === 'unknown',
 });
 const taskView = (task: WireSnapshot['tasks'][number]): TaskView => ({
-  id: task.id, label: task.role ?? task.agentId ?? task.id, status: task.status, detail: task.text, turnId: task.turnId, agentId: task.agentId, role: task.role,
+  id: task.id, label: task.label ?? task.name ?? task.role ?? task.agentId ?? task.id, status: task.status, detail: task.text, turnId: task.turnId, agentId: task.agentId, role: task.role, wire: task,
 });
 
 function interactionView(interaction: WireInteraction): InteractionView {
@@ -31,12 +31,13 @@ function interactionView(interaction: WireInteraction): InteractionView {
     kind: interaction.kind,
     title: interaction.summary || interaction.toolName,
     detail: [interaction.detail, interaction.risk && `Risk: ${interaction.risk}`, JSON.stringify(interaction.input, null, 2)].filter(Boolean).join('\n'),
-    owner: interaction.parentExecutionId ?? interaction.turnId,
+    owner: interaction.taskId ?? interaction.parentExecutionId ?? interaction.turnId,
     choices: interaction.kind === 'approval'
-      ? [{ id: 'allow', label: 'Allow' }, { id: 'deny', label: 'Deny (optional reason)' }]
+      ? [{ id: 'allow', label: 'Allow' }, { id: 'deny', label: 'Deny (optional reason)' }, ...interaction.supportedGrants.map(grant => ({ id: `grant:${grant}`, label: `Grant: ${grant}` }))]
       : [{ id: 'answer', label: 'Answer (text required)' }, { id: 'stop', label: 'Stop after resolving question' }],
     acceptsText: true,
     questions: interaction.questions,
+    supportedGrants: interaction.supportedGrants,
   };
 }
 
@@ -59,9 +60,12 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     drafts,
     reasoning: snapshot.reasoning ? { [snapshot.activeTurnId ?? 'snapshot']: snapshot.reasoning } : {},
     tools: snapshot.tools.map(toolView),
+    unmatchedTools: snapshot.unmatchedToolResults ?? [],
+    budgets: snapshot.pendingBudgets ?? [],
     interactions: snapshot.pendingInteractions.map(interactionView),
-    queue: snapshot.queue.map(entry => ({ id: entry.messageId, text: entry.text, delivery: entry.delivery })),
+    queue: snapshot.queue.map(entry => ({ id: entry.messageId, text: entry.text, delivery: entry.delivery, content: entry.content })),
     queueState: snapshot.queueState,
+    queuePauseReason: snapshot.queuePauseReason,
     tasks: snapshot.tasks.map(taskView),
     notices: snapshot.notices.map(notice => `${notice.kind}: ${notice.message}`),
     usage: usageText(snapshot.usage),

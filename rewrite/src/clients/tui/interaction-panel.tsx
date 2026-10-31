@@ -20,7 +20,7 @@ export function InteractionPanel({ interactions, width, onClose, onAnswer }: {
   const [busy, setBusy] = useState(false);
   const request = interactions.find(item => item.id === requestId);
   const options = request ? (request.kind === 'approval'
-    ? ['Allow', 'Deny', 'Deny with reason']
+    ? ['Allow', 'Deny', 'Deny with reason', ...(request.supportedGrants ?? []).map(grant => `Grant: ${grant}`)]
     : ['Answer with text', 'Stop after resolving']) : interactions.map(item => `${item.kind}: ${item.title}`);
 
   const send = async (decision: WireDecision) => {
@@ -51,7 +51,8 @@ export function InteractionPanel({ interactions, width, onClose, onAnswer }: {
     if (request.kind === 'approval') {
       if (index === 0) void send({ kind: 'allow' }).catch(() => {});
       else if (index === 1) void send({ kind: 'deny' }).catch(() => {});
-      else { setEntry('reason'); setText(''); }
+      else if (index === 2) { setEntry('reason'); setText(''); }
+      else { const grant = request.supportedGrants?.[index - 3]; if (grant) void send({ kind: 'grant', grant }).catch(() => {}); }
     } else if (index === 0) { setEntry('answer'); setText(''); }
     else void send({ kind: 'answer', answer: '', stopAfterApprovalResolution: true }).catch(() => {});
   }, { isActive: !structured });

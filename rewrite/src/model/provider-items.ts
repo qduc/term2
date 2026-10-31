@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   StreamedModelToolDefinition,
   StreamedModelToolResultPart,
+  StreamedModelTurnEvent,
   StreamedModelTurnInput,
   StreamedModelTurnOutput,
   StreamedModelUsage,

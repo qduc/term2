@@ -122,7 +122,7 @@ function exitCodeForSignal(signal: NodeJS.Signals): number {
 async function runWithSignals(
   request: DirectHeadlessRequest,
 ): Promise<{
-  readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked';
+  readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked' | 'budget_paused';
   readonly signal?: NodeJS.Signals;
 }> {
   // The handle has no started bit. Latch observed activity so later inactivity
@@ -353,7 +353,8 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
   // A resumable context pause exits 2, as the current CLI does; the recovery text was already printed.
   if (result.kind === 'context_paused') return 2;
   // A blocked turn (goal check unresolved, completion verification blocked, run budget paused) exits 2 with the notice already printed.
-  if (result.kind === 'blocked') return 2;
+  // A pending run-budget check-in parks the run; the CLI never answers it, and the app keeps it for interactive resume.
+  if (result.kind === 'blocked' || result.kind === 'budget_paused') return 2;
   if (result.kind === 'cancelled') return result.signal ? exitCodeForSignal(result.signal) : 1;
   return 1;
 }

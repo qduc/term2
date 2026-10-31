@@ -16,6 +16,7 @@ import type {
 import type { DirectBackgroundFact } from './direct-background-types.js';
 import type { DirectQueueFact } from './direct-queue-types.js';
 import type { DirectContextFact } from './direct-context.js';
+import type { DirectNotificationFact } from './direct-notifications.js';
 import type { DirectCommandFact } from './direct-command-types.js';
 import type { BudgetDecision } from '../engine/direct-types.js';
 import type { ModelRequestCost, RunBudgetEvent, RunBudgetSnapshot } from '../engine/direct-recovery-budget.js';
@@ -70,6 +71,8 @@ export type DirectTurnFact =
   | {
       readonly type: 'turn_started';
       readonly requestConfiguration?: import('./direct-preview.js').DirectPreviewConfiguration;
+      /** Native background planning input is durable provider context, never a displayed human admission. */
+      readonly silent?: true;
       /** A command continuation reuses retained human context; it is not a new admission. */
       readonly retryContext?: {
         readonly sourceTurnId: TurnId;
@@ -184,6 +187,7 @@ export type Fact =
   | DirectBranchFact
   | DirectRequestCostFact
   | DirectCommandFact
+  | DirectNotificationFact
   | DirectQueueFact
   | DirectBackgroundFact
   | DirectContextFact;

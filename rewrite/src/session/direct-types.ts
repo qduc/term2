@@ -51,6 +51,17 @@ export type Conversation = {
     readonly started?: StartedConversationTurn;
   }>;
   cancelCommand(): void;
+  drainBackgroundNotifications(
+    clientRequestId: string,
+    settings: Omit<TurnRequest, 'input' | 'submission'>,
+  ): {
+    readonly result: import('./direct-notifications.js').DirectNotificationDrainResult;
+    readonly started?: StartedConversationTurn;
+  };
+  configureTaskCheckIn(
+    target: string,
+    policy: import('./direct-background-check-ins.js').DirectBackgroundCheckInPolicy,
+  ): ReturnType<import('./direct-background-check-ins.js').DirectBackgroundCheckIns['configure']>;
   rewindTargets(): readonly import('./direct-command-types.js').DirectRewindTarget[];
   submit(
     request: DirectQueueSubmission,
@@ -85,6 +96,7 @@ export type ConversationDeps = TurnDeps & {
   readonly context?: DirectContextFactory;
   readonly authorizeNested?: import('./direct-branches.js').DirectNestedAuthorizer;
   readonly publishNotice?: (notice: import('./direct-memory.js').DirectAutomaticMemoryNotice) => void;
+  readonly publishBranch?: (event: import('./facade-types.js').DirectBranchTransient) => void;
   readonly publishTask?: (event: import('./direct-background-types.js').DirectBackgroundProgress) => void;
 };
 export type ReplayedConversation = {

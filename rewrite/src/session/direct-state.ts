@@ -12,6 +12,11 @@ import {
   reduceDirectCommandReceipts,
   recoverDirectCommands,
 } from './direct-command-receipts.js';
+import {
+  isDirectNotificationFactType,
+  reduceDirectNotifications,
+  type DirectNotificationFact,
+} from './direct-notifications.js';
 import type { DirectCommandFact } from './direct-command-types.js';
 import { reduceDirectBackground } from './direct-background-replay.js';
 
@@ -48,6 +53,7 @@ export function initialDirectState(id: string, workspace: Workspace, model: Mode
     turnResults: [],
     requestCosts: [],
     commands: [],
+    notifications: { notices: [], deliveries: [] },
     pendingBudgets: [],
     timeline: [],
   };
@@ -60,6 +66,8 @@ export function directDraftId(turnId: TurnId, modelStep?: number): string {
 
 /** Applies one accepted fact without mutating any previously captured snapshot. */
 export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0): DirectPublicState {
+  if (isDirectNotificationFactType(fact.type))
+    return { ...state, notifications: reduceDirectNotifications(state.notifications, fact as DirectNotificationFact) };
   if (isDirectCommandFactType(fact.type))
     return { ...state, commands: reduceDirectCommandReceipts(state.commands, fact as DirectCommandFact) };
   const timeline = [...state.timeline];
@@ -78,7 +86,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         ...(modelStep === undefined ? {} : { modelStep }),
       });
   };
-  if (fact.type === 'turn_started')
+  if (fact.type === 'turn_started' && !fact.silent)
     for (const item of fact.input) if (item.type === 'user_message') add('message', item.id, fact.turnId);
   if (fact.type === 'text_delta')
     add('message', directDraftId(fact.turnId, fact.modelStep), fact.turnId, fact.modelStep);
@@ -167,7 +175,9 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         terminal: null,
         messages: [
           ...state.messages,
-          ...fact.input.flatMap((item) => messageFor(item).map((message) => ({ ...message, turnId: fact.turnId }))),
+          ...(fact.silent
+            ? []
+            : fact.input.flatMap((item) => messageFor(item).map((message) => ({ ...message, turnId: fact.turnId })))),
         ],
         admissions:
           fact.submission &&

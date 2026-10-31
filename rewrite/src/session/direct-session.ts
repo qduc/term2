@@ -154,7 +154,11 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     try {
       let terminal = false;
       for await (const event of turn.events) {
-        if (event.type === 'reasoning_delta' || event.type === 'tool_progress') {
+        if (
+          event.type === 'reasoning_delta' ||
+          event.type === 'tool_progress' ||
+          event.type === 'tool_call_streaming_delta'
+        ) {
           if (event.type === 'reasoning_delta') state = { ...state, reasoning: state.reasoning + event.delta };
           publish({ type: 'transient', position: ++position, event });
         }
@@ -245,6 +249,17 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       const draft: Item = { type: 'user_message', id: randomUUID() as ItemId, content };
       const planned = conversation.snapshotInputPreview({ ...options.request, model: options.model, input: [draft] });
       return structuredClone({ ...planned, ...directPreviewLifecycle(durable, resumedAtSeq) });
+    },
+    configureTaskCheckIn: (target, policy) => conversation.configureTaskCheckIn(target, policy),
+    drainBackgroundNotifications(clientRequestId) {
+      if (closing || fault)
+        return Promise.resolve({ kind: 'not_admitting' as const, reason: fault?.message ?? 'Session is closed' });
+      const { result, started } = conversation.drainBackgroundNotifications(clientRequestId, {
+        ...options.request,
+        model: options.model,
+      });
+      if (started) startDrain(started.turn, started.turnId);
+      return Promise.resolve(structuredClone(result));
     },
     rewindTargets: () => conversation.rewindTargets(),
     command(request) {

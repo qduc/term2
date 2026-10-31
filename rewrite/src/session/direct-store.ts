@@ -114,6 +114,10 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
               ownedRuntime.deps.publishTask?.(event);
               publish(event);
             },
+            publishBranch: (event: import('./facade-types.js').DirectBranchTransient) => {
+              ownedRuntime.deps.publishBranch?.(event);
+              publish(event);
+            },
             publishNotice: (notice: import('./direct-memory.js').DirectAutomaticMemoryNotice) => {
               ownedRuntime.deps.publishNotice?.(notice);
               publish({ type: 'automatic_memory_notice', notice });

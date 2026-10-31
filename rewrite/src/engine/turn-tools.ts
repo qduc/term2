@@ -86,8 +86,12 @@ export class TurnTools {
     this.#registry = registry ?? this.deps.tools;
   }
 
-  get completed(): number { return this.#completed; }
-  get exhausted(): boolean { return this.spec.limits !== undefined && this.#physicalCalls >= this.spec.limits.maxToolCalls; }
+  get completed(): number {
+    return this.#completed;
+  }
+  get exhausted(): boolean {
+    return this.spec.limits !== undefined && this.#physicalCalls >= this.spec.limits.maxToolCalls;
+  }
 
   get stopped(): boolean {
     return this.#stop !== undefined;
@@ -104,9 +108,15 @@ export class TurnTools {
   async run(calls: readonly RootCall[], history: Item[]): Promise<void> {
     const plans: Plan[] = [];
     for (const call of calls) {
-      plans.push(call.item.toolName === 'goal_check' && calls.length !== 1
-        ? { call, parallelSafe: false, result: errorResult('goal_check must be called by itself after other tool results') }
-        : await this.#plan(call));
+      plans.push(
+        call.item.toolName === 'goal_check' && calls.length !== 1
+          ? {
+              call,
+              parallelSafe: false,
+              result: errorResult('goal_check must be called by itself after other tool results'),
+            }
+          : await this.#plan(call),
+      );
     }
     let position = 0;
     const configured = this.deps.maxParallelToolCalls ?? 3;
@@ -245,7 +255,11 @@ export class TurnTools {
         const parent = current();
         this.#checkBody(parent);
         if (!this.deps.runNested) throw new Error('Direct nested execution is not configured');
-        const work = this.deps.runNested(request, { turnId: this.spec.turnId, parentExecutionId: parent.executionId, signal: this.signal });
+        const work = this.deps.runNested(request, {
+          turnId: this.spec.turnId,
+          parentExecutionId: parent.executionId,
+          signal: this.signal,
+        });
         parent.children.add(work);
         void work.finally(() => parent.children.delete(work)).catch(() => {});
         return work;
@@ -267,7 +281,8 @@ export class TurnTools {
       ) => {
         const parent = current();
         this.#checkBody(parent);
-        if (descriptor.toolName === 'goal_check' || descriptor.toolName === 'propose_goal') throw new Error('goal_check is root-only');
+        if (descriptor.toolName === 'goal_check' || descriptor.toolName === 'propose_goal')
+          throw new Error('goal_check is root-only');
         const execution = this.#allocate(
           descriptor.toolName,
           descriptor.input,
@@ -377,7 +392,11 @@ export class TurnTools {
 
   #rawArguments(execution: Execution): string {
     if (execution.rawArguments !== undefined) return execution.rawArguments;
-    try { return JSON.stringify(execution.input) ?? ''; } catch { return ''; }
+    try {
+      return JSON.stringify(execution.input) ?? '';
+    } catch {
+      return '';
+    }
   }
 
   #allocate(toolName: string, input: unknown, callId: ToolCallId, parentExecutionId?: ExecutionId): Execution {

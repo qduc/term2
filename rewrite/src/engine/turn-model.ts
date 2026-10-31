@@ -11,11 +11,13 @@ import { TurnTools, type RootCall } from './turn-tools.js';
 
 type Done = Extract<ModelEvent, { type: 'done' }>;
 type Retry = Extract<DirectRecoveryDecision, { kind: 'retry' }>;
+class CompactionWrapUp extends Error {}
 
 export class TurnModel {
   readonly #recovery: DirectRecovery;
   readonly #continuity: DirectContinuity;
   #step = 0;
+  #mainRequests = 0;
   #hasOutput = false;
   #compactionState: TurnSpec['compactionState'];
   #lastInputTokens: number | undefined;
@@ -54,9 +56,14 @@ export class TurnModel {
           ...(response.done.costUsd !== undefined ? { costUsd: response.done.costUsd } : {}),
         });
         this.#recovery?.responseAccepted();
-        if (prepared.ticket !== undefined) this.#continuity.accept({ ticket: prepared.ticket, history, continuation: response.done.continuation });
-        if (this.budget.wrappingUp) throw new NativeBudgetExhausted('Child run budget exhausted after its tools-disabled wrap-up');
-        if (response.calls.length && (response.done.stopReason === 'max_tokens' || response.done.stopReason === 'refusal')) {
+        if (prepared.ticket !== undefined)
+          this.#continuity.accept({ ticket: prepared.ticket, history, continuation: response.done.continuation });
+        if (this.budget.wrappingUp)
+          throw new NativeBudgetExhausted('Child run budget exhausted after its tools-disabled wrap-up');
+        if (
+          response.calls.length &&
+          (response.done.stopReason === 'max_tokens' || response.done.stopReason === 'refusal')
+        ) {
           throw new Error(`Model response ended with ${response.done.stopReason}; tool calls were not executed.`);
         }
         return response.calls;
@@ -77,15 +84,24 @@ export class TurnModel {
         this.#standardTier ||= retry.useStandardServiceTier;
         this.#downgraded ||= retry.downgradeTransport;
         if (retry.downgradeTransport) this.#continuity.breakChaining();
+        const remaining = this.#recovery.budget.remainingMs();
+        // Respect upstream Retry-After without sleeping past the existing
+        // recovery envelope or inventing a shorter permitted retry delay.
+        if (remaining !== undefined && retry.delayMs >= remaining) throw error;
         await delay(retry.delayMs, this.signal);
       }
     }
   }
 
   /** Only cancelled/failed/interrupted runs retire an accepted checkpoint. */
-  clear(): void { this.#continuity.clear(); }
+  clear(): void {
+    this.#continuity.clear();
+  }
 
-  async #prepare(history: Item[], retry?: Retry): Promise<{ request: ModelRequest; modelStep: number; ticket?: number }> {
+  async #prepare(
+    history: Item[],
+    retry?: Retry,
+  ): Promise<{ request: ModelRequest; modelStep: number; ticket?: number }> {
     await this.#steering(history);
     const preflight = await this.#request(history, this.#step + 1);
     // A reserved recovery dispatch belongs to the main request, never a summary.
@@ -105,17 +121,21 @@ export class TurnModel {
     };
     // Retry budget is live state, not part of the cloneable continuity envelope.
     const prepared = this.deps.continuity
-      ? this.#continuity.prepare(request, this.deps.continuity.binding, modelStep === 1)
+      ? this.#continuity.prepare(request, this.deps.continuity.binding, this.#mainRequests === 0)
       : undefined;
     request = prepared?.request ?? selfContained(request);
     if (retry?.disableChaining) request = selfContained(request);
     request = this.#withRecovery(request, retry?.dispatchClaimed);
     this.tools.bindRequest(request, surface.tools);
-    this.budget.dispatched();
+    this.budget.dispatched(action === 'wrap_up');
+    ++this.#mainRequests;
     return { request, modelStep, ...(prepared ? { ticket: prepared.ticket } : {}) };
   }
 
-  async #request(history: readonly Item[], modelStep: number): Promise<{ request: ModelRequest; tools?: TurnDeps['tools'] }> {
+  async #request(
+    history: readonly Item[],
+    modelStep: number,
+  ): Promise<{ request: ModelRequest; tools?: TurnDeps['tools'] }> {
     const request: ModelRequest = {
       model: this.spec.model,
       instructions: this.spec.instructions,
@@ -126,26 +146,36 @@ export class TurnModel {
       ...(this.spec.maxOutputTokens !== undefined ? { maxOutputTokens: this.spec.maxOutputTokens } : {}),
       ...(this.spec.providerOptions !== undefined ? { providerOptions: this.spec.providerOptions } : {}),
     };
-    const surface = await this.deps.prepareRequest?.(request, { turnId: this.spec.turnId, modelStep, signal: this.signal });
+    const surface = await this.deps.prepareRequest?.(request, {
+      turnId: this.spec.turnId,
+      modelStep,
+      signal: this.signal,
+    });
     if (this.signal.aborted) throw cancelled();
     return surface ?? { request };
   }
 
   async #steering(history: Item[]): Promise<readonly Item[]> {
     // Session already committed queue_steered; never duplicate it as item facts.
-    const items = await this.deps.takeSteering?.(this.spec.turnId) ?? [];
+    const items = (await this.deps.takeSteering?.(this.spec.turnId)) ?? [];
     if (this.signal.aborted) throw cancelled();
     history.push(...items);
     return items;
   }
 
   #withRecovery(request: ModelRequest, dispatchClaimed?: boolean): ModelRequest {
-    return this.#recovery ? { ...request, recovery: { budget: this.#recovery.budget, ...(dispatchClaimed ? { dispatchClaimed: true } : {}) } } : request;
+    return this.#recovery
+      ? {
+          ...request,
+          recovery: { budget: this.#recovery.budget, ...(dispatchClaimed ? { dispatchClaimed: true } : {}) },
+        }
+      : request;
   }
 
   #checkLimit(): void {
     if (this.signal.aborted) throw cancelled();
-    if (this.spec.limits && this.#step >= this.spec.limits.maxModelCalls) throw new NativeBudgetExhausted('Native child model-call budget exhausted');
+    if (this.spec.limits && this.#step >= this.spec.limits.maxModelCalls)
+      throw new NativeBudgetExhausted('Native child model-call budget exhausted');
   }
 
   async #compact(request: ModelRequest, history: Item[]): Promise<void> {
@@ -159,53 +189,104 @@ export class TurnModel {
       ref: model.ref,
       contextWindow: model.contextWindow,
       stream: (summary, signal) => control.#summary(model, summary, history, signal),
-      ...(model.compact ? { compact: async (native: ModelRequest, signal: AbortSignal) => {
-        const { request: prepared, modelStep } = await control.#auxiliary(native, history);
-        control.budget.dispatched();
-        try {
-          const items = await model.compact!(prepared, signal);
-          await control.events.publish({ type: 'model_response_completed', modelStep, stopReason: 'end_turn' });
-          control.budget.record({ requestId: `${control.spec.turnId}:model:${modelStep}`, model: native.model, outcome: 'completed' });
-          return items;
-        } catch (error) {
-          control.budget.record({ requestId: `${control.spec.turnId}:model:${modelStep}`, model: native.model, outcome: signal.aborted ? 'cancelled' : 'failed' });
-          throw error;
-        }
-      } } : {}),
+      ...(model.compact
+        ? {
+            compact: async (native: ModelRequest, signal: AbortSignal) => {
+              const { request: prepared, modelStep } = await control.#auxiliary(native, history);
+              control.budget.dispatched();
+              try {
+                const items = await model.compact!(prepared, signal);
+                await control.events.publish({ type: 'model_response_completed', modelStep, stopReason: 'end_turn' });
+                control.budget.record({
+                  requestId: `${control.spec.turnId}:model:${modelStep}`,
+                  model: native.model,
+                  outcome: 'completed',
+                });
+                return items;
+              } catch (error) {
+                control.budget.record({
+                  requestId: `${control.spec.turnId}:model:${modelStep}`,
+                  model: native.model,
+                  outcome: signal.aborted ? 'cancelled' : 'failed',
+                });
+                throw error;
+              }
+            },
+          }
+        : {}),
     };
-    const result = await compactDirectHistory({
-      ...this.deps.compaction,
-      request,
-      model: summaryModel,
-      signal: this.signal,
-      ...this.#compactionState,
-      lastCompletedInputTokens: this.#lastInputTokens,
-    });
+    let result;
+    try {
+      result = await compactDirectHistory({
+        ...this.deps.compaction,
+        contextWindow: this.deps.compaction.contextWindow ?? model.catalogContextWindow,
+        request,
+        model: summaryModel,
+        signal: this.signal,
+        ...this.#compactionState,
+        lastCompletedInputTokens: this.#lastInputTokens,
+      });
+    } catch (error) {
+      // A child critical boundary needs a root tools-disabled final response,
+      // not an internal summary masquerading as that wrap-up.
+      if (error instanceof CompactionWrapUp) return;
+      throw error;
+    }
     if (result.kind !== 'compacted') return;
     // Steering admitted during summaries is newer than the frozen compact input.
     const replacement = [...result.history, ...history.slice(sourceLength)];
-    await this.events.publish({ type: 'history_replaced', history: replacement, reason: 'compaction', rearmAtEstimatedTokens: result.rearmAtEstimatedTokens, checkpointReceipts: result.checkpointReceipts });
+    await this.events.publish({
+      type: 'history_replaced',
+      history: replacement,
+      reason: 'compaction',
+      rearmAtEstimatedTokens: result.rearmAtEstimatedTokens,
+      checkpointReceipts: result.checkpointReceipts,
+    });
     history.splice(0, history.length, ...replacement);
-    this.#compactionState = { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens, checkpointReceipts: result.checkpointReceipts };
+    this.#compactionState = {
+      rearmAtEstimatedTokens: result.rearmAtEstimatedTokens,
+      checkpointReceipts: result.checkpointReceipts,
+    };
     this.#lastInputTokens = undefined;
     this.#continuity.clear();
   }
 
   async #auxiliary(request: ModelRequest, history: Item[]): Promise<{ request: ModelRequest; modelStep: number }> {
-    const steering = [...await this.#steering(history)];
+    const steering = [...(await this.#steering(history))];
     const action = await this.budget.beforeRequest(history);
-    steering.push(...await this.#steering(history));
-    if (action !== 'run') throw new NativeBudgetExhausted('Run budget exhausted before context compaction');
+    steering.push(...(await this.#steering(history)));
+    if (action === 'wrap_up') throw new CompactionWrapUp();
+    if (action === 'stop') throw new NativeBudgetExhausted('Run budget exhausted before context compaction');
     this.#checkLimit();
     const modelStep = ++this.#step;
     const canonical = { ...request, input: [...request.input, ...steering] };
-    const surface = await this.deps.prepareRequest?.(canonical, { turnId: this.spec.turnId, modelStep, signal: this.signal });
+    const surface = await this.deps.prepareRequest?.(canonical, {
+      turnId: this.spec.turnId,
+      modelStep,
+      signal: this.signal,
+    });
     if (this.signal.aborted) throw cancelled();
     // Summary/native compaction is not a root goal/tool execution context.
-    return { request: this.#withRecovery(selfContained({ ...(surface?.request ?? canonical), tools: [], instructions: `${(surface?.request ?? canonical).instructions}\nThis is internal context compaction, not a root response. Output only the requested summary; do not call tools or adjudicate the durable goal.` })), modelStep };
+    return {
+      request: this.#withRecovery(
+        selfContained({
+          ...(surface?.request ?? canonical),
+          tools: [],
+          instructions: `${
+            (surface?.request ?? canonical).instructions
+          }\nThis is internal context compaction, not a root response. Output only the requested summary; do not call tools or adjudicate the durable goal.`,
+        }),
+      ),
+      modelStep,
+    };
   }
 
-  async *#summary(model: Model, request: ModelRequest, history: Item[], signal: AbortSignal): AsyncGenerator<ModelEvent> {
+  async *#summary(
+    model: Model,
+    request: ModelRequest,
+    history: Item[],
+    signal: AbortSignal,
+  ): AsyncGenerator<ModelEvent> {
     const prepared = await this.#auxiliary(request, history);
     const requestId = `${this.spec.turnId}:model:${prepared.modelStep}`;
     let usage: Usage | undefined;
@@ -221,13 +302,26 @@ export class TurnModel {
         }
         if (event.type === 'done') {
           done = event;
-          await this.events.publish({ type: 'model_response_completed', modelStep: prepared.modelStep, stopReason: event.stopReason, ...(event.continuation !== undefined ? { continuation: event.continuation } : {}), ...(event.providerMetadata !== undefined ? { providerMetadata: event.providerMetadata } : {}), ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}) });
+          await this.events.publish({
+            type: 'model_response_completed',
+            modelStep: prepared.modelStep,
+            stopReason: event.stopReason,
+            ...(event.continuation !== undefined ? { continuation: event.continuation } : {}),
+            ...(event.providerMetadata !== undefined ? { providerMetadata: event.providerMetadata } : {}),
+            ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
+          });
           outcome = 'completed';
         }
         yield event;
       }
     } finally {
-      this.budget.record({ requestId, model: request.model, usage, costUsd: done?.costUsd, outcome: signal.aborted ? 'cancelled' : outcome });
+      this.budget.record({
+        requestId,
+        model: request.model,
+        usage,
+        costUsd: done?.costUsd,
+        outcome: signal.aborted ? 'cancelled' : outcome,
+      });
     }
   }
 
@@ -255,13 +349,24 @@ export class TurnModel {
             break;
           case 'item': {
             const call = event.item.type === 'tool_call' ? this.tools.root(event.item, modelStep) : undefined;
-            await this.events.publish({ type: 'item', item: event.item, modelStep, ...(call ? { executionId: call.executionId } : {}) });
+            await this.events.publish({
+              type: 'item',
+              item: event.item,
+              modelStep,
+              ...(call ? { executionId: call.executionId } : {}),
+            });
             items.push(event.item);
             this.#hasOutput = true;
             if (event.item.type === 'assistant_message') text = '';
             if (call) {
               calls.push(call);
-              await this.events.publish({ type: 'tool_called', executionId: call.executionId, callId: call.item.callId, toolName: call.item.toolName, input: call.item.input });
+              await this.events.publish({
+                type: 'tool_called',
+                executionId: call.executionId,
+                callId: call.item.callId,
+                toolName: call.item.toolName,
+                input: call.item.input,
+              });
             }
             break;
           }
@@ -269,7 +374,9 @@ export class TurnModel {
             usage = event.usage;
             await this.events.publish({ type: 'usage', usage, modelStep });
             break;
-          case 'done': done = event; break;
+          case 'done':
+            done = event;
+            break;
           case 'retrying':
             // Injected recovery delegates physical retries back to this boundary.
             break;
@@ -281,10 +388,21 @@ export class TurnModel {
       this.#lastInputTokens = usage?.inputTokens;
       return { calls, done };
     } finally {
-      if (text) items.splice(textPosition, 0, { type: 'assistant_message', id: `${this.spec.turnId}-model-${modelStep}-partial` as ItemId, content: [{ type: 'text', text }] });
+      if (text)
+        items.splice(textPosition, 0, {
+          type: 'assistant_message',
+          id: `${this.spec.turnId}-model-${modelStep}-partial` as ItemId,
+          content: [{ type: 'text', text }],
+        });
       // Every retained item/delta already has its own durable Session receipt.
       history.push(...items);
-      this.budget.record({ requestId: `${this.spec.turnId}:model:${modelStep}`, model: request.model, usage, costUsd: done?.costUsd, outcome: this.signal.aborted ? 'cancelled' : outcome });
+      this.budget.record({
+        requestId: `${this.spec.turnId}:model:${modelStep}`,
+        model: request.model,
+        usage,
+        costUsd: done?.costUsd,
+        outcome: this.signal.aborted ? 'cancelled' : outcome,
+      });
     }
   }
 }
@@ -298,16 +416,29 @@ function recoveryFailure(error: unknown): DirectRecoveryFailure {
 /** Error.message is non-enumerable; raw causes and provider frames never persist. */
 export function toModelError(error: unknown): ModelError {
   const { kind, message, retryable, retryAfterMs } = (error ?? {}) as Partial<ModelError>;
-  if (typeof kind === 'string' && typeof message === 'string') return { kind, message, retryable: retryable === true, ...(typeof retryAfterMs === 'number' ? { retryAfterMs } : {}) };
+  if (typeof kind === 'string' && typeof message === 'string')
+    return {
+      kind,
+      message,
+      retryable: retryable === true,
+      ...(typeof retryAfterMs === 'number' ? { retryAfterMs } : {}),
+    };
   return { kind: 'provider', message: error instanceof Error ? error.message : String(error), retryable: false };
 }
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.reject(cancelled());
   return new Promise((resolve, reject) => {
-    const finish = (): void => { signal.removeEventListener('abort', abort); resolve(); };
+    const finish = (): void => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    };
     const timer = setTimeout(finish, ms);
-    const abort = (): void => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(cancelled()); };
+    const abort = (): void => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+      reject(cancelled());
+    };
     signal.addEventListener('abort', abort, { once: true });
   });
 }

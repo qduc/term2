@@ -16,14 +16,18 @@ export function startTurn(spec: TurnSpec, deps: TurnDeps): TurnHandle {
   const budget = new TurnBudgetControl(spec, deps, channel, controller.signal);
   const tools = new TurnTools(spec, deps, controller.signal, channel, budget);
   const model = new TurnModel(spec, deps, controller.signal, channel, tools, budget);
+  let settled = false;
   const cancel = (): void => {
+    if (!settled) model.clear();
     controller.abort();
     channel.cancel();
     tools.cancel();
     budget.cancel();
   };
   const events = (async function* () {
-    const work = drive(spec, deps, controller, channel, tools, model);
+    const work = drive(spec, deps, controller, channel, tools, model, () => {
+      settled = true;
+    });
     try {
       yield* channel.events();
     } finally {
@@ -46,14 +50,19 @@ export function startTurn(spec: TurnSpec, deps: TurnDeps): TurnHandle {
  * Session allocates its identity, consumes/accepts its events into branch facts,
  * and owns background lifetime and durable interaction answers. No second log.
  */
-export function startNestedTurn(request: NestedRunRequest, options: { readonly turnId: TurnSpec['turnId']; readonly deps: TurnDeps }): TurnHandle {
+export function startNestedTurn(
+  request: NestedRunRequest,
+  options: { readonly turnId: TurnSpec['turnId']; readonly deps: TurnDeps },
+): TurnHandle {
   if (request.budget.kind === 'adopted') throw new Error('Direct branches require a native budget');
   for (const limit of [request.budget.maxModelCalls, request.budget.maxToolCalls]) {
-    if (!Number.isSafeInteger(limit) || limit < 0) throw new RangeError('Native branch limits must be nonnegative integers');
+    if (!Number.isSafeInteger(limit) || limit < 0)
+      throw new RangeError('Native branch limits must be nonnegative integers');
   }
   if (!options.deps.toolContext) throw new Error('A branch requires an authorized workspace and settings');
   const names = new Set(request.toolNames);
-  if (names.size !== request.toolNames.length || (names.has('goal_check') || names.has('propose_goal'))) throw new Error('Invalid child authority: duplicate or root-only tool');
+  if (names.size !== request.toolNames.length || names.has('goal_check') || names.has('propose_goal'))
+    throw new Error('Invalid child authority: duplicate or root-only tool');
   const registry = options.deps.tools;
   const tools = request.toolNames.map((name) => {
     const tool = registry?.get(name);
@@ -61,33 +70,44 @@ export function startNestedTurn(request: NestedRunRequest, options: { readonly t
     return tool;
   });
   const scoped: ToolRegistry = {
-    get: (name) => names.has(name) ? registry?.get(name) : undefined,
+    get: (name) => (names.has(name) ? registry?.get(name) : undefined),
     available: () => tools,
   };
   const prepare = options.deps.prepareRequest;
-  return startTurn({
-    turnId: options.turnId,
-    history: [],
-    newItems: request.items,
-    instructions: request.instructions,
-    model: request.model,
-    tools: tools.map((tool) => tool.spec),
-    ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
-    limits: { maxModelCalls: request.budget.maxModelCalls, maxToolCalls: request.budget.maxToolCalls },
-  }, {
-    ...options.deps,
-    tools: scoped,
-    // Root goal/memory preparation may not expand resolved child authority.
-    ...(prepare ? { prepareRequest: async (input, context) => {
-      const surface = await prepare(input, context);
-      if (surface.request.tools.some((tool) => !names.has(tool.name))) throw new Error('Request preparation expanded child authority');
-      const selected = surface.tools ?? scoped;
-      return {
-        request: surface.request,
-        tools: { get: (name: string) => names.has(name) ? selected.get(name) : undefined, available: (seed) => selected.available(seed).filter((tool) => names.has(tool.spec.name)) },
-      };
-    } } : {}),
-  });
+  return startTurn(
+    {
+      turnId: options.turnId,
+      history: [],
+      newItems: request.items,
+      instructions: request.instructions,
+      model: request.model,
+      tools: tools.map((tool) => tool.spec),
+      ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
+      limits: { maxModelCalls: request.budget.maxModelCalls, maxToolCalls: request.budget.maxToolCalls },
+    },
+    {
+      ...options.deps,
+      tools: scoped,
+      // Root goal/memory preparation may not expand resolved child authority.
+      ...(prepare
+        ? {
+            prepareRequest: async (input, context) => {
+              const surface = await prepare(input, context);
+              if (surface.request.tools.some((tool) => !names.has(tool.name)))
+                throw new Error('Request preparation expanded child authority');
+              const selected = surface.tools ?? scoped;
+              return {
+                request: surface.request,
+                tools: {
+                  get: (name: string) => (names.has(name) ? selected.get(name) : undefined),
+                  available: (seed) => selected.available(seed).filter((tool) => names.has(tool.spec.name)),
+                },
+              };
+            },
+          }
+        : {}),
+    },
+  );
 }
 
 async function drive(
@@ -97,6 +117,7 @@ async function drive(
   events: TurnEvents,
   tools: TurnTools,
   model: TurnModel,
+  settled: () => void,
 ): Promise<void> {
   const { signal } = controller;
   let result: TurnResult = { kind: 'completed' };
@@ -116,11 +137,22 @@ async function drive(
       const decision = await deps.normalStop?.({ turnId: spec.turnId, signal });
       if (signal.aborted) throw cancelled();
       if (!decision || decision.action === 'stop') {
-        if (decision?.terminalCause) result = { kind: 'interrupted', terminalCause: decision.terminalCause, ...(decision.notice !== undefined ? { notice: decision.notice } : {}) };
+        if (decision?.terminalCause)
+          result = {
+            kind: 'interrupted',
+            terminalCause: decision.terminalCause,
+            ...(decision.notice !== undefined ? { notice: decision.notice } : {}),
+          };
+        else if (decision?.notice !== undefined) result = { kind: 'completed', notice: decision.notice };
         break;
       }
       if (!decision.reminder) throw new Error('Normal-stop continuation requires a reminder');
-      const item: Item = { type: 'summary', id: `${spec.turnId}:normal-stop:${++reminderOrdinal}` as ItemId, text: decision.reminder, replaces: [] };
+      const item: Item = {
+        type: 'summary',
+        id: `${spec.turnId}:normal-stop:${++reminderOrdinal}` as ItemId,
+        text: decision.reminder,
+        replaces: [],
+      };
       await events.publish({ type: 'item', item });
       history.push(item);
     }
@@ -129,8 +161,8 @@ async function drive(
     result = signal.aborted
       ? { kind: 'cancelled' }
       : error instanceof NativeBudgetExhausted
-        ? { kind: 'interrupted', terminalCause: 'budget_exhausted', notice: error.message }
-        : { kind: 'failed', error: toModelError(error) };
+      ? { kind: 'interrupted', terminalCause: 'budget_exhausted', notice: error.message }
+      : { kind: 'failed', error: toModelError(error) };
     model.clear();
     controller.abort();
     events.cancel();
@@ -139,6 +171,7 @@ async function drive(
     // Session cannot go idle while root/scripted descendants still have bodies.
     tools.cancel();
     await tools.cleanup();
+    settled();
     events.finish(result);
   }
 }

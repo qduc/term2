@@ -6,13 +6,20 @@ export type JsonValue = null | boolean | number | string | readonly JsonValue[] 
 export type WireModel = { readonly provider: string; readonly model: string };
 export type WireContent =
   | { readonly type: 'text'; readonly text: string }
+  /** data is raw RFC 4648 base64 bytes, NOT a data URI/path/URL. Provider policy stays Session-owned. */
   | { readonly type: 'image'; readonly mediaType: string; readonly data: string; readonly detail?: string };
 export type WireStatus = 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';
 export type WireUsage = { readonly inputTokens: number; readonly outputTokens: number; readonly cachedInputTokens: number };
+export type WireGrant = 'allow-remember' | 'unsandboxed-once' | 'allow-folder-session' | 'allow-edit-file-session' | 'allow-edit-folder-session' | 'docker-allow-once' | 'docker-allow-session' | 'docker-allow-project';
+export type WireQuestion = { readonly id: string; readonly prompt: string; readonly options: readonly { readonly label: string; readonly description?: string }[]; readonly multiple: boolean; readonly allowCustom: boolean };
+export type WireQuestionAnswer = { readonly questionId: string; readonly value: string | readonly string[] };
 export type WireDecision = (
   | { readonly kind: 'allow' }
+  | { readonly kind: 'decline' }
   | { readonly kind: 'deny'; readonly reason?: string }
   | { readonly kind: 'answer'; readonly answer: string }
+  | { readonly kind: 'answers'; readonly answers: readonly WireQuestionAnswer[] }
+  | { readonly kind: 'grant'; readonly grant: WireGrant }
 ) & { readonly stopAfterApprovalResolution?: boolean };
 export type WireInteraction = {
   readonly requestId: string;
@@ -26,6 +33,9 @@ export type WireInteraction = {
   readonly detail?: string;
   readonly risk?: 'low' | 'medium' | 'high';
   readonly presentation?: { readonly [key: string]: JsonValue };
+  readonly questions?: readonly WireQuestion[];
+  /** Only explicitly supported grants may be offered; empty under the M2 contract. */
+  readonly supportedGrants: readonly WireGrant[];
 };
 export type WireMessage = {
   readonly id: string;
@@ -92,13 +102,16 @@ export type WireSnapshot = {
   readonly verification: WireVerification | null;
   readonly notices: readonly WireNotice[];
   readonly lastError: WireError | null;
+  readonly terminal: { readonly turnId: string; readonly outcome: 'completed' | 'cancelled' | 'failed' | 'interrupted'; readonly error?: WireError } | null;
+  /** null means the facade cannot yet supply authoritative mixed transcript ordering. */
+  readonly timeline: readonly { readonly kind: 'message' | 'tool'; readonly id: string }[] | null;
 };
 
 export type WireEventPayloads = {
   snapshot: { readonly snapshot: WireSnapshot };
   turn_started: { readonly input: readonly WireMessage[]; readonly foreground: boolean };
   text_delta: { readonly delta: string; readonly messageId: string; readonly modelStep: number };
-  reasoning_delta: { readonly delta: string };
+  reasoning_delta: { readonly delta: string; readonly modelStep: number | null; readonly messageId: string | null };
   message: { readonly message: WireMessage; readonly replacesDraftId?: string };
   tool_called: { readonly tool: WireTool };
   tool_started: { readonly tool: WireTool };
@@ -106,6 +119,7 @@ export type WireEventPayloads = {
   tool_finished: { readonly executionId: string; readonly output: string; readonly isError: boolean };
   interaction_opened: { readonly interaction: WireInteraction };
   interaction_resolved: { readonly requestId: string; readonly resolution: WireDecision | { readonly kind: 'cancelled' | 'interrupted' } };
+  admission: { readonly admission: WireAdmission };
   usage: { readonly usage: WireUsage };
   status_changed: { readonly status: WireStatus };
   turn_ended: { readonly outcome: 'completed' | 'cancelled' | 'failed' | 'interrupted'; readonly error?: WireError };
@@ -131,14 +145,15 @@ export type WireEvent = { [K in WireEventType]: {
   readonly payload: WireEventPayloads[K];
 } }[WireEventType];
 
+export type WireSubmission = { readonly requestId: string; readonly text: string; readonly attachments?: readonly WireContent[]; readonly origin?: WireOrigin; readonly delivery?: 'auto' | 'steer' | 'follow_up' };
 export type WireCommand =
-  | { readonly type: 'submit'; readonly requestId: string; readonly text: string; readonly attachments?: readonly WireContent[]; readonly origin?: WireOrigin }
+  | ({ readonly type: 'submit' } & WireSubmission)
   | { readonly type: 'answer'; readonly requestId: string; readonly decision: WireDecision }
   | { readonly type: 'cancel'; readonly target?: WireCancelTarget }
   | { readonly type: 'retry'; readonly target: 'turn' | 'tool'; readonly executionId?: string }
   | { readonly type: 'compact' }
   | { readonly type: 'configure'; readonly configuration: WireConfiguration }
-  | { readonly type: 'queue_edit'; readonly messageId: string; readonly text: string }
+  | { readonly type: 'queue_edit'; readonly messageId: string; readonly text: string; readonly attachments?: readonly WireContent[] }
   | { readonly type: 'queue_retract'; readonly messageId: string }
   | { readonly type: 'queue_resume' }
   | { readonly type: 'queue_discard' }
@@ -147,12 +162,13 @@ export type WireCommand =
   | { readonly type: 'rewind'; readonly targetId: string }
   | { readonly type: 'reset' }
   | { readonly type: 'rollover' }
-  | { readonly type: 'preview'; readonly text: string };
+  | { readonly type: 'preview'; readonly text: string; readonly attachments?: readonly WireContent[] };
 export type WireCommandErrorCode = 'invalid_command' | 'unavailable' | 'stale_interaction' | 'request_conflict' | 'rejected' | 'closed' | 'not_found' | 'forbidden' | 'storage_failure' | 'internal_error' | 'replay_unavailable';
 export type WireCommandResult =
   | { readonly ok: true; readonly kind: 'admitted'; readonly admission: WireAdmission }
   | { readonly ok: true; readonly kind: 'accepted' }
   | { readonly ok: true; readonly kind: 'rewind_targets'; readonly targets: readonly WireRewindTarget[] }
   | { readonly ok: true; readonly kind: 'preview'; readonly notices: readonly WireNotice[]; readonly requiresConfirmation: boolean }
+  | { readonly ok: true; readonly kind: 'rewound'; readonly draft: { readonly text: string; readonly attachments: readonly WireContent[] } | null }
   | { readonly ok: true; readonly kind: 'session_changed'; readonly sessionId: string }
   | { readonly ok: false; readonly code: WireCommandErrorCode; readonly message: string };

@@ -34,7 +34,7 @@ import type {
   StreamedModelTurnOutput,
 } from '../../contracts/streamed-model-turn.js';
 import { ASSISTANT_TEXT_PART_SEPARATOR } from '../../contracts/streamed-model-turn.js';
-import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
+import { RetryRecoveryBudgetExhaustedError, type RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 import type {
   AnyToolDefinition,
   RequestSnapshot,
@@ -1255,6 +1255,7 @@ export class ApplicationRunLoop {
     let pendingNativeReasoning: PendingNativeReasoning | undefined;
     let deferredNativeReasoning: PendingNativeReasoning[] = [];
     let criticalWrapUp = false;
+    let pendingSameChainRecovery: { budget: RetryRecoveryBudget; cause: unknown } | undefined;
 
     while (true) {
       streamedToolCalls = [];
@@ -1364,6 +1365,10 @@ export class ApplicationRunLoop {
         let iteratorFinished = false;
         try {
           options.signal?.throwIfAborted();
+          if (pendingSameChainRecovery?.budget.deadlineExceeded) {
+            throw new RetryRecoveryBudgetExhaustedError(pendingSameChainRecovery.cause);
+          }
+          pendingSameChainRecovery = undefined;
           context.session?.onModelDispatch?.({
             requestId,
             providerId: state.currentProviderId,
@@ -1507,6 +1512,8 @@ export class ApplicationRunLoop {
         break;
       } catch (caught) {
         let error: unknown = caught;
+        // The reserved recovery expired during preparation, before any model dispatch.
+        if (error instanceof RetryRecoveryBudgetExhaustedError && pendingSameChainRecovery) throw error;
         if (error instanceof RequestInputLimitError) {
           this.#deps.logDiagnostic?.('Request input admission refused', {
             code: error.code,
@@ -1586,6 +1593,18 @@ export class ApplicationRunLoop {
           continue;
         }
 
+        // Only the new same-chain recovery owns this admission; older unchained
+        // loop recoveries retain their existing behavior.
+        const sameChainBudget = decision.retryable && decision.kind === 'same_chain' ? state.recoveryBudget : undefined;
+        if (decision.retryable && sameChainBudget && !options.signal?.aborted) {
+          sameChainBudget.noteRetryableFailure();
+          const remaining = sameChainBudget.remainingMs();
+          if ((remaining !== undefined && decision.delayMs >= remaining) || !sameChainBudget.claimPhysicalAttempt()) {
+            error = new RetryRecoveryBudgetExhaustedError(error);
+            decision = { retryable: false, reason: 'recovery_budget_exhausted' };
+          }
+        }
+
         if (decision.retryable && !options.signal?.aborted) {
           attempt++;
           state.input.splice(inputLengthBefore);
@@ -1608,7 +1627,13 @@ export class ApplicationRunLoop {
             error: describeError(error),
           });
           await (this.#deps.waitBeforeModelRetry ?? sleepWithAbort)(decision.delayMs, options.signal);
-          continue;
+          if (sameChainBudget?.deadlineExceeded && !options.signal?.aborted) {
+            // Timer scheduling can overshoot an admitted wait; never resend past the deadline.
+            error = new RetryRecoveryBudgetExhaustedError(error);
+          } else {
+            if (sameChainBudget) pendingSameChainRecovery = { budget: sameChainBudget, cause: error };
+            continue;
+          }
         }
 
         // Session recovery owns full-history rebuild for a chained delta.

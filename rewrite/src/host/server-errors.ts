@@ -44,6 +44,7 @@ export function commandFailure(result: Extract<WireCommandResult, { ok: false }>
     case 'not_found':
     case 'forbidden':
       return publicError(404, 'not_found', 'session not found');
+    case 'not_admitting':
     case 'closed':
     case 'rejected':
       return publicError(409, 'session_not_admitting', 'session is not admitting');

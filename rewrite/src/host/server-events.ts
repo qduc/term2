@@ -4,6 +4,7 @@
  */
 import type { AgentEventEnvelope, AgentEventType } from '@qduc/agent-wire';
 import type { WireAdmission, WireEvent, WireTask } from '../protocol/direct-wire.js';
+import { legacyCommandMessages } from '../protocol/direct-json.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { ServerHttpError } from './server-errors.js';
 
@@ -63,6 +64,27 @@ function canonicalCandidate(
         },
       };
     case 'tool_finished': {
+      const messages = legacyCommandMessages(event);
+      if (messages.length > 1)
+        return missing('canonical command messages require separate accepted boundaries, not shared numeric IDs');
+      if (messages.length === 1) {
+        const message = messages[0]!.message;
+        const callId = message.callId ?? event.payload.callId;
+        const toolName = message.toolName ?? event.payload.toolName;
+        if (!callId || !toolName) return missing('canonical command display requires its accepted call identity');
+        return {
+          type: 'command_message',
+          payload: {
+            turnId: requiredTurn(event),
+            callId: text(callId, 256),
+            toolName: text(toolName, 256),
+            status: message.status,
+            output: text(message.output, 16_384),
+            ...(message.failureReason !== undefined ? { error: text(message.failureReason, 10_000) } : {}),
+            message: { id: text(message.id, 256), role: 'command', text: text(message.command, 16_384) },
+          },
+        };
+      }
       const toolName = event.payload.toolName;
       if (toolName === undefined) return missing('canonical tool results require their accepted execution metadata');
       return {
@@ -182,6 +204,9 @@ function canonicalCandidate(
     case 'budget_observed':
     case 'history_replaced':
     case 'model_response_completed':
+    case 'request_cost_recorded':
+    case 'command_started':
+    case 'command_finished':
     // The pinned event vocabulary has no automatic-memory notice envelope.
     case 'automatic_memory_notice':
       return null;
@@ -222,8 +247,17 @@ function nestedCandidate(
   context: CanonicalEventContext,
 ): Candidate | null {
   const { event: child, agentId } = event.payload;
+  // Current wire carries the actual parent separately. Older payloads may use accepted cut
+  // context, but neither a child turnId nor rootTurnId is a substitute for the immediate parent.
+  const task = context.task?.id === agentId ? context.task : undefined;
+  const parentTurnId = event.payload.parentTurnId ?? task?.turnId;
+  const role = event.payload.role ?? task?.role;
+  if (!parentTurnId || !role) return missing('canonical child events require their accepted parent and role');
   const identity = {
-    ...taskIdentity(agentId, context, event.payload.role),
+    turnId: parentTurnId,
+    agentId: text(agentId, 256),
+    role: text(role, 256),
+    ...(event.payload.rootTurnId ? { rootTurnId: event.payload.rootTurnId } : {}),
     ...(child.turnId !== null ? { childTurnId: child.turnId } : {}),
     ...(event.payload.branchId ? { branchId: event.payload.branchId } : {}),
   };
@@ -291,6 +325,9 @@ function nestedCandidate(
     case 'budget_observed':
     case 'history_replaced':
     case 'model_response_completed':
+    case 'request_cost_recorded':
+    case 'command_started':
+    case 'command_finished':
     case 'automatic_memory_notice':
     case 'snapshot':
     case 'status_changed':

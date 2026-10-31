@@ -3,10 +3,10 @@
  * Session integration supplies them; absence always returns unavailable, never success.
  */
 import type { DirectAdmission, DirectSubmission } from '../session/facade-types.js';
-import type { WireConfiguration, WireNotice, WireRewindTarget, WireContent, WireGrant, WireCommandResult } from './direct-wire.js';
+import type { WireConfiguration, WireNotice, WireRewindTarget, WireContent, WireGrant } from './direct-wire.js';
 
 export type DirectCommandCapabilities = {
-  submitWithDelivery?(request: DirectSubmission, delivery: 'steer' | 'follow_up'): Promise<DirectAdmission>;
+  submitWithDelivery?(request: DirectSubmission, delivery: 'steer' | 'follow_up' | 'reject_if_busy'): Promise<DirectAdmission>;
   /** Must validate the target and exact scope durably; never translate to ordinary allow. */
   grant?(requestId: string, grant: WireGrant, stopAfterApprovalResolution?: boolean): Promise<import('../session/direct-types.js').AnswerResult>;
   retry?(request: { readonly target: 'turn' | 'tool'; readonly executionId?: string }): Promise<void>;

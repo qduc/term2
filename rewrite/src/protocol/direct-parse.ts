@@ -97,7 +97,7 @@ export function parseWireCommand(raw: unknown): WireCommand {
       return { type: value.type, requestId: id(value.requestId, 'requestId'), text: text(value.text, 'text'),
         ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}),
         ...(value.origin !== undefined ? { origin: origin(value.origin) } : {}),
-        ...(value.delivery !== undefined ? { delivery: choice(value.delivery, ['auto', 'steer', 'follow_up'], 'delivery') } : {}) };
+        ...(value.delivery !== undefined ? { delivery: choice(value.delivery, ['auto', 'steer', 'follow_up', 'reject_if_busy'], 'delivery') } : {}) };
     }
     case 'answer': fields(value, ['type', 'requestId', 'decision']);
       return { type: 'answer', requestId: id(value.requestId, 'requestId'), decision: decision(value.decision) };

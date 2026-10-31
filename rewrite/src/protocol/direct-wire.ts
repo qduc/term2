@@ -59,6 +59,8 @@ export type WireTool = {
   readonly output?: string;
   readonly isError?: boolean;
   readonly progress?: string;
+  readonly display?: JsonValue;
+  readonly content?: readonly WireContent[];
 };
 export type WireOrigin = { readonly kind: 'cli' | 'tui' | 'acp' | 'control' | 'discord' | 'api'; readonly id?: string };
 export type WireAdmission =
@@ -116,7 +118,7 @@ export type WireEventPayloads = {
   tool_called: { readonly tool: WireTool };
   tool_started: { readonly tool: WireTool };
   tool_progress: { readonly executionId: string; readonly chunk: string };
-  tool_finished: { readonly executionId: string; readonly output: string; readonly isError: boolean };
+  tool_finished: { readonly executionId: string; readonly output: string; readonly isError: boolean; readonly display?: JsonValue; readonly content?: readonly WireContent[] };
   interaction_opened: { readonly interaction: WireInteraction };
   interaction_resolved: { readonly requestId: string; readonly resolution: WireDecision | { readonly kind: 'cancelled' | 'interrupted' } };
   admission: { readonly admission: WireAdmission };
@@ -145,7 +147,7 @@ export type WireEvent = { [K in WireEventType]: {
   readonly payload: WireEventPayloads[K];
 } }[WireEventType];
 
-export type WireSubmission = { readonly requestId: string; readonly text: string; readonly attachments?: readonly WireContent[]; readonly origin?: WireOrigin; readonly delivery?: 'auto' | 'steer' | 'follow_up' };
+export type WireSubmission = { readonly requestId: string; readonly text: string; readonly attachments?: readonly WireContent[]; readonly origin?: WireOrigin; readonly delivery?: 'auto' | 'steer' | 'follow_up' | 'reject_if_busy' };
 export type WireCommand =
   | ({ readonly type: 'submit' } & WireSubmission)
   | { readonly type: 'answer'; readonly requestId: string; readonly decision: WireDecision }

@@ -57,6 +57,7 @@ const provider: any = {
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
 const { service: host, source } = createAdoptedSettings({
+  settingsDir: path.join(root, 'settings'),
   disableLogging: true,
   disableFilePersistence: true,
   cli: {
@@ -69,9 +70,13 @@ const { service: host, source } = createAdoptedSettings({
     } as any,
     memory: { enabled: false } as any,
     shell: { autoApproveMode: 'off' } as any,
+    // Proposals need Pair's user-interaction capability; Bare deliberately omits it.
+    // Keep the other modes on default Bare to exercise its goal control/check path.
     // With shell on, propose_goal is reachable only inside run_code, which refuses
     // approval-requiring tools (old CLI behavior); the shell toggle makes it direct.
-    ...(mode.startsWith('propose') ? { tools: { shell: { enabled: false } } as any } : {}),
+    ...(mode.startsWith('propose')
+      ? { app: { activeProfileId: 'builtin:pair' }, tools: { shell: { enabled: false } } as any }
+      : {}),
   },
 });
 const pair = source.forSessionBinding(

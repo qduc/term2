@@ -181,6 +181,13 @@ pnpm exec tsx rewrite/bench/c1-adopted-kill.mts       # parked approval process-
 pnpm exec tsc -p rewrite/tsconfig.native-tracer.json && node rewrite/bench-dist/rewrite/bench/native-tracer/tracer.js
 ```
 
+Capability-dependent adopted benches need an explicit profile rather than the
+application default. In `c3a-goal.mts`, proposals select Pair because Bare omits
+`user-interaction`; an unoffered `propose_goal` returns `Unknown tool` and never
+opens the approval the bench waits for. The other goal modes retain default
+Bare coverage. Its settings directory is isolated too: `disableFilePersistence`
+disables writes, not loading existing settings.
+
 The build script emits the TypeScript tree and copies the runtime assets just as
 the root build does: prompts come from `source/prompts/` and provider presets
 from `source/providers/provider-presets.json`.

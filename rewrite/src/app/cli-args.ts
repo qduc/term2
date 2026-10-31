@@ -69,7 +69,6 @@ type Flag = {
   readonly interactiveNoOp?: boolean;
 };
 
-const SESSION_HELD = 'session goals need a Session goal API in the direct app (M4 context owner)';
 const JSON_HELD =
   'the old NDJSON event schema needs a protocol-owned read model, which the direct protocol does not expose yet';
 
@@ -84,12 +83,11 @@ const FLAGS: readonly Flag[] = [
   opt(['-m', '--model'], ' <model>', 'Model pattern or ID, supports provider/id and optional :<thinking>'),
   opt(['-p', '--provider'], ' <provider>', 'Override the configured provider (e.g. openai, openrouter)'),
   opt(['-r', '--reasoning'], ' <effort>', 'Set reasoning effort (default, none, minimal, low, medium, high, xhigh)'),
-  opt(['--goal'], ' <text>', 'Persist a user-authored session outcome (max 2,000 characters)', SESSION_HELD),
+  opt(['--goal'], ' <text>', 'Persist a user-authored session outcome (max 2,000 characters)'),
   opt(
     ['--goal-criteria'],
     ' <text>',
     'Optional success criteria (max 2,000 characters; requires --goal)',
-    SESSION_HELD,
   ),
   opt(['--profile'], ' <name>', 'Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)', undefined, 'required'),
   opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),

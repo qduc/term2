@@ -331,6 +331,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
           ...state.turnResults,
           {
             turnId: fact.turnId,
+            ...(fact.finalWindow ? { finalWindow: fact.finalWindow } : {}),
             outcome: fact.outcome,
             messages: state.messages.filter((message) => message.turnId === fact.turnId),
             ...(fact.terminalCause ? { terminalCause: fact.terminalCause } : {}),

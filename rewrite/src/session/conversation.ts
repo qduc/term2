@@ -27,6 +27,7 @@ import {
   type DirectNotificationState,
 } from './direct-notifications.js';
 import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './direct-configuration.js';
+import { captureDirectFinalWindow } from './direct-final.js';
 import { captureDirectCommandHistory } from './direct-history-capture.js';
 import { listDirectRewindTargets, planDirectHistoryCommand } from './direct-command-history.js';
 import {
@@ -408,7 +409,8 @@ function conversation(
         // The same deterministic repair used on reopen supplies missing root
         // results. Its interrupted terminal is replaced by the actual outcome.
         const repairs = liveReplay().recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
-        commit([...repairs, terminalFact(turnId, outcome)]);
+        const ended = terminalFact(turnId, outcome);
+        commit([...repairs, { ...ended, finalWindow: captureDirectFinalWindow([...facts, ...repairs], ended) }]);
       }
       terminal = logFailure ? { kind: 'failed', error: logFailure } : outcome;
     };
@@ -700,7 +702,8 @@ function conversation(
       return { turnId, turn };
     } catch (error) {
       const failure = modelError(error);
-      commit([terminalFact(turnId, { kind: 'failed', error: failure })]);
+      const ended = terminalFact(turnId, { kind: 'failed', error: failure });
+      commit([{ ...ended, finalWindow: captureDirectFinalWindow(facts, ended) }]);
       return { turnId, turn: failedTurn(logFailure ?? failure) };
     }
   };
@@ -1313,7 +1316,7 @@ function factFor(
   }
 }
 
-function terminalFact(turnId: TurnId, result: TurnResult): Fact {
+function terminalFact(turnId: TurnId, result: TurnResult): Extract<Fact, { type: 'turn_ended' }> {
   return {
     type: 'turn_ended',
     turnId,

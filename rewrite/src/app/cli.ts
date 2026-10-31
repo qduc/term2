@@ -352,7 +352,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
   if (result.kind === 'completed') return 0;
   // A resumable context pause exits 2, as the current CLI does; the recovery text was already printed.
   if (result.kind === 'context_paused') return 2;
-  // A blocked turn (goal check unresolved, completion verification blocked, run budget paused) exits 2 with the notice already printed.
+  // A blocked turn (goal check unresolved, completion verification blocked) exits 2 with the notice already printed.
   // A pending run-budget check-in parks the run; the CLI never answers it, and the app keeps it for interactive resume.
   if (result.kind === 'blocked' || result.kind === 'budget_paused') return 2;
   if (result.kind === 'cancelled') return result.signal ? exitCodeForSignal(result.signal) : 1;

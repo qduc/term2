@@ -66,6 +66,8 @@ import {
   type GenerationGuardOptions,
 } from './generation-guard.js';
 import { classifyInLoopModelRetry, sleepWithAbort } from '../retry/in-loop-model-retry.js';
+import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
+import { isPreAcceptanceRateLimit } from '../retry/upstream-retry-policy.js';
 import { buildFailureObservation } from '../decision-shadow/failure-observation.js';
 import type { DecisionShadowObserver } from '../decision-shadow/decision-shadow-observer.js';
 import type { RunTerminationCause } from '../../contracts/run-termination.js';
@@ -1269,6 +1271,7 @@ export class ApplicationRunLoop {
       const inputLengthBefore = state.input.length;
       const historyLengthBefore = state.history.length;
       const criticalWrapUpDispatchedBefore = state.criticalWrapUpDispatched;
+      let observedModelOutput = false;
       let provisionalTextCharacters = 0;
       let provisionalReasoningCharacters = 0;
       let provisionalTextDeltas = 0;
@@ -1384,6 +1387,8 @@ export class ApplicationRunLoop {
             // window so long legitimate reasoning is never mistaken for a stall.
             deadline.recordActivity();
             const event = next.value;
+            // Quota metadata can precede admission; model and compaction events cannot prove rejection before work.
+            if (event.type !== 'codex_rate_limits') observedModelOutput = true;
             if (event.type === 'completion') {
               toolArgumentRunaway?.observeToolCallCompleted();
               generationGuard.observeCompletion(event.output);
@@ -1500,7 +1505,8 @@ export class ApplicationRunLoop {
         if (state.requestPreparation) await state.requestPreparation.run(dispatch);
         else await dispatch();
         break;
-      } catch (error) {
+      } catch (caught) {
+        let error: unknown = caught;
         if (error instanceof RequestInputLimitError) {
           this.#deps.logDiagnostic?.('Request input admission refused', {
             code: error.code,
@@ -1535,9 +1541,17 @@ export class ApplicationRunLoop {
         if (recoverOversizedToolArgument) requestSignal.abort();
         else if (error instanceof GenerationGuardError) requestAbortController.abort();
 
-        const decision = classifyInLoopModelRetry(error, attempt, maxRetries, Math.random, {
+        let decision = classifyInLoopModelRetry(error, attempt, maxRetries, Math.random, {
           previousResponseId: activeRequest?.previousResponseId,
         });
+        if (activeRequest?.previousResponseId && observedModelOutput && isPreAcceptanceRateLimit(error)) {
+          // A rate-limit-shaped error after output is not proof of pre-acceptance.
+          // Preserve partial output and make session-level retries fail closed too.
+          error = new AmbiguousModelOutcomeError('Model request failed after output; outcome is unknown.', {
+            cause: error,
+          });
+          decision = { retryable: false, reason: 'ambiguous_outcome' };
+        }
         const rollbackProvisionalAttempt = (): void => {
           stream.output.splice(outputLengthBefore);
           if (stream.newItems !== stream.output) {

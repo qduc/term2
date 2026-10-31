@@ -1,0 +1,130 @@
+/**
+ * `term2 acp` on the direct host. stdout is the protocol channel and nothing else
+ * writes to it. Security posture is fixed here, not configured: no auto-approval,
+ * no unsandboxed escape, and approvals go through `session/request_permission`.
+ */
+import fs from 'node:fs';
+import { getAllProviders, getProviderIds } from '../../../source/providers/index.js';
+import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
+import { resolveModelFlag } from '../../../source/services/models/model-resolution.js';
+import { getDefaultShellSandboxRunner } from '../../../source/utils/shell/sandbox/shell-sandbox-runner.js';
+import { createAcpBackend, createStdioAcpIo, serveAcp, type AcpIo, type AcpWorkspaces } from '../clients/acp/index.js';
+import { createDirectApplication, type DirectApplication } from './direct-application.js';
+import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant } from './direct-application-workspaces.js';
+import type { DirectLaunchRequest } from './direct-launch-types.js';
+
+type AcpRequest = Extract<DirectLaunchRequest, { readonly kind: 'acp' }>;
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Applies `--provider/--model/--effort` for this process only. Returns false after reporting a refusal. */
+async function applyModelFlags({ args, selection }: AcpRequest, io: AcpIo): Promise<boolean> {
+  const { settings, logger } = selection;
+  if (args.effort) settings.set('agent.reasoningEffort', args.effort, { persist: false });
+  if (args.provider && !getProviderIds().includes(args.provider)) {
+    io.writeStderr(`term2 acp: unknown provider "${args.provider}".`);
+    io.writeStderr('Available providers:');
+    for (const provider of getAllProviders()) io.writeStderr(`  - ${provider.id}  (${provider.label})`);
+    return false;
+  }
+  if (args.provider && !args.model) {
+    io.writeStderr('term2 acp: --provider requires --model; provider-only selection is not supported.');
+    return false;
+  }
+  if (!args.model) return true;
+  // The default prompter reads the terminal, but stdin carries JSON-RPC. A null
+  // answer makes an ambiguous pattern fail instead of consuming protocol bytes.
+  const resolution = await resolveModelFlag({
+    modelFlag: args.model,
+    ...(args.provider ? { providerFlag: args.provider } : {}),
+    settingsService: settings,
+    loggingService: logger,
+    prompter: async () => null,
+  });
+  if (resolution.status === 'no_match') {
+    io.writeStderr(`term2 acp: ${resolution.error}`);
+    return false;
+  }
+  if (resolution.status === 'cancelled') {
+    io.writeStderr(
+      `term2 acp: cannot resolve --model "${args.model}" non-interactively; pass an exact model id or <provider>/<model>.`,
+    );
+    return false;
+  }
+  for (const warning of ('warnings' in resolution && resolution.warnings) || []) io.writeStderr(warning);
+  settings.set('agent.modelSelection', { model: resolution.modelId, provider: resolution.provider }, { persist: false });
+  if (resolution.reasoningEffort && !args.effort) {
+    settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
+  }
+  return true;
+}
+
+async function warnIfSandboxUnavailable(io: AcpIo): Promise<void> {
+  const warn = (type: string, reason?: string): void =>
+    io.writeStderr(
+      `term2 acp: warning: shell sandbox unavailable: ${type}${
+        reason ? ` (${reason})` : ''
+      }; shell tool calls will be refused`,
+    );
+  try {
+    const availability = await getDefaultShellSandboxRunner().availability();
+    if (availability.type !== 'available') {
+      warn(availability.type, 'reason' in availability ? availability.reason : undefined);
+    }
+  } catch (error) {
+    warn('probe_failed', messageOf(error));
+  }
+}
+
+/** An ACP client names its cwd per session; any real directory is admitted, as today. */
+function acpWorkspaces(app: DirectApplication): AcpWorkspaces {
+  return {
+    async authorize(cwd) {
+      return localGrant(fs.realpathSync(cwd));
+    },
+    cwd: (sessionId) => app.sessionRoot(LOCAL_PRINCIPAL, sessionId),
+  };
+}
+
+export async function launchAcp(request: AcpRequest): Promise<number> {
+  const io = createStdioAcpIo();
+  if (!(await applyModelFlags(request, io))) return 1;
+  await warnIfSandboxUnavailable(io);
+
+  const { conversationsDir, selection } = request;
+  const app = createDirectApplication({
+    conversationsDir,
+    selection,
+    surface: { autoApprove: false, interactive: true, allowUnsandboxed: false },
+    authority: createLocalAuthority((root) => {
+      try {
+        return fs.statSync(root).isDirectory();
+      } catch {
+        return false;
+      }
+    }),
+  });
+
+  const shutdown = new AbortController();
+  const onSignal = (): void => shutdown.abort();
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  let exitCode = 1;
+  try {
+    const logger = { error: (message: string, fields: Readonly<Record<string, unknown>>) => selection.logger.error(message, fields) };
+    const backend = createAcpBackend({ host: app.host, principal: app.principal, workspaces: acpWorkspaces(app), logger });
+    exitCode = await serveAcp({ backend, logger, version: installationVersion }, io, shutdown.signal);
+  } finally {
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+    try {
+      await app.close();
+    } catch (error) {
+      io.writeStderr(`term2 acp: shutdown failed: ${messageOf(error)}`);
+      exitCode = 1;
+    }
+  }
+  return exitCode;
+}

@@ -42,6 +42,9 @@ export function run(request: RunRequest): RunHandle {
       // directory creation, and every possible provider or tool operation.
       const resumed = prepareResume(request);
       surface = loadSurface(selection, { autoApprove: request.autoApprove ?? false, interactive: false });
+      // Resume restoration precedes this announcement; CLI must not print the
+      // pre-restoration profile or announce a second time.
+      io.stderr.write(`Profile: ${surface.profileName}\n`);
       const { notice, profileName: _profileName, runtime, decideInteraction, ...settings } = surface;
       const model = selection.settings.get('agent.modelSelection') as ModelRef;
       const id = resumed?.meta.id ?? `conv_${randomUUID()}`;

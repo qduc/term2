@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import type { WireCommandResult, WireDecision } from '../../protocol/direct-wire.js';
+import type { WireCommandResult, WireContent, WireDecision } from '../../protocol/direct-wire.js';
 
 function requireAccepted(result: WireCommandResult): void {
   if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
@@ -8,8 +8,8 @@ function requireAccepted(result: WireCommandResult): void {
 }
 
 /** Submit a fresh message; a successful admission is not turn completion. */
-export async function submitText(connection: DirectConnection, text: string): Promise<void> {
-  const result = await connection.send({ type: 'submit', requestId: randomUUID(), text, origin: { kind: 'tui' } });
+export async function submitText(connection: DirectConnection, text: string, attachments: readonly WireContent[] = []): Promise<void> {
+  const result = await connection.send({ type: 'submit', requestId: randomUUID(), text, ...(attachments.length ? { attachments } : {}), origin: { kind: 'tui' } });
   if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
   if (result.kind !== 'admitted') throw new Error(`Unexpected submit response: ${result.kind}`);
   const admission = result.admission.kind === 'duplicate' ? result.admission.original : result.admission;
@@ -33,5 +33,19 @@ export async function directSlashCommand(connection: DirectConnection, input: st
     case '/retry-turn': requireAccepted(await connection.send({ type: 'retry', target: 'turn' })); return true;
     case '/retry-tool': requireAccepted(await connection.send({ type: 'retry', target: 'tool' })); return true;
     default: return false;
+  }
+}
+
+/** Perform a typed queued-message operation; unavailable remains an error. */
+export async function queueAction(connection: DirectConnection, action: 'edit' | 'retract' | 'resume' | 'discard', messageId?: string, text?: string): Promise<void> {
+  switch (action) {
+    case 'edit':
+      if (!messageId || !text?.trim()) throw new Error('A queued message and replacement text are required.');
+      requireAccepted(await connection.send({ type: 'queue_edit', messageId, text })); return;
+    case 'retract':
+      if (!messageId) throw new Error('Select a queued message.');
+      requireAccepted(await connection.send({ type: 'queue_retract', messageId })); return;
+    case 'resume': requireAccepted(await connection.send({ type: 'queue_resume' })); return;
+    case 'discard': requireAccepted(await connection.send({ type: 'queue_discard' })); return;
   }
 }

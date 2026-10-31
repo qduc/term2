@@ -20,8 +20,8 @@ The local `/answer <interaction-number> <choice-number> [text]` control maps
 approval allow/deny and question answer/stop to `WireDecision` with the actual
 request ID. Stop uses `answer` plus `stopAfterApprovalResolution`, not approval
 denial. It rejects a changed interaction index while an answer is being edited.
-This is an interim UI, not parity with full product prompts. Foreground input
-remains available while background interactions are displayed.
+This is an interim UI, not parity with full product prompts. Ctrl+G also opens a
+keyboard request picker. Foreground input remains available outside the picker.
 
 ## Remaining direct contract / app dependencies
 
@@ -45,11 +45,9 @@ remains available while background interactions are displayed.
   `rewind` ack carries no original turn. Session-changing results need the app to
   connect the new session and replace the surface. The current retry capability
   and all optional operations must not claim success until installed.
-- Full input history persistence, image input/attachments, terminal-native
-  scrollback, line-level scrolling and complete keyboard/approval UI remain.
-  History is local to this mounted session. Page Up/Down page message blocks.
-  Markdown uses the product renderer and skin gutter. A single tall message or
-  tool list can exceed the terminal height.
+- Full history fidelity (especially recalling images), terminal-native scrollback
+  and complete keyboard/approval UI remain. Markdown uses the product renderer
+  and skin gutter. Long activity and interaction panels can exceed terminal height.
 - Snapshot seq can be null and replay is not available; do not reuse a cursor or
   replay pre-snapshot events. C4/host own atomic snapshot+live correctness.
 
@@ -57,3 +55,26 @@ No tests, reviews, builds or terminal checks have run; all are deferred until
 post-M6. In particular, projection equivalence, background interactions, answer
 semantics, editor/input ownership and terminal rendering need real direct-path
 verification before M5 parity is claimed.
+
+## Local parity work (unverified)
+
+Ctrl+G opens the request-ID-based approval/question panel; Escape goes back
+without discarding the underlying draft. It presents allow, deny, denial reason,
+free-text answer and stop; structured multi-question and multi-select still need
+the typed question/answer contract. Clipboard image paste uses ink-prompt and
+sends direct `WireContent` image attachments. Paste errors and command rejection
+are displayed, and attachments stay in the draft on rejection.
+
+`/queue retract <number>`, `/queue edit <number> <text>`, `/queue resume`, and
+`/queue discard` send typed queue mutations; unavailable is reported. `/steer`
+reports the missing submit delivery selector rather than sending an ordinary
+message. The transcript is rendered offscreen at terminal width and browsed by
+rows with PgUp/PgDn and Ctrl+Up/Down. Long activity panels can still overflow;
+color/terminal rendering and streaming performance require real-terminal checks.
+
+Input history is now stored separately from old CLI history at
+`envPaths('term2').data/tui-history-next.json`, using same-directory atomic
+replacement. Malformed history is preserved and surfaced as an error. Only text
+is persisted (not clipboard images or `/answer` text). Concurrent writers can
+still overwrite each other's latest entries; app ownership/serialization is
+needed if multiple direct TUIs must share that file without lost updates.

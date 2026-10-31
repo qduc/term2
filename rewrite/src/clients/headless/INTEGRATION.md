@@ -64,11 +64,11 @@ conversation storage.
   required]`, `[question]`, retry and notice lines); errors, `Approval
   Rejected` verdicts and reasoning (when enabled) remain. JSON mode is
   unaffected.
-- `json` currently fails explicitly with `--json output requires the direct
-  conversation-event read model` (exit 1) before submit. Emitting wire events
-  under the old flag would misstate parity. The protocol-owned read model is
-  required (see `parallel-headless-parity-contract-needs.md`); remove the gate
-  only when that mapping exists.
+- `json` currently fails explicitly (exit 1) before submit because native
+  argument streaming and an authoritative final/turn-item window are missing.
+  Accepted cost/command slices alone are not the old schema. Emitting wire
+  events under the old flag would misstate parity; remove the gate only when
+  the protocol-owned read model is complete.
 - A stale interaction answer after abort is expected (Session closes pending
   interactions). The client keeps the ordered stream and lets the cancelled
   terminal decide instead of reporting a failure. A stale `closed` failure is
@@ -109,29 +109,32 @@ conversation storage.
   exists.
 - **`--json` schema:** old `--json` streams private `ConversationEvent`
   records (`tool_call_streaming_delta`, `cost_update`, `command_message`,
-  `final` with `turnItems`/`costRecords`, ...). The direct wire does not carry
-  those shapes, so this client emits wire events. Passing `json-events`
-  requires a protocol-owned public event/read-model mapping equivalent to the
-  old records, not a client-side guess. Required fields are listed in
-  `parallel-headless-parity-contract-needs.md`; `--json` stays disabled until
-  then.
+  `final` with `turnItems`/`costRecords`, ...). Protocol now provides exact
+  accepted slices for request costs (`legacyRequestCostUpdate`) and
+  source-formatted commands (`legacyCommandMessages`), but native argument
+  streaming and an authoritative final/turn-item window are still absent.
+  Those slices alone are not the legacy schema, so `--json` still exits 1 with
+  a precise missing-producer error. Never emit raw wire events as legacy JSON.
 - **Approval policy inputs:** the wire exposes `toolName`, `input`, `summary`,
   `detail`, `risk`, typed `questions` and `supportedGrants` (empty under the
   current M2 request contract), but not the old safety classification, the
   yellow command evaluator, MCP allowlists or `propose_goal` policy. The app
   must inject the exact policy through `decideApproval`. Run-budget check-ins
-  have real `budget_opened`/`pendingBudgets` wire evidence; headless parks and
+  have real `budget_opened`/`pendingBudgets` wire evidence; headless pauses and
   exits 2 rather than granting them.
 - **Questions:** typed questions and structured `answers` are available to an
   app-injected decider, but headless itself has no interactive presenter. The
   default declines. Old ask_user parity still needs the app to choose answers,
   and grants need a real scope-validating capability before any non-empty
   `supportedGrants` appears.
-- **Background work:** task state/progress is arriving in protocol, but the
-  Session-owned silent notification turn, outstanding-wait/timeout contract
-  and interrupted/timeout records are still missing. The client ends at the
-  submitted turn's terminal until that flow is concrete; it does not synthesize
-  notifications, completion or timeout behavior.
+- **Background work:** task state/progress and terminal task results are real
+  wire data, but the Session-owned silent notification admission, drain/wait,
+  `agent.backgroundWaitTimeoutMs` and interruption/timeout records are still
+  missing. The client tracks `task_changed` and, if any task is active or a
+  background task was launched during this run, refuses to report the foreground
+  terminal as completion. It exits 1 with the outstanding task IDs instead of
+  synthesizing a notification, waiting without a wake contract, or claiming
+  success while work/results cannot be delivered.
 - **Generation guards:** the old app wrapped provider streams in
   `GenerationGuard`; deadline/idle caps remain app/model policy, not client
   state.

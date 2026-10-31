@@ -15,6 +15,7 @@ import type {
   WireDecision,
   WireEvent,
   WireInteraction,
+  WireTask,
 } from '../../protocol/direct-wire.js';
 import { interactionLine, rejectionLine, retryLine, toolStartLine } from './format.js';
 import type {
@@ -102,6 +103,23 @@ export async function runDirectHeadless(
   const autoApprove = options.autoApprove ?? false;
   const quiet = options.quiet ?? false;
   const sessionId = connection.sessionId;
+  const runStartedAt = Date.now();
+  const tasks = new Map<string, WireTask>();
+  for (const task of connection.snapshot.tasks) tasks.set(task.id, task);
+
+  /** Old headless waited for background work and delivered its notification turns.
+   * Until Session exposes that admission/drain/wait contract, a completed
+   * foreground turn must not be reported as completed while that work is live or
+   * was launched into the background during this run.
+   */
+  const unsettledBackground = (): WireTask[] =>
+    [...tasks.values()].filter(
+      (task) =>
+        task.status === 'running' ||
+        task.status === 'awaiting_interaction' ||
+        task.status === 'cancelling' ||
+        (task.mode === 'background' && task.startedAt !== undefined && task.startedAt >= runStartedAt),
+    );
   const requestId = options.requestId ?? `req_${randomUUID()}`;
   const reportedErrors = new Set<string>();
   const answered = new Set<string>();
@@ -155,10 +173,13 @@ export async function runDirectHeadless(
   };
 
   // The old --json schema is a ConversationEvent read model, not the wire event
-  // stream. Until protocol publishes that mapping, fail explicitly instead of
-  // presenting wire events as parity. Remove this gate with the read model.
+  // stream. Protocol now exposes accepted request-cost and source command slices,
+  // but native argument streaming and an authoritative final/turn-item window are
+  // still absent. Do not present a partial stream as legacy parity.
   if (output === 'json') {
-    errorText('--json output requires the direct conversation-event read model, which is not available yet.');
+    errorText(
+      '--json output requires native argument-stream records and an authoritative final/turn-item window; accepted cost and command slices alone are not the legacy schema.',
+    );
     return result('error', 1);
   }
 
@@ -305,6 +326,10 @@ export async function runDirectHeadless(
         if (failure) return failure;
         continue;
       }
+      if (event.type === 'task_changed') {
+        tasks.set(event.payload.task.id, event.payload.task);
+        continue;
+      }
       if (event.type === 'budget_opened') {
         if (targetTurnId === null || event.payload.request.turnId === targetTurnId) {
           return reportBudgetPause(event.payload.request.evidence);
@@ -387,6 +412,16 @@ export async function runDirectHeadless(
             return result('blocked', 2);
           }
           if (outcome === 'completed') {
+            const unsettled = unsettledBackground();
+            if (unsettled.length > 0) {
+              const details = unsettled
+                .map((task) => `${task.kind ?? 'task'} ${task.name ?? task.label ?? task.id} [${task.id}] (${task.status})`)
+                .join(', ');
+              errorText(
+                `Background work is not settled: ${details}. Direct headless has no Session-owned notification/wait contract, so completion is not reported.`,
+              );
+              return result('error', 1);
+            }
             const final = finalText || streamedText;
             if (output === 'plain') io.stdout.write('\n');
             else json({ type: 'completed', finalText: final });

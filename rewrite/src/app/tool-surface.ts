@@ -1,7 +1,7 @@
 /** Direct executable assembly: source tool leaves and policy, without the legacy runtime. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { buildAgent, type AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
+import { buildAgent, buildAgentTools, type AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
 import { createEditorImpl } from '../../../source/lib/editor-impl.js';
 import { getCatalogModel } from '../../../source/providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from '../../../source/services/agent-runtime/model-context-policy.js';
@@ -13,6 +13,8 @@ import { primeActiveProfileNoticeIfActive } from '../../../source/services/mode-
 import { installPlanModeInterceptor } from '../../../source/services/plan-mode-interceptor.js';
 import { SessionAccessState } from '../../../source/services/session/session-access-state.js';
 import { SkillsService } from '../../../source/services/skills/skills-service.js';
+import { bindRunCodeRegistry } from '../../../source/tools/system/run-code/run-code.js';
+import type { AnyToolDefinition } from '../../../source/tools/types.js';
 import { InvalidatableShellChildRegistry } from '../../../source/utils/shell/shell-child-registry.js';
 import type { ProviderInputItem } from '../../../source/contracts/provider-input.js';
 import type { ToolContextSeed } from '../engine/index.js';
@@ -65,6 +67,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     },
     { settingsService: settings },
   );
+  let sourceGraph: AnyToolDefinition[] = [];
+  let baseGraph: AnyToolDefinition[] = [];
   const deps: AgentFactoryDeps = {
     settings,
     logger,
@@ -77,6 +81,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     readOnly,
     shellChildRegistry: shellChildren,
     skillsService,
+    onToolGraph(graph) {
+      sourceGraph = graph;
+      baseGraph = [...graph];
+    },
     includeMemory: !remote && options.includeMemory !== false,
     projectInstructions: options.projectInstructions,
     withToolInvocation: withInvocation,
@@ -156,9 +164,26 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     notice,
     runtime: {
       tools: registry,
+      resetAdaptedTools() {
+        sourceGraph.splice(0, sourceGraph.length, ...baseGraph);
+        bindRunCodeRegistry(sourceGraph);
+      },
       adaptTool(definition) {
         if (remote) throw new Error('Native local source-leaf adaptation is unavailable for SSH workspaces');
-        return registry.adaptTool(definition);
+        if (baseGraph.some((tool) => tool.name === definition.name))
+          throw new Error(`Native source leaf collides with the fixed graph: ${definition.name}`);
+        const [wrapped] = buildAgentTools({
+          toolDefinitions: [definition],
+          resolvedModel: agent.model,
+          shouldUseNativePatchTool: false,
+          deps: { ...deps, onToolGraph: undefined },
+        });
+        if (!wrapped) throw new Error('Native source leaf was not adapted');
+        const old = sourceGraph.findIndex((tool) => tool.name === wrapped.name);
+        if (old < 0) sourceGraph.push(wrapped);
+        else sourceGraph[old] = wrapped;
+        bindRunCodeRegistry(sourceGraph);
+        return registry.adaptTool(wrapped);
       },
       toolContext: toolContext(selection, workspace),
       maxParallelToolCalls: settings.get('agent.maxParallelToolCalls') ?? 3,

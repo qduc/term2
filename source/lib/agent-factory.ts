@@ -95,6 +95,8 @@ export interface AgentFactoryDeps {
   getAskUserAnswer?: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
   skillsService?: SkillsService;
+  /** Retain the complete wrapped graph, including script-only leaves, for native capability binding. */
+  onToolGraph?: (tools: ToolRegistry) => void;
   /** Omit local memory discovery when another owner supplies context or the workspace is remote. */
   includeMemory?: boolean;
   /** Project text already loaded from the execution target; profile gates still apply. */
@@ -409,6 +411,7 @@ export function buildAgentTools({
   // run_code executes tools itself, out of band of the run loop. Binding the
   // wrapped list here is what subjects a script's calls to the same approval
   // wrapping, plan-mode interceptors, and post-execute policy as a direct call.
+  deps.onToolGraph?.(tools);
   bindRunCodeRegistry(tools);
 
   // Profiles without run_code keep their existing direct surface. When the

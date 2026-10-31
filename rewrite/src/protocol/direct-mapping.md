@@ -67,20 +67,20 @@ NOT cancel: selected allow still settles its approved body/result, selected deny
 settles rejection, and an empty question answer keeps the source no-answer result;
 engine suppresses later work. Protocol does not reinterpret these as cancellation.
 
-## M4 committed helper vocabularies (mapping implemented, production wiring pending)
+## Native M4 vocabulary and public mapping
 
 The imported unions are the actual helpers, not a parallel Session API:
 `direct-background-types.ts`, `direct-queue-types.ts`, `direct-context.ts`.
-`DirectProtocolUpdate` accepts those exact fact/progress types while the Session
-owner integrates its authoritative Fact/capture union. Merely typing these inputs
-DOES NOT implement acceptance, nested execution or M4.
+`DirectProtocolUpdate` now aliases the published authoritative Session update
+union. Native Session integration is published through bbff1582/83f61600; this
+protocol maps that source-backed contract. Combined execution remains unverified.
 
 - Task start/background/stop/finish -> one task_changed per fact. Task progress ->
   transient task_progress. Task kind, ID, parent turn/execution, origin, source
   call ID, mode and actual timestamps survive. Cancelling is not completed.
   Known shell output / nested assistant text is public; arbitrary result objects
-  and nested provider items are not. Rich nested tool/usage observations still
-  need the real driver.
+  and nested provider items are not. Real branch observations use the scoped
+  subagent wrapper, not root tool/usage arrays.
 - Task interaction open/close -> one interaction frame with taskId/origin. Root
   turn completion does not delete task questions; background questions do not
   mark root foreground awaiting_interaction. Exact request IDs remain answerable
@@ -93,7 +93,7 @@ DOES NOT implement acceptance, nested execution or M4.
   appends a second item fact or emits N cursor-sharing message frames.
 - Public submission records retain original/current content, delivery, origin,
   receipt, stage, owning turn and accepted outcome. finalText is null unless an
-  accepted completed assistant message is actually correlated to that turn.
+  accepted historical completed turn result is actually correlated to that turn.
   Retracted/discarded/cancelled stages do not manufacture a turn terminal.
 - Goal changes/proposals, stop reminders, completion verification stages and
   memory facts map one frame each. Goal proposal is not an activated goal.
@@ -196,19 +196,20 @@ Local editor/navigation/reset actions are intentionally not wire commands.
 | reset_all | local replacement only after authorized actual session switch |
 
 The shared reducer retains retry/compaction notices and scoped subagent
-presentation rather than dropping them. These DTOs still need real producers;
-notice retention is not evidence retries/compaction/nested execution occurred.
+presentation rather than dropping them. Legacy retrying/compacted DTOs still
+need corresponding native producers; real branch/history facts now have direct
+mappings. Notice retention is not runtime evidence that these paths occurred.
 
 ## Commands / external gaps
 
-Actual minimal operations: submit, exact answer and foreground cancel. Optional
-M3/M4 operations must be injected from the same Session, never a second runtime.
-Queue callbacks return native DirectQueueMutation (accepted/no_op/too_late/rejected);
+Actual native operations include delivery admission, exact answer/budget answer,
+queue mutations and atomic abort. Remaining optional operations must be supplied
+from the same Session, never a second runtime. Queue mutations return native DirectQueueMutation (accepted/no_op/too_late/rejected);
 too_late is a distinct wire failure, and invalid does not become accepted. Task
 controls return native outcomes; unknown/inactive targets are not successful.
 Explicit non-auto delivery and structured Discord input require real
 submitWithDelivery. Scoped grants are not offered while supportedGrants is empty.
-Expected-turn cancellation requires its atomic domain callback. Rewind returns the
+Expected-turn cancellation calls native atomic Session.abort. Rewind returns the
 actual editable draft, not reconstructed provider history. Host/global slash actions
 are app authority, not an arbitrary invoke-method RPC.
 
@@ -257,6 +258,9 @@ completed-answer evidence is unavailable. A native task terminal remains solely
 Genuine task supported-action metadata still needs the Session owner; no action
 list is inferred from task kind/status or merely having a generic control seam.
 
-This code targets the lead's current working facade/facts/state, which remained
-uncommitted when consumed (HEAD 3bb4c4dd); integration needs that actual shared
-change, not merely its HEAD. No compile/runtime/acceptance evidence was collected.
+The native facade/facts/state are now published in the lead lineage through
+`83f61600` (current inspected HEAD `950a30ea`). `DirectProtocolUpdate` is exactly
+the native `DirectSessionUpdate`, not an extra helper union. Native accepted
+updates/replay retain original `at`; host passes the original replay entry.
+The new native automatic_memory_notice transient maps its public success/command/
+output to a null-seq notice event; no private snapshot/receipt is serialized. No compile/runtime/acceptance evidence was collected.

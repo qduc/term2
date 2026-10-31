@@ -132,6 +132,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
       ? { ...task, lastActivityAt: event.payload.at, progress: (task.progress ?? '') + event.payload.chunk,
         ...(event.payload.kind === 'text' ? { text: (task.text ?? '') + event.payload.chunk } : {}) } : task) };
     case 'cost': return { ...state, cost: event.payload };
+    case 'automatic_memory_notice': return { ...state, notices: [...state.notices, { kind: 'automatic_memory', message: `${event.payload.command}\n${event.payload.output}` }] };
     case 'notice': return { ...state, notices: [...state.notices, event.payload] };
     case 'goal': return { ...state, goal: event.payload.goal, goalProposal: null, goalGeneration: event.payload.generation ?? state.goalGeneration };
     case 'goal_proposed': return { ...state, goalProposal: event.payload.goal };

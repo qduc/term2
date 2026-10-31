@@ -88,8 +88,9 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
           }
           const fact = factFor(turnId, event);
           if (fact && !commit([fact])) {
+            // Keep reading: the cancelled engine ends with only its terminal event.
             handle.cancel();
-            break;
+            continue;
           }
           yield event;
         }

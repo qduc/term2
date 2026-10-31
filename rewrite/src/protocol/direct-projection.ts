@@ -3,14 +3,12 @@
  */
 import type { DirectSessionState, DirectSessionUpdate } from '../session/facade-types.js';
 import { directDraftId, initialDirectState } from '../session/direct-state.js';
-import type { DirectContextFact } from '../session/direct-context.js';
 import { contextFactEvent } from './direct-context.js';
-import type { DirectQueueFact, DirectQueueState } from '../session/direct-queue-types.js';
+import type { DirectQueueState } from '../session/direct-queue-types.js';
 import { createDirectQueueState, directQueueSteeredInput, reduceDirectQueue } from '../session/direct-queue-state.js';
 import { budgetFactEvent } from './direct-budget.js';
 import { completedFinalText } from './direct-turn-results.js';
 import { publicQueue } from './direct-queue.js';
-import type { DirectBackgroundFact, DirectBackgroundProgress } from '../session/direct-background-types.js';
 import { taskFactEvent } from './direct-tasks.js';
 import type { Fact } from '../session/facts.js';
 import type { WireEvent, WireEventPayloads, WireEventType, WireSnapshot } from './direct-wire.js';
@@ -18,12 +16,8 @@ import { publicInteraction, publicJson, publicMessage, publicToolContent, public
 import { runtimeDirectError, snapshotDirectState } from './direct-state.js';
 import { reduceWireEvent } from './direct-reducer.js';
 
-/** Accepts the exact committed helper vocabulary while shared Session capture wiring lands.
- * No operation is implemented by merely accepting this data type.
- */
-export type DirectProtocolUpdate = (DirectSessionUpdate
-  | { readonly type: 'fact'; readonly position: number; readonly seq: number; readonly fact: DirectBackgroundFact | DirectQueueFact | DirectContextFact }
-  | { readonly type: 'transient'; readonly position: number; readonly event: DirectBackgroundProgress }) & { readonly at?: string };
+/** The published native update vocabulary, including original accepted timestamps. */
+export type DirectProtocolUpdate = DirectSessionUpdate;
 type FactUpdate = Extract<DirectProtocolUpdate, { type: 'fact' }>;
 export class DirectProjection {
   #state: WireSnapshot;
@@ -48,7 +42,10 @@ export class DirectProjection {
     let events: readonly WireEvent[];
     if (update.type === 'state') return this.synchronize(update.state);
     if (update.type === 'transient') {
-      if (update.event.type === 'task_progress') {
+      if (update.event.type === 'automatic_memory_notice') {
+        const { success, command, output } = update.event.notice;
+        events = [this.#event('automatic_memory_notice', { success, command, output }, null, this.#state.activeTurnId)];
+      } else if (update.event.type === 'task_progress') {
         const progress = update.event;
         const task = this.#state.tasks.find(task => task.id === progress.taskId);
         const { type: _type, ...payload } = progress;
@@ -86,7 +83,7 @@ export class DirectProjection {
   #event<K extends WireEventType>(type: K, payload: WireEventPayloads[K], seq: number | null, turnId: string | null): WireEvent {
     return { sessionId: this.#state.sessionId, seq, occurredAt: null, turnId, type, payload } as WireEvent;
   }
-  #fact({ fact, seq }: FactUpdate): readonly WireEvent[] {
+  #fact({ fact, seq, at }: FactUpdate): readonly WireEvent[] {
     const turnId = 'turnId' in fact ? fact.turnId ?? null : null;
     switch (fact.type) {
       case 'goal_changed':
@@ -138,9 +135,9 @@ export class DirectProjection {
         const task = this.#state.tasks.find(task => task.id === fact.taskId);
         const projection = DirectProjection.forReplay(initialDirectState(this.#state.sessionId, this.#workspace, task?.model ?? this.#state.model));
         this.#branches.set(fact.branchId, { projection, taskId: fact.taskId, ...(task?.role ? { role: task.role } : {}) });
-        return this.#branch(fact.branchId, { type: 'turn_started', turnId: fact.turnId, input: fact.input }, seq);
+        return this.#branch(fact.branchId, { type: 'turn_started', turnId: fact.turnId, input: fact.input }, seq, at);
       }
-      case 'branch_event': return this.#branch(fact.branchId, fact.fact, seq);
+      case 'branch_event': return this.#branch(fact.branchId, fact.fact, seq, at);
       case 'session_started': return [this.#event('configuration', { model: fact.model, ...(fact.reasoning ? { reasoning: fact.reasoning } : {}) }, seq, null)];
       case 'turn_started': return [
         this.#event('turn_started', { foreground: true,
@@ -175,10 +172,10 @@ export class DirectProjection {
     } : {};
   }
   /** Branch facts keep their one outer cursor; child frames never advance the root cursor. */
-  #branch(branchId: string, fact: Fact, seq: number): readonly WireEvent[] {
+  #branch(branchId: string, fact: Fact, seq: number, at: string): readonly WireEvent[] {
     const branch = this.#branches.get(branchId);
     if (!branch) throw new Error('Branch event has no accepted branch identity');
-    return branch.projection.update({ type: 'fact', position: 0, seq, fact }).map(event =>
+    return branch.projection.update({ type: 'fact', position: 0, seq, at, fact }).map(event =>
       this.#event('subagent', { agentId: branch.taskId, branchId, ...(branch.role ? { role: branch.role } : {}), event: { ...event, seq: null } }, seq, event.turnId));
   }
   #item(fact: Extract<Fact, { type: 'item' }>, seq: number): readonly WireEvent[] {

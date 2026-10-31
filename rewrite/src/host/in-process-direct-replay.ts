@@ -35,7 +35,7 @@ export function directReplayView(session: DirectSession, fromSeq: number) {
     for (const entry of capture.replay) {
       if (entry.seq <= previousSeq || entry.seq > capture.seq) throw new Error('Invalid accepted replay prefix');
       previousSeq = entry.seq;
-      for (const event of projection.update({ type: 'fact', position: 0, seq: entry.seq, fact: entry.fact, ...('at' in entry && typeof entry.at === 'string' ? { at: entry.at } : {}) })) {
+      for (const event of projection.update(entry)) {
         if (entry.seq > fromSeq) events.push(event);
       }
     }

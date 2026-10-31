@@ -212,6 +212,8 @@ export type WireEventPayloads = {
   compacted: { readonly replaced: number; readonly summaryId: string };
   cost: { readonly totalUsd: number; readonly currency: 'USD' };
   notice: WireNotice;
+  /** Session-owned public command notice; no private memory snapshot/receipt is serialized. */
+  automatic_memory_notice: { readonly success: boolean; readonly command: string; readonly output: string };
   goal: { readonly goal: WireGoal | null; readonly generation?: number };
   goal_proposed: { readonly goal: WireGoal };
   verification: { readonly verification: WireVerification | null };

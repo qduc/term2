@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
-import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import type { WireDecision } from '../../protocol/direct-wire.js';
+import type { TuiConnection } from './integration.js';
+import type { WireDecision, WireSnapshot, WireSubmission } from '../../protocol/direct-wire.js';
 import { useTheme } from '../../../../source/components/theme.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
 import type { TuiIntegration } from './integration.js';
@@ -18,7 +18,7 @@ export type { TuiIntegration } from './integration.js';
 export type { TuiState, ViewUpdate, Message, ToolView, InteractionView, QueueItem, TaskView } from './state.js';
 export { updateView } from './state.js';
 export { submitText, cancelForeground, answerInteraction, directSlashCommand } from './commands.js';
-export { projectSnapshot, projectEvent } from './direct-projection.js';
+export { projectSnapshot } from './direct-projection.js';
 
 /**
  * Direct TUI surface. The app owns the connection and supplies host/config actions;
@@ -26,20 +26,24 @@ export { projectSnapshot, projectEvent } from './direct-projection.js';
  * Session mutations go through the direct wire and failures remain visible.
  */
 export function Tui(props: {
-  readonly connection: DirectConnection;
+  readonly connection: TuiConnection;
   readonly integration: TuiIntegration;
+  readonly retainedSnapshot?: WireSnapshot;
+  readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   readonly onExit: () => void;
 }): React.ReactElement {
   // A different session gets its own draft, history and viewport.
   return <TuiSession key={props.connection.sessionId} {...props} />;
 }
 
-function TuiSession({ connection, integration, onExit }: {
-  readonly connection: DirectConnection;
+function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onExit }: {
+  readonly connection: TuiConnection;
   readonly integration: TuiIntegration;
+  readonly retainedSnapshot?: WireSnapshot;
+  readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   readonly onExit: () => void;
 }): React.ReactElement {
-  const { state, error: connectionError } = useClient(connection);
+  const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot);
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [images, setImages] = useState<ImageRef[]>([]);
@@ -54,6 +58,7 @@ function TuiSession({ connection, integration, onExit }: {
   const queueOwners = useRef<readonly string[] | null>(null);
   useInput((input, key) => {
     if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
+    if (key.meta && key.return && state.activeTurnId && !busy) void submit(editor.value, images, 'follow_up');
   }, { isActive: !interactionOpen });
 
   const changeInput = (value: string) => {
@@ -70,13 +75,13 @@ function TuiSession({ connection, integration, onExit }: {
     editor.change(value);
   };
 
-  const submit = async (input: string, submittedImages: ImageRef[] = images): Promise<void> => {
+  const submit = async (input: string, submittedImages: ImageRef[] = images, delivery: WireSubmission['delivery'] = state.activeTurnId ? 'steer' : 'auto'): Promise<void> => {
     if ((!input.trim() && !submittedImages.length) || pending.current) return;
     pending.current = true;
     setBusy(true);
     setNotice(null);
     try {
-      if (input.startsWith('/') && submittedImages.length) throw new Error('Remove attachments before running a command.');
+      if (input.startsWith('/') && !/^\/(steer|followup)\s/.test(input) && submittedImages.length) throw new Error('Remove attachments before running a command.');
       if (input.startsWith('/answer ')) {
         const match = /^\/answer\s+(\d+)\s+(\d+)(?:\s+([\s\S]*))?$/.exec(input.trim());
         const interaction = match && state.interactions[Number(match[1]) - 1];
@@ -85,6 +90,7 @@ function TuiSession({ connection, integration, onExit }: {
         if (answerOwners.current && answerOwners.current[Number(match[1]) - 1] !== interaction.id) {
           throw new Error('The interaction list changed. Check the prompt and re-enter your answer.');
         }
+        if (interaction.questions?.length) throw new Error('Use Ctrl+G to answer these structured questions.');
         let decision: WireDecision;
         switch (choice.id) {
           case 'allow':
@@ -100,8 +106,11 @@ function TuiSession({ connection, integration, onExit }: {
           default: throw new Error('Unsupported interaction choice.');
         }
         await answerInteraction(connection, interaction.id, decision);
-      } else if (/^\/steer(?:\s|$)/.test(input)) {
-        throw new Error('Explicit steering is unavailable: the direct submit protocol has no delivery selector.');
+      } else if (/^\/(steer|followup)(?:\s|$)/.test(input)) {
+        const match = /^\/(steer|followup)\s+([\s\S]*)$/.exec(input);
+        if (!match || (!match[2].trim() && !submittedImages.length)) throw new Error('Enter a message after /steer or /followup.');
+        await submitText(connection, match[2], submittedImages.map(image => ({ type: 'image' as const, mediaType: image.mimeType, data: image.data })), match[1] === 'steer' ? 'steer' : 'follow_up');
+        setImages([]);
       } else if (/^\/queue(?:\s|$)/.test(input)) {
         const match = /^\/queue\s+(resume|discard|retract|edit)(?:\s+(\d+))?(?:\s+([\s\S]*))?$/.exec(input.trim());
         if (!match) throw new Error('Use /queue resume|discard|retract <number>|edit <number> <text>.');
@@ -122,7 +131,7 @@ function TuiSession({ connection, integration, onExit }: {
           if (result.exit) onExit();
         }
       } else {
-        await submitText(connection, input, submittedImages.map(image => ({ type: 'image' as const, mediaType: image.mimeType, data: image.data })));
+        await submitText(connection, input, submittedImages.map(image => ({ type: 'image' as const, mediaType: image.mimeType, data: image.data })), delivery);
         setImages([]);
       }
       // Do not add interaction answers to recallable input history.
@@ -153,7 +162,7 @@ function TuiSession({ connection, integration, onExit }: {
         key={editor.inputKey}
         value={editor.value}
         onChange={changeInput}
-        onSubmit={submit}
+        onSubmit={(value, submittedImages) => { void submit(value, submittedImages); }}
         onBoundaryArrow={editor.navigate}
         width={Math.max(1, columns - 4)}
         maxHeight={Math.max(1, rows - 8)}
@@ -162,9 +171,9 @@ function TuiSession({ connection, integration, onExit }: {
         onImagesChange={setImages}
         enableImagePaste
         onPasteError={reason => setNotice(`Image paste failed: ${reason}`)}
-        ignoreInput={(input, key) => key.pageUp || key.pageDown || (key.ctrl && (key.upArrow || key.downArrow || input === 'g'))}
+        ignoreInput={(input, key) => key.pageUp || key.pageDown || (key.ctrl && (key.upArrow || key.downArrow || input === 'g')) || (Boolean(state.activeTurnId) && key.meta && key.return)}
       />
     </InputFrame>
-    <Hints hints={[["Enter", "send"], ["↑/↓", "history"], ["PgUp/PgDn", "scroll"], ["Ctrl+G", "approvals"], ["/", "commands"], ["/cancel", "stop"]]} />
+    <Hints hints={[["Enter", state.activeTurnId ? "steer" : "send"], ["Alt+Enter", "follow-up"], ["↑/↓", "history"], ["PgUp/PgDn", "scroll"], ["Ctrl+G", "approvals"], ["/", "commands"], ["/cancel", "stop"]]} />
   </Box>;
 }

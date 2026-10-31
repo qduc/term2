@@ -30,6 +30,14 @@ The app must keep diagnostics off stdout, supply process shutdown signals to
 `serveAcp`, and dispose its Host after serving returns. No production factory,
 CLI dispatch/default flip, global signal handler or runtime fallback lives here.
 
+The app owner published `app/direct-launch-acp.ts` in `fd13b572`, calling these
+entry points with the real Host and canonical workspace callbacks. Its launcher
+passes `autoApprove:false` and `allowUnsandboxed:false`, but that commit's
+`ToolSurfaceOptions` does not yet declare the latter option. The launcher alone
+is not evidence that tool authority enforces it. Also, its
+`applicationCapabilities` installs only `reset`, not `submitWithDelivery`.
+These remain app/Session/tool-owner integration work, not client fallbacks.
+
 ## Admission, content and interactions
 
 - Each prompt sends exactly one UUID-keyed `submit`, with `origin:acp` and explicit
@@ -116,8 +124,9 @@ cursor extension, client seq counter, or snapshot-then-old-tail fallback.
 
 - Integrate the real shared protocol/Host implementation and its M2 dependencies,
   including enriched Session state/store; shared direct imports intentionally do
-  not resolve in this worker's older base. Wire the direct executable and actual
-  reject_if_busy capability. No bridge implementation is an integration substitute.
+  not resolve in this worker's older base. The published app launcher must receive
+  actual reject_if_busy admission and tool security authority as described above.
+  No bridge implementation is an integration substitute.
 - Supply authoritative mixed snapshot.timeline. If committed IDs differ from live
   draft IDs, preserve their replacement/display relation across fresh snapshots;
   event-only replacesDraftId cannot guarantee cross-reconnect ACP identity.

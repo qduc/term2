@@ -2,11 +2,13 @@
 import type { DirectTaskControlResult } from '../session/direct-background-types.js';
 import type { DirectQueueMutation } from '../session/direct-queue-types.js';
 import type { DirectSession, DirectSubmission } from '../session/facade-types.js';
+import type { BudgetDecision } from '../engine/direct-types.js';
+import type { TurnId } from '../engine/index.js';
 import type { InteractionRequestId } from '../tools/index.js';
 import type { DirectCommandCapabilities } from './direct-capabilities.js';
 import type { AnswerResult } from '../session/direct-types.js';
 import { serializeQuestionAnswers } from './direct-questions.js';
-import type { WireCommand, WireCommandResult, WireDecision } from './direct-wire.js';
+import type { WireAnswerProvenance, WireCommand, WireCommandResult, WireDecision } from './direct-wire.js';
 import { DirectProtocolError } from './direct-errors.js';
 import { parseWireCommand } from './direct-parse.js';
 
@@ -33,30 +35,27 @@ async function dispatch(session: DirectSession, command: WireCommand, operations
         content: [{ type: 'text', text: command.text }, ...(command.attachments ?? [])],
         ...(command.origin ? { origin: command.origin } : {}) };
       const delivery = command.delivery ?? 'auto';
-      // Structured Discord authority must use the real queue/delivery admission path,
-      // whose immutable fingerprint includes every origin field (never M2 kind/id).
-      const admission = delivery === 'auto' && command.origin?.kind !== 'discord' ? await session.submit(request)
-        : await requireOperation(operations.submitWithDelivery, `submit:${delivery}`).call(operations, request, delivery === 'auto' ? 'follow_up' : delivery);
+      const admission = await session.submitWithDelivery({ ...request, delivery });
       return { ok: true, kind: 'admitted', admission };
     }
     case 'answer': {
-      const answer = await answerInteraction(session, command.requestId, command.decision, operations);
+      const answer = await answerInteraction(session, command.requestId, command.decision, operations, command.provenance);
       return answerResult(answer);
     }
+    case 'answer_budget': return answerResult(session.answerBudget(command.requestId as InteractionRequestId, command.decision as BudgetDecision, command.provenance));
     case 'cancel':
       if (command.expectedTurnId !== undefined) {
-        const result = await requireOperation(operations.cancelForeground, 'atomic expected-turn cancel').call(operations, command.expectedTurnId);
-        return result.kind === 'accepted' ? accepted : { ok: false, code: 'rejected', message: 'Expected turn is no longer active.' };
+        return { ok: true, kind: 'abort', result: session.abort(command.expectedTurnId as TurnId, command.discardQueue) };
       }
       if (command.target?.kind === 'task') return taskResult(await requireOperation(operations.controlTask, 'task cancel').call(operations, command.target.id, 'cancel'));
       session.cancel(command.target); return accepted;
     case 'retry': await requireOperation(operations.retry, 'retry').call(operations, { target: command.target, ...(command.executionId ? { executionId: command.executionId } : {}) }); return accepted;
     case 'compact': await requireOperation(operations.compact, 'compact').call(operations); return accepted;
     case 'configure': await requireOperation(operations.configure, 'configure').call(operations, command.configuration); return accepted;
-    case 'queue_edit': return queueResult(await requireOperation(operations.editQueue, 'queue_edit').call(operations, command.messageId, { text: command.text, ...(command.attachments !== undefined ? { attachments: command.attachments } : {}) }));
-    case 'queue_retract': return queueResult(await requireOperation(operations.retractQueue, 'queue_retract').call(operations, command.messageId));
-    case 'queue_resume': return queueResult(await requireOperation(operations.resumeQueue, 'queue_resume').call(operations));
-    case 'queue_discard': return queueResult(await requireOperation(operations.discardQueue, 'queue_discard').call(operations));
+    case 'queue_edit': return queueResult(await session.editQueue(command.messageId, { text: command.text, ...(command.attachments !== undefined ? { attachments: command.attachments } : {}) }));
+    case 'queue_retract': return queueResult(await session.retractQueue(command.messageId));
+    case 'queue_resume': return queueResult(await session.resumeQueue());
+    case 'queue_discard': return queueResult(await session.discardQueue());
     case 'task_control': return taskResult(await requireOperation(operations.controlTask, 'task_control').call(operations, command.taskId, command.action));
     case 'list_rewind_targets': return { ok: true, kind: 'rewind_targets', targets: await requireOperation(operations.listRewindTargets, 'list_rewind_targets').call(operations) };
     case 'rewind': return { ok: true, kind: 'rewound', ...await requireOperation(operations.rewind, 'rewind').call(operations, command.targetId) };
@@ -69,13 +68,13 @@ async function dispatch(session: DirectSession, command: WireCommand, operations
 function answerResult(answer: AnswerResult): WireCommandResult {
   if (answer.kind === 'accepted') return accepted;
   if (answer.kind === 'stale') return { ok: false, code: 'stale_interaction', message: 'Interaction is no longer answerable.' };
-  return { ok: false, code: 'storage_failure', message: 'Interaction resolution could not be committed.' };
+  return { ok: false, code: 'rejected', message: 'Interaction resolution was not accepted.' };
 }
 /** Structured question serialization is not effect authority: the final specific-target
  * resolution still goes through the actual synchronous Session answer operation.
  */
-async function answerInteraction(session: DirectSession, requestId: string, decision: WireDecision, operations: DirectCommandCapabilities): Promise<AnswerResult> {
-  if (decision.kind === 'grant') return requireOperation(operations.grant, 'scoped approval grants').call(operations, requestId, decision.grant, decision.stopAfterApprovalResolution);
+async function answerInteraction(session: DirectSession, requestId: string, decision: WireDecision, operations: DirectCommandCapabilities, provenance?: WireAnswerProvenance): Promise<AnswerResult> {
+  if (decision.kind === 'grant') return requireOperation(operations.grant, 'scoped approval grants').call(operations, requestId, decision.grant, decision.stopAfterApprovalResolution, provenance);
   if (decision.kind === 'answers') {
     const capture = session.capture(() => undefined);
     const request = capture.state.pendingInteractions.find(request => request.requestId === requestId);
@@ -83,11 +82,11 @@ async function answerInteraction(session: DirectSession, requestId: string, deci
     if (!request) return { kind: 'stale' };
     const answer = serializeQuestionAnswers(request, decision.answers);
     return session.answer(requestId as InteractionRequestId, { kind: 'answer', answer,
-      ...(decision.stopAfterApprovalResolution !== undefined ? { stopAfterApprovalResolution: decision.stopAfterApprovalResolution } : {}) });
+      ...(decision.stopAfterApprovalResolution !== undefined ? { stopAfterApprovalResolution: decision.stopAfterApprovalResolution } : {}) }, provenance);
   }
   if (decision.kind === 'decline') return session.answer(requestId as InteractionRequestId, { kind: 'answer', answer: 'User declined to answer.',
-    ...(decision.stopAfterApprovalResolution !== undefined ? { stopAfterApprovalResolution: decision.stopAfterApprovalResolution } : {}) });
-  return session.answer(requestId as InteractionRequestId, decision);
+    ...(decision.stopAfterApprovalResolution !== undefined ? { stopAfterApprovalResolution: decision.stopAfterApprovalResolution } : {}) }, provenance);
+  return session.answer(requestId as InteractionRequestId, decision, provenance);
 }
 
 /** Planner outcomes are effects only after the owning Session has durably accepted them. */

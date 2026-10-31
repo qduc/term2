@@ -26,13 +26,17 @@ state with what the actual Session currently knows. Real publication positions s
 private. Runtime-only poisoned-writer errors have null-seq error/semantic-terminal
 frames, never invented accepted terminal facts.
 
-A full-prefix projection initializes timeline to []; direct array-only projection
-keeps timeline null. Completed messages replace their exact draft slot. A model
+The current native `DirectSessionState.timeline` is authoritative for message/tool
+snapshot order; reasoning/task entries retain their own public presentation scopes.
+A full-prefix projection still initializes an empty timeline and derives exact
+message turn/step and draft aliases from accepted facts. Completed messages replace their exact draft slot. A model
 call creates a called tool display, not proof its physical body started. Tool audit
 and provider-result facts may each upsert the SAME occurrence; clients must use
 execution ID, not add a duplicate transcript item per finish frame. Unmatched
 terminal output is retained in unmatchedToolResults plus a presentation notice;
-no tool name, call input or occurrence is invented. Opaque provider items are not
+no tool name, call input or occurrence is invented. When accepted call metadata is
+known, each tool_finished also carries toolName/input/callId/parentExecutionId so
+a reconnect after its call frame does not need to guess them. Opaque provider items are not
 public transcript messages. Known text/image tool-result parts are normalized.
 
 ## Facts currently produced by the M2 Session
@@ -49,7 +53,11 @@ public transcript messages. Known text/image tool-result parts are normalized.
 | tool_finished / item tool_result | tool_finished upsert, rich accepted display/content where available |
 | interaction_opened / interaction_closed | interaction_opened / interaction_resolved |
 | usage | usage (root accepted token delta, not fabricated cost) |
-| turn_ended | turn_ended, preserving supplied outcome/error/cause/notice |
+| turn_ended | turn_ended, preserving supplied outcome/error/cause/notice and nullable correlated finalText; retained turnResults |
+| budget_opened / budget_closed / budget_observed | one matching typed budget frame per accepted fact; no tool interaction or settled cost invented |
+| history_replaced | public reason only, no private provider history |
+| model_response_completed | actual response modelStep/stopReason and optional supplied costUsd, not aggregate pricing |
+| branch_started / branch_event | one subagent wrapper with real task/branch identity and a scoped child event; child seq null, outer seq authoritative |
 | transient reasoning_delta | reasoning_delta; unknown step/message identity stays null |
 | transient tool_progress | tool_progress |
 | live state | snapshot; real runtimeError additionally settles event-driven clients with null seq |
@@ -218,3 +226,37 @@ usage, providerHistory, private provider frames or success markers are fabricate
 Silent task-notification turns, check-in settlement, budget recovery evidence,
 full historical result recovery and real metadata/config also need their owning
 accepted facts/capabilities. These are integration blockers, not optional parity.
+
+## Native facade integration (current lead working contract)
+
+Delivery and queue edits/retract/resume/discard now call actual `DirectSession`
+methods; `DirectCommandCapabilities` no longer defines parallel injected versions.
+`submitWithDelivery({...request,delivery})` preserves auto/reject_if_busy/steer/
+follow_up semantics under native admission. An expected-turn cancel calls atomic
+`Session.abort(expectedTurnId,discardQueue?)` and returns
+`{ok:true,kind:'abort',result:<native DirectAbortResult>}`. `no_op` means no new
+abort, **not** evidence the turn physically settled; `not_admitting` is distinct.
+Untargeted cancel remains a request acknowledgement, never task completion.
+
+`answer` accepts optional explicit `provenance` and passes it to every native
+resolution path (including structured questions and grants). Missing provenance
+stays missing; protocol never upgrades a policy/system answer to human. Native
+failed answers can represent policy/validation as well as writer failure, so the
+wire reports generic rejected, not an invented storage diagnosis. `answer_budget`
+passes the native budget decision/provenance to `Session.answerBudget`; accepted
+budget closure carries its actual source. Wire steering inputs are restricted to
+explicit user-message IDs/content, never arbitrary provider frames. The current
+native root implementation may reject steer or parent extension; a typed decision
+is not an assertion that policy permits it.
+
+`pendingBudgets`, observed evidence and `turnResults` are retained in the public
+fold/snapshot. Historical submission finalText uses that turn result, not the
+current terminal. Completed finalText excludes live drafts; null means accepted
+completed-answer evidence is unavailable. A native task terminal remains solely
+`task_finished`: a scoped child turn ending does not claim cleanup/task completion.
+Genuine task supported-action metadata still needs the Session owner; no action
+list is inferred from task kind/status or merely having a generic control seam.
+
+This code targets the lead's current working facade/facts/state, which remained
+uncommitted when consumed (HEAD 3bb4c4dd); integration needs that actual shared
+change, not merely its HEAD. No compile/runtime/acceptance evidence was collected.

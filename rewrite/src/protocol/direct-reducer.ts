@@ -1,6 +1,7 @@
 /** Pure shared public-state reducer; clients and snapshots use this same fold.
  * Local UI scroll/menu/composer state belongs to the client, not this projection.
  */
+import { completedFinalText } from './direct-turn-results.js';
 import type { WireEvent, WireMessage, WireSnapshot } from './direct-wire.js';
 
 function timeline(state: WireSnapshot, entries: NonNullable<WireSnapshot['timeline']>, replacesDraftId?: string): WireSnapshot['timeline'] {
@@ -54,7 +55,10 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'reasoning_delta': return { ...state, reasoning: state.reasoning + event.payload.delta,
       reasoningIdentity: event.payload.messageId ? { messageId: event.payload.messageId, turnId: event.turnId, modelStep: event.payload.modelStep } : null,
     };
-    case 'message': return { ...state, timeline: timeline(state, [{ kind: 'message', id: event.payload.message.id }], event.payload.replacesDraftId), messages: message(state.messages, event.payload.message, event.payload.replacesDraftId) };
+    case 'message': {
+      const next = { ...event.payload.message, ...(event.payload.replacesDraftId ? { replacesDraftId: event.payload.replacesDraftId } : {}) };
+      return { ...state, timeline: timeline(state, [{ kind: 'message', id: event.payload.message.id }], event.payload.replacesDraftId), messages: message(state.messages, next, event.payload.replacesDraftId) };
+    }
     case 'tool_called':
     case 'tool_started': return { ...state, timeline: timeline(state, [{ kind: 'tool', id: event.payload.tool.executionId }]), tools: replace(state.tools.map(tool => ({ ...tool, id: tool.executionId })),
       { ...event.payload.tool, id: event.payload.tool.executionId }).map(({ id: _id, ...tool }) => tool) };
@@ -85,6 +89,14 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...(state.activeTurnId ? { status: awaiting ? 'awaiting_interaction' : 'running' } : {}),
       };
     }
+    case 'budget_opened': return { ...state,
+      pendingBudgets: [...(state.pendingBudgets ?? []).filter(request => request.requestId !== event.payload.request.requestId), event.payload.request],
+    };
+    case 'budget_closed': return { ...state, pendingBudgets: (state.pendingBudgets ?? []).filter(request => request.requestId !== event.payload.requestId) };
+    case 'budget_observed': return { ...state, budgetObservations: [...(state.budgetObservations ?? []), { turnId: event.turnId, evidence: event.payload.evidence }] };
+    case 'history_replaced': return { ...state, notices: [...state.notices, { kind: 'history_replaced', message: `Provider history replaced: ${event.payload.reason}` }] };
+    // An accepted response boundary is not an aggregate settled cost or a terminal.
+    case 'model_response_completed': return state;
     case 'admission': return { ...state, admissions: [...state.admissions.filter(item => item.clientRequestId !== event.payload.admission.clientRequestId), event.payload.admission] };
     case 'usage': return { ...state, usage: {
       inputTokens: state.usage.inputTokens + event.payload.usage.inputTokens,
@@ -93,6 +105,11 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     } };
     case 'status_changed': return { ...state, status: event.payload.status };
     case 'turn_ended': return { ...state,
+      pendingBudgets: (state.pendingBudgets ?? []).filter(request => request.turnId !== event.turnId),
+      turnResults: event.turnId ? [...(state.turnResults ?? []).filter(result => result.turnId !== event.turnId), {
+        turnId: event.turnId, ...event.payload, messages: state.messages.filter(message => message.turnId === event.turnId),
+        finalText: event.payload.finalText !== undefined ? event.payload.finalText : completedFinalText(event.payload.outcome, state.messages.filter(message => message.turnId === event.turnId)),
+      }] : state.turnResults,
       pendingInteractions: state.pendingInteractions.filter(item => item.taskId || item.turnId !== event.turnId),
       ...(state.activeTurnId === event.turnId || state.activeTurnId === null
         ? { activeTurnId: null, status: event.payload.outcome === 'interrupted' ? 'interrupted' as const : 'idle' as const } : {}),
@@ -147,12 +164,12 @@ function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent, { typ
     case 'tool_started': detail = `${child.type}: ${child.payload.tool.toolName}`; break;
     case 'tool_progress': task = { ...task, progress: (task.progress ?? '') + child.payload.chunk }; break;
     case 'tool_finished': task = { ...task, progress: (task.progress ?? '') + child.payload.output }; break;
-    case 'turn_ended': task = { ...task, status: child.payload.outcome }; break;
+    case 'turn_ended': detail = `Branch turn ${child.payload.outcome}; task settlement is separate`; break;
     case 'error': detail = child.payload.error.message; break;
   }
   return { ...state, tasks: replace(state.tasks, task),
     ...(child.type === 'text_delta' || child.type === 'tool_progress' ? {} : {
-      notices: [...state.notices, { kind: 'subagent', message: `${role} (${agentId}): ${detail}` }],
+      notices: [...state.notices, { kind: 'subagent', message: `${role ?? 'Subagent'} (${agentId}): ${detail}` }],
     }),
   };
 }

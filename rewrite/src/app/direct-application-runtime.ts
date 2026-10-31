@@ -1,4 +1,5 @@
 /** Assembles one Session's runtime from the real tool surface. Runs no provider and no tool. */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
@@ -6,6 +7,7 @@ import { createProviderRegistry } from '../model/provider.js';
 import type { DirectBackgroundTasks } from '../session/direct-background.js';
 import type { DirectContextFactory } from '../session/direct-capabilities.js';
 import type { DirectBinding } from '../session/facade-types.js';
+import type { DirectCommandOutcome } from '../session/direct-command-types.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
@@ -34,6 +36,8 @@ export type DirectRuntimeOptions = {
   readonly sessionBinding?: DirectBinding;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
   readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
+  /** Runs inside the Session's command reservation, so this session admits nothing meanwhile. */
+  readonly rollover: (sessionId: string) => Promise<DirectCommandOutcome>;
   /** After any resumed selection is restored, so this reports what actually runs. */
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
@@ -52,7 +56,12 @@ export type DirectRuntimes = {
   create(context: DirectRuntimeContext): DirectConversationRuntime;
   /** An open session's runtime, for app-owned policy and commands. */
   get(sessionId: string): DirectRuntimeRecord | undefined;
+  /** A session created during `operation` starts with this session's profile and effort, not the launch defaults. */
+  inheriting<Result>(sessionId: string, operation: () => Promise<Result>): Promise<Result>;
 };
+
+/** The settings a new session continues from, carried through the store's creation call. */
+const continuedSettings = new AsyncLocalStorage<ProfileSelection['settings']>();
 
 /**
  * A session owns its settings. `selection.settings` only supplies defaults: one
@@ -63,7 +72,7 @@ function sessionSettings(
   { selection, profileExplicit, approvalAlwaysAsks }: DirectRuntimeOptions,
   { metadata, model }: DirectRuntimeContext,
 ): ProfileSelection['settings'] {
-  const defaults = selection.settings;
+  const defaults = continuedSettings.getStore() ?? selection.settings;
   const { service: settings } = createAppSettings({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
@@ -170,7 +179,8 @@ export function createDirectRuntimes(
           maxParallelToolCalls: runtime.maxParallelToolCalls,
           ...runPolicy(selection.settings, context.id, context.model),
           context: contextFactory,
-          authorizeNested: createNestedAuthorizer(selection.settings, context, runtime.tools),
+          authorizeNested: createNestedAuthorizer(selection.settings, context.model, runtime.resolveNestedAuthority),
+          rollover: () => options.rollover(context.id),
         },
         request: {
           ...request,
@@ -190,5 +200,9 @@ export function createDirectRuntimes(
       };
     },
     get: (sessionId) => records.get(sessionId),
+    inheriting(sessionId, operation) {
+      const source = records.get(sessionId)?.settings;
+      return source ? continuedSettings.run(source, operation) : operation();
+    },
   };
 }

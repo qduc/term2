@@ -26,11 +26,12 @@ import type { ExecutionId, Workspace } from '../tools/index.js';
 import type { ProfileSelection } from './tool-contract.js';
 import { startDirectHooks, type DirectHookOptions } from './direct-application-hooks.js';
 import { createDirectRuntimes, type DirectRuntimeOptions, type DirectRuntimes } from './direct-application-runtime.js';
+import { rollSessionOver } from './direct-application-rollover.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority, type DirectAuthorityFactory } from './direct-application-workspaces.js';
 import { createDirectInputPreview } from './direct-input-preview.js';
 import { sessionStart } from './direct-host-config-access.js';
 
-export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
+export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun' | 'rollover'> & {
   readonly conversationsDir: string;
   readonly authority: DirectAuthority | DirectAuthorityFactory;
   /** The modes with public hooks today: the terminal UI and headless. ACP and serve have none. */
@@ -95,7 +96,26 @@ function logTimes(logPath: string, seq?: number | null): { readonly first: LogLi
 export async function createDirectApplication(options: DirectApplicationOptions): Promise<DirectApplication> {
   const { selection, sessionBinding } = options;
   const hooks = options.hooks ? await startDirectHooks(options.hooks, selection) : null;
-  const runtimes = createDirectRuntimes({ ...options, canRun: (workspace) => authority.canRun(workspace) }, hooks);
+  const runtimes = createDirectRuntimes(
+    {
+      ...options,
+      canRun: (workspace) => authority.canRun(workspace),
+      async rollover(sessionId) {
+        const state = stateOf(await store.open(sessionId));
+        const binding = sessionStart(options.conversationsDir, sessionId).binding;
+        return rollSessionOver({
+          sessionId,
+          state,
+          create: () =>
+            runtimes.inheriting(sessionId, () =>
+              store.create(state.workspace, state.model, binding, { rolloverFrom: sessionId }),
+            ),
+          carryGoal: (successor, goal) => writeGoal(successor, goal, 'launcher'),
+        });
+      },
+    },
+    hooks,
+  );
   const store = createDirectSessionStore({
     directory: options.conversationsDir,
     resolveWorkspace: (root, identity) => authority.resolveStored(root, identity),
@@ -216,10 +236,16 @@ function applicationCapabilities(
     async reset() {
       const state = stateOf(session);
       if (state.activeTurnId !== null) throw new DirectProtocolError('rejected', 'Stop the running turn first.');
-      const next = await store.create(state.workspace, state.model, sessionStart(directory, session.id).binding);
+      const binding = sessionStart(directory, session.id).binding;
+      const next = await runtimes.inheriting(session.id, () => store.create(state.workspace, state.model, binding));
       const { goal } = state.context.goal;
       if (goal) writeGoal(next, goal, 'launcher');
       return { sessionId: next.id };
+    },
+    async rollover() {
+      const outcome = await runCommand(session, { kind: 'rollover' });
+      if (outcome.kind !== 'rolled_over') throw new DirectProtocolError('rejected', 'The session did not roll over.');
+      return { sessionId: outcome.sessionId };
     },
     async retry({ target, executionId }) {
       await runCommand(session, {

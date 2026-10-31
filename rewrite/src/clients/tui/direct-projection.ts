@@ -62,6 +62,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     tools: snapshot.tools.map(toolView),
     unmatchedTools: snapshot.unmatchedToolResults ?? [],
     budgets: snapshot.pendingBudgets ?? [],
+    commands: snapshot.commands ?? [],
     interactions: snapshot.pendingInteractions.map(interactionView),
     queue: snapshot.queue.map(entry => ({ id: entry.messageId, text: entry.text, delivery: entry.delivery, content: entry.content })),
     queueState: snapshot.queueState,

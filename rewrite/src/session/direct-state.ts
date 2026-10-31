@@ -4,7 +4,10 @@ import type { ContentPart, ModelError, ModelRef, Usage } from '../model/index.js
 import type { Workspace } from '../tools/index.js';
 import type { DirectMessage, DirectSessionState, DirectToolDisplay } from './facade-types.js';
 export type { DirectDraft } from './facade-types.js';
-import type { Fact } from './facts.js';
+import { isDirectTaskFact, isDirectQueueFact, type Fact } from './facts.js';
+import { initialDirectContextState, reduceDirectContext } from './direct-context.js';
+import { createDirectQueueState, reduceDirectQueue, directQueueSteeredInput } from './direct-queue.js';
+import { reduceDirectBackground } from './direct-background-replay.js';
 
 export type DirectDisplayTool = DirectToolDisplay & {
   /** A model call is not evidence that its physical body started. */
@@ -33,6 +36,12 @@ export function initialDirectState(id: string, workspace: Workspace, model: Mode
     reasoning: '',
     runtimeError: null,
     terminal: null,
+    context: initialDirectContextState(),
+    tasks: [],
+    queue: createDirectQueueState(),
+    turnResults: [],
+    pendingBudgets: [],
+    timeline: [],
   };
 }
 
@@ -42,8 +51,81 @@ export function directDraftId(turnId: TurnId, modelStep?: number): string {
 }
 
 /** Applies one accepted fact without mutating any previously captured snapshot. */
-export function reduceDirectFact(state: DirectPublicState, fact: Fact): DirectPublicState {
+export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0): DirectPublicState {
+  const timeline = [...state.timeline];
+  const add = (
+    kind: import('./facade-types.js').DirectTimelineEntry['kind'],
+    id: string,
+    turnId?: TurnId,
+    modelStep?: number,
+  ): void => {
+    if (!timeline.some((entry) => entry.kind === kind && entry.id === id))
+      timeline.push({
+        seq,
+        kind,
+        id,
+        ...(turnId ? { turnId } : {}),
+        ...(modelStep === undefined ? {} : { modelStep }),
+      });
+  };
+  if (fact.type === 'turn_started')
+    for (const item of fact.input) if (item.type === 'user_message') add('message', item.id, fact.turnId);
+  if (fact.type === 'text_delta')
+    add('message', directDraftId(fact.turnId, fact.modelStep), fact.turnId, fact.modelStep);
+  if (fact.type === 'item') {
+    const item = fact.item;
+    if (item.type === 'assistant_message' || item.type === 'user_message') {
+      const draft = timeline.find(
+        (entry) => entry.kind === 'message' && entry.id === directDraftId(fact.turnId, fact.modelStep),
+      );
+      if (item.type === 'assistant_message' && draft) timeline[timeline.indexOf(draft)] = { ...draft, id: item.id };
+      else add('message', item.id, fact.turnId, fact.modelStep);
+    }
+    if (item.type === 'reasoning') add('reasoning', item.id, fact.turnId, fact.modelStep);
+    if (item.type === 'tool_call' && fact.executionId) add('tool', fact.executionId, fact.turnId, fact.modelStep);
+  }
+  if (fact.type === 'tool_started') add('tool', fact.executionId, fact.turnId);
+  if (fact.type === 'task_started') add('task', fact.task.taskId, fact.task.parentTurnId);
+  state = { ...state, timeline, context: reduceDirectContext(state.context, fact) };
+  if (isDirectTaskFact(fact)) {
+    const tasks = reduceDirectBackground(state.tasks, fact);
+    const rootRequests = state.pendingInteractions.filter((request) => !('taskId' in request));
+    return {
+      ...state,
+      tasks,
+      pendingInteractions: [...rootRequests, ...tasks.flatMap((task) => task.pendingInteractions)],
+    };
+  }
+  if (isDirectQueueFact(fact)) {
+    const input = fact.type === 'queue_steered' ? directQueueSteeredInput(state.queue, fact) : [];
+    for (const item of input)
+      if (item.type === 'user_message')
+        add('message', item.id, fact.type === 'queue_steered' ? fact.turnId : undefined);
+    const queue = reduceDirectQueue(state.queue, fact);
+    return {
+      ...state,
+      queue,
+      timeline,
+      admissions: queue.records.map((record) => record.admission),
+      messages: [
+        ...state.messages,
+        ...input.flatMap((item) =>
+          messageFor(item).map((message) => ({
+            ...message,
+            turnId: fact.type === 'queue_steered' ? fact.turnId : undefined,
+          })),
+        ),
+      ],
+    };
+  }
   switch (fact.type) {
+    case 'budget_opened':
+      return { ...state, pendingBudgets: [...state.pendingBudgets, fact] };
+    case 'budget_closed':
+      return {
+        ...state,
+        pendingBudgets: state.pendingBudgets.filter((request) => request.requestId !== fact.requestId),
+      };
     case 'session_started':
       return { ...state, model: fact.model };
     case 'turn_started':
@@ -54,8 +136,20 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact): DirectPu
         reasoning: '',
         runtimeError: null,
         terminal: null,
-        messages: [...state.messages, ...fact.input.flatMap(messageFor)],
-        admissions: fact.submission ? [...state.admissions, directSubmittedTurn(fact)!.admission] : state.admissions,
+        messages: [
+          ...state.messages,
+          ...fact.input.flatMap((item) => messageFor(item).map((message) => ({ ...message, turnId: fact.turnId }))),
+        ],
+        admissions:
+          fact.submission &&
+          !state.admissions.some(
+            (admission) =>
+              admission.kind !== 'duplicate' &&
+              'messageId' in admission &&
+              admission.messageId === fact.submission!.messageId,
+          )
+            ? [...state.admissions, directSubmittedTurn(fact)!.admission]
+            : state.admissions,
       };
     case 'text_delta': {
       const modelStep = fact.modelStep ?? 1;
@@ -68,6 +162,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact): DirectPu
         messages: replaceMessage(state.messages, {
           id,
           role: 'assistant',
+          turnId: fact.turnId,
           content: [{ type: 'text', text: draft.text }],
         }),
       };
@@ -112,7 +207,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact): DirectPu
           fact.item.type === 'assistant_message' ? state.drafts.filter((draft) => draft.id !== draftId) : state.drafts,
         messages: replaceMessage(
           state.messages,
-          messageFor(fact.item)[0]!,
+          { ...messageFor(fact.item)[0]!, turnId: fact.turnId },
           fact.item.type === 'assistant_message' ? draftId : undefined,
         ),
       };
@@ -159,7 +254,11 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact): DirectPu
       return {
         ...state,
         pendingInteractions,
-        status: pendingInteractions.length ? 'awaiting_interaction' : state.activeTurnId ? 'running' : state.status,
+        status: pendingInteractions.some((request) => !('taskId' in request))
+          ? 'awaiting_interaction'
+          : state.activeTurnId
+          ? 'running'
+          : state.status,
       };
     }
     case 'usage':
@@ -169,25 +268,58 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact): DirectPu
         ...state,
         status: fact.outcome === 'interrupted' ? 'interrupted' : 'idle',
         activeTurnId: null,
-        pendingInteractions: state.pendingInteractions.filter((request) => request.turnId !== fact.turnId),
+        pendingBudgets: state.pendingBudgets.filter((request) => request.turnId !== fact.turnId),
+        pendingInteractions: state.pendingInteractions.filter(
+          (request) => 'taskId' in request || request.turnId !== fact.turnId,
+        ),
         tools: state.tools.map((tool) =>
           tool.turnId === fact.turnId && tool.status === 'started'
             ? { ...tool, status: 'unknown', phase: 'unknown' }
             : tool,
         ),
-        terminal: { turnId: fact.turnId, outcome: fact.outcome, ...(fact.error ? { error: fact.error } : {}) },
+        terminal: {
+          turnId: fact.turnId,
+          outcome: fact.outcome,
+          ...(fact.error ? { error: fact.error } : {}),
+          ...(fact.terminalCause ? { terminalCause: fact.terminalCause } : {}),
+          ...(fact.notice ? { notice: fact.notice } : {}),
+        },
+        turnResults: [
+          ...state.turnResults,
+          {
+            turnId: fact.turnId,
+            outcome: fact.outcome,
+            messages: state.messages.filter((message) => message.turnId === fact.turnId),
+            ...(fact.terminalCause ? { terminalCause: fact.terminalCause } : {}),
+            ...(fact.notice ? { notice: fact.notice } : {}),
+          },
+        ],
       };
+    default:
+      return state;
   }
 }
 
 /** Reopening cannot resurrect a live interaction or claim an unobserved effect finished. */
 export function interruptedDirectState(state: DirectPublicState): DirectPublicState {
-  if (!state.activeTurnId) return state;
+  const unfinished = state.tasks.some((task) => ['running', 'waiting_for_answer', 'cancelling'].includes(task.status));
+  if (!state.activeTurnId && !unfinished) return state;
   return {
     ...state,
-    status: 'interrupted',
+    status: state.status === 'closed' ? 'closed' : 'interrupted',
     activeTurnId: null,
     pendingInteractions: [],
+    pendingBudgets: [],
+    tasks: state.tasks.map((task) =>
+      ['running', 'waiting_for_answer', 'cancelling'].includes(task.status)
+        ? {
+            ...task,
+            status: 'interrupted',
+            pendingInteractions: [],
+            result: { kind: 'interrupted', reason: 'outcome_unobserved' },
+          }
+        : task,
+    ),
     tools: state.tools.map((tool) =>
       tool.status === 'started' ? { ...tool, status: 'unknown', phase: 'unknown' } : tool,
     ),

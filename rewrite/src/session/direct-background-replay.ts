@@ -13,6 +13,17 @@ export function projectDirectBackground(facts: readonly DirectBackgroundFact[]):
   return structuredClone([...tasks.values()]);
 }
 
+/** Incremental public projection; Session separately reserves all historical request IDs. */
+export function reduceDirectBackground(
+  states: readonly DirectTaskState[],
+  fact: DirectBackgroundFact,
+): readonly DirectTaskState[] {
+  const tasks = new Map(states.map((task) => [task.taskId, task]));
+  const requestIds = new Set(states.flatMap((task) => task.pendingInteractions.map((request) => request.requestId)));
+  applyFact(tasks, requestIds, fact);
+  return structuredClone([...tasks.values()]);
+}
+
 /**
  * Propose explicit unknown outcomes for tasks left live by process loss. Session
  * appends these only on a later explicit action, through its sole writer. No

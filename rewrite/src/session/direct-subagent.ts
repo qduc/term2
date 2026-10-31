@@ -94,6 +94,8 @@ export class DirectSubagents {
 
 function taskResult(result: NestedRunResult): DirectTaskResult<NestedRunResult> {
   switch (result.outcome.kind) {
+    case 'background':
+      throw new Error('A branch driver must settle the actual child, not return a launch handle');
     case 'completed':
       return { kind: 'completed', value: result };
     case 'cancelled':

@@ -3,6 +3,7 @@
  * single writer, appends facts plus companion turn-start facts, installs state,
  * then releases the effect. A plan alone never admits input or runs anything.
  */
+import { directOriginKey } from './direct-origin.js';
 import { STEERING_NOTICE } from '../../../source/prompts/steering-notice.js';
 import type { TurnId } from '../engine/index.js';
 import type { ContentPart, Item, ItemId } from '../model/index.js';
@@ -78,7 +79,7 @@ export function submitDirectQueue(
   if (!messageId || state.records.some((record) => record.messageId === messageId))
     throw new Error('queue: message ID allocator returned a reused or empty ID');
   const immediate = !busy;
-  const turnId = immediate ? nextTurnId(state, environment) : steering ? state.active!.turnId : undefined;
+  const turnId = steering ? state.active!.turnId : nextTurnId(state, environment);
   const admission: DirectQueueAdmission = {
     kind: immediate ? 'started' : steering ? 'steering' : 'queued',
     clientRequestId: body.clientRequestId,
@@ -92,7 +93,7 @@ export function submitDirectQueue(
     content: body.content,
     admission,
     stage: steering ? 'pending_steer' : 'queued',
-    ...(steering ? { turnId } : {}),
+    turnId,
   };
   const facts: DirectQueueFact[] = [{ type: 'queue_submitted', record }];
   if (immediate) {
@@ -141,7 +142,10 @@ export function planDirectQueue(
       if (environment.dispatchHeld || state.active || state.pause || !state.pending.length)
         return makePlan(state, [], { kind: 'no_op' });
       const record = directQueuePending(state)[0]!;
-      const turnId = nextTurnId(state, environment);
+      const turnId =
+        record.admission.kind === 'queued' && record.admission.turnId
+          ? record.admission.turnId
+          : nextTurnId(state, environment);
       const plan = makePlan(state, [{ type: 'queue_started', messageId: record.messageId, turnId }], {
         kind: 'accepted',
       });
@@ -271,7 +275,7 @@ function submissionKey(request: DirectQueueSubmission): string {
     request.content.map((part) =>
       part.type === 'text' ? ['text', part.text] : ['image', part.mediaType, part.data, part.detail ?? null],
     ),
-    request.origin ? [request.origin.kind, request.origin.id ?? null] : null,
+    directOriginKey(request.origin),
     request.humanInputAt ?? null,
   ]);
 }

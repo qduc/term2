@@ -13,6 +13,12 @@ import type {
   InteractionRequest,
   InteractionRequestId,
 } from '../engine/index.js';
+import type { DirectBackgroundFact } from './direct-background-types.js';
+import type { DirectQueueFact } from './direct-queue-types.js';
+import type { DirectContextFact } from './direct-context.js';
+import type { BudgetDecision } from '../engine/direct-types.js';
+import type { RunBudgetEvent, RunBudgetSnapshot } from '../engine/direct-recovery-budget.js';
+import type { StopReason } from '../model/index.js';
 import type { ToolResult } from '../tools/index.js';
 import type { DirectBinding, DirectOrigin } from './facade-types.js';
 import type { Item, ModelError, ModelRef, ReasoningEffort, Usage } from '../model/index.js';
@@ -41,8 +47,22 @@ export type SubmissionMetadata = {
 
 export type TurnOutcomeName = 'completed' | 'cancelled' | 'failed' | 'interrupted';
 
-export type Fact =
-  | SessionStartedFact
+export type DirectTurnFact =
+  | {
+      readonly type: 'budget_opened';
+      readonly requestId: InteractionRequestId;
+      readonly turnId: TurnId;
+      readonly evidence: RunBudgetEvent;
+      readonly snapshot: RunBudgetSnapshot;
+    }
+  | {
+      readonly type: 'budget_closed';
+      readonly requestId: InteractionRequestId;
+      readonly turnId: TurnId;
+      readonly decision: BudgetDecision;
+      readonly source: 'user' | 'parent' | 'system';
+    }
+  | { readonly type: 'budget_observed'; readonly turnId: TurnId; readonly evidence: RunBudgetEvent }
   | {
       readonly type: 'turn_started';
       readonly turnId: TurnId;
@@ -79,6 +99,8 @@ export type Fact =
       readonly turnId: TurnId;
       readonly requestId: InteractionRequestId;
       readonly resolution: InteractionDecision | { readonly kind: 'cancelled' | 'interrupted' };
+      readonly resolutionSource?: 'user' | 'policy' | 'system';
+      readonly automaticApproval?: boolean;
     }
   | { readonly type: 'usage'; readonly turnId: TurnId; readonly usage: Usage; readonly modelStep?: number }
   | {
@@ -86,6 +108,17 @@ export type Fact =
       readonly turnId: TurnId;
       readonly outcome: TurnOutcomeName;
       readonly error?: ModelError;
+      readonly terminalCause?: 'goal_check_unresolved' | 'completion_verification_blocked' | 'budget_exhausted';
+      readonly notice?: string;
+    }
+  | {
+      readonly type: 'model_response_completed';
+      readonly turnId: TurnId;
+      readonly modelStep: number;
+      readonly stopReason: StopReason;
+      readonly continuation?: unknown;
+      readonly providerMetadata?: Readonly<Record<string, unknown>>;
+      readonly costUsd?: number | string;
     };
 
 /** One JSONL line. */
@@ -95,3 +128,48 @@ export type FactLine = {
   readonly at: string;
   readonly fact: Fact;
 };
+
+/** Provider transcript edits do not retract physical execution audit facts. */
+export type DirectHistoryFact = {
+  readonly type: 'history_replaced';
+  readonly turnId?: TurnId;
+  readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind';
+  readonly history: readonly Item[];
+  readonly rearmAtEstimatedTokens?: number;
+  readonly checkpointReceipts?: readonly string[];
+};
+
+/** Child audit is isolated from the foreground transcript, but uses the same writer. */
+export type DirectBranchFact =
+  | {
+      readonly type: 'branch_started';
+      readonly branchId: string;
+      readonly taskId: string;
+      readonly turnId: TurnId;
+      readonly input: readonly Item[];
+    }
+  | {
+      readonly type: 'branch_event';
+      readonly branchId: string;
+      readonly fact: Exclude<
+        DirectTurnFact,
+        { readonly type: 'turn_started' | 'interaction_opened' | 'interaction_closed' }
+      >;
+    };
+
+export type Fact =
+  | SessionStartedFact
+  | DirectTurnFact
+  | DirectHistoryFact
+  | DirectBranchFact
+  | DirectQueueFact
+  | DirectBackgroundFact
+  | DirectContextFact;
+
+/** Narrow native vocabulary without interpreting authority or restoring live work. */
+export function isDirectTaskFact(fact: Fact): fact is DirectBackgroundFact {
+  return fact.type.startsWith('task_');
+}
+export function isDirectQueueFact(fact: Fact): fact is DirectQueueFact {
+  return fact.type.startsWith('queue_');
+}

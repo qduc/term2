@@ -1,7 +1,6 @@
 /** Live host facade over one direct Conversation. Only that Conversation writes facts. */
-import { randomUUID } from 'node:crypto';
 import type { InteractionDecision, InteractionRequestId, TurnId } from '../engine/index.js';
-import type { Item, ItemId, ModelError, ModelRef } from '../model/index.js';
+import type { ModelError, ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Conversation, Turn, TurnRequest } from './direct-types.js';
 import type {
@@ -13,13 +12,12 @@ import type {
   DirectSessionUpdate,
   DirectSubmission,
 } from './facade-types.js';
-import type { Fact } from './facts.js';
+import type { Fact, FactLine } from './facts.js';
 import type { ConversationLog } from './log.js';
 import {
   initialDirectState,
   interruptedDirectState,
   reduceDirectFact,
-  directSubmittedTurn,
   type DirectPublicState,
 } from './direct-state.js';
 
@@ -42,20 +40,19 @@ export type DirectSessionOptions = {
   readonly workspace: Workspace;
   readonly model: ModelRef;
   readonly log: ConversationLog;
-  readonly facts: readonly Fact[];
+  readonly entries: readonly FactLine[];
   readonly request: Omit<TurnRequest, 'input' | 'model' | 'submission'>;
   /** Constructs the real direct conversation with this observing log, never another writer. */
-  readonly attach: (log: ConversationLog) => Conversation;
+  readonly attach: (
+    log: ConversationLog,
+    publish: (event: Extract<DirectSessionUpdate, { type: 'transient' }>['event']) => void,
+  ) => Conversation;
   readonly dispose?: () => void | Promise<void>;
   readonly released?: () => void;
 };
 
 type Subscriber = { readonly after: number; readonly listener: (update: DirectSessionUpdate) => void };
 type Active = { readonly turn: Turn; readonly done: Promise<void> };
-type Remembered = {
-  readonly body: string;
-  readonly admission: Exclude<DirectAdmission, { readonly kind: 'duplicate' }>;
-};
 
 /**
  * Owns one semantic-stream drain, admission exclusion and an atomic publication cut.
@@ -73,26 +70,17 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   let fault: ModelError | null = null;
   const subscribers = new Set<Subscriber>();
   const pending: DirectSessionUpdate[] = [];
-  const remembered = new Map<string, Remembered>();
   let scheduled = false;
-
-  const rememberSubmission = (fact: Fact): void => {
-    if (fact.type !== 'turn_started') return;
-    const submitted = directSubmittedTurn(fact);
-    if (!submitted) return;
-    const key = submitted.request.clientRequestId;
-    if (remembered.has(key)) throw new Error(`duplicate durable direct submission ID ${key}`);
-    remembered.set(key, { body: submissionBody(submitted.request), admission: submitted.admission });
-  };
 
   // Replayed entries get positions in this runtime's projection order; these
   // are not historical ordinals from the process that originally wrote them.
-  for (const fact of options.facts) {
-    rememberSubmission(fact);
-    state = reduceDirectFact(state, fact);
-    durable.push({ type: 'fact', position: ++position, seq: ++seq, fact });
+  for (const entry of options.entries) {
+    state = reduceDirectFact(state, entry.fact, entry.seq);
+    seq = entry.seq;
+    durable.push({ type: 'fact', position: ++position, seq: entry.seq, at: entry.at, fact: entry.fact });
   }
-  state = interruptedDirectState(state);
+  let reopened = true;
+  const publicState = () => (reopened ? interruptedDirectState(state) : state);
 
   // Deferring delivery until append returns keeps callbacks outside the writer's
   // acceptance stack. Capture can still see the new state/cursor synchronously.
@@ -120,28 +108,37 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       }
     });
   };
-  const publishState = (): void => publish({ type: 'state', position: ++position, state });
-  const observe = (facts: readonly Fact[]): void => {
-    for (const fact of facts) {
-      rememberSubmission(fact);
-      state = reduceDirectFact(state, fact);
-      const update: DirectDurableUpdate = { type: 'fact', position: ++position, seq: ++seq, fact };
-      durable.push(update);
-      publish(update);
-    }
-  };
+  const publishState = (): void => publish({ type: 'state', position: ++position, state: publicState() });
   const observedLog: ConversationLog = {
     path: options.log.path,
     append(facts) {
-      // Detach accepted payloads from tool/provider-owned objects, using the same
-      // JSON representation the sole writer persists. No fact type is fabricated.
       const accepted = JSON.parse(JSON.stringify(facts)) as Fact[];
-      options.log.append(accepted);
-      observe(accepted);
+      // Invalid projections fail before disk mutation; install/publication happen
+      // only after the sole underlying writer has accepted the complete batch.
+      let candidate = state;
+      for (const [index, fact] of accepted.entries()) candidate = reduceDirectFact(candidate, fact, seq + index + 1);
+      const lines = options.log.append(accepted);
+      state = candidate;
+      reopened = false;
+      for (const line of lines) {
+        seq = line.seq;
+        const update: DirectDurableUpdate = {
+          type: 'fact',
+          position: ++position,
+          seq: line.seq,
+          at: line.at,
+          fact: line.fact,
+        };
+        durable.push(update);
+        publish(update);
+      }
+      return lines;
     },
     close: () => options.log.close(),
   };
-  const conversation = options.attach(observedLog);
+  const conversation = options.attach(observedLog, (event) =>
+    publish({ type: 'transient', position: ++position, event }),
+  );
 
   const recordFault = (error: unknown): void => {
     fault = { kind: 'provider', message: error instanceof Error ? error.message : String(error), retryable: false };
@@ -168,8 +165,13 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         }
       }
       if (!terminal) throw new Error(`conversation ${options.id} ended without a terminal event`);
-      active = null; // iteration completion, not cancel() or terminal delivery, releases admission
+      active = null; // actual iterator completion is the Session completion barrier
+      if (admittedTurnId && !closing && !fault) {
+        const outcome = state.terminal?.turnId === admittedTurnId ? state.terminal.outcome : 'interrupted';
+        conversation.queue({ kind: 'settled', turnId: admittedTurnId, outcome });
+      }
       publishState();
+      if (!closing && !fault) advance();
     } catch (error) {
       turn.cancel();
       recordFault(error);
@@ -186,7 +188,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   };
   const capture = (listener: Subscriber['listener']): DirectLiveCapture => {
     const subscriber = { after: position, listener };
-    const snapshot = structuredClone(state);
+    const snapshot = structuredClone(publicState());
     subscribers.add(subscriber);
     return {
       state: snapshot,
@@ -198,84 +200,59 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     };
   };
 
+  const advance = (): void => {
+    if (active || closing || fault) return;
+    const started = conversation.advanceQueue({ ...options.request, model: options.model });
+    if (started) startDrain(started.turn, started.turnId);
+  };
+  const submit = async (request: import('./direct-queue-types.js').DirectQueueSubmission): Promise<DirectAdmission> => {
+    const invalid = validateSubmission(request);
+    if (invalid) return { kind: 'rejected', clientRequestId: request.clientRequestId, reason: invalid };
+    if (closing || fault)
+      return {
+        kind: 'rejected',
+        clientRequestId: request.clientRequestId,
+        reason: fault?.message ?? 'session is closed',
+      };
+    try {
+      const result = conversation.submit(structuredClone(request), { ...options.request, model: options.model });
+      if (result.started) startDrain(result.started.turn, result.started.turnId);
+      publishState();
+      return structuredClone(result.admission);
+    } catch (error) {
+      recordFault(error);
+      return { kind: 'rejected', clientRequestId: request.clientRequestId, reason: fault!.message };
+    }
+  };
+  const mutate = async (command: import('./direct-queue-types.js').DirectQueueCommand) => {
+    if (closing || fault) return { kind: 'rejected' as const, reason: 'invalid' as const };
+    const result = conversation.queue(command);
+    advance();
+    return result;
+  };
   return {
     id: options.id,
-    async submit(request) {
-      const invalid = validateSubmission(request);
-      if (invalid) return { kind: 'rejected', clientRequestId: request.clientRequestId, reason: invalid };
-      const normalized = structuredClone(request);
-      const body = submissionBody(normalized);
-      const previous = remembered.get(normalized.clientRequestId);
-      if (previous) {
-        return previous.body === body
-          ? {
-              kind: 'duplicate',
-              clientRequestId: normalized.clientRequestId,
-              original: structuredClone(previous.admission),
-            }
-          : {
-              kind: 'rejected',
-              clientRequestId: normalized.clientRequestId,
-              reason: 'client request ID conflicts with an earlier submission',
-            };
-      }
-      if (closing || fault || active)
-        return {
-          kind: 'rejected',
-          clientRequestId: normalized.clientRequestId,
-          reason: closing
-            ? 'session is closed'
-            : fault
-            ? fault.message
-            : 'session is busy; queue and steering are not available',
-        };
-      const messageId = randomUUID();
-      const input: Item = { type: 'user_message', id: messageId as ItemId, content: normalized.content };
-      const before = seq;
-      let turn: Turn;
-      try {
-        turn = conversation.run({
-          ...options.request,
-          model: options.model,
-          input: [input],
-          submission: {
-            clientRequestId: normalized.clientRequestId,
-            messageId,
-            ...(normalized.origin ? { origin: normalized.origin } : {}),
-          },
-        });
-      } catch (error) {
-        recordFault(error);
-        return { kind: 'rejected', clientRequestId: normalized.clientRequestId, reason: fault!.message };
-      }
-      const started = durable.slice(before).find((update) => update.fact.type === 'turn_started');
-      // Match failure settlement to this admission, never a previous failed turn.
-      startDrain(turn, started?.fact.type === 'turn_started' ? started.fact.turnId : null);
-      const original = remembered.get(normalized.clientRequestId);
-      if (
-        started?.fact.type !== 'turn_started' ||
-        !original ||
-        started.fact.submission?.clientRequestId !== normalized.clientRequestId ||
-        started.fact.submission.messageId !== messageId
-      )
-        return {
-          kind: 'rejected',
-          clientRequestId: normalized.clientRequestId,
-          reason: 'conversation did not durably accept the correlated input',
-        };
-      const admission = structuredClone(original.admission);
-      publishState();
-      return admission;
-    },
-    answer(requestId: InteractionRequestId, decision: InteractionDecision) {
-      if (closing || fault || !active || !state.pendingInteractions.some((request) => request.requestId === requestId))
-        return { kind: 'stale' };
-      return active.turn.answer(requestId, structuredClone(decision));
+    submit,
+    submitWithDelivery: submit,
+    editQueue: (messageId, edit) => mutate({ kind: 'edit', messageId, edit }),
+    retractQueue: (messageId) => mutate({ kind: 'retract', messageId }),
+    resumeQueue: () => mutate({ kind: 'resume' }),
+    discardQueue: () => mutate({ kind: 'discard' }),
+    abort: (expectedTurnId, discardQueue) => conversation.abort(expectedTurnId, discardQueue),
+    answerBudget: (requestId, decision, provenance) => conversation.answerBudget(requestId, decision, provenance),
+    setGoal: (generation, goal, source) => conversation.setGoal(generation, goal, source),
+    answer(requestId, decision, provenance) {
+      if (closing || fault) return { kind: 'stale' };
+      return conversation.answer(requestId, structuredClone(decision), provenance);
     },
     cancel(target?: DirectCancelTarget) {
-      if (target?.kind === 'task')
-        throw new Error('background task cancellation is not available on the M2 conversation');
-      active?.turn.cancel();
+      if (target?.kind === 'task') {
+        conversation.tasks.requestStop(target.id);
+        return;
+      }
+      conversation.queue({ kind: 'cancel', ...(state.activeTurnId ? { turnId: state.activeTurnId } : {}) });
+      if (!state.queue.active) active?.turn.cancel();
+      advance();
     },
     capture,
     captureFrom(fromSeq, listener) {
@@ -319,23 +296,4 @@ function validateSubmission(request: DirectSubmission): string | null {
   if (!request.content.some((part) => part.type === 'image' || (part.type === 'text' && part.text.trim())))
     return 'content must not be blank';
   return null;
-}
-
-function submissionBody(request: DirectSubmission): string {
-  // Stable field order, without trimming or otherwise altering provider-visible input.
-  return JSON.stringify({
-    content: request.content.map((part) =>
-      part.type === 'text'
-        ? { type: part.type, text: part.text }
-        : {
-            type: part.type,
-            mediaType: part.mediaType,
-            data: part.data,
-            ...(part.detail !== undefined ? { detail: part.detail } : {}),
-          },
-    ),
-    ...(request.origin
-      ? { origin: { kind: request.origin.kind, ...(request.origin.id !== undefined ? { id: request.origin.id } : {}) } }
-      : {}),
-  });
 }

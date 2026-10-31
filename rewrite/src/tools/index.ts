@@ -21,6 +21,7 @@ export type NestedRunBudget =
   | { readonly kind: 'adopted' };
 
 export type NestedRunOutcome =
+  | { readonly kind: 'background'; readonly runId: string }
   | { readonly kind: 'completed' }
   | { readonly kind: 'cancelled' }
   | { readonly kind: 'budget_exhausted' }

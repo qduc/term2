@@ -1,10 +1,10 @@
-import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
+import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { WireContent, WireEvent, WireMessage, WireSnapshot, WireTool } from '../../protocol/direct-wire.js';
 
-/** Fail explicitly when a required direct display contract has not landed. */
-export class MissingAcpWireContract extends Error {
+/** Surface a missing direct contract as an explicit ACP error, not fake success. */
+export class MissingAcpWireContract extends acp.RequestError {
   constructor(detail: string) {
-    super(`Direct ACP wire contract unavailable: ${detail}`);
+    super(-32000, `Direct ACP wire contract unavailable: ${detail}`);
     this.name = 'MissingAcpWireContract';
   }
 }
@@ -23,47 +23,70 @@ function contentBlock(content: WireContent): acp.ContentBlock {
     : { type: 'image', data: content.data, mimeType: content.mediaType };
 }
 
-function messageContents(message: WireMessage): acp.ContentBlock[] {
-  return message.content.length ? message.content.map(contentBlock) : [{ type: 'text', text: message.text }];
-}
-
 function wholeMessage(message: WireMessage, id = message.id): acp.SessionUpdate | null {
   if (message.role === 'tool') return null;
   return {
     sessionUpdate: message.role === 'user' ? 'user_message' : 'agent_message',
     messageId: id,
-    content: messageContents(message),
+    content: message.content.length ? message.content.map(contentBlock) : [{ type: 'text', text: message.text }],
   };
 }
 
-/**
- * Encode the direct public wire as ACP, using occurrence ids for tools and the
- * explicit replacesDraftId relation for committed messages. No Session facts,
- * provider state or execution control are interpreted here.
- */
+function toolOutput(output: string | undefined, content: readonly WireContent[] | undefined): acp.ToolCallContent[] {
+  const parts = content ?? (output === undefined ? [] : [{ type: 'text' as const, text: output }]);
+  return parts.map((part) => ({ type: 'content', content: contentBlock(part) }));
+}
+
+type Entry =
+  | { readonly kind: 'message'; readonly message: WireMessage }
+  | { readonly kind: 'tool'; readonly tool: WireTool };
+const messageKey = (id: string): string => `message:${id}`;
+const toolKey = (id: string): string => `tool:${id}`;
+
+function entries(snapshot: WireSnapshot): readonly Entry[] {
+  const messages = new Map(
+    snapshot.messages.filter((message) => message.role !== 'tool').map((message) => [message.id, message]),
+  );
+  const tools = new Map(snapshot.tools.map((tool) => [tool.executionId, tool]));
+  if (!snapshot.timeline) {
+    if (messages.size && tools.size)
+      throw new MissingAcpWireContract('snapshot.timeline needed for ordered mixed transcript replay');
+    return [...messages.values()]
+      .map((message): Entry => ({ kind: 'message', message }))
+      .concat([...tools.values()].map((tool): Entry => ({ kind: 'tool', tool })));
+  }
+  const result = snapshot.timeline.map((item): Entry => {
+    const message = item.kind === 'message' ? messages.get(item.id) : undefined;
+    const tool = item.kind === 'tool' ? tools.get(item.id) : undefined;
+    if (message) {
+      messages.delete(item.id);
+      return { kind: 'message', message };
+    }
+    if (tool) {
+      tools.delete(item.id);
+      return { kind: 'tool', tool };
+    }
+    throw new MissingAcpWireContract('snapshot.timeline references absent/duplicate display item');
+  });
+  if (messages.size || tools.size) throw new MissingAcpWireContract('snapshot.timeline omits display items');
+  return result;
+}
+
+/** Encode public wire data only. IDs, sequence, decisions and execution remain Session-owned. */
 export class AcpRenderer {
   private readonly drafts = new Map<string, string>();
   private readonly completed = new Set<string>();
   private readonly tools = new Set<string>();
   private readonly progress = new Map<string, string>();
+  private readonly known = new Map<string, boolean>();
+  private readonly aliases = new Map<string, string>();
 
-  /** Replace bookkeeping from the host's current atomic snapshot, optionally replaying display. */
+  /** Seed an atomic fresh attachment. Replay must use authoritative mixed ordering. */
   snapshot(snapshot: WireSnapshot, replay: boolean): acp.SessionUpdate[] {
-    this.drafts.clear();
-    this.completed.clear();
-    this.tools.clear();
-    this.progress.clear();
+    const ordered = replay ? entries(snapshot) : [];
+    this.seed(snapshot);
     const updates: acp.SessionUpdate[] = [];
-    for (const message of snapshot.messages) {
-      if (message.draft) this.drafts.set(message.id, message.text);
-      else this.completed.add(message.id);
-      const update = wholeMessage(message);
-      if (replay && update) updates.push(update);
-    }
-    for (const tool of snapshot.tools) {
-      const update = this.tool(tool);
-      if (replay) updates.push(update);
-    }
+    for (const entry of ordered) this.upsert(entry, updates);
     if (replay && snapshot.reasoning)
       updates.push({
         sessionUpdate: 'agent_thought',
@@ -73,14 +96,17 @@ export class AcpRenderer {
     return updates;
   }
 
-  /** Display-only telemetry with no ACP equivalent is intentionally omitted. */
+  /** Telemetry without an ACP display equivalent is intentionally omitted. */
   event(event: WireEvent): acp.SessionUpdate[] {
     switch (event.type) {
       case 'snapshot':
-        return this.snapshot(event.payload.snapshot, true);
+        return this.refresh(event.payload.snapshot);
+      case 'turn_started':
+        return event.payload.input.flatMap((message) => this.message(message));
       case 'text_delta': {
         const { messageId, delta } = event.payload;
         if (this.completed.has(messageId)) return [];
+        this.known.set(messageKey(messageId), true);
         this.drafts.set(messageId, (this.drafts.get(messageId) ?? '') + delta);
         return [{ sessionUpdate: 'agent_message_chunk', messageId, content: { type: 'text', text: delta } }];
       }
@@ -88,7 +114,7 @@ export class AcpRenderer {
         return [
           {
             sessionUpdate: 'agent_thought_chunk',
-            messageId: `${event.turnId ?? event.sessionId}:thought`,
+            messageId: event.payload.messageId ?? `${event.turnId ?? event.sessionId}:thought`,
             content: { type: 'text', text: event.payload.delta },
           },
         ];
@@ -96,40 +122,109 @@ export class AcpRenderer {
         return this.message(event.payload.message, event.payload.replacesDraftId);
       case 'tool_called':
       case 'tool_started':
+        this.known.set(toolKey(event.payload.tool.executionId), true);
         return [this.tool(event.payload.tool)];
       case 'tool_progress': {
+        this.tools.add(event.payload.executionId);
         const text = (this.progress.get(event.payload.executionId) ?? '') + event.payload.chunk;
         this.progress.set(event.payload.executionId, text);
+        this.known.set(toolKey(event.payload.executionId), true);
         return [
           {
             sessionUpdate: 'tool_call_update',
             toolCallId: event.payload.executionId,
             status: 'in_progress',
-            content: [{ type: 'content', content: { type: 'text', text } }],
+            content: toolOutput(text, undefined),
           },
         ];
       }
-      case 'tool_finished':
-        this.progress.delete(event.payload.executionId);
+      case 'tool_finished': {
+        const { executionId, output, content, display, isError } = event.payload;
+        this.progress.delete(executionId);
+        this.tools.add(executionId);
+        this.known.set(toolKey(executionId), true);
+        // Invalid/no-body calls can finish without any start. ACP upserts them
+        // by execution id; no provider call-id alias or duplicate message.
         return [
           {
             sessionUpdate: 'tool_call_update',
-            toolCallId: event.payload.executionId,
-            status: event.payload.isError ? 'failed' : 'completed',
-            rawOutput: event.payload.output,
-            content: [{ type: 'content', content: { type: 'text', text: event.payload.output } }],
+            toolCallId: executionId,
+            status: isError ? 'failed' : 'completed',
+            rawOutput: display === undefined ? output : { text: output, display },
+            content: toolOutput(output, content),
           },
         ];
+      }
       default:
         return [];
     }
   }
 
+  private seed(snapshot: WireSnapshot): void {
+    this.drafts.clear();
+    this.completed.clear();
+    this.tools.clear();
+    this.progress.clear();
+    this.known.clear();
+    for (const message of snapshot.messages) {
+      if (message.draft) this.drafts.set(message.id, message.text);
+      else {
+        this.completed.add(message.id);
+        const alias = this.aliases.get(message.id);
+        if (alias) this.completed.add(alias);
+      }
+      this.known.set(messageKey(message.id), false);
+    }
+    for (const tool of snapshot.tools) {
+      this.known.set(toolKey(tool.executionId), false);
+      if (tool.progress !== undefined) this.progress.set(tool.executionId, tool.progress);
+    }
+  }
+
+  private upsert(entry: Entry, updates: acp.SessionUpdate[]): void {
+    if (entry.kind === 'tool') {
+      this.known.set(toolKey(entry.tool.executionId), true);
+      updates.push(this.tool(entry.tool));
+    } else {
+      this.known.set(messageKey(entry.message.id), true);
+      const update = wholeMessage(entry.message, this.aliases.get(entry.message.id));
+      if (update) updates.push(update);
+    }
+  }
+
+  private refresh(snapshot: WireSnapshot): acp.SessionUpdate[] {
+    const previous = new Map(this.known);
+    const previousTools = new Set(this.tools);
+    const all: Entry[] = [
+      ...snapshot.messages
+        .filter((message) => message.role !== 'tool')
+        .map((message): Entry => ({ kind: 'message', message })),
+      ...snapshot.tools.map((tool): Entry => ({ kind: 'tool', tool })),
+    ];
+    const key = (entry: Entry): string =>
+      entry.kind === 'message' ? messageKey(entry.message.id) : toolKey(entry.tool.executionId);
+    const hasNew = all.some((entry) => !previous.has(key(entry)));
+    // Upserting already displayed IDs does not change their observed order.
+    // New mixed items require the authoritative timeline; array concatenation
+    // is not a claim that messages happened before tools.
+    const ordered = snapshot.timeline || hasNew ? entries(snapshot) : all;
+    this.seed(snapshot);
+    for (const id of previousTools) this.tools.add(id);
+    const updates: acp.SessionUpdate[] = [];
+    for (const entry of ordered) {
+      const wasVisible = previous.get(key(entry));
+      if (wasVisible === false) continue; // A resume without replay keeps old history hidden.
+      this.upsert(entry, updates);
+    }
+    return updates;
+  }
+
   private message(message: WireMessage, replacesDraftId?: string): acp.SessionUpdate[] {
     if (this.completed.has(message.id)) return [];
-    // ACP chunks append to a stable message. Keep the draft's ACP identity even
-    // when the durable wire record has a different id, rather than duplicate it.
     const displayId = replacesDraftId ?? message.id;
+    this.aliases.set(message.id, displayId);
+    this.known.set(messageKey(message.id), true);
+    this.known.set(messageKey(displayId), true);
     const draft = this.drafts.get(displayId);
     this.drafts.delete(displayId);
     this.completed.add(message.id);
@@ -141,24 +236,15 @@ export class AcpRenderer {
     ) {
       const suffix = message.text.slice(draft.length);
       return suffix
-        ? [
-            {
-              sessionUpdate: 'agent_message_chunk',
-              messageId: displayId,
-              content: { type: 'text', text: suffix },
-            },
-          ]
+        ? [{ sessionUpdate: 'agent_message_chunk', messageId: displayId, content: { type: 'text', text: suffix } }]
         : [];
     }
-    // ACP v2's full-message update replaces content, supporting corrections and
-    // media instead of appending a second copy of an already-streamed draft.
     const update = wholeMessage(message, displayId);
     return update ? [update] : [];
   }
 
   private tool(tool: WireTool): acp.SessionUpdate {
     if (tool.progress !== undefined) this.progress.set(tool.executionId, tool.progress);
-    const output = tool.output ?? tool.progress;
     const exists = this.tools.has(tool.executionId);
     this.tools.add(tool.executionId);
     const status =
@@ -177,20 +263,20 @@ export class AcpRenderer {
       kind: toolKind(tool.toolName),
       status,
       rawInput: tool.input,
-      ...(tool.output === undefined ? {} : { rawOutput: tool.output }),
-      ...(output === undefined
+      ...(tool.output === undefined && tool.display === undefined
         ? {}
         : {
-            content: [{ type: 'content', content: { type: 'text', text: output } }],
+            rawOutput: tool.display === undefined ? tool.output : { text: tool.output ?? '', display: tool.display },
           }),
+      content: toolOutput(tool.output ?? tool.progress, tool.content),
     };
   }
 }
 
-/** Map real terminal events, not command receipts, to ACP idle stop reasons. */
-export function terminalOutcome(event: Extract<WireEvent, { type: 'turn_ended' }>): { stopReason: acp.StopReason } {
-  if (event.payload.outcome === 'cancelled' || event.payload.outcome === 'interrupted')
-    return { stopReason: 'cancelled' };
-  if (event.payload.error?.kind === 'budget_exhausted') return { stopReason: 'max_turn_requests' };
-  return { stopReason: event.payload.outcome === 'failed' ? '_term2_error' : 'end_turn' };
+/** Snapshot terminals and live terminals share exact outcomes; receipts are not terminals. */
+export function terminalOutcome(
+  terminal: NonNullable<WireSnapshot['terminal']> | Extract<WireEvent, { type: 'turn_ended' }>['payload'],
+): { stopReason: acp.StopReason } {
+  if (terminal.outcome === 'cancelled' || terminal.outcome === 'interrupted') return { stopReason: 'cancelled' };
+  return { stopReason: terminal.outcome === 'failed' ? '_term2_error' : 'end_turn' };
 }

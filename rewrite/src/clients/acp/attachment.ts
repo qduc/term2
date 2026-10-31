@@ -5,11 +5,11 @@ import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './co
 import { errorMessage } from './contract.js';
 import { AcpRenderer, MissingAcpWireContract, terminalOutcome } from './render.js';
 import { requestPermission } from './permissions.js';
+import type { PromptInput } from './input.js';
 
 type ActivePrompt = {
   turnId: string | null;
   messageId: string | null;
-  disposition: 'started' | 'queued' | 'steering' | null;
   readonly ready: Promise<void>;
   release(): void;
   readonly outcome: Promise<PromptOutcome>;
@@ -32,7 +32,7 @@ function reservePrompt(): ActivePrompt {
   });
   // Admission or a broken subscription can fail before the scheduled run starts.
   void outcome.catch(() => undefined);
-  return { turnId: null, messageId: null, disposition: null, ready, release, outcome, resolve, reject };
+  return { turnId: null, messageId: null, ready, release, outcome, resolve, reject };
 }
 
 type PermissionTask = {
@@ -72,18 +72,37 @@ export class AcpAttachment {
     if (replay && (this.status === 'running' || this.status === 'awaiting_interaction')) {
       await this.emit({ sessionUpdate: 'state_update', state: 'running' });
     }
+    if (
+      replay &&
+      this.status !== 'running' &&
+      this.status !== 'awaiting_interaction' &&
+      this.connection.snapshot.terminal
+    ) {
+      await this.emit({
+        sessionUpdate: 'state_update',
+        state: 'idle',
+        ...terminalOutcome(this.connection.snapshot.terminal),
+      });
+    }
     for (const permission of this.connection.snapshot.pendingInteractions) this.openPermission(permission);
     this.pump = this.consume().catch((error: unknown) => this.fail(error));
   }
 
   /** Reserve before awaiting admission so simultaneous prompts cannot both enter. */
-  async prepare(requestId: string, text: string): Promise<PromptExecution> {
+  async prepare(requestId: string, input: PromptInput): Promise<PromptExecution> {
     if (this.closed) throw new acp.RequestError(-32001, 'ACP session attachment is closed');
     if (this.active) throw new acp.RequestError(-32000, 'Session is already processing foreground work');
     const prompt = reservePrompt();
     this.active = prompt;
     try {
-      const result = await this.connection.send({ type: 'submit', requestId, text, origin: { kind: 'acp' } });
+      const result = await this.connection.send({
+        type: 'submit',
+        requestId,
+        text: input.text,
+        attachments: input.attachments,
+        origin: { kind: 'acp' },
+        delivery: 'reject_if_busy',
+      });
       if (!result.ok) throw new acp.RequestError(-32000, result.message);
       if (result.kind !== 'admitted') throw new MissingAcpWireContract('submit admission receipt');
       const admission = result.admission;
@@ -91,10 +110,9 @@ export class AcpAttachment {
       if (admission.kind === 'duplicate')
         throw new acp.RequestError(-32009, 'ACP client request id was already admitted');
       prompt.messageId = admission.messageId;
-      prompt.disposition = admission.kind;
       prompt.turnId = admission.turnId ?? null;
-      if (admission.kind === 'steering' && !prompt.turnId) {
-        throw new MissingAcpWireContract('steering receipt needs owning turnId for ACP completion');
+      if (admission.kind !== 'started') {
+        throw new MissingAcpWireContract('reject_if_busy must not queue or steer admitted ACP input');
       }
       if (this.closed) throw new Error('ACP connection closed during admission');
     } catch (error) {
@@ -122,18 +140,9 @@ export class AcpAttachment {
     };
   }
 
-  /** Cancel explicitly; a queued prompt is retracted rather than cancelling another turn. */
+  /** Cancel foreground work explicitly; only its actual terminal settles the prompt. */
   async cancel(): Promise<void> {
     const prompt = this.active;
-    if (prompt?.disposition === 'queued' && !prompt.turnId && prompt.messageId) {
-      const result = await this.connection.send({ type: 'queue_retract', messageId: prompt.messageId });
-      if (!result.ok) throw new acp.RequestError(-32000, result.message);
-      if (result.kind !== 'accepted') throw new MissingAcpWireContract('queue retraction result');
-      // Successful retraction removed unstarted work; there is no physical run
-      // whose terminal needs observing. A racing start must reject retraction.
-      prompt.resolve({ stopReason: 'cancelled' });
-      return;
-    }
     for (const task of this.permissions.values()) {
       if (prompt?.turnId && task.turnId === prompt.turnId) task.controller.abort();
     }
@@ -194,21 +203,23 @@ export class AcpAttachment {
     if (!this.closed) throw new Error('ACP host subscription ended unexpectedly');
   }
 
-  private async onEvent(event: WireEvent): Promise<void> {
+  private async onEvent(event: WireEvent, nested = false): Promise<void> {
     if (event.type === 'subagent') {
-      await this.onEvent(event.payload.event);
+      await this.onEvent(event.payload.event, true);
       return;
     }
-    if (event.type === 'turn_started') {
+    if (!nested && event.type === 'turn_started') {
       if (event.payload.foreground) this.foregroundTurnId = event.turnId;
       if (this.active?.messageId && event.payload.input.some((message) => message.id === this.active?.messageId)) {
         this.active.turnId = event.turnId;
-        this.active.disposition = 'started';
       }
     }
-    if (event.type === 'snapshot') {
+    if (!nested && event.type === 'snapshot') {
       this.foregroundTurnId = event.payload.snapshot.activeTurnId;
       this.status = event.payload.snapshot.status;
+      const terminal = event.payload.snapshot.terminal;
+      if (terminal && this.active?.turnId === terminal.turnId) this.active.resolve(terminalOutcome(terminal));
+      if (terminal && this.closeWaiter?.turnId === terminal.turnId) this.closeWaiter.resolve();
       const pending = new Set(event.payload.snapshot.pendingInteractions.map((interaction) => interaction.requestId));
       for (const [id, task] of this.permissions) {
         if (!pending.has(id)) {
@@ -218,7 +229,7 @@ export class AcpAttachment {
       }
       for (const interaction of event.payload.snapshot.pendingInteractions) this.openPermission(interaction);
     }
-    if (event.type === 'status_changed') {
+    if (!nested && event.type === 'status_changed') {
       const wasRunning = this.status === 'running' || this.status === 'awaiting_interaction';
       this.status = event.payload.status;
       if (!this.active && !wasRunning && (this.status === 'running' || this.status === 'awaiting_interaction')) {
@@ -233,13 +244,14 @@ export class AcpAttachment {
       this.permissions.get(event.payload.requestId)?.controller.abort();
       this.permissions.delete(event.payload.requestId);
     }
-    if (event.type === 'turn_ended') {
-      if (this.active && event.turnId === this.active.turnId) this.active.resolve(terminalOutcome(event));
+    if (!nested && event.type === 'turn_ended') {
+      if (this.active && event.turnId === this.active.turnId) this.active.resolve(terminalOutcome(event.payload));
       if (this.closeWaiter?.turnId === event.turnId) this.closeWaiter.resolve();
       if (this.foregroundTurnId === event.turnId) {
         this.foregroundTurnId = null;
         this.status = 'idle';
-        if (!this.active) await this.emit({ sessionUpdate: 'state_update', state: 'idle', ...terminalOutcome(event) });
+        if (!this.active)
+          await this.emit({ sessionUpdate: 'state_update', state: 'idle', ...terminalOutcome(event.payload) });
       }
     }
   }

@@ -68,6 +68,8 @@ export type DirectHeadlessOptions = {
   readonly decideApproval?: HeadlessApprovalDecider;
   /** Fields merged into the old `--json` `session_start` record (profile metadata). */
   readonly profileMetadata?: Readonly<Record<string, unknown>>;
+  /** Old `agent.backgroundWaitTimeoutMs`; defaults to one hour. */
+  readonly backgroundWaitTimeoutMs?: number;
   /** Default true: a finished one-shot run detaches its connection, not the session. */
   readonly closeConnection?: boolean;
 };

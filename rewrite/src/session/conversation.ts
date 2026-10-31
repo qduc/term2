@@ -111,6 +111,7 @@ function conversation(
   let active: (Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> }) | null = null;
   let runtimeDeps = deps;
   let configuredRequest: Omit<TurnRequest, 'input' | 'submission'> | undefined;
+  let pendingProfileNotice: string | undefined;
   let continuity = deps.continuity
     ? { ...deps.continuity, state: deps.continuity.state ?? new DirectContinuity() }
     : undefined;
@@ -664,7 +665,14 @@ function conversation(
       ])
     )
       throw new Error(logFailure!.message);
-    const { input, notice, submission: _submission, previewMode: _previewMode, ...settings } = request;
+    const { input, notice: requestNotice, submission: _submission, previewMode: _previewMode, ...settings } = request;
+    // Rejected admission, read-only preview, maintenance and empty retry input
+    // cannot consume a pending profile transition. Like source pendingModeNotice,
+    // this queue belongs to the live Session, not a second durable journal.
+    const profileNotice =
+      !planned?.compaction && input.some((item) => item.type === 'user_message') ? pendingProfileNotice : undefined;
+    const notice = [profileNotice, requestNotice].filter(Boolean).join('\n\n') || undefined;
+    if (profileNotice) pendingProfileNotice = undefined;
     // Old detached branches keep the exact generation that admitted their root.
     const turnDeps = runtimeDeps;
     const turnContinuity = continuity;
@@ -828,6 +836,11 @@ function conversation(
         nextWorkspace.access !== expectedWorkspace.access)
     )
       throw new Error('Configure cannot change Session workspace authority');
+    if (
+      candidate.profileTransitionNotice !== undefined &&
+      (typeof candidate.profileTransitionNotice !== 'string' || !candidate.profileTransitionNotice.trim())
+    )
+      throw new Error('Profile transition notice must be nonempty text');
     const configurationFact = parseDirectConfigurationFact({
       type: 'configuration_changed',
       configuration: candidate.configuration,
@@ -867,6 +880,8 @@ function conversation(
       capabilities!.replace(candidate.deps.tools, supplied);
       checkInSettings = supplied.backgroundCheckIns;
       candidate.install();
+      if (candidate.profileTransitionNotice)
+        pendingProfileNotice = [pendingProfileNotice, candidate.profileTransitionNotice].filter(Boolean).join('\n\n');
     } catch (error) {
       poison(error);
       throw error;
@@ -1389,7 +1404,8 @@ function conversation(
       // This is the same pure admission plan, but its returned context facts are
       // deliberately NOT accepted. No memory/notice/goal state is consumed.
       const human = capabilities!.humanPlan('preview', request.input);
-      const modelInput = request.notice ? withNotice(human.modelInput, request.notice) : human.modelInput;
+      const notice = [pendingProfileNotice, request.notice].filter(Boolean).join('\n\n');
+      const modelInput = notice ? withNotice(human.modelInput, notice) : human.modelInput;
       const canonical: ModelRequest = {
         model: request.model,
         instructions: request.instructions,
@@ -1625,7 +1641,10 @@ function withNotice(input: readonly Item[], notice: string): readonly Item[] {
     if (prefixed || item.type !== 'user_message') return item;
     const textIndex = item.content.findIndex((part) => part.type === 'text');
     const part = item.content[textIndex];
-    if (part?.type !== 'text') return item;
+    if (part?.type !== 'text') {
+      prefixed = true;
+      return { ...item, content: [{ type: 'text', text: notice }, ...item.content] };
+    }
     prefixed = true;
     const content = [...item.content];
     content[textIndex] = { ...part, text: `${notice}\n\n${part.text}` };

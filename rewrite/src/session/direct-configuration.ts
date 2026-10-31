@@ -20,6 +20,9 @@ export type DirectPreparedConfiguration = DirectConfigurationState & {
   readonly deps: Omit<ConversationDeps, 'log' | 'context' | 'publishTask' | 'publishBranch' | 'publishNotice'>;
   readonly request: Omit<TurnRequest, 'input' | 'model' | 'submission'>;
   readonly capabilities: DirectContextCapabilities;
+  /** Source-style one-shot transition text; native queues it for the next
+   * admitted root input, never as a repeating per-turn request.notice. */
+  readonly profileTransitionNotice?: string;
   /** Synchronous NO-THROW app record-pointer swap only; no observers or user callbacks. */
   install(): void;
   /** Discard only before installation; install transfers shutdown ownership to app. */

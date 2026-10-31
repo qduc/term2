@@ -17,6 +17,12 @@ export type DirectRuntimeOptions = {
   readonly selection: ProfileSelection;
   readonly profileExplicit?: boolean;
   readonly canRun: (workspace: DirectRuntimeContext['workspace']) => boolean;
+  /**
+   * For modes with a remote client. The tool gate reads `shell.autoApproveMode`
+   * from settings, and `always` skips approval altogether, so a user's local
+   * preference must not reach these sessions.
+   */
+  readonly approvalAlwaysAsks?: boolean;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
   readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
   /** After any resumed selection is restored, so this reports what actually runs. */
@@ -50,7 +56,7 @@ export type DirectRuntimes = {
  * session's saved selection must not change another session's.
  */
 function sessionSettings(
-  { selection, profileExplicit }: DirectRuntimeOptions,
+  { selection, profileExplicit, approvalAlwaysAsks }: DirectRuntimeOptions,
   { metadata, model }: DirectRuntimeContext,
 ): ProfileSelection['settings'] {
   const defaults = selection.settings;
@@ -64,6 +70,7 @@ function sessionSettings(
   settings.set('agent.modelSelection', model, { persist: false });
   const reasoning = metadata ? metadata.reasoning ?? 'default' : defaults.get('agent.reasoningEffort');
   settings.set('agent.reasoningEffort', reasoning, { persist: false });
+  if (approvalAlwaysAsks) settings.set('shell.autoApproveMode', 'off', { persist: false });
   return settings;
 }
 

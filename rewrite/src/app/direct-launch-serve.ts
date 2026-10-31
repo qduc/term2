@@ -151,6 +151,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     conversationsDir: path.join(stateDir, 'conversations'),
     selection,
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
+    approvalAlwaysAsks: true,
     authority: serverAuthority(config, args.localOwnerUserId),
   });
   const auditPath = path.join(stateDir, 'server-audit.jsonl');

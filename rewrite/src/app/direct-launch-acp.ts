@@ -98,6 +98,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
     conversationsDir,
     selection,
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
+    approvalAlwaysAsks: true,
     authority: createLocalAuthority((root) => {
       try {
         return fs.statSync(root).isDirectory();

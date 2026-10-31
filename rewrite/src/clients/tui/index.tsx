@@ -11,11 +11,12 @@ import { Activity } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
-import { restoreAttachments, wireAttachments, wireImages } from './draft.js';
+import { BudgetPanel } from './budget-panel.js';
+import { restoreAttachments, wireAttachments } from './draft.js';
 import { useEditor } from './editor.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
-import { answerInteraction, cancelForeground, changeSession, controlTask, directSlashCommand, listRewindTargets, queueAction, rewindTo, submitText, WireCommandFailure } from './commands.js';
+import { answerBudget, answerInteraction, cancelForeground, changeSession, controlTask, directSlashCommand, listRewindTargets, queueAction, rewindTo, submitText, WireCommandFailure } from './commands.js';
 
 export type { TuiIntegration } from './integration.js';
 export type { TuiState, ViewUpdate, Message, ToolView, InteractionView, QueueItem, TaskView } from './state.js';
@@ -35,27 +36,36 @@ export function Tui(props: {
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   readonly onExit: () => void;
 }): React.ReactElement {
-  // A different session gets its own draft, history and viewport.
-  return <TuiSession key={props.connection.sessionId} {...props} />;
+  // Keep transition notices above the keyed per-session component.
+  const [transition, setTransition] = useState<{ sessionId: string; message: string } | null>(null);
+  const switchSession = props.integration.switchSession ? async (sessionId: string) => {
+    const result = await props.integration.switchSession!(sessionId);
+    setTransition(result && result.message ? { sessionId, message: result.message } : null);
+  } : undefined;
+  return <TuiSession key={props.connection.sessionId} {...props} switchSession={switchSession}
+    transitionNotice={transition?.sessionId === props.connection.sessionId ? transition.message : undefined} />;
 }
 
-function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onExit }: {
+function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onExit, switchSession, transitionNotice }: {
   readonly connection: TuiConnection;
   readonly integration: TuiIntegration;
   readonly retainedSnapshot?: WireSnapshot;
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   readonly onExit: () => void;
+  readonly switchSession?: (sessionId: string) => Promise<void>;
+  readonly transitionNotice?: string;
 }): React.ReactElement {
   const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot);
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
   const [images, setImages] = useState<ImageRef[]>([]);
   const [otherParts, setOtherParts] = useState<readonly WireContent[]>([]);
   const [originalParts, setOriginalParts] = useState<readonly WireContent[]>([]);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
-  const [editing, setEditing] = useState<{ id: string; restoreText: string; restoreCursor: number; restoreImages: ImageRef[]; restoreOther: readonly WireContent[]; restoreOriginal: readonly WireContent[] } | null>(null);
-  const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen && !taskOpen && !rewindTargets);
+  const [editing, setEditing] = useState<{ id: string; restoreText: string; restoreCursor: number; restoreImages: ImageRef[]; restoreOther: readonly WireContent[]; restoreOriginal: readonly WireContent[]; knownParts?: readonly WireContent[] } | null>(null);
+  const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets);
   const editor = useEditor(state.messages.filter(message => message.role === 'user').map(message => ({ text: message.historyText ?? message.text, attachments: message.attachments ?? [] })));
   const { InputFrame, PromptMarker, Hints } = useSkin();
   const theme = useTheme();
@@ -66,8 +76,9 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const queueOwners = useRef<readonly string[] | null>(null);
   useInput((input, key) => {
     if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
+    if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
     if (key.meta && key.return && state.activeTurnId && !busy && !editing) void submit(editor.value, images, 'follow_up');
-  }, { isActive: !interactionOpen && !taskOpen && !rewindTargets });
+  }, { isActive: !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets });
 
   const changeInput = (value: string) => {
     if (/^\/answer(?:\s|$)/.test(value)) {
@@ -113,13 +124,16 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
           editor.replace(editing.restoreText, editing.restoreCursor); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null); return;
         }
         try {
-          await queueAction(connection, 'edit', editing.id, input, submittedImages.length ? wireImages(submittedImages, originalParts) : undefined);
+          const parts = wireAttachments(submittedImages, otherParts, originalParts);
+          if (!editing.knownParts && parts.length) throw new Error('Queued attachments are unavailable; cannot safely replace them.');
+          const changed = editing.knownParts && JSON.stringify(parts) !== JSON.stringify(editing.knownParts);
+          await queueAction(connection, 'edit', editing.id, input, changed ? parts : undefined);
           editor.replace(editing.restoreText, editing.restoreCursor); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null);
           setNotice('Queued message updated.'); return;
         } catch (error) {
           if (error instanceof WireCommandFailure && error.code === 'too_late') {
             setEditing(null);
-            setNotice('Already sent. Your edited text is preserved; original queued attachments are unavailable here. Review before resubmitting.'); return;
+            setNotice(editing.knownParts ? 'Queued input is no longer editable. Your edited draft and attachments are preserved; review before resubmitting.' : 'Queued input is no longer editable. Your edited text is preserved, but original attachments were unavailable; review before resubmitting.'); return;
           }
           throw error;
         }
@@ -146,7 +160,11 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
           case 'stop':
             if (match[3]) throw new Error('Stop does not accept text.');
             decision = { kind: 'answer', answer: '', stopAfterApprovalResolution: true }; break;
-          default: throw new Error('Unsupported interaction choice.');
+          default: {
+            const grant = interaction.supportedGrants?.find(value => choice.id === `grant:${value}`);
+            if (!grant || match[3]) throw new Error('Unsupported interaction choice or unexpected text.');
+            decision = { kind: 'grant', grant };
+          }
         }
         await answerInteraction(connection, interaction.id, decision);
       } else if (/^\/(steer|followup)(?:\s|$)/.test(input)) {
@@ -180,10 +198,10 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
           ? `Session attached: ${status.attachment.name}; local control socket ${status.attachment.socketPath}; Discord input ${status.attachment.discordInputEnabled ? 'enabled' : 'disabled'} (Discord connectivity not verified); session ${status.sessionId}${status.startup ? '; startup socket' : ''}.`
           : `Session not attached; session ${status.sessionId}. To enable remote input, use /bridge connect [name].`);
       } else if (input.trim() === '/clear' || input.trim() === '/rollover') {
-        if (!integration.switchSession) throw new Error('Session switching is unavailable in this app.');
+        if (!switchSession) throw new Error('Session switching is unavailable in this app.');
         const sessionId = await changeSession(connection, input.trim() === '/clear' ? 'reset' : 'rollover');
-        try { await integration.switchSession(sessionId); }
-        catch (error) { throw new Error(`Session ${sessionId} was created but could not be attached: ${error instanceof Error ? error.message : String(error)}`); }
+        try { await switchSession(sessionId); }
+        catch (error) { throw new Error(`Session ${sessionId} was created; switching reported: ${error instanceof Error ? error.message : String(error)}`); }
       } else if (/^\/queue(?:\s|$)/.test(input)) {
         const match = /^\/queue\s+(resume|discard|retract|edit|clear-images)(?:\s+(\d+))?(?:\s+([\s\S]*))?$/.exec(input.trim());
         if (!match) throw new Error('Use /queue resume|discard|retract <number>|edit <number> [text]|clear-images <number>.');
@@ -196,22 +214,26 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         if ((action === 'resume' || action === 'discard') && match[2]) throw new Error('This operation takes no message number.');
         if (action === 'clear-images') {
           if (!item || match[3] !== undefined) throw new Error('Use /queue clear-images <number>.');
-          await queueAction(connection, 'edit', item.id, item.text, []);
+          if (!item.content) throw new Error('Queued content is unavailable; cannot safely clear images.');
+          const primary = item.content.findIndex(part => part.type === 'text');
+          await queueAction(connection, 'edit', item.id, item.text, item.content.filter((part, index) => index !== primary && part.type !== 'image'));
         } else if (action === 'edit' && item && match[3] === undefined) {
-          setEditing({ id: item.id, restoreText: '', restoreCursor: 0, restoreImages: images, restoreOther: otherParts, restoreOriginal: originalParts });
-          editor.replace(item.text); setImages([]); setOtherParts([]); setOriginalParts([]);
-          setNotice('Editing queued text. Existing attachments will be retained unless you paste replacements. /queue cancel restores your draft.'); return;
+          const primary = item.content?.findIndex(part => part.type === 'text') ?? -1;
+          const parts = item.content?.filter((_part, index) => index !== primary);
+          setEditing({ id: item.id, restoreText: '', restoreCursor: 0, restoreImages: images, restoreOther: otherParts, restoreOriginal: originalParts, knownParts: parts });
+          restoreDraft({ text: item.text, attachments: parts ?? [] });
+          setNotice(parts ? 'Editing queued input and attachments. /queue cancel restores your draft.' : 'Editing queued text; attachment content is unavailable. /queue cancel restores your draft.'); return;
         } else await queueAction(connection, action, item?.id, match[3]);
       } else if (input.trim() === '/cancel') {
-        await cancelForeground(connection);
+        setNotice(await cancelForeground(connection, state.activeTurnId ?? undefined));
       } else if (input.startsWith('/')) {
         if (!await directSlashCommand(connection, input)) {
           const result = await integration.command(connection, input);
           if (result.message) setNotice(result.message);
           if (result.draft) { restoreDraft(result.draft); return; }
           if (result.sessionId) {
-            if (!integration.switchSession) throw new Error(`Session ${result.sessionId} needs an app session switch.`);
-            await integration.switchSession(result.sessionId);
+            if (!switchSession) throw new Error(`Session ${result.sessionId} needs an app session switch.`);
+            await switchSession(result.sessionId);
           }
           if (result.exit) onExit();
         }
@@ -236,12 +258,14 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     {viewport.total > 0 && (viewport.start > 0 || !viewport.live) ?
       <Text color={theme.textSubtle}>Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓</Text> : null}
     <Activity state={state} />
+    {budgetOpen ? <BudgetPanel requests={state.budgets} onClose={() => setBudgetOpen(false)} onAnswer={(id, decision) => answerBudget(connection, id, decision)} /> : null}
     {taskOpen ? <TaskManager tasks={state.tasks} onClose={() => setTaskOpen(false)} onAction={(id, action) => controlTask(connection, id, action)} /> : null}
     {rewindTargets ? <RewindPicker targets={rewindTargets} onClose={() => setRewindTargets(null)} onSelect={(id, disposition) => { void executeRewind(id, disposition); }} /> : null}
     {editing ? <Text>Editing queued message · Enter saves · /queue cancel restores draft</Text> : null}
     {interactionOpen ? <InteractionPanel interactions={state.interactions} width={columns} onClose={() => setInteractionOpen(false)}
       onAnswer={(id, decision) => answerInteraction(connection, id, decision)} /> : null}
     {connectionError ? <Text color={theme.danger}>{connectionError}</Text> : null}
+    {transitionNotice ? <Text>{transitionNotice}</Text> : null}
     {notice ? <Text>{notice}</Text> : null}
     {editor.historyError ? <Text>{editor.historyError}</Text> : null}
     <InputFrame>
@@ -259,14 +283,14 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         cursorOverride={editor.cursorOverride}
         width={Math.max(1, columns - 4)}
         maxHeight={Math.max(1, rows - 8)}
-        isActive={!busy && !connectionError && !interactionOpen && !taskOpen && !rewindTargets}
+        isActive={!busy && !connectionError && !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets}
         images={images}
         onImagesChange={setImages}
         enableImagePaste
         onPasteError={reason => setNotice(`Image paste failed: ${reason}`)}
-        ignoreInput={(input, key) => key.pageUp || key.pageDown || (key.ctrl && (key.upArrow || key.downArrow || input === 'g')) || (Boolean(state.activeTurnId) && key.meta && key.return)}
+        ignoreInput={(input, key) => key.pageUp || key.pageDown || (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b')) || (Boolean(state.activeTurnId) && key.meta && key.return)}
       />
     </InputFrame>
-    <Hints hints={[["Enter", state.activeTurnId ? "steer" : "send"], ["Alt+Enter", "follow-up"], ["↑/↓", "history"], ["PgUp/PgDn", "scroll"], ["Ctrl+G", "approvals"], ["/tasks", "manage tasks"], ["/", "commands"], ["/cancel", "stop"]]} />
+    <Hints hints={[["Enter", state.activeTurnId ? "steer" : "send"], ["Alt+Enter", "follow-up"], ["↑/↓", "history"], ["PgUp/PgDn", "scroll"], ["Ctrl+G", "approvals"], ["Ctrl+B", "budget"], ["/tasks", "manage tasks"], ["/", "commands"], ["/cancel", "stop"]]} />
   </Box>;
 }

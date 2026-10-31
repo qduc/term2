@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TuiConnection } from './integration.js';
-import type { WireCommandResult, WireContent, WireDecision, WireSubmission } from '../../protocol/direct-wire.js';
+import type { WireCommandResult, WireContent, WireBudgetDecision, WireDecision, WireSubmission } from '../../protocol/direct-wire.js';
 
 export class WireCommandFailure extends Error {
   constructor(readonly code: string, message: string) { super(message); }
@@ -21,12 +21,22 @@ export async function submitText(connection: TuiConnection, text: string, attach
 
 /** Resolve exactly the identified pending request through the direct protocol. */
 export async function answerInteraction(connection: TuiConnection, requestId: string, decision: WireDecision): Promise<void> {
-  requireAccepted(await connection.send({ type: 'answer', requestId, decision }));
+  requireAccepted(await connection.send({ type: 'answer', requestId, decision, provenance: { source: 'user' } }));
 }
 
 /** Request foreground cancellation without closing the connection. */
-export async function cancelForeground(connection: TuiConnection): Promise<void> {
-  requireAccepted(await connection.send({ type: 'cancel' }));
+export async function cancelForeground(connection: TuiConnection, expectedTurnId?: string): Promise<string> {
+  const result = await connection.send({ type: 'cancel', ...(expectedTurnId ? { expectedTurnId } : {}) });
+  if (!result.ok) throw new WireCommandFailure(result.code, result.message);
+  if (result.kind === 'accepted') return 'Cancellation requested.';
+  if (result.kind !== 'abort') throw new Error(`Unexpected cancellation response: ${result.kind}`);
+  if (result.result.kind === 'aborted') return `Cancellation requested for ${result.result.turnId}; cleanup may still be running.${result.result.discardedMessageIds.length ? ` Discarded queued messages: ${result.result.discardedMessageIds.join(', ')}.` : ''}`;
+  return `Cancellation ${result.result.kind.replace('_', ' ')}${result.result.reason ? `: ${result.result.reason}` : '.'}`;
+}
+
+/** Resolve the exact budget request using explicit human provenance. */
+export async function answerBudget(connection: TuiConnection, requestId: string, decision: WireBudgetDecision): Promise<void> {
+  requireAccepted(await connection.send({ type: 'answer_budget', requestId, decision, provenance: { source: 'user' } }));
 }
 
 /** Handle slash operations with unambiguous direct wire equivalents; return false for app-owned commands. */
@@ -78,6 +88,6 @@ export async function changeSession(connection: TuiConnection, type: 'reset' | '
 }
 
 /** Request a specific task operation; an acknowledgement is not task completion. */
-export async function controlTask(connection: TuiConnection, taskId: string, action: 'cancel' | 'check_in' | 'foreground'): Promise<void> {
+export async function controlTask(connection: TuiConnection, taskId: string, action: 'cancel' | 'check_in' | 'foreground' | 'background'): Promise<void> {
   requireAccepted(await connection.send({ type: 'task_control', taskId, action }));
 }

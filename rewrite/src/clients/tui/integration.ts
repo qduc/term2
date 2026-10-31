@@ -27,5 +27,5 @@ export interface TuiIntegration {
     disconnect(): Promise<BridgeStatus>;
   };
   /** Attach a returned direct session ID; do not reuse the previous connection. */
-  switchSession?(sessionId: string): Promise<void>;
+  switchSession?(sessionId: string): Promise<void | { readonly message?: string }>;
 }

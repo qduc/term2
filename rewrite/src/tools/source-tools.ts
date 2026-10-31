@@ -25,6 +25,13 @@ import type { ApprovalRequirement, InteractionDecision, Tool, ToolContext, ToolR
 const DIRECT_CONTEXT = Symbol('directToolContext');
 type Invocation = { readonly signal: AbortSignal; readonly [DIRECT_CONTEXT]: ToolContext };
 
+/** Recover only an actual engine-owned invocation; never an ambient tool fallback. */
+export function sourceToolContext(invocation: unknown): ToolContext {
+  const context = (invocation as Partial<Invocation> | undefined)?.[DIRECT_CONTEXT];
+  if (!context) throw new Error('Source leaf has no direct execution context');
+  return context;
+}
+
 type SourceToolOptions = {
   readonly policies: ToolApprovalPolicyRegistry;
   readonly settings: ISettingsService;

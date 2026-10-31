@@ -21,12 +21,10 @@ import type { ToolContextSeed } from '../engine/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ItemId, ModelRegistry, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
+import { createDirectSubagentTools } from './direct-subagent-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from '../tools/source-tools.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
-const unavailable = async (): Promise<never> => {
-  throw new Error('This capability is not wired into the direct runtime yet');
-};
 type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[0]['addToolInterceptor']>[0];
 
 /** Build the source graph once, retain its script binding, and expose only its final direct offering. */
@@ -35,7 +33,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   const modelSelection = settings.get('agent.modelSelection');
   const remote = options.remote;
   const workspace = surfaceWorkspace(options.workspace, remote);
-  const withInvocation = remote
+  const targetInvocation = remote
     ? <T>(toolName: string, context: unknown, operation: () => Promise<T>) => {
         const signal = (context as { signal?: AbortSignal } | undefined)?.signal;
         if (!signal) throw new Error('Remote tool invocation has no cancellation scope');
@@ -69,6 +67,26 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   );
   let sourceGraph: AnyToolDefinition[] = [];
   let baseGraph: AnyToolDefinition[] = [];
+  const delegation = createDirectSubagentTools({
+    selection,
+    workspace,
+    executionContext,
+    skillsService,
+    sessionAccess,
+    sessionId,
+    readOnly,
+    graph: () => sourceGraph,
+    checkInterceptors: async (name, params) => {
+      for (const interceptor of interceptors) {
+        const rejection = await interceptor(name, params);
+        if (rejection) return rejection;
+      }
+      return null;
+    },
+    withAnswer: (answer, operation) => answers.run(answer, operation),
+    targetInvocation,
+    remoteUnavailable: REMOTE_UNAVAILABLE,
+  });
   const deps: AgentFactoryDeps = {
     settings,
     logger,
@@ -87,17 +105,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     },
     includeMemory: !remote && options.includeMemory !== false,
     projectInstructions: options.projectInstructions,
-    withToolInvocation: withInvocation,
+    withToolInvocation: delegation.withInvocation,
     getGoal: () => undefined,
-    createMentor: unavailable,
-    runSubagent: unavailable,
-    runSubagentAsync: unavailable,
-    getSubagentResult: unavailable,
-    getSubagentStatus: unavailable,
-    sendSubagentMessage: unavailable,
-    cancelSubagentRun: unavailable,
-    runResolvedSubagent: unavailable,
-    runResolvedSubagentAsync: unavailable,
+    ...delegation.callbacks,
     getAskUserAnswer: () => answers.getStore(),
     async checkToolInterceptors(name, params, callId) {
       for (const interceptor of interceptors) {
@@ -113,14 +123,11 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       options.allowUnsandboxed !== false && !readOnly && (remote?.sourcePolicy.allowUnsandboxed ?? true),
     discordSend: options.discordSend,
     isDiscordInputEnabled: options.isDiscordInputEnabled,
-    // Keep the tool declaration, but do not create an old agent/runtime for it.
-    getAgentRuntime: () => ({
-      agent: () => {
-        throw new Error('Nested model runs are not wired into the direct runtime yet');
-      },
-    }),
-    configureTaskCheckIn: unavailable,
-    setTaskCheckInPolicy: () => {},
+    // A source AgentHandle would adopt the old loop. Omit the unsupported
+    // workflow tool instead of advertising a runtime that cannot execute it.
+    getAgentRuntime: () => null,
+    configureTaskCheckIn: delegation.configureTaskCheckIn,
+    setTaskCheckInPolicy: delegation.setTaskCheckInPolicy,
   };
   const { agent } = buildAgent(
     { selection: modelSelection, reasoningEffort: settings.get('agent.reasoningEffort') },
@@ -164,6 +171,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     notice,
     runtime: {
       tools: registry,
+      resolveNestedAuthority: delegation.resolveNestedAuthority,
+      bindTaskCheckIn: delegation.bindTaskCheckIn,
       resetAdaptedTools() {
         sourceGraph.splice(0, sourceGraph.length, ...baseGraph);
         bindRunCodeRegistry(sourceGraph);
@@ -190,6 +199,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       async dispose() {
         advisoryAbort.abort();
         registry.dispose();
+        delegation.dispose();
         shellChildren.invalidate();
         sessionAccess.dispose();
         removePlanInterceptor();

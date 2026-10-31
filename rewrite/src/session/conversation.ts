@@ -611,6 +611,7 @@ function conversation(
     try {
       const runNested: NonNullable<TurnDeps['runNested']> = async (nested, parent) => {
         if (!deps.authorizeNested) throw new Error('App has not supplied direct nested authority');
+        // Preserve the exact host-produced request for the surface's WeakMap authority lookup.
         const authority = await deps.authorizeNested(nested, parent);
         parent.signal.throwIfAborted();
         const driver = createDirectBranchDriver({
@@ -618,6 +619,7 @@ function conversation(
             ...deps,
             budget: runBudgets.open(branchTurnId, parent.turnId),
             runNested,
+            subagents: subagentPort,
           }),
           parentTurnId: parent.turnId,
           rootTurnId: turnId,
@@ -635,18 +637,26 @@ function conversation(
           task: authority.label,
           run: authority.request,
           workspace: authority.workspace,
-          mode: 'foreground',
+          mode: nested.mode ?? 'foreground',
+          ...(nested.name ? { name: nested.name } : {}),
           parentSignal: parent.signal,
           parentTurnId: parent.turnId,
           parentExecutionId: parent.parentExecutionId,
           ...(request.submission?.origin ? { origin: request.submission.origin } : {}),
         });
+        if (nested.mode === 'background')
+          return { runId: handle.runId, items: [], outcome: { kind: 'background', runId: handle.runId } };
         const result = await agents.waitForForeground(handle);
-        if (result.kind === 'background') return { items: [], outcome: { kind: 'background', runId: result.taskId } };
-        if (result.result.value) return result.result.value;
+        if (result.kind === 'background')
+          return { runId: handle.runId, items: [], outcome: { kind: 'background', runId: result.taskId } };
+        if (result.result.value) return { ...result.result.value, runId: handle.runId };
         if (result.result.kind === 'failed')
-          return { items: [], outcome: { kind: 'failed', error: result.result.error } };
-        return { items: [], outcome: { kind: result.result.kind === 'cancelled' ? 'cancelled' : 'interrupted' } };
+          return { runId: handle.runId, items: [], outcome: { kind: 'failed', error: result.result.error } };
+        return {
+          runId: handle.runId,
+          items: [],
+          outcome: { kind: result.result.kind === 'cancelled' ? 'cancelled' : 'interrupted' },
+        };
       };
       const handle = startTurn(
         {
@@ -664,6 +674,7 @@ function conversation(
           prepareRequest: capabilities!.prepareRequest,
           normalStop: capabilities!.normalStop,
           runNested,
+          subagents: subagentPort,
         },
       );
       const turn = ownTurn(turnId, handle);
@@ -693,6 +704,40 @@ function conversation(
       },
       { turnId: effect.turnId, facts: next },
     );
+  };
+  const subagentPort: NonNullable<TurnDeps['subagents']> = (parent) => {
+    const check = (): void => {
+      parent.signal.throwIfAborted();
+      if (closed || logFailure) throw new Error(logFailure?.message ?? 'Session is closed');
+    };
+    const get = (target: string): import('../tools/index.js').SubagentTaskState | undefined => {
+      check();
+      const task = tasks!.get(target) ?? taskStates.find((task) => task.taskId === target);
+      return task?.kind === 'subagent' ? { ...task, kind: 'subagent' } : undefined;
+    };
+    return {
+      list() {
+        check();
+        const live = new Map(tasks!.list().map((task) => [task.taskId, task]));
+        return taskStates.flatMap((accepted) => {
+          const task = live.get(accepted.taskId) ?? accepted;
+          return task.kind === 'subagent' ? [{ ...task, kind: 'subagent' as const }] : [];
+        });
+      },
+      get,
+      async wait(target, signal) {
+        const current = get(target);
+        if (!current || current.result) return current;
+        await tasks!.wait(current.taskId, AbortSignal.any([parent.signal, signal]));
+        return get(current.taskId);
+      },
+      cancel(target) {
+        const task = get(target);
+        if (!task) return { ok: false, code: 'not_found' };
+        if (task.result) return { ok: false, code: 'not_active' };
+        return tasks!.requestStop(task.taskId);
+      },
+    };
   };
   const revision = (): string => `${id}:${historyRevision}`;
   const commandSnapshot = () =>

@@ -97,6 +97,34 @@ export class DirectBackgroundTasks {
     return entry && this.#state(entry);
   }
 
+  /** Await the same owned operation; an aborted waiter never cancels that operation. */
+  async wait(target: string, signal: AbortSignal): Promise<DirectTaskState | undefined> {
+    signal.throwIfAborted();
+    const entry = this.#resolve(target);
+    if (!entry) return undefined;
+    if (entry.outcome) return this.#state(entry);
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        detach();
+        reject(directTaskAbortError());
+      };
+      const detach = () => signal.removeEventListener('abort', abort);
+      signal.addEventListener('abort', abort, { once: true });
+      entry.result.then(
+        () => {
+          detach();
+          resolve();
+        },
+        (error) => {
+          detach();
+          reject(error);
+        },
+      );
+      if (signal.aborted) abort();
+    });
+    return this.#state(entry);
+  }
+
   /** All task interactions, independently of the foreground Turn's lifetime. */
   pendingInteractions() {
     return this.#interactions.pending();

@@ -120,6 +120,12 @@ export type TurnDeps = {
     readonly maxRequestInputTokens?: number | null;
   };
   readonly budget?: TurnBudget;
+  /** Engine supplies current physical execution scope; Session retains the actual task registry. */
+  readonly subagents?: (context: {
+    readonly turnId: TurnId;
+    readonly parentExecutionId: ExecutionId;
+    readonly signal: AbortSignal;
+  }) => NonNullable<ToolContext['subagents']>;
   /** Session owns task identity, branch receipts, interaction acceptance and transfers. */
   readonly runNested?: (
     request: NestedRunRequest,

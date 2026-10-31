@@ -9,6 +9,20 @@ import type { DirectWorkspaceAuthority } from './direct-host-config-workspace.js
 
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Binding = { readonly client: string; readonly id: string };
+type ModelRef = { readonly provider: string; readonly model: string };
+/**
+ * The direct store's create/open/list/close surface. Result types stay the
+ * caller's: `DirectLocalStore.create` returns `Promise<DirectLiveSession>`,
+ * not `unknown`. This wrapper does not import the session module.
+ */
+export type DirectBoundSessionStore<TCreated, TOpened> = {
+  create(workspace: Workspace, model: ModelRef, binding?: Binding): Promise<TCreated>;
+  open(id: string, binding?: Binding): Promise<TOpened>;
+  list(
+    cursor?: string,
+  ): Promise<{ sessions: readonly { id: string; workspace: Workspace; model: ModelRef }[]; cursor?: string }>;
+  close(): Promise<void>;
+};
 type StartFact = {
   readonly type?: string;
   readonly workspace?: string;
@@ -19,16 +33,6 @@ type StartFact = {
 };
 type FactLine = { readonly v?: number; readonly seq?: number; readonly at?: string; readonly fact?: StartFact };
 type Frame = { readonly userId: string; readonly workspaceId: string; readonly workspace: Workspace };
-type ModelRef = { readonly provider: string; readonly model: string };
-type SessionStoreLike = {
-  create(workspace: Workspace, model: ModelRef, binding?: Binding): Promise<unknown>;
-  open(id: string, binding?: Binding): Promise<unknown>;
-  list(
-    cursor?: string,
-  ): Promise<{ sessions: readonly { id: string; workspace: Workspace; model: ModelRef }[]; cursor?: string }>;
-  close(): Promise<void>;
-};
-
 const creation = new AsyncLocalStorage<Frame>();
 
 /**
@@ -36,13 +40,18 @@ const creation = new AsyncLocalStorage<Frame>();
  * Host.create does not take a binding, so create() copies it from the authority
  * check on the same call. Open refuses a missing or different owner. A path match
  * alone is not authorization, and access is never widened.
+ *
+ * Wrap the one store the app host already uses. This does not construct a host
+ * or a second store. `resolveWorkspace` stays synchronous and records the owner
+ * for `sessions.create` on that call; a create outside that check fails closed.
+ * Create and open keep the store's own result types.
  */
-export function bindDirectSessionAccess(options: {
+export function bindDirectSessionAccess<TCreated, TOpened>(options: {
   readonly authority: DirectWorkspaceAuthority;
-  readonly sessions: SessionStoreLike;
+  readonly sessions: DirectBoundSessionStore<TCreated, TOpened>;
   readonly directory: string;
 }): {
-  readonly sessions: SessionStoreLike;
+  readonly sessions: DirectBoundSessionStore<TCreated, TOpened>;
   authorize(
     principal: Principal,
     access:
@@ -54,7 +63,7 @@ export function bindDirectSessionAccess(options: {
   resolveStoredRoot(root: string): Workspace;
 } {
   const directory = path.resolve(options.directory);
-  const sessions: SessionStoreLike = {
+  const sessions: DirectBoundSessionStore<TCreated, TOpened> = {
     create(workspace, model, binding) {
       const frame = creation.getStore();
       if (!frame) throw new DirectHostConfigError('workspace_authority_revoked', 'authority');
@@ -108,6 +117,11 @@ export function bindDirectSessionAccess(options: {
   };
 }
 
+/**
+ * The `session_started` fact only: owner binding, root, model, profile and the
+ * first accepted timestamp. A snapshot cut is not this helper. Presentation
+ * timestamps come from the app's `sessionDetails(sessionId, snapshot.seq)`.
+ */
 export function sessionStart(
   directory: string,
   sessionId: string,
@@ -120,11 +134,9 @@ export function sessionStart(
   profileId?: string;
   provider?: string;
   model?: string;
-  updatedAt: string;
 } {
   if (!DIRECT_ID.test(sessionId)) throw forbidden();
-  const edges = readEdges(path.join(directory, `${sessionId}.jsonl`));
-  const line = edges.first;
+  const line = readFirstFact(path.join(directory, `${sessionId}.jsonl`));
   const fact = line?.fact;
   if (
     !line ||
@@ -147,7 +159,6 @@ export function sessionStart(
     ...(typeof fact.model?.provider === 'string' && typeof fact.model.model === 'string'
       ? { provider: fact.model.provider, model: fact.model.model }
       : {}),
-    updatedAt: edges.last?.at ?? line.at,
   };
 }
 
@@ -162,34 +173,17 @@ function forbidden(): DirectProtocolError {
   return new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
 }
 
-function readEdges(file: string): { first?: FactLine; last?: FactLine } {
+function readFirstFact(file: string): FactLine | undefined {
   const fd = openSync(file, 'r');
   try {
     const size = fstatSync(fd).size;
-    const head = readAt(fd, 0, Math.min(size, 256 * 1024));
-    const first = parseLine(head.toString('utf8').split('\n')[0] ?? '');
-    if (size <= head.length) {
-      const lines = head
-        .toString('utf8')
-        .split('\n')
-        .filter((line) => line.startsWith('{'));
-      return { first, last: parseLine(lines.at(-1) ?? '') };
-    }
-    const tail = readAt(fd, Math.max(0, size - 256 * 1024), Math.min(size, 256 * 1024));
-    const lines = tail
-      .toString('utf8')
-      .split('\n')
-      .filter((line) => line.startsWith('{'));
-    return { first, last: parseLine(lines.at(-1) ?? '') };
+    const length = Math.min(size, 256 * 1024);
+    const buffer = Buffer.alloc(length);
+    readSync(fd, buffer, 0, length, 0);
+    return parseLine(buffer.toString('utf8').split('\n')[0] ?? '');
   } finally {
     closeSync(fd);
   }
-}
-
-function readAt(fd: number, position: number, length: number): Buffer {
-  const buffer = Buffer.alloc(length);
-  readSync(fd, buffer, 0, length, position);
-  return buffer;
 }
 
 function parseLine(line: string): FactLine | undefined {

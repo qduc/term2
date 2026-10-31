@@ -166,12 +166,14 @@ export class TurnModel {
   }
 
   #withRecovery(request: ModelRequest, dispatchClaimed?: boolean): ModelRequest {
-    return this.#recovery
-      ? {
-          ...request,
-          recovery: { budget: this.#recovery.budget, ...(dispatchClaimed ? { dispatchClaimed: true } : {}) },
-        }
-      : request;
+    return {
+      ...request,
+      // Effective fallback controls belong to every later physical inference,
+      // including summary/native compaction; they are never persisted settings.
+      ...(this.#standardTier ? { useStandardServiceTier: true } : {}),
+      ...(this.#downgraded ? { downgradeTransport: true } : {}),
+      recovery: { budget: this.#recovery.budget, ...(dispatchClaimed ? { dispatchClaimed: true } : {}) },
+    };
   }
 
   #checkLimit(): void {
@@ -332,6 +334,7 @@ export class TurnModel {
       this.budget.record({
         requestId,
         model: request.model,
+        serviceTier: prepared.request.useStandardServiceTier ? 'standard' : undefined,
         usage,
         costUsd: done?.costUsd,
         outcome: signal.aborted ? 'cancelled' : outcome,
@@ -419,6 +422,7 @@ export class TurnModel {
       this.budget.record({
         requestId: `${this.spec.turnId}:model:${modelStep}`,
         model: request.model,
+        serviceTier: request.useStandardServiceTier ? 'standard' : undefined,
         usage,
         costUsd: done?.costUsd,
         outcome: this.signal.aborted ? 'cancelled' : outcome,

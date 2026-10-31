@@ -47,13 +47,14 @@ export class TurnBudgetControl {
     usage?: Usage;
     costUsd?: number | string;
     outcome: ModelRequestCost['outcome'];
+    serviceTier?: ModelRequestCost['serviceTier'];
   }): void {
     const usdMicros = parseUsdMicros(input.costUsd);
     const record: ModelRequestCost = {
       requestId: input.requestId,
       provider: input.model.provider,
       model: input.model.model,
-      serviceTier: 'unknown',
+      serviceTier: input.serviceTier ?? 'unknown',
       outcome: input.outcome,
       ...(input.usage
         ? {

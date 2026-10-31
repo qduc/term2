@@ -80,6 +80,6 @@ export type DirectHistoryCommandPlan =
 
 /** A repeated invocation returns its original receipt, never another execution grant. */
 export type DirectCommandResult =
-  | { readonly kind: 'pending' | 'finished'; readonly receipt: DirectCommandReceipt }
+  | { readonly kind: 'pending' | 'finished'; readonly receipt: DirectCommandReceipt; readonly replayed: boolean }
   | { readonly kind: 'conflict' }
   | { readonly kind: 'not_admitting'; readonly reason: string };

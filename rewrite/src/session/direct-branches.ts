@@ -31,6 +31,7 @@ export function createDirectBranchDriver(options: {
     event: Exclude<TurnEvent, { type: 'turn_ended' }>,
   ) => DirectTurnFact | DirectHistoryFact | null;
   readonly handles: Set<TurnHandle>;
+  readonly publish?: (event: import('./facade-types.js').DirectBranchTransient) => void;
 }): DirectSubagentDriver {
   return {
     async execute(request: NestedRunRequest, context: DirectSubagentContext): Promise<NestedRunResult> {
@@ -130,6 +131,14 @@ export function createDirectBranchDriver(options: {
             !(event.type === 'item' && event.item.type === 'tool_result')
           )
             continue;
+          if (event.type === 'tool_call_streaming_delta')
+            options.publish?.({
+              ...event,
+              branchId,
+              taskId: context.task.taskId,
+              parentTurnId: options.parentTurnId,
+              rootTurnId: options.rootTurnId,
+            });
           if (event.type === 'tool_progress' || event.type === 'text_delta')
             context.progress(
               event.type === 'text_delta' ? event.delta : event.chunk,

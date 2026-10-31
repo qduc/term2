@@ -33,7 +33,7 @@ export function captureDirectCommandHistory(input: {
   };
   for (const fact of input.facts) {
     if (fact.type === 'memory_personal_snapshot') personal.set(fact.admissionId, directPersonalMemoryItem(fact).id);
-    if (fact.type === 'turn_started' && !fact.retryContext)
+    if (fact.type === 'turn_started' && !fact.retryContext && !fact.silent)
       admit(fact.input, fact.submission?.messageId ?? fact.turnId);
     if (fact.type === 'queue_steered') admit(directQueueSteeredInput(queue, fact));
     if (isDirectQueueFact(fact)) queue = reduceDirectQueue(queue, fact);

@@ -16,6 +16,16 @@ import type {
   TurnDeps,
   TurnResult,
 } from '../engine/index.js';
+import { DirectBackgroundCheckIns } from './direct-background-check-ins.js';
+import {
+  directCheckInNotice,
+  directTaskNotice,
+  isDirectNotificationFactType,
+  pendingDirectNotifications,
+  reduceDirectNotifications,
+  type DirectNotificationFact,
+  type DirectNotificationState,
+} from './direct-notifications.js';
 import { captureDirectCommandHistory } from './direct-history-capture.js';
 import { listDirectRewindTargets, planDirectHistoryCommand } from './direct-command-history.js';
 import {
@@ -100,6 +110,7 @@ function conversation(
     : undefined;
   let commandReceipts: DirectCommandReceipts = [];
   let historyRevision = 0;
+  let notifications: DirectNotificationState = { notices: [], deliveries: [] };
   let commandOwner: { readonly commandId: string; readonly abort: AbortController; done?: Promise<unknown> } | null =
     null;
   let context = initialDirectContextState();
@@ -109,6 +120,8 @@ function conversation(
   for (const fact of facts) {
     if (isDirectCommandFactType(fact.type))
       commandReceipts = reduceDirectCommandReceipts(commandReceipts, fact as DirectCommandFact);
+    if (isDirectNotificationFactType(fact.type))
+      notifications = reduceDirectNotifications(notifications, fact as DirectNotificationFact);
     if (changesRootHistory(fact)) ++historyRevision;
     context = reduceDirectContext(context, fact);
     if (isDirectQueueFact(fact)) queueState = reduceDirectQueue(queueState, fact);
@@ -159,12 +172,15 @@ function conversation(
   const commit = (next: readonly Fact[]): boolean => {
     if (logFailure) return false;
     if (next.length === 0) return true;
+    let projectedNotices = notifications;
     let projectedReceipts = commandReceipts;
     let projectedContext = context;
     let projectedQueue = queueState;
     let projectedTasks = taskStates;
     const reserved = new Set(requestIds);
     for (const fact of next) {
+      if (isDirectNotificationFactType(fact.type))
+        projectedNotices = reduceDirectNotifications(projectedNotices, fact as DirectNotificationFact);
       if (isDirectCommandFactType(fact.type))
         projectedReceipts = reduceDirectCommandReceipts(projectedReceipts, fact as DirectCommandFact);
       projectedContext = reduceDirectContext(projectedContext, fact);
@@ -182,6 +198,7 @@ function conversation(
       poison(error);
       return false;
     }
+    notifications = projectedNotices;
     commandReceipts = projectedReceipts;
     historyRevision += next.filter(changesRootHistory).length;
     context = projectedContext;
@@ -238,10 +255,27 @@ function conversation(
     sessionId: id,
     sink: {
       accept(fact) {
+        const taskId =
+          fact.type === 'task_started'
+            ? fact.task.taskId
+            : fact.type === 'task_interaction_opened'
+            ? fact.request.taskId
+            : fact.taskId;
+        const previous = taskStates.find((task) => task.taskId === taskId);
+        const notice =
+          previous &&
+          !closed &&
+          (fact.type === 'task_backgrounded'
+            ? directTaskNotice(previous, 'background')
+            : fact.type === 'task_stop_requested'
+            ? directTaskNotice(previous, 'stop')
+            : fact.type === 'task_finished' && previous.mode === 'background'
+            ? directTaskNotice(previous, 'finished', fact.result)
+            : undefined);
         if (
           (closed && (fact.type === 'task_started' || fact.type === 'task_interaction_opened')) ||
           !recover() ||
-          !commit([fact])
+          !commit([fact, ...(notice ? [{ type: 'background_notice_enqueued' as const, notice }] : [])])
         )
           throw new Error(logFailure?.message ?? 'Session is closed');
       },
@@ -249,6 +283,18 @@ function conversation(
       failed: poison,
     },
   });
+  let checkInSettings: (() => import('./direct-background-check-ins.js').DirectBackgroundCheckInSettings) | undefined;
+  const checkIns = new DirectBackgroundCheckIns({
+    tasks,
+    settings: () => checkInSettings?.() ?? { enabled: false, intervalMs: 1 },
+    emit(event) {
+      if (closed || logFailure) return;
+      if (!commit([{ type: 'background_notice_enqueued', notice: directCheckInNotice(event) }]))
+        throw new Error(logFailure!.message);
+    },
+  });
+  const configureTaskCheckIn: Conversation['configureTaskCheckIn'] = (target, policy) =>
+    closed || logFailure ? { ok: false, code: 'not_active' } : checkIns.configure(target, policy);
   const contextCommit = (generation: number, next: readonly DirectContextFact[], turnId?: TurnId): boolean => {
     if (
       closed ||
@@ -268,7 +314,19 @@ function conversation(
     read: () => structuredClone(context),
     commit: (generation, next) => contextCommit(generation, next),
     tasks,
+    configureTaskCheckIn,
   });
+  checkInSettings = configured?.backgroundCheckIns;
+  const checkInTimer = checkInSettings
+    ? setInterval(() => {
+        try {
+          checkIns.tick();
+        } catch (error) {
+          poison(error);
+        }
+      }, 30_000)
+    : undefined;
+  checkInTimer?.unref();
   capabilities = bindDirectCapabilities({
     sessionId: id,
     read: () => context,
@@ -398,7 +456,12 @@ function conversation(
           await drain();
           if (!cancelled && !logFailure && capabilities?.finalizeHuman) {
             const admission = facts.find((fact) => fact.type === 'turn_started' && fact.turnId === turnId);
-            if (admission?.type === 'turn_started' && humanOrigin(admission.submission?.origin)) {
+            if (
+              admission?.type === 'turn_started' &&
+              !admission.silent &&
+              !admission.retryContext &&
+              humanOrigin(admission.submission?.origin)
+            ) {
               const content = admission.input.flatMap((item) =>
                 item.type === 'user_message' ? [...item.content] : [],
               );
@@ -507,6 +570,7 @@ function conversation(
       readonly facts: readonly Fact[];
       /** Command admission already committed replacement/start/receipt in one batch. */
       readonly accepted?: true;
+      readonly silent?: true;
       readonly history?: readonly Item[];
     },
   ): StartedConversationTurn => {
@@ -523,7 +587,7 @@ function conversation(
     }
     const turnId = planned?.turnId ?? (`turn-${nextTurnId++}` as TurnId);
     const snapshot = planned?.accepted ? { history: planned.history!, compactionState: undefined } : liveReplay();
-    const isHuman = !planned?.accepted && humanOrigin(request.submission?.origin);
+    const isHuman = !planned?.accepted && !planned?.silent && humanOrigin(request.submission?.origin);
     const human = isHuman
       ? capabilities!.humanPlan(request.submission?.messageId ?? turnId, request.input)
       : { facts: capabilities!.memoryFacts(), modelInput: request.input };
@@ -534,6 +598,7 @@ function conversation(
         ...human.facts,
         {
           type: 'turn_started',
+          ...(planned?.silent ? { silent: true as const } : {}),
           turnId,
           input: request.input,
           ...(directPreviewConfiguration(request) ? { requestConfiguration: directPreviewConfiguration(request) } : {}),
@@ -562,6 +627,7 @@ function conversation(
           },
           factFor,
           handles: branchHandles,
+          publish: deps.publishBranch,
         });
         const agents = new DirectSubagents({ tasks: tasks!, driver });
         const handle = agents.start({
@@ -640,6 +706,41 @@ function conversation(
   return {
     id,
     tasks,
+    configureTaskCheckIn,
+    drainBackgroundNotifications(clientRequestId, settings) {
+      if (!clientRequestId.trim()) throw new Error('Background drain requires a nonempty invocation ID');
+      if (closed || logFailure || !recover())
+        return { result: { kind: 'not_admitting', reason: logFailure?.message ?? 'Session is closed' } };
+      const previous = notifications.deliveries.find((delivery) => delivery.clientRequestId === clientRequestId);
+      if (previous)
+        return {
+          result: { kind: 'duplicate', turnId: previous.turnId, notificationIds: [...previous.notificationIds] },
+        };
+      if (active || completionHeld || commandOwner || queueState.active || queueState.pending.length)
+        return { result: { kind: 'busy' } };
+      const notices = pendingDirectNotifications(notifications);
+      if (!notices.length) return { result: { kind: 'empty' } };
+      const turnId = `turn-${nextTurnId++}` as TurnId;
+      const notificationIds = notices.map((notice) => notice.id);
+      const started = start(
+        {
+          ...settings,
+          input: [
+            {
+              type: 'user_message',
+              id: `background:${randomUUID()}` as import('../model/index.js').ItemId,
+              content: [{ type: 'text', text: notices.map((notice) => notice.text).join('\n\n') }],
+            },
+          ],
+        },
+        {
+          turnId,
+          silent: true,
+          facts: [{ type: 'background_notices_delivered', clientRequestId, turnId, notificationIds }],
+        },
+      );
+      return { result: { kind: 'started', turnId, notificationIds }, started };
+    },
     cancelCommand() {
       commandOwner?.abort.abort();
     },
@@ -654,7 +755,10 @@ function conversation(
           result: { kind: 'not_admitting' as const, reason: logFailure?.message ?? 'Session is closed' },
         });
       const proposal = planDirectCommandStart(commandReceipts, request, revision());
-      if (proposal.kind !== 'start') return Promise.resolve({ result: structuredClone(proposal) });
+      if (proposal.kind !== 'start')
+        return Promise.resolve({
+          result: proposal.kind === 'conflict' ? proposal : { ...structuredClone(proposal), replayed: true },
+        });
       // Reserve synchronously, before cancellation or any async model operation.
       if (!commit([proposal.fact])) throw new Error(logFailure!.message);
       const finish = (outcome: DirectCommandOutcome): DirectCommandResult => {
@@ -662,6 +766,7 @@ function conversation(
           throw new Error(logFailure!.message);
         return {
           kind: 'finished',
+          replayed: false,
           receipt: structuredClone(commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!),
         };
       };
@@ -722,6 +827,7 @@ function conversation(
             return {
               result: {
                 kind: 'finished',
+                replayed: false,
                 receipt: structuredClone(
                   commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
                 ),
@@ -762,6 +868,7 @@ function conversation(
           return {
             result: {
               kind: 'finished',
+              replayed: false,
               receipt: structuredClone(
                 commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
               ),
@@ -771,7 +878,8 @@ function conversation(
         } catch (error) {
           if (logFailure) throw new Error(logFailure.message);
           const accepted = commandReceipts.find((receipt) => receipt.request.commandId === request.commandId);
-          if (accepted?.outcome) return { result: { kind: 'finished', receipt: structuredClone(accepted) } };
+          if (accepted?.outcome)
+            return { result: { kind: 'finished', replayed: false, receipt: structuredClone(accepted) } };
           return {
             result: finish({
               kind: 'rejected',
@@ -917,6 +1025,7 @@ function conversation(
     },
     async close() {
       closed = true;
+      if (checkInTimer) clearInterval(checkInTimer);
       commandOwner?.abort.abort();
       try {
         await commandOwner?.done;

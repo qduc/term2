@@ -22,6 +22,10 @@ export type DirectContextPort = {
   /** Generation CAS and candidate reduction occur before the sole writer append. */
   commit(expectedGeneration: number, facts: readonly DirectContextFact[]): boolean;
   readonly tasks: DirectBackgroundTasks;
+  configureTaskCheckIn(
+    target: string,
+    policy: import('./direct-background-check-ins.js').DirectBackgroundCheckInPolicy,
+  ): ReturnType<import('./direct-background-check-ins.js').DirectBackgroundCheckIns['configure']>;
 };
 export type DirectContextCapabilities = {
   readonly memory?: DirectMemoryCapability;
@@ -29,6 +33,8 @@ export type DirectContextCapabilities = {
   readonly verification?: Pick<Parameters<typeof createDirectGoalVerifier>[0], 'operations' | 'limits'>;
   readonly verificationEnabled?: () => boolean;
   readonly unattended?: boolean;
+  /** Effective source settings, re-read for each advisory tick. */
+  readonly backgroundCheckIns?: () => import('./direct-background-check-ins.js').DirectBackgroundCheckInSettings;
   readonly proposeGoal?: boolean;
   readonly automaticMemory?: (input: {
     readonly admissionId: string;
@@ -231,6 +237,8 @@ export function directAcceptedGoalWindow(facts: readonly Fact[]): readonly Direc
         window = through < 0 ? [] : window.slice(0, through + 1);
         // Physical modelStep numbering restarts on a new Turn. Goal evidence
         // must not treat the retried step as the old step's parallel calls.
+        stepOffset = Math.max(-1, ...window.map(({ modelStep }) => modelStep)) + 1;
+      } else if (fact.type === 'turn_started' && fact.silent) {
         stepOffset = Math.max(-1, ...window.map(({ modelStep }) => modelStep)) + 1;
       } else {
         window = [];

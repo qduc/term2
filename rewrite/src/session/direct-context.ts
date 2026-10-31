@@ -113,12 +113,17 @@ export function isDirectContextFactType(type: string): boolean {
 /**
  * Session calls this on a candidate batch before append and installs it only
  * after append succeeds. A rejected transition cannot mutate the live view.
- * turn_started is a real new human/queued instruction, not a continuation.
+ * Only accepted human input resets reminders; automatic input and retries retain them.
  */
-export function reduceDirectContext(state: DirectContextState, fact: Fact | DirectContextFact): DirectContextState {
+export function reduceDirectContext(
+  state: DirectContextState,
+  fact: Fact | DirectContextFact,
+  queueRecords: readonly DirectQueueRecord[] = [],
+): DirectContextState {
   switch (fact.type) {
     case 'turn_started':
-      return fact.retryContext || fact.silent ? state : { ...state, goalReminders: [] };
+    case 'queue_steered':
+      return startsDirectHumanWindow(fact, queueRecords) ? { ...state, goalReminders: [] } : state;
     case 'goal_changed':
     case 'goal_proposed':
       return { ...state, goal: reduceDirectGoal(state.goal, fact) };
@@ -175,4 +180,18 @@ export function planDirectHumanContext(deps: {
     facts: [...deps.memory.facts, ...(personal ? [personal] : [])],
     modelInput: personal ? [directPersonalMemoryItem(personal), ...deps.input] : deps.input,
   };
+}
+
+/** Classify a goal-window boundary from accepted origin evidence, not model notice text. */
+export function startsDirectHumanWindow(
+  fact: Fact | DirectContextFact,
+  queueRecords: readonly DirectQueueRecord[] = [],
+): boolean {
+  if (fact.type === 'turn_started')
+    return !fact.retryContext && !fact.silent && isDirectHumanOrigin(fact.submission?.origin);
+  if (fact.type !== 'queue_steered') return false;
+  return fact.messageIds.some((id) => {
+    const record = queueRecords.find((record) => record.messageId === id);
+    return !!record && isDirectHumanOrigin(record.request.origin);
+  });
 }

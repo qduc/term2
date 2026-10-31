@@ -111,6 +111,7 @@ export type DirectSessionState = {
   readonly queue: DirectQueueState;
   readonly turnResults: readonly {
     readonly turnId: TurnId;
+    readonly finalWindow?: import('./direct-final.js').DirectFinalWindow;
     readonly outcome: TurnOutcomeName;
     readonly messages: readonly DirectMessage[];
     readonly terminalCause?: string;

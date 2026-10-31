@@ -121,6 +121,8 @@ export type DirectTurnFact =
   | {
       readonly type: 'turn_ended';
       readonly turnId: TurnId;
+      /** Accepted root public evidence; absent on old/recovered or nested terminals. */
+      readonly finalWindow?: import('./direct-final.js').DirectFinalWindow;
       readonly outcome: TurnOutcomeName;
       readonly error?: ModelError;
       readonly terminalCause?: 'goal_check_unresolved' | 'completion_verification_blocked' | 'budget_exhausted';

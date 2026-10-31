@@ -3,6 +3,7 @@
  * session needs. Every mode is a client of this host. Only `host.dispose()` ends
  * Sessions, so a client disconnecting never stops work another client can see.
  */
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
@@ -14,13 +15,14 @@ import { DirectProtocolError } from '../protocol/direct-errors.js';
 import type { DirectCommandCapabilities } from '../protocol/direct-capabilities.js';
 import { forkDirectConversation } from '../session/direct-fork.js';
 import { createDirectSessionStore, type DirectLocalStore } from '../session/direct-store.js';
+import type { DirectCommandOperation, DirectCommandOutcome } from '../session/direct-command-types.js';
 import type { DurableGoal } from '../session/direct-goal.js';
 import type { DirectSession, DirectSessionState } from '../session/facade-types.js';
 import { readFacts } from '../session/log.js';
 import { replay } from '../session/replay.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
-import type { Workspace } from '../tools/index.js';
+import type { ExecutionId, Workspace } from '../tools/index.js';
 import type { ProfileSelection } from './tool-contract.js';
 import { startDirectHooks, type DirectHookOptions } from './direct-application-hooks.js';
 import { createDirectRuntimes, type DirectRuntimeOptions, type DirectRuntimes } from './direct-application-runtime.js';
@@ -179,6 +181,24 @@ function writeGoal(session: DirectSession, goal: DurableGoal | undefined, source
 }
 
 /**
+ * Wire commands carry no identity of their own, so each call is a new command. A
+ * client that resends one gets a second attempt, which the Session judges afresh.
+ */
+async function runCommand(session: DirectSession, operation: DirectCommandOperation): Promise<DirectCommandOutcome> {
+  const result = await session.command({ commandId: randomUUID(), operation });
+  if (result.kind !== 'finished' || !result.receipt.outcome) {
+    throw new DirectProtocolError('rejected', 'The session did not accept this command.');
+  }
+  const { outcome } = result.receipt;
+  if (outcome.kind === 'rejected') {
+    const code = outcome.code === 'unavailable' ? 'unavailable' : 'rejected';
+    throw new DirectProtocolError(code, outcome.message);
+  }
+  if (outcome.kind === 'interrupted') throw new DirectProtocolError('rejected', 'The command was interrupted.');
+  return outcome;
+}
+
+/**
  * `reset` is a new session in the same workspace, not a change to this one: the
  * old log stays intact and other clients stay attached to it. It keeps the old
  * session's owner and its goal, which `/clear` always retained. Waiting for the
@@ -200,6 +220,21 @@ function applicationCapabilities(
       const { goal } = state.context.goal;
       if (goal) writeGoal(next, goal, 'launcher');
       return { sessionId: next.id };
+    },
+    async retry({ target, executionId }) {
+      await runCommand(session, {
+        kind: 'retry',
+        target,
+        ...(executionId === undefined ? {} : { executionId: executionId as ExecutionId }),
+      });
+    },
+    listRewindTargets: async () => session.rewindTargets().map(({ id, label }) => ({ id, label })),
+    async rewind(targetId) {
+      const outcome = await runCommand(session, { kind: 'rewind', targetId });
+      if (outcome.kind !== 'rewound') return { draft: null };
+      const text = outcome.draft.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('');
+      const attachments = outcome.draft.content.filter((part) => part.type !== 'text');
+      return { draft: { text, attachments } };
     },
     async controlTask(taskId, action) {
       const tasks = runtimes.get(session.id)?.tasks();

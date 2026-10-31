@@ -1,11 +1,38 @@
 /** Direct runtime contracts. Live acceptance tokens are never persisted. */
-import type { Item, ModelError, ModelRef, ModelRegistry, ModelRequest, ReasoningEffort, StopReason, ToolCallId, ToolSpec, Usage } from '../model/index.js';
-import type { ExecutionId, InteractionDecision, InteractionRequestId, ToolContext, ToolInteractionRequest, ToolRegistry, ToolResult, NestedRunRequest, NestedRunResult } from '../tools/index.js';
+import type {
+  Item,
+  ModelError,
+  ModelRef,
+  ModelRegistry,
+  ModelRequest,
+  ReasoningEffort,
+  StopReason,
+  ToolCallId,
+  ToolSpec,
+  Usage,
+} from '../model/index.js';
+import type {
+  ExecutionId,
+  InteractionDecision,
+  InteractionRequestId,
+  ToolContext,
+  ToolInteractionRequest,
+  ToolRegistry,
+  ToolResult,
+  NestedRunRequest,
+  NestedRunResult,
+} from '../tools/index.js';
 import type { TurnId } from './index.js';
 import type { DirectRecoveryOptions } from './direct-recovery.js';
 import type { DirectContinuity, DirectContinuityBinding } from './direct-recovery-continuity.js';
 import type { DirectCompactionSettings } from './direct-recovery-compaction.js';
-import type { ModelRequestCost, RunBudget, RunBudgetEvent, RunBudgetPolicy, RunBudgetSnapshot } from './direct-recovery-budget.js';
+import type {
+  ModelRequestCost,
+  RunBudget,
+  RunBudgetEvent,
+  RunBudgetPolicy,
+  RunBudgetSnapshot,
+} from './direct-recovery-budget.js';
 
 /** Replay metadata is promoted only with an accepted history replacement. */
 export type TurnCompactionState = {
@@ -51,7 +78,7 @@ export type TurnSpec = {
   readonly limits?: { readonly maxModelCalls: number; readonly maxToolCalls: number };
 };
 export type TurnResult =
-  | { readonly kind: 'completed' }
+  | { readonly kind: 'completed'; readonly notice?: string }
   | { readonly kind: 'cancelled' }
   | {
       readonly kind: 'interrupted';
@@ -75,8 +102,13 @@ export type TurnDeps = {
   readonly prepareRequest?: (
     request: ModelRequest,
     context: { readonly turnId: TurnId; readonly modelStep: number; readonly signal: AbortSignal },
-  ) => { readonly request: ModelRequest; readonly tools?: ToolRegistry } | Promise<{ readonly request: ModelRequest; readonly tools?: ToolRegistry }>;
-  readonly normalStop?: (context: { readonly turnId: TurnId; readonly signal: AbortSignal }) => Promise<NormalStopDecision>;
+  ) =>
+    | { readonly request: ModelRequest; readonly tools?: ToolRegistry }
+    | Promise<{ readonly request: ModelRequest; readonly tools?: ToolRegistry }>;
+  readonly normalStop?: (context: {
+    readonly turnId: TurnId;
+    readonly signal: AbortSignal;
+  }) => Promise<NormalStopDecision>;
   readonly recovery?: DirectRecoveryOptions;
   readonly continuity?: { readonly binding: DirectContinuityBinding; readonly state?: DirectContinuity };
   readonly compaction?: {
@@ -92,16 +124,48 @@ export type TurnDeps = {
   ) => Promise<NestedRunResult>;
 };
 export type TurnEvent =
-  | { readonly type: 'history_replaced'; readonly history: readonly Item[]; readonly reason: 'compaction'; readonly rearmAtEstimatedTokens?: number; readonly checkpointReceipts?: readonly string[] }
-  | { readonly type: 'model_response_completed'; readonly modelStep: number; readonly stopReason: StopReason; readonly continuation?: unknown; readonly providerMetadata?: Readonly<Record<string, unknown>>; readonly costUsd?: number | string }
+  | {
+      readonly type: 'history_replaced';
+      readonly history: readonly Item[];
+      readonly reason: 'compaction';
+      readonly rearmAtEstimatedTokens?: number;
+      readonly checkpointReceipts?: readonly string[];
+    }
+  | {
+      readonly type: 'model_response_completed';
+      readonly modelStep: number;
+      readonly stopReason: StopReason;
+      readonly continuation?: unknown;
+      readonly providerMetadata?: Readonly<Record<string, unknown>>;
+      readonly costUsd?: number | string;
+    }
   | { readonly type: 'budget_observed'; readonly evidence: RunBudgetEvent }
-  | { readonly type: 'budget_required'; readonly requestId: InteractionRequestId; readonly turnId: TurnId; readonly evidence: RunBudgetEvent; readonly snapshot: RunBudgetSnapshot }
+  | {
+      readonly type: 'budget_required';
+      readonly requestId: InteractionRequestId;
+      readonly turnId: TurnId;
+      readonly evidence: RunBudgetEvent;
+      readonly snapshot: RunBudgetSnapshot;
+    }
   | { readonly type: 'text_delta'; readonly delta: string; readonly modelStep?: number }
   | { readonly type: 'reasoning_delta'; readonly delta: string }
   | { readonly type: 'item'; readonly item: Item; readonly executionId?: ExecutionId; readonly modelStep?: number }
   | { readonly type: 'usage'; readonly usage: Usage; readonly modelStep?: number }
-  | { readonly type: 'tool_called'; readonly executionId: ExecutionId; readonly callId: ToolCallId; readonly toolName: string; readonly input: unknown }
-  | { readonly type: 'tool_start_requested'; readonly executionId: ExecutionId; readonly parentExecutionId?: ExecutionId; readonly callId: ToolCallId; readonly toolName: string; readonly input: unknown }
+  | {
+      readonly type: 'tool_called';
+      readonly executionId: ExecutionId;
+      readonly callId: ToolCallId;
+      readonly toolName: string;
+      readonly input: unknown;
+    }
+  | {
+      readonly type: 'tool_start_requested';
+      readonly executionId: ExecutionId;
+      readonly parentExecutionId?: ExecutionId;
+      readonly callId: ToolCallId;
+      readonly toolName: string;
+      readonly input: unknown;
+    }
   | { readonly type: 'tool_progress'; readonly executionId: ExecutionId; readonly chunk: string }
   | { readonly type: 'tool_execution_finished'; readonly executionId: ExecutionId; readonly result: ToolResult }
   | { readonly type: 'interaction_required'; readonly request: InteractionRequest }

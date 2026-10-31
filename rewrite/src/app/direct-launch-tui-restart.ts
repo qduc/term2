@@ -1,6 +1,6 @@
 /** `/restart`: hand this session to a freshly loaded process, once nothing here can write to it. */
 import { createRestartPlan } from '../../../source/utils/process-restart.js';
-import type { WireSnapshot } from '../protocol/direct-wire.js';
+import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
 import type { DirectControlBridge, DirectControlHold } from './direct-launch-control.js';
 
@@ -16,12 +16,27 @@ function assertSupported(): void {
   }
 }
 
-function assertIdle(snapshot: WireSnapshot): void {
+function liveTasks(snapshot: WireSnapshot): WireSnapshot['tasks'] {
+  return snapshot.tasks.filter((task) => task.status === 'running' || task.status === 'awaiting_interaction');
+}
+
+function assertIdle(snapshot: WireSnapshot, stopTasks: boolean): void {
   if (snapshot.activeTurnId !== null) throw new Error('Finish or cancel the running turn before restarting.');
-  const live = snapshot.tasks.filter((task) => task.status === 'running' || task.status === 'awaiting_interaction');
-  if (live.length) {
+  const live = liveTasks(snapshot);
+  if (live.length && !stopTasks) {
     const names = live.map((task) => `${task.id} (${task.status})`).join(', ');
-    throw new Error(`Live background work: ${names}. Cancel it first; /restart stop needs direct task cancel.`);
+    throw new Error(`Live background work: ${names}. Cancel it first, or use /restart stop to consent to stopping it.`);
+  }
+}
+
+/** `/restart stop`. Closing the host waits for these tasks, so this only has to ask. */
+async function stopLiveTasks(
+  snapshot: WireSnapshot,
+  send: (command: WireCommand) => Promise<WireCommandResult>,
+): Promise<void> {
+  for (const task of liveTasks(snapshot)) {
+    const result = await send({ type: 'task_control', taskId: task.id, action: 'cancel' });
+    if (!result.ok) throw new Error(`Could not stop task ${task.id}: ${result.message}`);
   }
 }
 
@@ -59,13 +74,15 @@ export async function prepareRestart(
   app: DirectApplication,
   bridge: DirectControlBridge,
   ssh: RestartTarget,
+  stopTasks?: (command: WireCommand) => Promise<WireCommandResult>,
 ): Promise<DirectRestartPlan> {
   assertSupported();
-  assertIdle(latest());
+  assertIdle(latest(), stopTasks !== undefined);
   const hold: DirectControlHold | undefined = bridge.hold();
   try {
     await hold?.drained;
-    assertIdle(latest());
+    assertIdle(latest(), stopTasks !== undefined);
+    if (stopTasks) await stopLiveTasks(latest(), stopTasks);
     return plan(latest(), app, bridge, ssh);
   } catch (error) {
     hold?.release();

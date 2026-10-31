@@ -180,7 +180,11 @@ export function createDirectRuntimes(
           context: contextFactory,
         },
         request: { ...request, ...(notice ? { notice } : {}) },
-        profile: { id: profile.activeProfileId, version: profile.activeProfileVersion, digest: profile.activeProfileDigest },
+        profile: {
+          id: profile.activeProfileId,
+          version: profile.activeProfileVersion,
+          digest: profile.activeProfileDigest,
+        },
         appVersion: installationVersion,
         async dispose() {
           records.delete(context.id);

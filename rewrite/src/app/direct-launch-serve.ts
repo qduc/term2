@@ -106,11 +106,7 @@ async function warnIfSandboxUnavailable(): Promise<void> {
  * path, is what admits a read or write. `resolveGrant` must stay synchronous:
  * it hands the owner to `createSession` through the caller's async context.
  */
-function serverAuthority(
-  grants: DirectWorkspaceAuthority,
-  directory: string,
-  owner: string,
-): DirectAuthorityFactory {
+function serverAuthority(grants: DirectWorkspaceAuthority, directory: string, owner: string): DirectAuthorityFactory {
   return (store) => {
     const access = bindDirectSessionAccess({ authority: grants, sessions: store, directory });
     return {
@@ -262,7 +258,9 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
         ? `transport=socket path=${args.transport.socketPath}`
         : `transport=tls host=${args.transport.host} port=${args.transport.port}`;
     process.stderr.write(
-      `GATEWAY_READY pid=${process.pid} ${endpoint} pairing=${args.pairing ? 'on' : 'off'} workspaceRoots=${args.workspaceRoots.join(',')}\n`,
+      `GATEWAY_READY pid=${process.pid} ${endpoint} pairing=${
+        args.pairing ? 'on' : 'off'
+      } workspaceRoots=${args.workspaceRoots.join(',')}\n`,
     );
     await stopped;
   } catch (error) {

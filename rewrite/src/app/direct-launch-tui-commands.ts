@@ -36,7 +36,10 @@ export type DirectTuiCommandOptions = {
 
 const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
 
-async function send(connection: TuiConnection, command: WireCommand): Promise<Exclude<WireCommandResult, { ok: false }>> {
+async function send(
+  connection: TuiConnection,
+  command: WireCommand,
+): Promise<Exclude<WireCommandResult, { ok: false }>> {
   const result = await connection.send(command);
   if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
   return result;
@@ -184,9 +187,16 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'goal':
           return goal(connection.sessionId, input.trim().slice('/goal'.length));
         case 'restart':
-          if (argument === 'stop') throw new Error('/restart stop needs direct task cancel, which is not available yet.');
-          if (argument) throw new Error('Usage: /restart');
-          restart(await prepareRestart(latest, app, bridge, remote));
+          if (argument && argument !== 'stop') throw new Error('Usage: /restart [stop]');
+          restart(
+            await prepareRestart(
+              latest,
+              app,
+              bridge,
+              remote,
+              argument === 'stop' ? (sent) => connection.send(sent) : undefined,
+            ),
+          );
           return { exit: true };
         default:
           throw new Error(`/${name} is not available in the direct executable yet.`);
@@ -203,7 +213,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     bridge: {
       status: async () => bridgeStatus(),
       async connect(name) {
-        if (!isControlSocketName(name)) throw new Error('Invalid bridge socket name. Use 1–64 letters, digits, _ or -.');
+        if (!isControlSocketName(name))
+          throw new Error('Invalid bridge socket name. Use 1–64 letters, digits, _ or -.');
         await bridge.connect(latest().sessionId, name);
         return bridgeStatus();
       },

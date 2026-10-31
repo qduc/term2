@@ -47,8 +47,6 @@ export function runPolicy(
       },
       maxRequestInputTokens: settings.get('agent.maxRequestInputTokens'),
     },
-    ...(endpoint
-      ? { continuity: { binding: { origin: sessionId, endpoint }, state: new DirectContinuity() } }
-      : {}),
+    ...(endpoint ? { continuity: { binding: { origin: sessionId, endpoint }, state: new DirectContinuity() } } : {}),
   };
 }

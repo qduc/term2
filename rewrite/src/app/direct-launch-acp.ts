@@ -54,7 +54,11 @@ async function applyModelFlags({ args, selection }: AcpRequest, io: AcpIo): Prom
     return false;
   }
   for (const warning of ('warnings' in resolution && resolution.warnings) || []) io.writeStderr(warning);
-  settings.set('agent.modelSelection', { model: resolution.modelId, provider: resolution.provider }, { persist: false });
+  settings.set(
+    'agent.modelSelection',
+    { model: resolution.modelId, provider: resolution.provider },
+    { persist: false },
+  );
   if (resolution.reasoningEffort && !args.effort) {
     settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
   }
@@ -114,8 +118,15 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
   process.once('SIGTERM', onSignal);
   let exitCode = 1;
   try {
-    const logger = { error: (message: string, fields: Readonly<Record<string, unknown>>) => selection.logger.error(message, fields) };
-    const backend = createAcpBackend({ host: app.host, principal: app.principal, workspaces: acpWorkspaces(app), logger });
+    const logger = {
+      error: (message: string, fields: Readonly<Record<string, unknown>>) => selection.logger.error(message, fields),
+    };
+    const backend = createAcpBackend({
+      host: app.host,
+      principal: app.principal,
+      workspaces: acpWorkspaces(app),
+      logger,
+    });
     exitCode = await serveAcp({ backend, logger, version: installationVersion }, io, shutdown.signal);
   } finally {
     process.removeListener('SIGINT', onSignal);

@@ -86,6 +86,7 @@ const provider: any = {
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
 const { service: host, source } = createAdoptedSettings({
+  settingsDir: path.join(root, 'settings'),
   disableLogging: true,
   disableFilePersistence: true,
   cli: {
@@ -95,6 +96,8 @@ const { service: host, source } = createAdoptedSettings({
       runBudget: { escalation: 'disabled' },
       retryAttempts: 0,
     } as any,
+    // ask_user needs Pair's user-interaction capability; retain Bare for shell approvals.
+    ...(mode.startsWith('ask') ? { app: { activeProfileId: 'builtin:pair' } } : {}),
     memory: { enabled: false } as any,
     shell: { autoApproveMode: 'off' } as any,
   },

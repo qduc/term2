@@ -187,6 +187,9 @@ application default. In `c3a-goal.mts`, proposals select Pair because Bare omits
 opens the approval the bench waits for. The other goal modes retain default
 Bare coverage. Its settings directory is isolated too: `disableFilePersistence`
 disables writes, not loading existing settings.
+The `c3a-interactions.mts` ask-navigation/cancellation modes likewise select Pair
+and isolate settings; shell-approval modes stay on default Bare. An unoffered
+`ask_user` produces the same unknown-tool result, not a pending interaction.
 
 The build script emits the TypeScript tree and copies the runtime assets just as
 the root build does: prompts come from `source/prompts/` and provider presets

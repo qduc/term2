@@ -1,5 +1,7 @@
 /** One headless run as a client of the direct host. `cli.ts` owns signals, as it does for any `RunHandle`. */
 import fs from 'node:fs';
+import { openDirectApplicationMcp } from './direct-application-mcp.js';
+import type { DirectMcp } from './direct-mcp.js';
 import { runDirectHeadless } from '../clients/headless/index.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import { openDirectSessionTarget, type DirectSessionTarget } from './direct-application-target.js';
@@ -13,15 +15,25 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
     const { io, prompt, resumeId, conversationsDir, selection, autoApprove = false, output = 'plain' } = request;
     let application: DirectApplication | null = null;
     let target: DirectSessionTarget | null = null;
+    let mcp: DirectMcp | undefined;
     let profileMetadata: Readonly<Record<string, unknown>> = {};
     try {
       const opened = await openDirectSessionTarget(request.ssh, request.lite === true, stop.signal);
       target = opened;
+      mcp = await openDirectApplicationMcp({
+        target: opened,
+        conversationsDir,
+        interactive: false,
+        onNotice: (message) => io.stderr.write(`MCP: ${message}\n`),
+      });
+      // Headless owns one frozen generation; settle BEFORE first surface/session.
+      await mcp?.whenSettled();
+      stop.signal.throwIfAborted();
       const app = await createDirectApplication({
         conversationsDir,
         selection,
         ...(request.profileExplicit !== undefined ? { profileExplicit: request.profileExplicit } : {}),
-        surface: () => ({ autoApprove, interactive: false, ...opened.surface }),
+        surface: () => ({ autoApprove, interactive: false, ...opened.surface, ...(mcp ? { mcp } : {}) }),
         authority: opened.authority,
         ...(opened.binding ? { sessionBinding: opened.binding } : {}),
         hooks: { root: fs.realpathSync(process.cwd()), mode: 'non-interactive' },
@@ -67,8 +79,15 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
       return { kind: 'failed' };
     } finally {
       try {
-        await application?.close();
-        await target?.close();
+        try {
+          await application?.close();
+        } finally {
+          try {
+            await mcp?.close();
+          } finally {
+            await target?.close();
+          }
+        }
       } catch {
         // The durable terminal, or the failure to write it, has already decided the result.
       } finally {

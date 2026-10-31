@@ -34,9 +34,13 @@ import { rollSessionOver } from './direct-application-rollover.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority, type DirectAuthorityFactory } from './direct-application-workspaces.js';
 import { createDirectInputPreview } from './direct-input-preview.js';
 import { sessionStart } from './direct-host-config-access.js';
+import { createDirectMcpRefresh } from './direct-application-mcp.js';
+import type { DirectMcp } from './direct-mcp.js';
 
 export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun' | 'rollover'> & {
   readonly conversationsDir: string;
+  /** Interactive local app only. Borrowed catalog; manager outlives app.close(). */
+  readonly mcpCatalog?: Pick<DirectMcp, 'onCatalogChanged'>;
   readonly authority: DirectAuthority | DirectAuthorityFactory;
   /** The modes with public hooks today: the terminal UI and headless. ACP and serve have none. */
   readonly hooks?: DirectHookOptions;
@@ -127,11 +131,31 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     },
     hooks,
   );
-  const store = createDirectSessionStore({
+  const nativeStore = createDirectSessionStore({
     directory: options.conversationsDir,
     resolveWorkspace: (root, identity) => authority.resolveStored(root, identity),
     createRuntime: (context) => runtimes.create(context),
   });
+  const refresh = options.mcpCatalog
+    ? createDirectMcpRefresh(options.mcpCatalog, (message) => selection.logger.warn(message))
+    : undefined;
+  // Every app-owned opening, including successor/rollover paths, observes the
+  // same manager epoch. A catalog change during async construction remains stale.
+  const store: DirectLocalStore = {
+    ...nativeStore,
+    async create(...args) {
+      const epoch = refresh?.epoch ?? 0;
+      const session = await nativeStore.create(...args);
+      refresh?.track(session, epoch);
+      return session;
+    },
+    async open(...args) {
+      const epoch = refresh?.epoch ?? 0;
+      const session = await nativeStore.open(...args);
+      refresh?.track(session, epoch);
+      return session;
+    },
+  };
   const authority = typeof options.authority === 'function' ? options.authority(store) : options.authority;
   const create = authority.createSession ?? store.create;
   const sessions: DirectLocalStore = {
@@ -215,6 +239,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       return next.id;
     },
     async close() {
+      refresh?.close();
       try {
         await host.dispose();
       } finally {

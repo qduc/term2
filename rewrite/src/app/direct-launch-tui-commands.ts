@@ -11,7 +11,8 @@
 import { randomUUID } from 'node:crypto';
 import { createDurableGoal, formatGoalStatus } from '../../../source/services/conversation/durable-goal.js';
 import { composeHandoffMessage } from '../../../source/services/handoff/handoff-flow-reducer.js';
-import { loadMcpConfig } from '../../../source/services/mcp/mcp-config.js';
+import { formatMcpStatus } from '../../../source/services/mcp/mcp-status.js';
+import type { DirectMcp } from './direct-mcp.js';
 import { injectSkillIntoTurn } from '../../../source/types/user-turn.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import { isControlSocketName } from '../clients/control/index.js';
@@ -30,6 +31,8 @@ type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
 export type DirectTuiCommandOptions = {
   readonly app: DirectApplication;
   readonly root: string;
+  readonly mcp?: DirectMcp;
+  readonly onMcpAuthorizationUrl?: (url: string) => void;
   readonly bridge: DirectControlBridge;
   readonly remote?: DirectSessionTarget['restart'];
   /** The current session as this client last folded it. */
@@ -185,13 +188,10 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return { sessionId: await app.handoff(connection.sessionId, named, text) };
   };
 
-  /** Configuration is all this can show: nothing in this executable connects a server yet. */
-  const mcp = async (): Promise<CommandResult> => {
-    if (remote) return { message: 'MCP servers are not available over SSH in this executable.' };
-    const { servers, notes, userConfigPath } = await loadMcpConfig({ workspaceRoot: root });
-    if (!servers.length) return { message: `No MCP servers configured. Define them in ${userConfigPath}.` };
-    const lines = servers.map(({ name, provenance, transport }) => `  ${name} (${provenance} ${transport})`);
-    return { message: ['Configured, not connected in this executable:', ...lines, ...notes].join('\n') };
+  const requireMcp = (): DirectMcp => {
+    if (remote) throw new Error('MCP servers are not available over SSH in this executable.');
+    if (!options.mcp) throw new Error('MCP is not enabled for this application.');
+    return options.mcp;
   };
 
   return {
@@ -230,7 +230,12 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'handoff':
           return handoff(connection, input);
         case 'mcp':
-          return mcp();
+          return { message: formatMcpStatus(requireMcp().status()) };
+        case 'mcp-login': {
+          if (!argument || rest.length !== 1) throw new Error('Usage: /mcp-login <server>');
+          const server = await requireMcp().login(argument, options.onMcpAuthorizationUrl);
+          return { message: `MCP server "${server.name}" is ${server.state}.` };
+        }
         case 'goal':
           return goal(connection.sessionId, input.trim().slice('/goal'.length));
         case 'restart':

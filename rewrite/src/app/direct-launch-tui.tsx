@@ -23,6 +23,8 @@ import { createDirectControlBridge, type DirectControlBridge } from './direct-la
 import { createDirectTuiCommands } from './direct-launch-tui-commands.js';
 import { performRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
+import { openDirectApplicationMcp } from './direct-application-mcp.js';
+import type { DirectMcp } from './direct-mcp.js';
 
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
 
@@ -43,6 +45,7 @@ function DirectTui({
   app,
   root,
   remote,
+  mcp,
   initial,
   bridge,
   restart,
@@ -51,6 +54,7 @@ function DirectTui({
   readonly app: DirectApplication;
   readonly root: string;
   readonly remote: DirectSessionTarget['restart'];
+  readonly mcp?: DirectMcp;
   readonly initial: DirectConnection;
   readonly bridge: DirectControlBridge;
   readonly restart: (plan: DirectRestartPlan) => void;
@@ -66,6 +70,8 @@ function DirectTui({
         root,
         bridge,
         remote,
+        mcp,
+        onMcpAuthorizationUrl: (url) => stderr.write(`MCP authorization: ${url}\n`),
         restart,
         latest: () => latest.current,
         publish(next) {
@@ -73,7 +79,7 @@ function DirectTui({
           setConnection(next);
         },
       }),
-    [app, root, remote, bridge, restart],
+    [app, root, remote, mcp, bridge, restart],
   );
   return (
     <Tui
@@ -89,7 +95,12 @@ function DirectTui({
 
 type Restart = { plan?: DirectRestartPlan };
 
-async function runTui(request: InteractiveRequest, target: DirectSessionTarget, pending: Restart): Promise<number> {
+async function runTui(
+  request: InteractiveRequest,
+  target: DirectSessionTarget,
+  pending: Restart,
+  mcp?: DirectMcp,
+): Promise<number> {
   const { conversationsDir, selection, resumeId, fork, profileExplicit, controlSocket } = request;
   const { settings } = selection;
   const { root } = target;
@@ -98,7 +109,13 @@ async function runTui(request: InteractiveRequest, target: DirectSessionTarget, 
     conversationsDir,
     selection,
     ...(profileExplicit !== undefined ? { profileExplicit } : {}),
-    surface: (sessionId) => ({ interactive: true, ...bridge.outbound(sessionId), ...target.surface }),
+    surface: (sessionId) => ({
+      interactive: true,
+      ...bridge.outbound(sessionId),
+      ...target.surface,
+      ...(mcp ? { mcp } : {}),
+    }),
+    ...(mcp ? { mcpCatalog: mcp } : {}),
     // The person at this terminal named the model, as with `-m` today.
     authorizeModel: () => undefined,
     authority: target.authority,
@@ -111,7 +128,7 @@ async function runTui(request: InteractiveRequest, target: DirectSessionTarget, 
   const onSignal = (signal: NodeJS.Signals): void => {
     exitCode = signal === 'SIGINT' ? 130 : 143;
     if (unmount) unmount();
-    else process.exit(exitCode);
+    // Setup unwinds through the same app/MCP cleanup once its current await ends.
   };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
@@ -129,7 +146,9 @@ async function runTui(request: InteractiveRequest, target: DirectSessionTarget, 
       ? await detectTerminalBackground({ stdin, stdout })
       : undefined;
 
+    if (exitCode !== 0) return exitCode;
     if (controlSocket) stderr.write(`${await bridge.attachAtStartup(initial.sessionId, controlSocket)}\n`);
+    if (exitCode !== 0) return exitCode;
 
     const instance = render(
       (
@@ -139,6 +158,7 @@ async function runTui(request: InteractiveRequest, target: DirectSessionTarget, 
               app={app}
               root={root}
               remote={target.restart}
+              mcp={mcp}
               initial={initial}
               bridge={bridge}
               restart={(plan) => {
@@ -157,21 +177,34 @@ async function runTui(request: InteractiveRequest, target: DirectSessionTarget, 
   } finally {
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
-    await bridge.close();
-    await app.close();
+    try {
+      await bridge.close();
+    } finally {
+      await app.close();
+    }
   }
 }
 
 export async function launchTui(request: InteractiveRequest): Promise<number> {
   if (!(await confirmHomeStart(request))) return 1;
-  // A signal during setup exits the process, so nothing outlives this signal.
   const target = await openDirectSessionTarget(request.ssh, request.lite, new AbortController().signal);
   const pending: Restart = {};
   let exitCode: number;
+  let mcp: DirectMcp | undefined;
   try {
-    exitCode = await runTui(request, target, pending);
+    mcp = await openDirectApplicationMcp({
+      target,
+      conversationsDir: request.conversationsDir,
+      interactive: true,
+      onNotice: (message) => stderr.write(`MCP: ${message}\n`),
+    });
+    exitCode = await runTui(request, target, pending, mcp);
   } finally {
-    await target.close();
+    try {
+      await mcp?.close();
+    } finally {
+      await target.close();
+    }
   }
   if (pending.plan) performRestart(pending.plan);
   return exitCode;

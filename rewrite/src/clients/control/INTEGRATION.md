@@ -56,3 +56,26 @@ the protocol's structured origins, submission records, queue pause reasons and
 rich task metadata, and the actual Session/queue/replay operations behind them.
 The external task handoff records exact commits and remaining owner gaps;
 this document makes no runtime acceptance claim.
+
+## Native command receipts (protocol 82d37ded)
+
+`status.commands` and `get(pending).commands` retain the native per-invocation
+`commandId`, original request/revision and actual typed receipt. The control
+projection distinguishes pending, finished, negative rejection and unknown
+outcome-unobserved interruption. Pending commands count as working in the v1
+phase, not as success. Finished retry means admission of its exact turnId, not
+model/tool completion; rolled_over only names the actual accepted successor.
+An absent command projection is null; absence of an ID is not permission to
+execute. The shared protocol reducer folds command_started/command_finished.
+
+The v1 control/Discord mutation methods remain submit, steer and interrupt;
+they do not issue retry/compact/configure/rewind/rollover commands or translate
+slash text into them. Submit keeps its clientRequestId (not a native commandId),
+and foreground interrupt keeps Session's untargeted/second-stop behavior. App
+owns keyed native command invocation: allocate a fresh commandId once per human
+invocation, preserve it for that invocation's receipt lookup, and use the read-only
+command_status operation to recover after a lost acknowledgement. Pending,
+not_found and outcome_unobserved are not grants to rerun an unknown effect.
+No client command-kind cache, automatic resend or successor creation belongs
+in this adapter. The pure exported controlCommandState can also classify an
+actual command receipt returned to app code without changing that ownership.

@@ -139,19 +139,19 @@ export async function handleSessionRoute(
     }
     case 'abort': {
       if (!validate.isTurnBody(body)) return invalid('abort request is invalid');
-      if (connection.snapshot.status === 'idle' && connection.snapshot.activeTurnId === null)
-        return {
-          status: 200,
-          body: { sessionId: connection.sessionId, turnId: body.turnId, accepted: false, alreadySettled: true },
-        };
-      // A capture followed by an untargeted cancel could cancel a successor turn. The protocol
-      // needs expectedTurnId checked atomically by Session, not a transport snapshot comparison.
-      return publicError(
-        503,
-        'turn_abort_unavailable',
-        'turn-targeted cancellation requires the direct Session cancel contract',
-        true,
-      );
+      // The expected identity is checked by the Session capability under admission ownership.
+      // Never read the foreground and then send an untargeted cancel: it may hit a successor.
+      const result = await connection.send({
+        type: 'cancel',
+        target: { kind: 'foreground' },
+        expectedTurnId: body.turnId,
+      });
+      if (!result.ok) return commandFailure(result);
+      if (result.kind !== 'accepted') return unavailable('turn abort receipt');
+      return {
+        status: 202,
+        body: { sessionId: connection.sessionId, turnId: body.turnId, accepted: true },
+      };
     }
     default:
       return publicError(403, 'gateway_unavailable', 'gateway operation is unavailable');

@@ -9,7 +9,7 @@ const TRUNCATED = '[truncated: session transcript size limit]';
 type Command = {
   callId: string;
   toolName: string;
-  status: 'completed' | 'failed' | 'unknown';
+  status: 'running' | 'completed' | 'failed' | 'unknown';
   output?: string;
   error?: string;
 };
@@ -63,23 +63,40 @@ function transcriptMessages(snapshot: WireSnapshot): Message[] {
       true,
     );
   const byId = new Map(snapshot.messages.map((message) => [message.id, message]));
+  const toolsById = new Map(snapshot.tools.map((tool) => [tool.executionId, tool]));
+  const commandsByTurn = new Map<string, Command[]>();
+  // Tool order comes from the accepted mixed timeline, not the runtime's separate tool array.
+  for (const entry of snapshot.timeline ?? []) {
+    if (entry.kind !== 'tool') continue;
+    const tool = toolsById.get(entry.id);
+    if (!tool) return incompleteTimeline();
+    const commands = commandsByTurn.get(tool.turnId) ?? [];
+    commands.push(commandCard(tool));
+    commandsByTurn.set(tool.turnId, commands);
+  }
+  const replyTurns = new Set(
+    snapshot.messages.flatMap((message) => (message.role === 'assistant' && message.turnId ? [message.turnId] : [])),
+  );
   const ordered =
-    snapshot.timeline === null
-      ? snapshot.messages
-      : snapshot.timeline
-          .filter((entry) => entry.kind === 'message')
-          .map((entry) => {
-            const message = byId.get(entry.id);
-            if (!message)
-              throw new ServerHttpError(
-                503,
-                'projection_unavailable',
-                'direct transcript timeline is incomplete',
-                true,
-              );
-            return message;
-          });
-  for (const message of ordered) {
+    snapshot.timeline ?? snapshot.messages.map((message) => ({ kind: 'message' as const, id: message.id }));
+  for (const entry of ordered) {
+    if (entry.kind === 'tool') {
+      const tool = toolsById.get(entry.id);
+      if (!tool) return incompleteTimeline();
+      if (replyTurns.has(tool.turnId) || commandTurns.has(tool.turnId)) continue;
+      // A tool-only or stopped-before-text turn still has cards. This is a deterministic
+      // presentation row at the accepted tool boundary, not an invented assistant message/fact.
+      result.push({
+        id: projectionText(`tools-${tool.turnId}`, 256),
+        role: 'bot',
+        text: '',
+        commands: commandsByTurn.get(tool.turnId)?.slice(0, 64),
+      });
+      commandTurns.add(tool.turnId);
+      continue;
+    }
+    const message = byId.get(entry.id);
+    if (!message) return incompleteTimeline();
     if (message.role === 'tool') continue;
     if (snapshot.tools.length && message.role === 'assistant' && !message.turnId)
       throw new ServerHttpError(
@@ -91,9 +108,7 @@ function transcriptMessages(snapshot: WireSnapshot): Message[] {
     const turnId = message.turnId;
     const commands =
       message.role === 'assistant' && turnId && !commandTurns.has(turnId)
-        ? snapshot.tools
-            .filter((tool) => tool.turnId === turnId && (tool.status === 'completed' || tool.status === 'unknown'))
-            .map(commandCard)
+        ? (commandsByTurn.get(turnId) ?? []).slice(0, 64)
         : [];
     if (commands.length && turnId) commandTurns.add(turnId);
     result.push({
@@ -129,7 +144,14 @@ function commandCard(tool: WireTool): Command {
   return {
     callId: tool.executionId,
     toolName: projectionText(tool.toolName, 256),
-    status: tool.status === 'unknown' ? 'unknown' : tool.isError ? 'failed' : 'completed',
+    status:
+      tool.status === 'called' || tool.status === 'started'
+        ? 'running'
+        : tool.status === 'unknown'
+        ? 'unknown'
+        : tool.isError
+        ? 'failed'
+        : 'completed',
     ...(output && output !== error ? { output } : {}),
     ...(error ? { error } : {}),
   };
@@ -141,4 +163,8 @@ function commandText(text: string | undefined, max: number): string | undefined 
   if (!text) return undefined;
   const bounded = projectionText(text, max);
   return /^Bearer\s+|^sk-[A-Za-z0-9]/u.test(bounded) ? '[output withheld: looks like a credential]' : bounded;
+}
+
+function incompleteTimeline(): never {
+  throw new ServerHttpError(503, 'projection_unavailable', 'direct transcript timeline is incomplete', true);
 }

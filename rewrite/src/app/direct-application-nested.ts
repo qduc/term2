@@ -20,11 +20,11 @@ export function createNestedAuthorizer(
   return (request) => {
     const authority = resolve(request);
     const { provider, model } = authority.request.model;
-    // Settings are read per run: the source's pools are live, and mentor has its own.
-    const pool =
-      authority.role === 'mentor'
-        ? settings.get('agent.mentorPool')
-        : getTierModelPoolEntries(getAncillaryTierForRole(authority.role), settings);
+    // Read per run, as the source does. Mentor has a tier like any role, used when its own pool is empty.
+    const pool = [
+      ...getTierModelPoolEntries(getAncillaryTierForRole(authority.role), settings),
+      ...(authority.role === 'mentor' ? settings.get('agent.mentorPool') : []),
+    ];
     if (![sessionModel, ...pool].some((entry) => entry.provider === provider && entry.model === model)) {
       throw new Error(`A ${authority.role} run may not use ${provider}/${model}: no setting names that model.`);
     }

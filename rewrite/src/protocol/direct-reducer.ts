@@ -32,6 +32,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
   switch (event.type) {
     case 'snapshot': return event.payload.snapshot;
     case 'turn_started': return { ...state,
+      ...(event.payload.admission ? { admissions: [...state.admissions.filter(item => item.clientRequestId !== event.payload.admission!.clientRequestId), event.payload.admission] } : {}),
       messages: event.payload.input.reduce((items, item) => message(items, item), state.messages),
       ...(event.payload.foreground ? { status: 'running' as const, activeTurnId: event.turnId, reasoning: '', lastError: null } : {}),
     };

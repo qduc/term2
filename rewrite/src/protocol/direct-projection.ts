@@ -41,8 +41,8 @@ export class DirectProjection {
     switch (fact.type) {
       case 'session_started': return [this.#event('configuration', { model: fact.model, ...(fact.reasoning ? { reasoning: fact.reasoning } : {}) }, seq, null)];
       case 'turn_started': return [
-        ...(fact.submission ? [this.#event('admission', { admission: { kind: 'started', clientRequestId: fact.submission.clientRequestId, messageId: fact.submission.messageId, turnId: fact.turnId } }, seq, turnId)] : []),
         this.#event('turn_started', { foreground: true,
+          ...(fact.submission ? { admission: { kind: 'started' as const, clientRequestId: fact.submission.clientRequestId, messageId: fact.submission.messageId, turnId: fact.turnId } } : {}),
           input: fact.input.flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; }),
         }, seq, turnId),
       ];

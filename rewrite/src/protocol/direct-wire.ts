@@ -111,7 +111,7 @@ export type WireSnapshot = {
 
 export type WireEventPayloads = {
   snapshot: { readonly snapshot: WireSnapshot };
-  turn_started: { readonly input: readonly WireMessage[]; readonly foreground: boolean };
+  turn_started: { readonly input: readonly WireMessage[]; readonly foreground: boolean; readonly admission?: WireAdmission };
   text_delta: { readonly delta: string; readonly messageId: string; readonly modelStep: number };
   reasoning_delta: { readonly delta: string; readonly modelStep: number | null; readonly messageId: string | null };
   message: { readonly message: WireMessage; readonly replacesDraftId?: string };

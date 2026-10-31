@@ -30,8 +30,8 @@ export type DirectConversationRuntime = {
 export type DirectSessionStoreOptions = {
   /** Required, separate conversations-next directory. No default to old storage. */
   readonly directory: string;
-  /** Re-resolves authority: v1 session metadata stores a path, not a workspace grant. */
-  readonly resolveWorkspace: (root: string) => Workspace | Promise<Workspace>;
+  /** Obtain a CURRENT grant. Stored identity is a comparison hint, never authority. */
+  readonly resolveWorkspace: (root: string, identity?: Workspace) => Workspace | Promise<Workspace>;
   /** App assembles models/tools/settings. Construction must not run a provider or tool. */
   readonly createRuntime: (
     context: DirectRuntimeContext,
@@ -58,11 +58,16 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
   const assertOpen = (): void => {
     if (closed) throw new Error('direct Session store is closed');
   };
-  const resolveWorkspace = async (root: string): Promise<Workspace> => {
-    const workspace = await options.resolveWorkspace(root);
-    if (path.resolve(workspace.root) !== path.resolve(root))
-      throw new Error('resolved workspace does not match the stored root');
-    return { ...workspace, root: path.resolve(workspace.root) };
+  const resolveWorkspace = async (root: string, identity?: Workspace): Promise<Workspace> => {
+    const workspace = await options.resolveWorkspace(root, identity);
+    if (identity) {
+      if (identity.root !== root || !sameWorkspace(workspace, identity))
+        throw new Error('current workspace grant does not match the stored/requested identity');
+    } else if (workspace.target !== 'local' || path.resolve(workspace.root) !== path.resolve(root)) {
+      // Path-only direct records cannot identify an SSH endpoint or retain remote access.
+      throw new Error('path-only direct Session requires a matching current local workspace grant');
+    }
+    return workspace.target === 'local' ? { ...workspace, root: path.resolve(workspace.root) } : { ...workspace };
   };
   const remember = (id: string, construct: () => Promise<DirectLiveSession>): Promise<DirectLiveSession> => {
     const existing = sessions.get(id);
@@ -121,6 +126,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
             meta: {
               id: context.id,
               workspace: context.workspace.root,
+              workspaceIdentity: context.workspace,
               model: context.model,
               profile: ownedRuntime.profile,
               appVersion: ownedRuntime.appVersion,
@@ -158,7 +164,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       workspace = { ...workspace };
       model = { ...model };
       validateBinding(binding);
-      const authority = await resolveWorkspace(workspace.root);
+      const authority = await resolveWorkspace(workspace.root, workspace);
       if (!sameWorkspace(authority, workspace))
         throw new Error('requested workspace does not match resolved authority');
       // Inspect names before mkdir or parsing anything. An old directory is never imported.
@@ -193,7 +199,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       // Every caller's binding is checked before joining a shared live writer.
       // remember installs its construction promise before workspace/runtime assembly.
       return remember(id, async () => {
-        const workspace = await resolveWorkspace(metadata.workspace);
+        const workspace = await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity);
         return construct(
           {
             id,
@@ -215,7 +221,11 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       for (const id of ids) {
         if (cursor !== undefined && id <= cursor) continue;
         const metadata = sessionMetadata(id, readFacts(logPath(directory, id)));
-        summaries.push({ id, workspace: await resolveWorkspace(metadata.workspace), model: metadata.model });
+        summaries.push({
+          id,
+          workspace: await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity),
+          model: metadata.model,
+        });
       }
       return { sessions: summaries };
     },
@@ -277,7 +287,9 @@ function sessionMetadata(id: string, facts: readonly Fact[]): SessionStartedFact
 
 function sameWorkspace(left: Workspace, right: Workspace): boolean {
   return (
-    path.resolve(left.root) === path.resolve(right.root) && left.access === right.access && left.target === right.target
+    left.access === right.access &&
+    left.target === right.target &&
+    (left.target === 'local' ? path.resolve(left.root) === path.resolve(right.root) : left.root === right.root)
   );
 }
 

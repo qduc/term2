@@ -30,6 +30,7 @@ type SourceToolOptions = {
   readonly settings: ISettingsService;
   readonly sessionAccess: SessionAccessState;
   readonly sessionId: string;
+  readonly checkInterceptors?: (name: string, input: unknown) => Promise<string | null>;
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
 };
 
@@ -253,6 +254,8 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
     approval: (input, context) => approvalFor(definition, input, context, options),
     async execute(input, context) {
       context.signal.throwIfAborted();
+      const rejection = await options.checkInterceptors?.(definition.name, input);
+      if (rejection) return { output: rejection, isError: true };
       const answer = await questionAnswer(definition, input, context);
       context.signal.throwIfAborted();
       // A direct allow means one execution only, including the separate Docker capability.
@@ -296,7 +299,7 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
 export function createSourceToolRegistry(
   definitions: readonly AnyToolDefinition[],
   options: SourceToolOptions,
-): ToolRegistry & { dispose(): void } {
+): ToolRegistry & { adaptTool(definition: AnyToolDefinition): Tool; dispose(): void } {
   const owners = new Set<NestedApprovalOwner>();
   const tools = new Map<string, Tool>();
   for (const definition of definitions) {
@@ -306,6 +309,17 @@ export function createSourceToolRegistry(
   return {
     get: (name) => tools.get(name),
     available: () => [...tools.values()],
+    adaptTool(definition) {
+      options.policies.register({
+        toolName: definition.name,
+        parameters: definition.canonicalParameters ?? definition.parameters,
+        needsApproval: definition.needsApproval,
+        checkInterceptors: (input) => options.checkInterceptors?.(definition.name, input) ?? Promise.resolve(null),
+      });
+      // Adaptation does not add authority to the fixed base offering. The native
+      // request capability owns which of these tools enters its actual registry.
+      return adaptTool(definition, options, owners);
+    },
     dispose() {
       for (const owner of owners) owner.close();
       owners.clear();

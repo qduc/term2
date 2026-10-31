@@ -208,12 +208,13 @@ function replayProjection(
     }
     if (isDirectQueueFactType(fact.type)) {
       for (const item of queue.accept(fact, active?.turnId ?? null)) appendHuman(item);
-      if (fact.type === 'queue_steered') context = { ...context, goalReminders: [] };
+      // Human steers reset the goal window; automatic steers keep the same reminders.
+      if (fact.type === 'queue_steered') context = reduceDirectContext(context, fact, queue.state.records);
       return;
     }
     if (isDirectContextFactType(fact.type)) {
       const accepted = parseDirectContextFact(fact);
-      context = reduceDirectContext(context, accepted);
+      context = reduceDirectContext(context, accepted, queue.state.records);
       if (accepted.type === 'memory_personal_snapshot') {
         if (personalSnapshots.has(accepted.admissionId))
           throw new Error('replay: duplicate personal snapshot admission');
@@ -237,7 +238,7 @@ function replayProjection(
       return;
     }
     queue.accept(fact, active?.turnId ?? null);
-    context = reduceDirectContext(context, fact);
+    context = reduceDirectContext(context, fact, queue.state.records);
     switch (fact.type) {
       case 'session_started':
         if (sessionId && sessionId !== fact.id) throw new Error('replay: conflicting Session identity');

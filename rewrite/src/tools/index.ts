@@ -46,7 +46,11 @@ export type InteractionDecision = (
   | { readonly kind: 'allow' }
   | { readonly kind: 'deny'; readonly reason?: string }
   | { readonly kind: 'answer'; readonly answer: string }
-) & { readonly stopAfterApprovalResolution?: boolean };
+) & {
+  /** Settle this selected decision/body/result, then stop later work/model continuation.
+   * This is not cancellation. An empty question answer records the unanswered result. */
+  readonly stopAfterApprovalResolution?: boolean;
+};
 export type ToolInteractionRequest = {
   readonly kind: 'approval' | 'question';
   readonly toolName: string;

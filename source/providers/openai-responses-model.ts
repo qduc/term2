@@ -1,3 +1,4 @@
+import { ResponseToolArgumentScopes } from './tool-argument-stream-scope.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
@@ -511,6 +512,7 @@ function completedEvent(
 export interface ResponseEventNormalizationState {
   toolNamesByIndex: Map<number | string, string>;
   toolArgumentLengthsByIndex: Map<number | string, number>;
+  toolArgumentScopes: ResponseToolArgumentScopes;
   /** Reasoning items already surfaced so a full-text summary part is not re-emitted. */
   reasoningEmittedItemIds: Set<string>;
   /**
@@ -525,6 +527,7 @@ export function createResponseEventNormalizationState(): ResponseEventNormalizat
   return {
     toolNamesByIndex: new Map(),
     toolArgumentLengthsByIndex: new Map(),
+    toolArgumentScopes: new ResponseToolArgumentScopes(),
     reasoningEmittedItemIds: new Set(),
     compactionStartedAtByIndex: new Map(),
   };
@@ -589,6 +592,9 @@ export function normalizeResponseEvent(
   }
   if (event.type === 'response.output_item.added') {
     const item = event.output_item ?? event.item;
+    if (item?.type === 'function_call' || item?.type === 'custom_tool_call' || item?.type === 'mcp_call') {
+      state.toolArgumentScopes.observe(event);
+    }
     if ((item?.type === 'function_call' || item?.type === 'custom_tool_call') && typeof item.name === 'string') {
       const index = typeof event.output_index === 'number' ? event.output_index : item.id ?? 0;
       state.toolNamesByIndex.set(index, item.name);
@@ -619,7 +625,12 @@ export function normalizeResponseEvent(
     const argumentCharCount = (state.toolArgumentLengthsByIndex.get(index) ?? 0) + delta.length;
     state.toolArgumentLengthsByIndex.set(index, argumentCharCount);
     const toolName = state.toolNamesByIndex.get(index);
-    return { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
+    return {
+      type: 'tool_call_streaming_delta',
+      ...state.toolArgumentScopes.observe(event),
+      ...(toolName ? { toolName } : {}),
+      argumentCharCount,
+    };
   }
   // opencode may deliver the assembled arguments only on the done frames rather
   // than as incremental deltas. Surface the full count so the UI still shows the
@@ -636,7 +647,12 @@ export function normalizeResponseEvent(
     if (argumentCharCount <= previousLength) return null;
     state.toolArgumentLengthsByIndex.set(index, argumentCharCount);
     const toolName = state.toolNamesByIndex.get(index);
-    return { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
+    return {
+      type: 'tool_call_streaming_delta',
+      ...state.toolArgumentScopes.observe(event),
+      ...(toolName ? { toolName } : {}),
+      argumentCharCount,
+    };
   }
   if (event.type === 'response.output_item.delta') {
     const delta = event.delta;
@@ -646,7 +662,12 @@ export function normalizeResponseEvent(
     const argumentCharCount = (state.toolArgumentLengthsByIndex.get(index) ?? 0) + argumentsText.length;
     state.toolArgumentLengthsByIndex.set(index, argumentCharCount);
     const toolName = state.toolNamesByIndex.get(index);
-    return { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
+    return {
+      type: 'tool_call_streaming_delta',
+      ...state.toolArgumentScopes.observe(event),
+      ...(toolName ? { toolName } : {}),
+      argumentCharCount,
+    };
   }
   if (event.type === 'response.output_item.done') {
     const item = event.item;
@@ -670,6 +691,7 @@ export function normalizeResponseEvent(
       state.toolArgumentLengthsByIndex.set(index, fullArguments.length);
       return {
         type: 'tool_call_streaming_delta',
+        ...state.toolArgumentScopes.observe(event),
         ...(typeof item.name === 'string' ? { toolName: item.name } : {}),
         argumentCharCount: fullArguments.length,
       };

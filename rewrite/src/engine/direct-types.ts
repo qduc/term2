@@ -8,6 +8,7 @@ import type {
   ReasoningEffort,
   StopReason,
   ToolCallId,
+  ToolCallArgumentProgress,
   ToolSpec,
   Usage,
 } from '../model/index.js';
@@ -126,6 +127,8 @@ export type TurnDeps = {
   ) => Promise<NestedRunResult>;
 };
 export type TurnEvent =
+  /** Live-only progress. The actual physical request scopes reused provider IDs. */
+  | (ToolCallArgumentProgress & { readonly turnId: TurnId; readonly modelStep: number })
   | {
       readonly type: 'history_replaced';
       readonly history: readonly Item[];

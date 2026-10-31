@@ -36,7 +36,7 @@ import type { ProviderDefinition } from '../../../source/providers/registry.js';
 import { getProvider } from '../../../source/providers/index.js';
 import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
 import { MODEL_CATALOG } from '../../../source/providers/model-catalog/catalog.generated.js';
-import { isAbortLikeError } from '../../../source/utils/error-helpers.js';
+import { describeError, isAbortLikeError } from '../../../source/utils/error-helpers.js';
 import type {
   Item,
   ItemId,
@@ -397,13 +397,13 @@ function parseArguments(raw: string): unknown {
 // ---------- Errors ----------
 
 /**
- * Maps a provider failure onto `ModelError`. The message is the provider's own
- * body message when it has one (`500 boom` becomes `boom`), so it matches what
- * the old CLI printed. Retries already happened in `RetryingModel` or the SDK.
+ * Maps a provider failure onto `ModelError`. `describeError` gives the message
+ * the old headless CLI printed: it keeps the status (`500 boom`), the socket
+ * cause and the reauthentication sentence.
  */
 function toModelError(error: unknown, signal?: AbortSignal): ModelError {
   if (isModelError(error)) return error;
-  const message = messageOf(error);
+  const message = describeError(error);
   if (signal?.aborted || isAbortLikeError(error)) return { kind: 'cancelled', message, retryable: false };
   const status = statusOf(error);
   const kind = kindOf(status, message, error);
@@ -434,13 +434,6 @@ function isConnectionError(error: unknown, message: string): boolean {
     ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(code) ||
     /connection error|fetch failed|socket hang up|terminated|premature close|ended before the response/i.test(message)
   );
-}
-
-function messageOf(error: unknown): string {
-  if (isRecord(error) && isRecord(error.error) && typeof error.error.message === 'string') return error.error.message;
-  if (error instanceof Error) return error.message;
-  if (isRecord(error) && typeof error.message === 'string') return error.message;
-  return String(error);
 }
 
 function statusOf(error: unknown): number | undefined {

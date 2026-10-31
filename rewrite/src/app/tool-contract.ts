@@ -31,6 +31,8 @@ export type AgentSurface = {
   readonly providerOptions?: Readonly<Record<string, unknown>>;
   readonly notice: string | null;
   readonly runtime: {
+    /** Adapt native-owned source leaves against this SAME surface's policy/lifecycle context. */
+    adaptTool(definition: import('../../../source/tools/types.js').AnyToolDefinition): import('../tools/index.js').Tool;
     readonly tools: ToolRegistry;
     readonly toolContext: ToolContextSeed;
     readonly maxParallelToolCalls: number;

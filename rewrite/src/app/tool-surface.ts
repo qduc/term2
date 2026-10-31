@@ -125,6 +125,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     sessionAccess,
     sessionId,
     withAnswer: (answer, operation) => answers.run(answer, operation),
+    checkInterceptors: deps.checkToolInterceptors,
   });
   const modelSettings = agent.modelSettings;
   const maxOutputTokens = resolveRequestOutput(
@@ -155,6 +156,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     notice,
     runtime: {
       tools: registry,
+      adaptTool(definition) {
+        if (remote) throw new Error('Native local source-leaf adaptation is unavailable for SSH workspaces');
+        return registry.adaptTool(definition);
+      },
       toolContext: toolContext(selection, workspace),
       maxParallelToolCalls: settings.get('agent.maxParallelToolCalls') ?? 3,
       async dispose() {

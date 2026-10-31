@@ -40,9 +40,14 @@ export type TuiState = {
   readonly tools: readonly ToolView[];
   readonly interactions: readonly InteractionView[];
   readonly queue: readonly QueueItem[];
+  readonly queueState: string;
   readonly tasks: readonly TaskView[];
   readonly notices: readonly string[];
   readonly usage?: string;
+  readonly cost?: string;
+  readonly goal?: string;
+  readonly verification?: string;
+  readonly lastError?: string;
   readonly canRetry: boolean;
 };
 

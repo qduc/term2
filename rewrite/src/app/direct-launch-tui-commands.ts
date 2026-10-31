@@ -1,14 +1,17 @@
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
- * host or wire operation here, or it fails visibly. `/compact`, `/retry-*`, `/queue`,
- * `/answer`, `/steer`, `/followup` and `/cancel` never arrive here: the TUI sends
- * those itself. A replacement always attaches fresh: this host's connections cannot
- * drop, and a fresh snapshot needs no reasoning about transient state at a cursor.
+ * host or wire operation here, or it fails visibly. The TUI sends `/compact`, `/retry-*`,
+ * `/queue`, `/answer`, `/steer`, `/followup`, `/cancel`, `/clear`, `/rollover` and
+ * `/rewind` itself, and calls `switchSession` or `bridge` here for the app's part.
+ *
+ * A replacement always attaches fresh, so there is no retained cursor: this host's
+ * connections cannot drop, and a fresh snapshot needs no reasoning about what
+ * transient state a cursor covers.
  */
-import { createBridgeCommand } from '../../../source/commands/bridge-command.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
+import { isControlSocketName } from '../clients/control/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
-import type { TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
+import type { BridgeStatus, TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
 import type { DirectControlBridge } from './direct-launch-control.js';
@@ -22,7 +25,8 @@ export type DirectTuiCommandOptions = {
   readonly bridge: DirectControlBridge;
   /** The current session as this client last folded it. */
   readonly latest: () => WireSnapshot;
-  readonly replace: (connection: DirectConnection) => void | Promise<void>;
+  /** Shows this connection. Control has already moved, so the two never disagree. */
+  readonly publish: (connection: DirectConnection) => void;
   /** The app closes the host, then runs this plan. */
   readonly restart: (plan: DirectRestartPlan) => void;
 };
@@ -47,7 +51,7 @@ function assistantTexts(snapshot: WireSnapshot): readonly string[] {
 }
 
 export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIntegration {
-  const { app, root, bridge, latest, replace, restart } = options;
+  const { app, root, bridge, latest, publish, restart } = options;
   const { host, principal } = app;
 
   const settingsOf = (sessionId: string) => {
@@ -56,17 +60,9 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return settings;
   };
 
-  const clear = async (connection: TuiConnection): Promise<CommandResult> => {
-    const result = await send(connection, { type: 'reset' });
-    if (result.kind !== 'session_changed') throw new Error(`Unexpected reset response: ${result.kind}`);
-    await replace(await host.connect(principal, result.sessionId));
-    return {};
-  };
-
   const resume = async (sessionId: string | undefined): Promise<CommandResult> => {
     if (sessionId) {
-      await replace(await host.connect(principal, sessionId));
-      return {};
+      return { sessionId };
     }
     const { sessions } = await host.listSessions(principal);
     const here = sessions.filter((session) => session.workspace.root === root).map((session) => session.id);
@@ -88,29 +84,16 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return {};
   };
 
-  const rewind = async (connection: TuiConnection, target: string | undefined): Promise<CommandResult> => {
-    if (target) {
-      await send(connection, { type: 'rewind', targetId: target });
-      return {};
-    }
-    const result = await send(connection, { type: 'list_rewind_targets' });
-    if (result.kind !== 'rewind_targets') throw new Error(`Unexpected rewind response: ${result.kind}`);
-    const lines = result.targets.map(({ id, label }) => `${id}  ${label}`);
-    return { message: lines.length ? lines.join('\n') : 'Nothing to rewind to.' };
+  const bridgeStatus = (): BridgeStatus => {
+    const { server, isStartup } = bridge;
+    return {
+      sessionId: latest().sessionId,
+      startup: isStartup,
+      attachment: server
+        ? { name: server.name, socketPath: server.socketPath, discordInputEnabled: server.discordInputEnabled }
+        : null,
+    };
   };
-
-  // The bridge command answers exactly once on each path, including its async ones.
-  const runBridge = (sessionId: string, args: string): Promise<CommandResult> =>
-    new Promise((resolve) => {
-      createBridgeCommand({
-        getServer: () => bridge.server as never,
-        isStartup: bridge.isStartup,
-        connect: async (name) => (await bridge.connect(sessionId, name)) as never,
-        disconnect: () => bridge.disconnect(),
-        getSessionId: () => sessionId,
-        addSystemMessage: (message) => resolve({ message }),
-      }).action(args);
-    });
 
   const copy = async (argument: string | undefined): Promise<CommandResult> => {
     const back = argument === undefined ? 1 : Number(argument);
@@ -150,18 +133,12 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'quit':
         case 'exit':
           return { exit: true };
-        case 'clear':
-          return clear(connection);
         case 'resume':
           return resume(argument);
         case 'model':
           return model(connection, argument);
         case 'effort':
           return effort(connection, argument);
-        case 'rewind':
-          return rewind(connection, argument);
-        case 'bridge':
-          return runBridge(connection.sessionId, rest.join(' '));
         case 'copy':
           return copy(argument);
         case 'usage':
@@ -178,6 +155,29 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         default:
           throw new Error(`/${name} is not available in the direct executable yet.`);
       }
+    },
+    async switchSession(sessionId) {
+      const next = await host.connect(principal, sessionId);
+      try {
+        await bridge.rebind(sessionId);
+      } catch (error) {
+        next.close();
+        throw error;
+      }
+      publish(next);
+    },
+    bridge: {
+      status: async () => bridgeStatus(),
+      async connect(name) {
+        if (!isControlSocketName(name)) throw new Error('Invalid bridge socket name. Use 1–64 letters, digits, _ or -.');
+        await bridge.connect(latest().sessionId, name);
+        return bridgeStatus();
+      },
+      async disconnect() {
+        if (bridge.isStartup) throw new Error('This startup control socket cannot be disconnected at runtime.');
+        await bridge.disconnect();
+        return bridgeStatus();
+      },
     },
   };
 }

@@ -2,7 +2,12 @@
 import type { DirectLaunchRequest } from './direct-launch-types.js';
 
 export { runDirectHeadlessOnHost } from './direct-launch-headless.js';
-export type { DirectHeadlessRequest, DirectLaunchRequest } from './direct-launch-types.js';
+export type {
+  DirectHeadlessHandle,
+  DirectHeadlessRequest,
+  DirectHeadlessResult,
+  DirectLaunchRequest,
+} from './direct-launch-types.js';
 
 export async function launchDirect(request: DirectLaunchRequest): Promise<number> {
   switch (request.kind) {

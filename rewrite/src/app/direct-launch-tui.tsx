@@ -65,10 +65,9 @@ function DirectTui({
         bridge,
         restart,
         latest: () => latest.current,
-        async replace(next) {
+        publish(next) {
           latest.current = next.snapshot;
           setConnection(next);
-          await bridge.rebind(next.sessionId);
         },
       }),
     [app, root, bridge, restart],

@@ -1,7 +1,7 @@
 /** What `cli.ts` hands the direct application after parsing. No Session or engine authority crosses here. */
 import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
 import type { ServeArgs } from '../../../source/gateway/serve-args.js';
-import type { RunRequest } from './run-types.js';
+import type { RunHandle, RunRequest } from './run-types.js';
 import type { ProfileSelection } from './tool-contract.js';
 
 /**
@@ -22,7 +22,13 @@ export type DirectHeadlessRequest = RunRequest & {
   readonly output?: 'plain' | 'json';
   /** Reasoning deltas go to stderr, never stdout. */
   readonly showReasoning?: boolean;
+  /** Drops non-error event lines from stderr. */
+  readonly quiet?: boolean;
 };
+
+/** `context_paused` is the resumable stop that exits 2. */
+export type DirectHeadlessResult = { readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' };
+export type DirectHeadlessHandle = Omit<RunHandle, 'result'> & { readonly result: Promise<DirectHeadlessResult> };
 
 export type DirectControlSocketRequest = {
   /** Already checked with `isControlSocketName`; defaults to the pid in `cli.ts`. */

@@ -31,9 +31,16 @@ export type DirectRecoveryContext = {
   readonly cancelled: boolean;
   /** False if the local transcript cannot form a self-contained request. */
   readonly fullHistoryAvailable: boolean;
+  /** Retained caller policy input; physical request retries are not fresh starts. */
   readonly freshStartAllowed: boolean;
   /** Any accepted model output/effect in this logical turn (not bookkeeping). */
   readonly hasCommittedOutput: boolean;
+  /**
+   * Output from this failed physical request only. Absent retains the older
+   * conservative logical-turn gate; false permits retry after accepted prior
+   * responses only when completed tool pairs remain in full history.
+   */
+  readonly hasCurrentRequestOutput?: boolean;
   readonly tools: {
     readonly completed: number;
     readonly allCompleted: boolean;
@@ -117,7 +124,6 @@ export class DirectRecovery {
     if (!context.tools.allCompleted) return stop('unsettled_tools');
     const choice = chooseRecovery(context);
     if (!choice) return stop(context.hasCommittedOutput ? 'committed_output' : 'unrecoverable');
-    if (choice.kind === 'transient' && !context.freshStartAllowed) return stop('fresh_start_forbidden');
     if (!this.#withinLimit(choice.kind)) return stop('retry_limit');
 
     this.budget.noteRetryableFailure();
@@ -177,23 +183,29 @@ function chooseRecovery(context: DirectRecoveryContext): RecoveryChoice | undefi
     evidence === 'provider_state_rejected' ||
     evidence === 'connection_interrupted' ||
     zeroFrame;
-  if (context.hasCommittedOutput) {
+  const currentRequestOutput = context.hasCurrentRequestOutput ?? context.hasCommittedOutput;
+  const ambiguous = evidence === 'ambiguous_outcome' || failure.cause instanceof AmbiguousModelOutcomeError;
+  const ordinaryTransport =
+    !evidence &&
+    !ambiguous &&
+    failure.error.retryable &&
+    ['network', 'rate_limit', 'provider'].includes(failure.error.kind);
+  if (ordinaryTransport && !currentRequestOutput && (tools.completed === 0 || tools.completedPairsInHistory)) {
+    // Engine-owned pre-output transport retries replace the adapter's former
+    // hidden retry loop. Prior accepted responses stay in full history; all
+    // physical tools are settled and their pairs retained, never re-executed.
+    // Neither rebuilding that request nor freshStartAllowed:false turns this
+    // physical dispatch into a whole-turn replay. Keep its replay claim free.
+    return { kind: 'transient', automaticReplay: false };
+  }
+  if (context.hasCommittedOutput || currentRequestOutput) {
     return settledContinuation && chainFailure ? { kind: 'chain', automaticReplay: false } : undefined;
   }
-  if ((evidence === 'ambiguous_outcome' || failure.cause instanceof AmbiguousModelOutcomeError) && !zeroFrame)
-    return undefined;
+  if (ambiguous && !zeroFrame) return undefined;
   if (chainFailure) return { kind: 'chain', automaticReplay: !settledContinuation };
   if (evidence === 'model_behavior') return { kind: 'model_behavior', automaticReplay: true };
   if (evidence === 'service_tier_rejected') return { kind: 'service_tier', automaticReplay: false };
   if (evidence === 'transport_downgrade') return { kind: 'transport', automaticReplay: true };
-  if (!evidence && failure.error.retryable && ['network', 'rate_limit', 'provider'].includes(failure.error.kind)) {
-    // Engine-owned pre-output transport retries replace the adapter's former
-    // hidden retry loop. Re-preparing full history is not a whole-turn replay:
-    // spend the physical dispatch envelope, leaving the separate replay claim
-    // for explicit chain/model-behavior recovery. Accepted output and ambiguous
-    // outcomes have already been excluded above; no tool batch is replayed.
-    return { kind: 'transient', automaticReplay: false };
-  }
   return undefined;
 }
 

@@ -104,6 +104,12 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
   switch (fact['type']) {
     case 'session_started': {
       optionalText(fact, 'forkedFrom');
+      if ('workspaceIdentity' in fact) {
+        const workspace = object(fact['workspaceIdentity'], 'workspaceIdentity');
+        text(workspace['root'], 'workspaceIdentity.root');
+        text(workspace['target'], 'workspaceIdentity.target');
+        if (workspace['access'] !== 'read' && workspace['access'] !== 'read_write') fail('workspaceIdentity.access');
+      }
       if ('binding' in fact) {
         const binding = object(fact['binding'], 'binding');
         text(binding['client'], 'binding.client');

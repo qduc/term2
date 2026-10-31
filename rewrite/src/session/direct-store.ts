@@ -221,11 +221,15 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       for (const id of ids) {
         if (cursor !== undefined && id <= cursor) continue;
         const metadata = sessionMetadata(id, readFacts(logPath(directory, id)));
-        summaries.push({
-          id,
-          workspace: await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity),
-          model: metadata.model,
-        });
+        let workspace: Workspace;
+        try {
+          // A shared directory is a catalogue, not a grant. Foreign workspaces
+          // are invisible here; selecting an ID still uses strict open above.
+          workspace = await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity);
+        } catch {
+          continue;
+        }
+        summaries.push({ id, workspace, model: metadata.model });
       }
       return { sessions: summaries };
     },

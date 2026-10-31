@@ -31,7 +31,52 @@ export type NestedRunOutcome =
     }
   | { readonly kind: 'failed'; readonly error: ModelError };
 
+/** Public task data supplied by the owning Session, never a tool-owned task map. */
+export type SubagentTaskState = {
+  readonly taskId: string;
+  readonly sessionId: string;
+  readonly kind: 'subagent';
+  readonly label: string;
+  readonly name?: string;
+  readonly role?: string;
+  readonly model?: ModelRef;
+  readonly workspace?: Workspace;
+  readonly parentTurnId: string;
+  readonly parentExecutionId?: ExecutionId;
+  readonly sourceCallId?: string;
+  readonly origin?: unknown;
+  readonly mode: 'foreground' | 'background';
+  readonly status:
+    | 'running'
+    | 'waiting_for_answer'
+    | 'cancelling'
+    | 'completed'
+    | 'cancelled'
+    | 'failed'
+    | 'interrupted';
+  readonly startedAt: number;
+  readonly lastActivityAt: number;
+  readonly completedAt?: number;
+  readonly result?:
+    | { readonly kind: 'completed'; readonly value: unknown }
+    | { readonly kind: 'cancelled'; readonly value?: unknown }
+    | { readonly kind: 'failed'; readonly error: ModelError; readonly value?: unknown }
+    | { readonly kind: 'interrupted'; readonly reason: string; readonly value?: unknown };
+  readonly pendingInteractions: readonly unknown[];
+};
+export type SubagentTaskPort = {
+  list(): readonly SubagentTaskState[];
+  get(target: string): SubagentTaskState | undefined;
+  /** Abort only this waiter; cancellation of the child is a distinct explicit operation. */
+  wait(target: string, signal: AbortSignal): Promise<SubagentTaskState | undefined>;
+  cancel(target: string): { readonly ok: boolean; readonly code?: string };
+};
 export type NestedRunRequest = {
+  readonly mode?: 'foreground' | 'background';
+  readonly name?: string;
+  readonly role?: string;
+  readonly label?: string;
+  readonly maxOutputTokens?: number;
   readonly instructions: string;
   readonly items: readonly Item[];
   readonly toolNames: readonly string[];
@@ -39,7 +84,11 @@ export type NestedRunRequest = {
   readonly reasoning?: ReasoningEffort;
   readonly budget: NestedRunBudget;
 };
-export type NestedRunResult = { readonly items: readonly Item[]; readonly outcome: NestedRunOutcome };
+export type NestedRunResult = {
+  readonly runId?: string;
+  readonly items: readonly Item[];
+  readonly outcome: NestedRunOutcome;
+};
 
 export type ExecutionId = string & { readonly __brand: 'ExecutionId' };
 export type InteractionRequestId = string & { readonly __brand: 'InteractionRequestId' };
@@ -67,6 +116,7 @@ export type ToolInteractionRequest = {
 export type ToolContext = {
   /** Runs a subagent. The engine injects it, so tools never import engine/. */
   runNested(request: NestedRunRequest): Promise<NestedRunResult>;
+  readonly subagents?: SubagentTaskPort;
   readonly workspace: Workspace;
   readonly settings: SettingsReader;
   readonly signal: AbortSignal;

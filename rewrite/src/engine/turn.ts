@@ -59,6 +59,11 @@ export function startNestedTurn(
     if (!Number.isSafeInteger(limit) || limit < 0)
       throw new RangeError('Native branch limits must be nonnegative integers');
   }
+  if (
+    request.maxOutputTokens !== undefined &&
+    (!Number.isSafeInteger(request.maxOutputTokens) || request.maxOutputTokens <= 0)
+  )
+    throw new RangeError('Native branch output token limit must be a positive integer');
   if (!options.deps.toolContext) throw new Error('A branch requires an authorized workspace and settings');
   const names = new Set(request.toolNames);
   if (names.size !== request.toolNames.length || names.has('goal_check') || names.has('propose_goal'))
@@ -83,6 +88,7 @@ export function startNestedTurn(
       model: request.model,
       tools: tools.map((tool) => tool.spec),
       ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
+      ...(request.maxOutputTokens !== undefined ? { maxOutputTokens: request.maxOutputTokens } : {}),
       limits: { maxModelCalls: request.budget.maxModelCalls, maxToolCalls: request.budget.maxToolCalls },
     },
     {

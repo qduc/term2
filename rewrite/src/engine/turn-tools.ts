@@ -248,9 +248,29 @@ export class TurnTools {
 
   #context(root: Execution): ToolContext {
     const current = (): Execution => this.#scope.getStore() ?? root;
+    const subagents = () => {
+      const parent = current();
+      this.#checkBody(parent);
+      if (!this.deps.subagents) throw new Error('Session subagent controls are unavailable');
+      return this.deps.subagents({
+        turnId: this.spec.turnId,
+        parentExecutionId: parent.executionId,
+        signal: this.signal,
+      });
+    };
     return {
       ...this.deps.toolContext!,
       signal: this.signal,
+      ...(this.deps.subagents
+        ? {
+            subagents: {
+              list: () => subagents().list(),
+              get: (target: string) => subagents().get(target),
+              wait: (target: string, signal: AbortSignal) => subagents().wait(target, signal),
+              cancel: (target: string) => subagents().cancel(target),
+            },
+          }
+        : {}),
       runNested: (request) => {
         const parent = current();
         this.#checkBody(parent);

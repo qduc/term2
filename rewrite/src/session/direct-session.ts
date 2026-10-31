@@ -69,6 +69,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   let seq = 0;
   let active: Active | null = null;
   let closing = false;
+  const commands = new Set<Promise<unknown>>();
   let closingPromise: Promise<void> | undefined;
   let fault: ModelError | null = null;
   const subscribers = new Set<Subscriber>();
@@ -245,6 +246,32 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       const planned = conversation.snapshotInputPreview({ ...options.request, model: options.model, input: [draft] });
       return structuredClone({ ...planned, ...directPreviewLifecycle(durable, resumedAtSeq) });
     },
+    rewindTargets: () => conversation.rewindTargets(),
+    command(request) {
+      if (closing || fault)
+        return Promise.resolve({ kind: 'not_admitting' as const, reason: fault?.message ?? 'Session is closed' });
+      // Conversation acquires ownership synchronously, before this await. The
+      // existing facade drain remains the only semantic-stream reader.
+      const operation = conversation
+        .command(structuredClone(request), { ...options.request, model: options.model }, async () => {
+          if (active) await active.done;
+        })
+        .then(({ result, started }) => {
+          if (started) {
+            if (closing) started.turn.cancel();
+            startDrain(started.turn, started.turnId);
+          } else if (!closing && !fault) advance();
+          publishState();
+          return structuredClone(result);
+        })
+        .catch((error) => {
+          recordFault(error);
+          throw error;
+        });
+      commands.add(operation);
+      void operation.finally(() => commands.delete(operation)).catch(() => {});
+      return operation;
+    },
     submit,
     submitWithDelivery: submit,
     editQueue: (messageId, edit) => mutate({ kind: 'edit', messageId, edit }),
@@ -263,6 +290,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         conversation.tasks.requestStop(target.id);
         return;
       }
+      conversation.cancelCommand();
       conversation.queue({ kind: 'cancel', ...(state.activeTurnId ? { turnId: state.activeTurnId } : {}) });
       if (!state.queue.active) active?.turn.cancel();
       advance();
@@ -278,6 +306,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     close() {
       if (closingPromise) return closingPromise;
       closing = true;
+      conversation.cancelCommand();
       closingPromise = (async () => {
         // A budget check-in is a settled request boundary, not a parked run.
         // Stop it durably and let the engine accept its interrupted terminal;
@@ -291,6 +320,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
           }
         }
         if (!stoppingBudget) active?.turn.cancel();
+        if (commands.size) await Promise.allSettled([...commands]);
         if (active) await active.done;
         try {
           await conversation.close();

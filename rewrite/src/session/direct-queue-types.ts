@@ -61,7 +61,12 @@ export type DirectQueueFact =
       readonly cancelledMessageIds: readonly string[];
       readonly retainedMessageIds: readonly string[];
     }
-  | { readonly type: 'queue_settled'; readonly turnId: TurnId; readonly outcome: DirectQueueOutcome }
+  | {
+      readonly type: 'queue_settled';
+      readonly turnId: TurnId;
+      readonly outcome: DirectQueueOutcome;
+      readonly preservePendingSteers?: boolean;
+    }
   | { readonly type: 'queue_resumed' }
   | { readonly type: 'queue_recovered' };
 
@@ -80,7 +85,12 @@ export type DirectQueueCommand =
   /** Foreground stop; a second untargeted stop resumes a retained manual pause. */
   | { readonly kind: 'cancel'; readonly turnId?: TurnId }
   /** Call only after physical cleanup AND the Session completion barrier. */
-  | { readonly kind: 'settled'; readonly turnId: TurnId; readonly outcome: DirectQueueOutcome }
+  | {
+      readonly kind: 'settled';
+      readonly turnId: TurnId;
+      readonly outcome: DirectQueueOutcome;
+      readonly preservePendingSteers?: boolean;
+    }
   /** Reopen materialization, never an instruction to restart a run. */
   | { readonly kind: 'recover' };
 export type DirectQueueMutation =

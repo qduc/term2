@@ -118,7 +118,7 @@ export function isDirectContextFactType(type: string): boolean {
 export function reduceDirectContext(state: DirectContextState, fact: Fact | DirectContextFact): DirectContextState {
   switch (fact.type) {
     case 'turn_started':
-      return { ...state, goalReminders: [] };
+      return fact.retryContext ? state : { ...state, goalReminders: [] };
     case 'goal_changed':
     case 'goal_proposed':
       return { ...state, goal: reduceDirectGoal(state.goal, fact) };

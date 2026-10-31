@@ -41,6 +41,17 @@ export type StartedConversationTurn = { readonly turnId: import('../engine/index
 export type Conversation = {
   readonly id: string;
   run(request: TurnRequest): Turn;
+  /** Reserves mutation before awaiting the host's physical/completion barrier. */
+  command(
+    request: import('./direct-command-types.js').DirectCommandRequest,
+    settings: Omit<TurnRequest, 'input' | 'submission'>,
+    settleForeground: () => Promise<void>,
+  ): Promise<{
+    readonly result: import('./direct-command-types.js').DirectCommandResult;
+    readonly started?: StartedConversationTurn;
+  }>;
+  cancelCommand(): void;
+  rewindTargets(): readonly import('./direct-command-types.js').DirectRewindTarget[];
   submit(
     request: DirectQueueSubmission,
     settings: Omit<TurnRequest, 'input' | 'submission'>,

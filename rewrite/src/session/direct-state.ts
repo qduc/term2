@@ -7,6 +7,12 @@ export type { DirectDraft } from './facade-types.js';
 import { isDirectTaskFact, isDirectQueueFact, type Fact } from './facts.js';
 import { initialDirectContextState, reduceDirectContext } from './direct-context.js';
 import { createDirectQueueState, reduceDirectQueue, directQueueSteeredInput } from './direct-queue.js';
+import {
+  isDirectCommandFactType,
+  reduceDirectCommandReceipts,
+  recoverDirectCommands,
+} from './direct-command-receipts.js';
+import type { DirectCommandFact } from './direct-command-types.js';
 import { reduceDirectBackground } from './direct-background-replay.js';
 
 export type DirectDisplayTool = DirectToolDisplay & {
@@ -41,6 +47,7 @@ export function initialDirectState(id: string, workspace: Workspace, model: Mode
     queue: createDirectQueueState(),
     turnResults: [],
     requestCosts: [],
+    commands: [],
     pendingBudgets: [],
     timeline: [],
   };
@@ -53,6 +60,8 @@ export function directDraftId(turnId: TurnId, modelStep?: number): string {
 
 /** Applies one accepted fact without mutating any previously captured snapshot. */
 export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0): DirectPublicState {
+  if (isDirectCommandFactType(fact.type))
+    return { ...state, commands: reduceDirectCommandReceipts(state.commands, fact as DirectCommandFact) };
   const timeline = [...state.timeline];
   const add = (
     kind: import('./facade-types.js').DirectTimelineEntry['kind'],
@@ -120,6 +129,20 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
     };
   }
   switch (fact.type) {
+    case 'history_replaced': {
+      const retained = new Set(fact.history.map((item) => item.id));
+      const messages = fact.history.flatMap((item) => {
+        const known = state.messages.find((message) => message.id === item.id);
+        return known ? [{ ...known, ...messageFor(item)[0] }] : [];
+      });
+      const messageIds = new Set(messages.map((message) => message.id));
+      return {
+        ...state,
+        messages,
+        drafts: state.drafts.filter((draft) => retained.has(draft.id)),
+        timeline: state.timeline.filter((entry) => entry.kind !== 'message' || messageIds.has(entry.id)),
+      };
+    }
     case 'budget_opened':
       return { ...state, pendingBudgets: [...state.pendingBudgets, fact] };
     case 'budget_closed':
@@ -309,9 +332,11 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
 /** Reopening cannot resurrect a live interaction or claim an unobserved effect finished. */
 export function interruptedDirectState(state: DirectPublicState): DirectPublicState {
   const unfinished = state.tasks.some((task) => ['running', 'waiting_for_answer', 'cancelling'].includes(task.status));
-  if (!state.activeTurnId && !unfinished) return state;
+  const commands = recoverDirectCommands(state.commands).reduce(reduceDirectCommandReceipts, state.commands);
+  if (!state.activeTurnId && !unfinished) return { ...state, commands };
   return {
     ...state,
+    commands,
     status: state.status === 'closed' ? 'closed' : 'interrupted',
     activeTurnId: null,
     pendingInteractions: [],

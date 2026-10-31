@@ -221,25 +221,36 @@ export function bindDirectCapabilities(options: {
 export function directAcceptedGoalWindow(facts: readonly Fact[]): readonly DirectGoalHistoryItem[] {
   let window: DirectGoalHistoryItem[] = [];
   let turnId: TurnId | undefined;
+  let stepOffset = 0;
   const partials = new Map<number, { text: string; completed: boolean }>();
   for (const fact of facts) {
     if (fact.type === 'turn_started' || fact.type === 'queue_steered') {
+      if (fact.type === 'turn_started' && fact.retryContext) {
+        if (fact.retryContext.sourceTurnId !== turnId) throw new Error('Retry goal window has no accepted source turn');
+        const through = window.findIndex(({ item }) => item.id === fact.retryContext!.throughItemId);
+        window = through < 0 ? [] : window.slice(0, through + 1);
+        // Physical modelStep numbering restarts on a new Turn. Goal evidence
+        // must not treat the retried step as the old step's parallel calls.
+        stepOffset = Math.max(-1, ...window.map(({ modelStep }) => modelStep)) + 1;
+      } else {
+        window = [];
+        stepOffset = 0;
+      }
       turnId = fact.turnId;
-      window = [];
       partials.clear();
     } else if (fact.type === 'item' && fact.turnId === turnId) {
-      const modelStep = fact.modelStep ?? 0;
+      const modelStep = stepOffset + (fact.modelStep ?? 0);
       if (fact.item.type === 'assistant_message') partials.set(modelStep, { text: '', completed: true });
       window.push({ item: fact.item, modelStep });
     } else if (fact.type === 'text_delta' && fact.turnId === turnId) {
-      const step = fact.modelStep ?? 0;
+      const step = stepOffset + (fact.modelStep ?? 0);
       const previous = partials.get(step) ?? { text: '', completed: false };
       partials.set(step, { ...previous, text: previous.text + fact.delta });
     } else if (fact.type === 'model_response_completed' && fact.turnId === turnId) {
-      const partial = partials.get(fact.modelStep);
+      const partial = partials.get(stepOffset + fact.modelStep);
       if (partial?.text && !partial.completed)
         window.push({
-          modelStep: fact.modelStep,
+          modelStep: stepOffset + fact.modelStep,
           item: {
             type: 'assistant_message',
             id: `${turnId}-model-${fact.modelStep}-partial` as ItemId,

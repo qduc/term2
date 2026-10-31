@@ -16,6 +16,7 @@ import type {
 import type { DirectBackgroundFact } from './direct-background-types.js';
 import type { DirectQueueFact } from './direct-queue-types.js';
 import type { DirectContextFact } from './direct-context.js';
+import type { DirectCommandFact } from './direct-command-types.js';
 import type { BudgetDecision } from '../engine/direct-types.js';
 import type { ModelRequestCost, RunBudgetEvent, RunBudgetSnapshot } from '../engine/direct-recovery-budget.js';
 import type { StopReason } from '../model/index.js';
@@ -69,6 +70,11 @@ export type DirectTurnFact =
   | {
       readonly type: 'turn_started';
       readonly requestConfiguration?: import('./direct-preview.js').DirectPreviewConfiguration;
+      /** A command continuation reuses retained human context; it is not a new admission. */
+      readonly retryContext?: {
+        readonly sourceTurnId: TurnId;
+        readonly throughItemId: import('../model/index.js').ItemId;
+      };
       readonly turnId: TurnId;
       readonly input: readonly Item[];
       readonly submission?: SubmissionMetadata;
@@ -177,6 +183,7 @@ export type Fact =
   | DirectHistoryFact
   | DirectBranchFact
   | DirectRequestCostFact
+  | DirectCommandFact
   | DirectQueueFact
   | DirectBackgroundFact
   | DirectContextFact;

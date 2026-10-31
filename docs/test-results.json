@@ -28173,6 +28173,162 @@
         "/home/qduc/coord/term2/tasks/direct-engine-rewrite/task0-report.md"
       ],
       "notes": "Result counts are old CLI parity on this commit. Static gates passed on this commit; layer check at 526 edges and rejected a probe import from session/replay.ts. On c46ac0fa: pnpm test:integration 409 passed 1 skipped (41 files); pnpm test 28 passed; pnpm test:e2e 58 passed; pnpm test:provider-black-box 238 passed 1 skipped. CI port bench step on c46ac0fa and on base 6a192b81: 22 pass, 7 fail, same commands on both. All 7 pass on c46ac0fa with HOME set to an empty temp directory: they read this machine's real settings (shell.autoApproveMode always), so this is an environment dependency in the benches, not a Task 0 regression. Load evidence uses the throwaway spike over rewrite/dist, not the unimplemented new CLI: 288 app modules loaded, none denied (320 before the cuts on the throwaway copy)."
+    },
+    {
+      "id": "2026-10-31-m1-direct-path-final",
+      "timestamp": "2026-10-31T11:15:25Z",
+      "commit": "bd5b3201ed83d8e1b17bf9b06a8a583b3befe676",
+      "tree": "628d33ba9cb47ae6c005d894425010b38c25fe03",
+      "revision_kind": "clean commit",
+      "base_commit": "6a192b81335cb1772bad76f5ae5e2a72b6761073",
+      "task_ids": ["2026-10-31-m1-direct-path"],
+      "suite": "M1 direct path on the built executable: goldens and bench",
+      "command": "node rewrite/scripts/build.mjs && node rewrite/parity/run.mjs check --cli rewrite/dist/rewrite/src/app/cli.js headless-plain-answer settings-batch && node rewrite/bench/m1-direct.mjs",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Worktree .worktrees/rewrite-direct-lead, local fake providers. The full CI port step ran with an empty HOME and XDG variables unset; the bench also ran three times directly."
+      },
+      "result": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-integration-report.md",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/final2.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/port-step.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/bench-final-1.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/bench-final-2.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/bench-final-3.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/signal-stress-final.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/matrix-final.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/appendfail-final.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/wire-final.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/old-dir-unchanged.log"
+      ],
+      "notes": "Counts are the bench, 18/18 in all three runs. Also on this commit: goldens 2/2, CI port step 38/38 commands, pnpm test 28 passed, root and rewrite typecheck exit 0, signal stress 200 trials with 0 violations, 8 matrix modes, ENOSPC at 7 write positions, old conversation directory unchanged. Old-CLI, live and broader-suite tiers are the entries below."
+    },
+    {
+      "id": "2026-10-31-m1-direct-path-old-cli-suites",
+      "timestamp": "2026-10-31T11:15:25Z",
+      "commit": "ae4f637432964ecf0b7a9b95c2c2e0beb2eb2667",
+      "tree": "c2f85f68b033a9f6358287ca9b010ea0dfbe678e",
+      "revision_kind": "clean commit",
+      "base_commit": "6a192b81335cb1772bad76f5ae5e2a72b6761073",
+      "task_ids": ["2026-10-31-m1-direct-path"],
+      "suite": "Old CLI suites on the M1 branch: guards, integration, e2e, provider black-box, old parity",
+      "command": "pnpm build; pnpm test; pnpm test:integration; pnpm test:e2e; pnpm test:provider-black-box; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Local fake providers. These exercise the old CLI and are not coverage of the direct path."
+      },
+      "result": {
+        "passed": 742,
+        "failed": 0,
+        "skipped": 2,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 1,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-integration-report.md",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/build.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/guards.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/integration.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/e2e.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/blackbox.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/oldparity.log"
+      ],
+      "notes": "Guards 28, integration 409 passed 1 skipped, e2e 58, black-box 238 passed 1 skipped, old parity 9/9. Reused for bd5b3201 because ae4f6374..bd5b3201 changes only rewrite/ files, which the old CLI does not import. Guards were rerun on bd5b3201."
+    },
+    {
+      "id": "2026-10-31-m1-direct-path-new-cli-broad",
+      "timestamp": "2026-10-31T11:15:25Z",
+      "commit": "ae4f637432964ecf0b7a9b95c2c2e0beb2eb2667",
+      "tree": "c2f85f68b033a9f6358287ca9b010ea0dfbe678e",
+      "revision_kind": "clean commit",
+      "base_commit": "6a192b81335cb1772bad76f5ae5e2a72b6761073",
+      "task_ids": ["2026-10-31-m1-direct-path"],
+      "suite": "One-off integration and provider black-box suites pointed at the direct path with TERM2_TEST_CLI",
+      "command": "export TERM2_TEST_CLI=$W/rewrite/dist/rewrite/src/app/cli.js NODE_ENV=test; vitest run --reporter=json --config vitest.integration.config.ts; vitest run --reporter=json --config vitest.provider-black-box.config.ts --testTimeout=20000",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Local fake providers. One-off probe of surface outside M1, not a required gate; failures were expected for out-of-scope features."
+      },
+      "result": {
+        "passed": 555,
+        "failed": 92,
+        "skipped": 2,
+        "files_passed": null,
+        "files_failed": null,
+        "files_skipped": null,
+        "exit_code": 1
+      },
+      "failures": [
+        "Integration 65 of 410: --model/--provider 7, --json 3, --goal 17, --resume 6, --list-models/--refresh 4, model tool call 7, D9 refused suite directory 10, serve subcommand 5, release-local 3, CLI surface wording 3",
+        "Black-box 27 of 239: all routed to the direct path; 17 stopped at the interactive-terminal refusal and 10 at Unknown option --provider or -p"
+      ],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-integration-report.md",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/new-cli-integration-groups.txt",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/new-cli-integration-failures.txt",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/new-cli-calls.jsonl",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/new-cli-integration.json",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/new-cli-blackbox.json"
+      ],
+      "notes": "Not a pass and not M1 coverage. The 211 black-box passes do not reach the direct path. The release-local 3 are a direct-vitest harness artifact: they fail the same without TERM2_TEST_CLI and pass through pnpm exec cross-env."
+    },
+    {
+      "id": "2026-10-31-m1-direct-path-live",
+      "timestamp": "2026-10-31T11:15:25Z",
+      "commit": "ae4f637432964ecf0b7a9b95c2c2e0beb2eb2667",
+      "tree": "c2f85f68b033a9f6358287ca9b010ea0dfbe678e",
+      "revision_kind": "clean commit",
+      "base_commit": "6a192b81335cb1772bad76f5ae5e2a72b6761073",
+      "task_ids": ["2026-10-31-m1-direct-path"],
+      "suite": "Live subscription workflow on the built direct executable",
+      "command": "node live-followup.mjs grok grok-4.7; node live-followup.mjs codex gpt-6-luna",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Subscription providers grok and codex only, isolated settings and conversation directories under /tmp/m1live-*."
+      },
+      "result": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/live-followup.mjs",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/live-followup-grok.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/live-followup-codex.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/live-grok.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/live-codex.log"
+      ],
+      "notes": "Each provider: answer exit 0; follow-up through the public session API recalled 7Q4X from replayed history; mid-stream SIGINT exit 130 with all stdout in the log; follow-up after cancel completed (Grok answered 7, Codex 300, model behaviour). Reused for bd5b3201: its runtime change only moves line building inside the append try block, and the bench and probes rerun there cover that path."
     }
   ]
 }

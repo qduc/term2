@@ -19,6 +19,32 @@ export type HeadlessIo = {
   readonly stderr: { write(text: string): unknown };
 };
 
-export function renderTurn(_events: AsyncIterable<HeadlessEvent>, _io: HeadlessIo): Promise<{ readonly kind: string }> {
-  throw new Error('renderTurn is not implemented yet (M1 task 3)');
+/**
+ * Streams text deltas as they arrive. Only completed turns get a trailing
+ * newline; failure diagnostics go to stderr, while cancelled and failed
+ * partial output stays unterminated.
+ */
+export async function renderTurn(
+  events: AsyncIterable<HeadlessEvent>,
+  io: HeadlessIo,
+): Promise<{ readonly kind: string }> {
+  for await (const event of events) {
+    if (event.type === 'text_delta' && 'delta' in event && typeof event.delta === 'string') {
+      io.stdout.write(event.delta);
+      continue;
+    }
+    if (event.type === 'turn_ended' && 'result' in event) {
+      const result = event.result;
+      if (result.kind === 'completed') {
+        io.stdout.write('\n');
+      } else if (result.kind === 'failed') {
+        io.stderr.write(`error ${result.error?.message ?? 'Unknown error.'}\n`);
+      }
+      return result;
+    }
+  }
+
+  const result = { kind: 'failed', error: { message: 'Turn ended without a terminal event.' } };
+  io.stderr.write(`error ${result.error.message}\n`);
+  return result;
 }

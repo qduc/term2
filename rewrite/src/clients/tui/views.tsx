@@ -36,7 +36,7 @@ export function Activity({ state }: { readonly state: TuiState }): React.ReactEl
     {state.verification ? <Text>Verification: {state.verification}</Text> : null}
     {state.lastError ? <Text color={theme.danger}>Error: {state.lastError}</Text> : null}
     {state.tasks.map(task => <Text key={task.id}>Task {task.label}: {task.status}{task.detail ? ` — ${task.detail}` : ''}</Text>)}
-    {state.queue.map(item => <Text key={item.id}>Queued ({item.delivery}): {item.text}</Text>)}
+    {state.queue.map((item, index) => <Text key={item.id}>Queued {index + 1} ({item.delivery}): {item.text}</Text>)}
     {state.interactions.map((interaction, index) => <Box key={interaction.id} flexDirection="column">
       <Text bold>{index + 1}. {interaction.kind === 'approval' ? 'Approval' : 'Question'}{interaction.owner ? ` · ${interaction.owner}` : ''}: {interaction.title}</Text>
       {interaction.detail ? <Text>{interaction.detail}</Text> : null}

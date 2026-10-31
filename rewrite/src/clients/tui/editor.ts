@@ -1,10 +1,16 @@
 import { useRef, useState } from 'react';
+import { appendHistory, readHistory } from './history.js';
 
 /** Session-local editor history. Navigation restores the unfinished draft at the end. */
 export function useEditor(initialHistory: readonly string[]) {
   const [value, setValue] = useState('');
   const [inputKey, setInputKey] = useState(0);
-  const history = useRef([...initialHistory]);
+  const [loaded] = useState(() => {
+    try { return { entries: readHistory(), error: null as string | null }; }
+    catch (error) { return { entries: [] as string[], error: `History unavailable: ${error instanceof Error ? error.message : String(error)}` }; }
+  });
+  const history = useRef(loaded.entries.length ? loaded.entries : [...initialHistory]);
+  const [historyError, setHistoryError] = useState(loaded.error);
   const position = useRef(-1);
   const draft = useRef('');
   const valueRef = useRef(value);
@@ -31,11 +37,15 @@ export function useEditor(initialHistory: readonly string[]) {
     setInputKey(key => key + 1);
   };
   const accepted = (submitted: string, remember: boolean) => {
-    if (remember && submitted.trim() && history.current.at(-1) !== submitted) history.current.push(submitted);
+    if (remember && submitted.trim() && history.current.at(-1) !== submitted) {
+      history.current.push(submitted);
+      try { appendHistory(submitted); setHistoryError(null); }
+      catch (error) { setHistoryError(`History not saved: ${error instanceof Error ? error.message : String(error)}`); }
+    }
     position.current = -1;
     draft.current = '';
     // Do not erase a draft edited while the admission was in flight.
     if (valueRef.current === submitted) change('');
   };
-  return { value, change, navigate, accepted, inputKey };
+  return { value, change, navigate, accepted, inputKey, historyError };
 }

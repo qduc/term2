@@ -26,6 +26,9 @@ export type ReplayedBranch = {
   readonly branchId: string;
   readonly taskId: string;
   readonly turnId: TurnId;
+  /** Only ancestry explicitly recorded on branch_started; absent on older logs. */
+  readonly parentTurnId?: TurnId;
+  readonly rootTurnId?: TurnId;
   readonly history: readonly Item[];
   readonly status: 'idle' | 'interrupted';
 };
@@ -49,6 +52,14 @@ const OUTCOME_UNOBSERVED =
 
 type Call = Extract<Item, { type: 'tool_call' }>;
 type Start = Extract<Fact, { type: 'tool_started' }>;
+type RequestCost = Extract<Fact, { type: 'request_cost_recorded' }>;
+type BranchStream = {
+  readonly taskId: string;
+  readonly turnId: TurnId;
+  readonly parentTurnId?: TurnId;
+  readonly rootTurnId?: TurnId;
+  readonly facts: (Extract<Fact, { type: 'turn_started' }> | Extract<Fact, { type: 'branch_event' }>['fact'])[];
+};
 type Slot = { item: Item | null };
 type Partial = { readonly slot: Slot; readonly deltas: string[]; readonly id: ItemId };
 type Occurrence = {
@@ -92,7 +103,10 @@ function replayProjection(
   const queue = new DirectQueueReplay();
   let context = initialDirectContextState();
   const backgroundFacts: DirectBackgroundFact[] = [];
-  const branches = new Map<string, { taskId: string; turnId: TurnId; facts: DirectTurnFact[] }>();
+  const branches = new Map<string, BranchStream>();
+  // Accounting outlives transcript replacements/terminals. Only ownership is immutable;
+  // a later physical receipt may correct or enrich the same request's record.
+  const requestCosts = new Map<string, RequestCost>();
   let compactionState: ReplayedConversation['compactionState'];
   const humanSlots = new Map<string, Slot>();
   const personalSnapshots = new Map<string, Extract<DirectMemoryFact, { type: 'memory_personal_snapshot' }>>();
@@ -302,6 +316,21 @@ function replayProjection(
             : undefined;
         break;
       }
+      case 'request_cost_recorded': {
+        const previous = requestCosts.get(fact.record.requestId);
+        if (
+          previous &&
+          (previous.turnId !== fact.turnId ||
+            previous.rootTurnId !== fact.rootTurnId ||
+            previous.parentTurnId !== fact.parentTurnId)
+        )
+          throw new Error(`replay: request cost ownership changed for ${fact.record.requestId}`);
+        for (const branch of branches.values()) if (branch.turnId === fact.turnId) validateCostAncestry(fact, branch);
+        requestCosts.set(fact.record.requestId, fact);
+        // No requireActive: summary/failure/cancel receipts can arrive after a root
+        // terminal. Costs are not model-output receipts, usage events or Items.
+        break;
+      }
       case 'model_response_completed': {
         const turn = requireActive(fact.turnId, fact.type);
         if (turn.responses.has(fact.modelStep)) throw new Error('replay: duplicate model response receipt');
@@ -315,9 +344,12 @@ function replayProjection(
           backgroundFacts.some((item) => item.type === 'task_finished' && item.taskId === fact.taskId)
         )
           throw new Error('replay: branch has no live task owner');
+        for (const cost of requestCosts.values()) if (cost.turnId === fact.turnId) validateCostAncestry(cost, fact);
         branches.set(fact.branchId, {
           taskId: fact.taskId,
           turnId: fact.turnId,
+          ...(fact.parentTurnId === undefined ? {} : { parentTurnId: fact.parentTurnId }),
+          ...(fact.rootTurnId === undefined ? {} : { rootTurnId: fact.rootTurnId }),
           facts: [{ type: 'turn_started', turnId: fact.turnId, input: fact.input }],
         });
         break;
@@ -396,6 +428,8 @@ function replayProjection(
       branchId,
       taskId: branch.taskId,
       turnId: branch.turnId,
+      ...(branch.parentTurnId === undefined ? {} : { parentTurnId: branch.parentTurnId }),
+      ...(branch.rootTurnId === undefined ? {} : { rootTurnId: branch.rootTurnId }),
       history: view.history,
       status: view.status,
     });
@@ -538,4 +572,16 @@ function recoverRoots(turn: ActiveTurn): Fact[] {
     facts.push({ type: 'item', turnId: turn.turnId, item, ...(executionId === undefined ? {} : { executionId }) });
   }
   return facts;
+}
+
+/** Older branch records have no ancestry: never infer their root from current foreground activity. */
+function validateCostAncestry(
+  cost: RequestCost,
+  branch: { readonly parentTurnId?: TurnId; readonly rootTurnId?: TurnId },
+): void {
+  if (
+    (branch.parentTurnId !== undefined && branch.parentTurnId !== cost.parentTurnId) ||
+    (branch.rootTurnId !== undefined && branch.rootTurnId !== cost.rootTurnId)
+  )
+    throw new Error(`replay: request cost ancestry disagrees with branch for ${cost.record.requestId}`);
 }

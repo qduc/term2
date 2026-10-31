@@ -22,9 +22,7 @@ import { SessionIndexService } from './session-index/session-index-service.js';
 import { SessionIndexWorkerClient } from './session-index/session-index-worker-client.js';
 import type { CanonicalBrowseRequest } from './session-index/session-index-worker.js';
 import { SNIPPET_CHARS, scoreText, termsFor } from './session-search-helpers.js';
-// Matches the default tool-result byte cap (output trim maxCharacters); a larger
-// budget would only produce a bounded-failure envelope for non-scripted calls.
-export const MAX_SESSION_BROWSER_CHARS = 40_000;
+export { MAX_SESSION_BROWSER_CHARS } from '../../tools/session-browser/limits.js';
 const DEFAULT_INDEX_CHARS = 12_000;
 const DEFAULT_READ_CHARS = 12_000;
 const DEFAULT_LIMIT = 10;

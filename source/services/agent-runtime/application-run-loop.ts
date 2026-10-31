@@ -1,4 +1,5 @@
 import type { NestedApprovalLedger } from '../../contracts/nested-run-driver.js';
+import { MaxTurnsExceededError } from '../subagents/max-turns-error.js';
 import { waitForAbortableRead } from '../../contracts/abort-aware-wait.js';
 import { isOpenAICompaction, projectModelRequestHistory } from '../conversation/conversation-state-projector.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
@@ -249,20 +250,7 @@ export type NormalStopDecision =
       readonly diagnostics?: Readonly<Record<string, unknown>>;
     };
 
-/**
- * Compatibility error for legacy callers without a staged run budget. The loop
- * owns turn counting — the SDK-era `callModelInputFilter` hook is deliberately
- * not reintroduced.
- */
-export class MaxTurnsExceededError extends Error {
-  readonly maxTurns: number;
-
-  constructor(maxTurns: number) {
-    super(`Max turns (${maxTurns}) exceeded`);
-    this.name = 'MaxTurnsExceededError';
-    this.maxTurns = maxTurns;
-  }
-}
+export { MaxTurnsExceededError };
 
 export interface ApplicationRunLoopDeps {
   readonly resolveModel: (model: string) => StreamedModelTurn | Promise<StreamedModelTurn>;

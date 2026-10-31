@@ -1,5 +1,5 @@
 import type { SubagentResult } from './types.js';
-import { MaxTurnsExceededError } from '../agent-runtime/application-run-loop.js';
+import { MaxTurnsExceededError } from './max-turns-error.js';
 import { isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
 
 // Diagnostic text can describe cancellation or contain it in a path without

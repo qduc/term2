@@ -87,7 +87,7 @@ export type ToolSpec = {
   };
 };
 
-export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export type ModelRequest = {
   readonly model: ModelRef;
@@ -96,6 +96,9 @@ export type ModelRequest = {
   readonly tools: readonly ToolSpec[];
   readonly reasoning?: ReasoningEffort;
   readonly maxOutputTokens?: number;
+  readonly temperature?: number;
+  /** The agent's `modelSettings.providerData`, passed to the provider as is. */
+  readonly providerOptions?: Readonly<Record<string, unknown>>;
   /** Provider-side continuation, e.g. a previous response id. Opaque to callers. */
   readonly continuation?: unknown;
   /** Explicit provider continuation accepted by source-backed model adapters. */

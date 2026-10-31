@@ -49,7 +49,7 @@ export class TurnBudgetControl {
     outcome: ModelRequestCost['outcome'];
   }): void {
     const usdMicros = parseUsdMicros(input.costUsd);
-    this.#costs.set(input.requestId, {
+    const record: ModelRequestCost = {
       requestId: input.requestId,
       provider: input.model.provider,
       model: input.model.model,
@@ -68,7 +68,9 @@ export class TurnBudgetControl {
       ...(usdMicros !== undefined
         ? { usdMicros, source: 'provider' as const }
         : { unpricedReason: input.usage ? ('unknown_model' as const) : ('missing_usage' as const) }),
-    });
+    };
+    this.#costs.set(input.requestId, record);
+    this.deps.budget?.onRequestCost?.(record, { turnId: this.spec.turnId });
   }
 
   get wrappingUp(): boolean {
@@ -104,8 +106,18 @@ export class TurnBudgetControl {
   async beforeRequest(history: Item[]): Promise<'run' | 'wrap_up' | 'stop'> {
     if (!this.state || !this.deps.budget) return 'run';
     if (this.#wrapUp) return this.#wrapUpDispatched ? 'stop' : 'wrap_up';
-    const costs = new Map(this.deps.budget.costRecords?.().map((cost) => [cost.requestId, cost]));
-    for (const [id, cost] of this.#costs) costs.set(id, cost);
+    const costs = new Map(this.deps.budget.costRecords?.(this.spec.turnId).map((cost) => [cost.requestId, cost]));
+    for (const [id, cost] of this.#costs) {
+      const shared = costs.get(id);
+      // Actual provider charges win; otherwise retain a price supplied by the
+      // owning catalog/accounting capability instead of erasing it as unknown.
+      costs.set(
+        id,
+        !shared || cost.source === 'provider'
+          ? cost
+          : { ...cost, ...shared, outcome: cost.outcome, usage: cost.usage ?? shared.usage },
+      );
+    }
     const observations = [
       ...this.#observations.splice(0),
       ...this.state.evaluate({ turns: this.#turns, costRecords: [...costs.values()] }),
@@ -117,7 +129,8 @@ export class TurnBudgetControl {
         (event) =>
           event.type === 'tool_stall' &&
           event.toolName === stall.toolName &&
-          event.argumentsText === stall.argumentsText,
+          event.argumentsText === stall.argumentsText &&
+          event.count === stall.count,
       )
     )
       observations.push(stall);
@@ -156,9 +169,10 @@ export class TurnBudgetControl {
         continue;
       }
       if (!this.state.grantExtension(decision.grantedBy).granted) return 'stop';
-      break;
+      // A finite grant may still be smaller than the measured overrun. Never
+      // treat its existence as permission for an already-exhausted dispatch.
+      return this.beforeRequest(history);
     }
-    return 'run';
   }
 
   async #notice(history: Item[], text: string): Promise<void> {

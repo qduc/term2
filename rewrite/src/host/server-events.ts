@@ -81,16 +81,11 @@ function canonicalCandidate(
     case 'interaction_opened': {
       // Task-scoped interactions need the true nested owner/role, not a root relabeling.
       if (event.payload.interaction.taskId) {
-        const task = context.task;
-        if (!task || task.id !== event.payload.interaction.taskId || !task.turnId || !task.role)
-          return missing('canonical nested interactions require their accepted owner metadata');
         return {
           type: 'subagent_approval_required',
           payload: {
-            turnId: task.turnId,
+            ...taskIdentity(event.payload.interaction.taskId, context),
             childTurnId: event.payload.interaction.turnId,
-            agentId: task.id,
-            role: text(task.role, 256),
             interaction: interactions.project(event.sessionId, event.payload.interaction),
           },
         };
@@ -104,16 +99,14 @@ function canonicalCandidate(
       };
     }
     case 'interaction_resolved': {
-      if (event.payload.taskId) return missing('canonical nested resolutions require their accepted owner metadata');
       const resolution = event.payload.resolution;
       return {
         type: 'interaction_resolved',
         payload: {
           turnId: requiredTurn(event),
           interactionId: event.payload.requestId,
-          ...(task
-            ? { turnId: task.turnId, agentId: task.id, role: text(task.role!, 256), childTurnId: event.turnId }
-            : {}),
+          // Task closures already carry the parent turnId. Do not relabel it as a child turn.
+          ...(event.payload.taskId ? taskIdentity(event.payload.taskId, context) : {}),
           outcome:
             resolution.kind === 'cancelled' || resolution.kind === 'interrupted'
               ? 'cancelled'
@@ -183,15 +176,14 @@ function canonicalCandidate(
         payload: {
           turnId: requiredTurn(event),
           interactionId: event.payload.requestId,
-          ...(task
-            ? { turnId: task.turnId, agentId: task.id, role: text(task.role!, 256), childTurnId: event.turnId }
-            : {}),
           outcome: event.payload.decision.kind === 'stop' ? 'rejected' : 'approved',
         },
       };
     case 'budget_observed':
     case 'history_replaced':
     case 'model_response_completed':
+    // The pinned event vocabulary has no automatic-memory notice envelope.
+    case 'automatic_memory_notice':
       return null;
     case 'subagent':
       return nestedCandidate(event, interactions, context);
@@ -221,6 +213,7 @@ function canonicalCandidate(
   }
 }
 /** Child publication keeps the outer accepted boundary and the real parent/child identities.
+ * A child turn terminal is not task settlement: only the Session's task_finished fact owns that.
  * Completed child messages are text turns; partial chunks are not mislabeled as completed replies.
  */
 function nestedCandidate(
@@ -229,16 +222,8 @@ function nestedCandidate(
   context: CanonicalEventContext,
 ): Candidate | null {
   const { event: child, agentId } = event.payload;
-  const task = context.task;
-  if (!task || task.id !== agentId || !task.turnId)
-    return missing('canonical child events require their accepted parent task identity');
-  const role = event.payload.role ?? task.role;
-  if (!role) return missing('canonical child events require their accepted role');
-  const finalText = child.type === 'turn_ended' ? child.payload.finalText : undefined;
   const identity = {
-    turnId: task.turnId,
-    agentId: text(agentId, 256),
-    role: text(role, 256),
+    ...taskIdentity(agentId, context, event.payload.role),
     ...(child.turnId !== null ? { childTurnId: child.turnId } : {}),
     ...(event.payload.branchId ? { branchId: event.payload.branchId } : {}),
   };
@@ -266,18 +251,28 @@ function nestedCandidate(
         type: 'subagent_approval_required',
         payload: { ...identity, interaction: interactions.project(event.sessionId, child.payload.interaction) },
       };
-    case 'turn_ended':
-      if (finalText == null) return missing('canonical child completion requires its Session-correlated terminal text');
+    case 'budget_opened':
       return {
-        type: child.payload.outcome === 'interrupted' ? 'subagent_interrupted' : 'subagent_completed',
+        type: 'subagent_approval_required',
+        payload: { ...identity, interaction: interactions.projectBudget(child.payload.request) },
+      };
+    case 'interaction_resolved':
+    case 'budget_closed':
+      return {
+        type: 'interaction_resolved',
         payload: {
           ...identity,
-          status: child.payload.outcome,
-          finalText: text(finalText, 16_384),
-          ...(child.payload.terminalCause !== undefined
-            ? { terminalCause: text(child.payload.terminalCause, 128) }
-            : {}),
-          ...(child.payload.error ? { error: text(child.payload.error.message) } : {}),
+          interactionId: child.payload.requestId,
+          outcome:
+            child.type === 'budget_closed'
+              ? child.payload.decision.kind === 'stop'
+                ? 'rejected'
+                : 'approved'
+              : child.payload.resolution.kind === 'cancelled' || child.payload.resolution.kind === 'interrupted'
+              ? 'cancelled'
+              : child.payload.resolution.kind === 'deny' || child.payload.resolution.kind === 'decline'
+              ? 'rejected'
+              : 'approved',
         },
       };
     case 'retrying': {
@@ -285,17 +280,44 @@ function nestedCandidate(
       return candidate ? { ...candidate, payload: { ...candidate.payload, ...identity } } : null;
     }
     case 'turn_started':
-    // The authoritative task descriptor owns subagent_started; the child root is not a new task.
+    case 'turn_ended':
+    // Task acceptance/settlement own subagent_started/completed, not a child root turn boundary.
     case 'text_delta':
     case 'reasoning':
     case 'reasoning_delta':
     case 'tool_called':
     case 'tool_progress':
     case 'usage':
+    case 'budget_observed':
+    case 'history_replaced':
+    case 'model_response_completed':
+    case 'automatic_memory_notice':
+    case 'snapshot':
+    case 'status_changed':
+    case 'retry_eligibility':
+    case 'configuration':
+    case 'task_progress':
+    case 'cost':
+    case 'notice':
+    case 'goal':
+    case 'goal_proposed':
+    case 'verification':
+    case 'error':
       return null;
     default:
       return missing('canonical child lifecycle requires its accepted task-owned projection');
   }
+}
+/** Accept only the task's original parent identity. A nested branch's outer turnId is its child,
+ * and a task interaction closure's outer turnId is already its parent; neither can be copied blindly.
+ */
+function taskIdentity(taskId: string, context: CanonicalEventContext, role?: string) {
+  const task = context.task;
+  if (!task || task.id !== taskId || !task.turnId)
+    return missing('canonical nested events require their accepted parent task identity');
+  const acceptedRole = role ?? task.role;
+  if (!acceptedRole) return missing('canonical nested events require their accepted role');
+  return { turnId: task.turnId, agentId: text(task.id, 256), role: text(acceptedRole, 256) };
 }
 function admissionCandidate(admission: WireAdmission): Candidate | null {
   if (admission.kind === 'duplicate') return null; // A read/retry is not a second admission event.

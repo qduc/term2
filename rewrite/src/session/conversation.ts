@@ -195,8 +195,9 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
           return { kind: 'failed', error: logFailure! };
         }
         requests.delete(requestId);
-        // Stop-after-resolution is durable but must not release an allowed body.
-        if (decision.stopAfterApprovalResolution) cancel();
+        // Stop is continuation control, not cancellation: the selected allowed
+        // body (or unanswered question result) must settle first. The engine
+        // suppresses later bodies/model steps while retaining cleanup ownership.
         handle.answer(requestId, decision);
         return { kind: 'accepted' };
       },

@@ -149,7 +149,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       if (request.kind === 'question') {
         // This policy has no user to answer. Resolve the exact question with
         // the stop marker, not an approval denial (which Session must reject).
-        // Session commits this closure and cancels before releasing a body.
+        // Session commits before resolution; the engine records the unanswered
+        // result and stops continuation, rather than cancelling that settlement.
         return { kind: 'answer', answer: '', stopAfterApprovalResolution: true };
       }
       // Headless auto-approval never silently grants Docker host control.

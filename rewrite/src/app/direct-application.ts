@@ -20,6 +20,7 @@ import { readFacts } from '../session/log.js';
 import { replay } from '../session/replay.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
+import type { Workspace } from '../tools/index.js';
 import type { ProfileSelection } from './tool-contract.js';
 import { startDirectHooks, type DirectHookOptions } from './direct-application-hooks.js';
 import { createDirectRuntimes, type DirectRuntimeOptions, type DirectRuntimes } from './direct-application-runtime.js';
@@ -94,7 +95,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
   const runtimes = createDirectRuntimes({ ...options, canRun: (workspace) => authority.canRun(workspace) }, hooks);
   const store = createDirectSessionStore({
     directory: options.conversationsDir,
-    resolveWorkspace: (root) => authority.resolveStored(root),
+    resolveWorkspace: (root, identity) => authority.resolveStored(root, identity),
     createRuntime: (context) => runtimes.create(context),
   });
   const authority = typeof options.authority === 'function' ? options.authority(store) : options.authority;
@@ -128,8 +129,8 @@ export async function createDirectApplication(options: DirectApplicationOptions)
         sourceId,
         ...(sessionBinding ? { expectedBinding: sessionBinding } : {}),
         // Refused here, or the copy would exist and then fail to open.
-        async resolveWorkspace(root) {
-          const workspace = await authority.resolveStored(root);
+        async resolveWorkspace(root, identity?: Workspace) {
+          const workspace = await authority.resolveStored(root, identity);
           if (!authority.canRun(workspace)) throw new Error('fork source belongs to a different workspace');
           return workspace;
         },

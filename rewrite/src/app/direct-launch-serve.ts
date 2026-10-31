@@ -117,7 +117,13 @@ function serverAuthority(grants: DirectWorkspaceAuthority, directory: string, ow
         await access.authorize(principal, request);
       },
       resolveGrant: (principal, grant) => access.resolveWorkspace(principal, grant),
-      resolveStored: (root) => access.resolveStoredRoot(root),
+      resolveStored(root, identity) {
+        // Grants are local only, so a recorded SSH target can never match one.
+        if (identity && identity.target !== 'local') {
+          throw new DirectProtocolError('forbidden', 'This server does not run SSH sessions.');
+        }
+        return access.resolveStoredRoot(root);
+      },
       // A read grant is a real grant here, enforced by the tools. Stored roots with no grant already threw.
       canRun: () => true,
       createSession: (workspace, model, binding) =>

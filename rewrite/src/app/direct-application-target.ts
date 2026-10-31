@@ -47,8 +47,11 @@ function remoteAuthority(workspace: Workspace): DirectAuthority {
       }
       return workspace;
     },
-    // Same contract as local: listing another project's session must not fail.
-    resolveStored: (root) => (root === workspace.root ? workspace : { root, target: workspace.target, access: 'read' }),
+    // A live connection is the only SSH grant, and it covers this one endpoint and root.
+    resolveStored(root, identity) {
+      if (root === workspace.root && identity?.target === workspace.target) return workspace;
+      throw new DirectProtocolError('forbidden', 'This session is not on the connected SSH workspace.');
+    },
     canRun: ({ root, access }) => root === workspace.root && access === workspace.access,
   };
 }

@@ -11,11 +11,11 @@ export type DirectAuthority = {
   /** A client's grant to the workspace a new session runs in. */
   resolveGrant(principal: Principal, grant: WorkspaceGrant): Workspace | Promise<Workspace>;
   /**
-   * The store's re-resolution of a stored path. Session metadata stores a path, not
-   * a grant, so a root that is not admitted resolves narrower instead of throwing:
-   * throwing here would fail a whole listing because of one other project's session.
+   * The current grant for a stored session. `identity` is what the session recorded:
+   * a hint to compare with, never authority. The store refuses any result that
+   * differs from it, so a narrower grant here refuses the session.
    */
-  resolveStored(root: string): Workspace | Promise<Workspace>;
+  resolveStored(root: string, identity?: Workspace): Workspace | Promise<Workspace>;
   /** May a stored session actually run here, rather than only be listed. */
   canRun(workspace: Workspace): boolean;
   /** For an authority that records who owns a session. Replaces the store's own create. */
@@ -54,7 +54,12 @@ export function createLocalAuthority(admits: (root: string) => boolean): DirectA
       }
       return resolved;
     },
-    resolveStored: workspace,
+    resolveStored(root, identity) {
+      if (identity && identity.target !== 'local') {
+        throw new DirectProtocolError('forbidden', 'This session belongs to an SSH workspace.');
+      }
+      return workspace(root);
+    },
     // Narrowing here only means "not admitted", so a local mode never runs it.
     canRun: ({ access }) => access === 'read_write',
   };

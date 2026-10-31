@@ -32,6 +32,8 @@ export type AgentSurface = {
   readonly notice: string | null;
   readonly runtime: {
     /** Adapt native-owned source leaves against this SAME surface's policy/lifecycle context. */
+    /** Withdraw the previous native leaf offering before building a replacement capability snapshot. */
+    resetAdaptedTools(): void;
     adaptTool(definition: import('../../../source/tools/types.js').AnyToolDefinition): import('../tools/index.js').Tool;
     readonly tools: ToolRegistry;
     readonly toolContext: ToolContextSeed;

@@ -1,9 +1,9 @@
 /**
- * Rollover moves a session's work to a new log. The Session calls this while it
- * holds its command reservation, so nothing can be admitted between the checks
- * here and the new session being written. Anything that cannot move refuses
+ * Rollover moves a session's work to a new log. Anything that cannot move refuses
  * before that write: queued input and live tasks belong to the old writer, and an
- * open approval would lose the only client that can answer it.
+ * open approval would lose the only client that can answer it. The Session calls
+ * this under its command reservation, which is what keeps these checks true while
+ * the successor is written; see rollover-session-needs.md for what it must hold.
  */
 import { randomUUID } from 'node:crypto';
 import type { SessionRolloverRequest } from '../../../source/contracts/session-rollover.js';

@@ -167,7 +167,14 @@ export type WireNativeCommandOutcome =
   | { readonly kind: 'rejected'; readonly code: 'ineligible' | 'stale' | 'busy' | 'unavailable' | 'cancelled' | 'failed'; readonly message: string }
   | { readonly kind: 'interrupted'; readonly reason: 'outcome_unobserved' };
 export type WireCommandReceipt = { readonly request: WireNativeCommandRequest; readonly revision: string; readonly outcome?: WireNativeCommandOutcome };
-
+/** Accepted Session planning notices; deliveries identify actual silent turns. */
+export type WireBackgroundNotice = { readonly id: string; readonly kind: 'completion' | 'control' | 'check_in'; readonly taskIds: readonly string[]; readonly text: string };
+export type WireNoticeDelivery = { readonly clientRequestId: string; readonly turnId: string; readonly notificationIds: readonly string[] };
+export type WireNotifications = { readonly notices: readonly WireBackgroundNotice[]; readonly deliveries: readonly WireNoticeDelivery[] };
+export type WireNotificationDrainResult =
+  | { readonly kind: 'started' | 'duplicate'; readonly turnId: string; readonly notificationIds: readonly string[] }
+  | { readonly kind: 'empty' | 'busy' }
+  | { readonly kind: 'not_admitting'; readonly reason: string };
 
 /** seq is a durable cursor, never the Session's private publication position.
  * null means no durable cursor is available (for example a transient-only state).
@@ -189,6 +196,7 @@ export type WireSnapshot = {
   readonly turnResults?: readonly WireTurnResult[];
   readonly requestCosts?: readonly WireRequestCost[];
   readonly commands?: readonly WireCommandReceipt[];
+  readonly notifications?: WireNotifications;
   readonly budgetObservations?: readonly { readonly turnId: string | null; readonly evidence: WireBudgetEvidence }[];
   readonly admissions: readonly WireAdmission[];
   readonly submissions?: readonly WireSubmissionRecord[];
@@ -214,11 +222,13 @@ export type WireSnapshot = {
 
 export type WireEventPayloads = {
   snapshot: { readonly snapshot: WireSnapshot };
-  turn_started: { readonly input: readonly WireMessage[]; readonly foreground: boolean; readonly admission?: WireAdmission };
+  turn_started: { readonly input: readonly WireMessage[]; readonly foreground: boolean; readonly silent?: true; readonly admission?: WireAdmission };
   text_delta: { readonly delta: string; readonly messageId: string; readonly modelStep: number };
   reasoning: { readonly text: string; readonly messageId: string; readonly modelStep: number | null };
   reasoning_delta: { readonly delta: string; readonly modelStep: number | null; readonly messageId: string | null };
   message: { readonly message: WireMessage; readonly replacesDraftId?: string };
+  /** Live-only source-measured cumulative count; no execution or persisted tool item. */
+  tool_call_streaming_delta: { readonly modelStep: number; readonly argumentCharCount: number; readonly toolName?: string; readonly callId?: string; readonly itemId?: string; readonly callIndex?: number };
   tool_called: { readonly tool: WireTool };
   tool_started: { readonly tool: WireTool };
   tool_progress: { readonly executionId: string; readonly chunk: string };
@@ -230,6 +240,8 @@ export type WireEventPayloads = {
   budget_observed: { readonly evidence: WireBudgetEvidence };
   history_replaced: { readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind' };
   request_cost_recorded: WireRequestCost;
+  background_notice_enqueued: { readonly notice: WireBackgroundNotice };
+  background_notices_delivered: WireNoticeDelivery;
   /** One accepted receipt fact, not proof a model/tool/successor completed. */
   command_started: { readonly receipt: WireCommandReceipt };
   command_finished: { readonly receipt: WireCommandReceipt & { readonly outcome: WireNativeCommandOutcome } };
@@ -281,6 +293,7 @@ export type WireCommand =
   | { readonly type: 'queue_discard' }
   | { readonly type: 'task_control'; readonly taskId: string; readonly action: 'cancel' | 'check_in' | 'foreground' | 'background' }
   | { readonly type: 'command_status'; readonly commandId: string }
+  | { readonly type: 'drain_background_notifications'; readonly requestId: string }
   | { readonly type: 'list_rewind_targets' }
   | { readonly type: 'rewind'; readonly commandId: string; readonly targetId: string }
   | { readonly type: 'reset' }
@@ -290,13 +303,15 @@ export type WireCommandErrorCode = 'invalid_command' | 'unavailable' | 'stale_in
 export type WireCommandResult =
   | { readonly ok: true; readonly kind: 'admitted'; readonly admission: WireAdmission }
   | { readonly ok: true; readonly kind: 'accepted' }
+  /** Exact admission/empty/busy result, not completion of the silent model turn. */
+  | { readonly ok: true; readonly kind: 'background_drain'; readonly result: Exclude<WireNotificationDrainResult, { readonly kind: 'not_admitting' }> }
   /** Atomic Session receipt, not a terminal or a promise that physical cleanup finished. */
   | { readonly ok: true; readonly kind: 'abort'; readonly result: { readonly kind: 'aborted'; readonly turnId: string; readonly discardedMessageIds: readonly string[] } | { readonly kind: 'no_op' | 'not_admitting'; readonly reason?: string } }
   | { readonly ok: true; readonly kind: 'rewind_targets'; readonly targets: readonly WireRewindTarget[] }
   | { readonly ok: true; readonly kind: 'preview'; readonly notices: readonly WireNotice[]; readonly requiresConfirmation: boolean }
   | { readonly ok: true; readonly kind: 'session_changed'; readonly sessionId: string }
   /** Pending means receipt-owned work, not command success or turn completion. */
-  | { readonly ok: true; readonly kind: 'command_pending'; readonly receipt: WireCommandReceipt }
-  | { readonly ok: true; readonly kind: 'command_finished'; readonly receipt: WireCommandReceipt & { readonly outcome: Exclude<WireNativeCommandOutcome, { readonly kind: 'rejected' | 'interrupted' }> } }
-  | { readonly ok: false; readonly code: 'command_rejected' | 'command_interrupted'; readonly commandId: string; readonly message: string; readonly receipt: WireCommandReceipt & { readonly outcome: WireNativeCommandOutcome } }
+  | { readonly ok: true; readonly kind: 'command_pending'; readonly replayed?: boolean; readonly receipt: WireCommandReceipt }
+  | { readonly ok: true; readonly kind: 'command_finished'; readonly replayed?: boolean; readonly receipt: WireCommandReceipt & { readonly outcome: Exclude<WireNativeCommandOutcome, { readonly kind: 'rejected' | 'interrupted' }> } }
+  | { readonly ok: false; readonly code: 'command_rejected' | 'command_interrupted'; readonly replayed?: boolean; readonly commandId: string; readonly message: string; readonly receipt: WireCommandReceipt & { readonly outcome: WireNativeCommandOutcome } }
   | { readonly ok: false; readonly code: Exclude<WireCommandErrorCode, 'command_rejected' | 'command_interrupted'>; readonly message: string; readonly commandId?: string };

@@ -95,8 +95,12 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...(state.activeTurnId ? { status: awaiting ? 'awaiting_interaction' : 'running' } : {}),
       };
     }
+    case 'background_notice_enqueued': return { ...state, notifications: { notices: [...(state.notifications?.notices ?? []), event.payload.notice], deliveries: state.notifications?.deliveries ?? [] } };
+    case 'background_notices_delivered': return { ...state, notifications: { notices: state.notifications?.notices ?? [], deliveries: [...(state.notifications?.deliveries ?? []), event.payload] } };
     case 'command_started':
     case 'command_finished': return { ...state, commands: commandReceipts(state.commands ?? [], event.payload.receipt) };
+    // Live argument evidence is not a finalized tool, root output, or replayable state.
+    case 'tool_call_streaming_delta': return state;
     case 'request_cost_recorded': return { ...state, requestCosts: [...(state.requestCosts ?? []).filter(cost => cost.record.requestId !== event.payload.record.requestId), event.payload] };
     case 'budget_opened': return { ...state,
       pendingBudgets: [...(state.pendingBudgets ?? []).filter(request => request.requestId !== event.payload.request.requestId), event.payload.request],

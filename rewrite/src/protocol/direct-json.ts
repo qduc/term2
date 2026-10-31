@@ -2,7 +2,7 @@
  * complete --json read model: callers must retain the fail-closed legacy gate.
  */
 import type { CommandMessage } from '../../../source/tools/types.js';
-import type { CommandMessageEvent, CostUpdateEvent } from '../../../source/services/conversation/conversation-events.js';
+import type { CommandMessageEvent, CostUpdateEvent, ToolCallStreamingDeltaEvent } from '../../../source/services/conversation/conversation-events.js';
 import type { WireEvent } from './direct-wire.js';
 
 /** Project one actual settled request record verbatim; ancestry remains on the wire
@@ -40,4 +40,12 @@ function isCommandMessage(value: unknown): value is CommandMessage {
     && ['pending', 'running', 'completed', 'failed', 'aborted', 'unknown'].some(status => status === message.status)
     && ['success', 'isApprovalRejection', 'autoApprovedByLlm'].every(key => message[key] === undefined || typeof message[key] === 'boolean')
     && ['failureReason', 'toolName', 'callId'].every(key => message[key] === undefined || typeof message[key] === 'string');
+}
+
+/** Emit only the old actual count/name DTO. Producing turn/step/call/branch scope
+ * stays in the wire envelope; no raw delta or finalized call is reconstructed.
+ */
+export function legacyToolCallStreamingDelta(event: Extract<WireEvent, { readonly type: 'tool_call_streaming_delta' }>): ToolCallStreamingDeltaEvent {
+  return { type: 'tool_call_streaming_delta', argumentCharCount: event.payload.argumentCharCount,
+    ...(event.payload.toolName !== undefined ? { toolName: event.payload.toolName } : {}) };
 }

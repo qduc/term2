@@ -61,6 +61,7 @@ public transcript messages. Known text/image tool-result parts are normalized.
 | branch_started / branch_event | one subagent wrapper with real task/branch identity and a scoped child event; child seq null, outer seq authoritative |
 | transient reasoning_delta | reasoning_delta; unknown step/message identity stays null |
 | transient tool_progress | tool_progress |
+| transient tool_call_streaming_delta | live-only actual turn/step/count/source scope; branch wrapper uses native ancestry, all seq null |
 | live state | snapshot; real runtimeError additionally settles event-driven clients with null seq |
 
 Stop-after-resolution is forwarded unchanged to the exact Session answer. It is
@@ -146,7 +147,7 @@ Reference: `source/acp-v2/session-backend.ts#mapEvent`.
 | reasoning_delta | reasoning_delta; reasoning summary supplies actual accepted identity |
 | tool_started | tool_called (called/pending) |
 | tool_dispatched | physical tool_started |
-| tool_call_streaming_delta | missing real argument-stream count producer; tool_called is too late |
+| tool_call_streaming_delta | actual live Session producer mapped below; parsed tool_called is never used as argument progress |
 | final | turn_ended + correlated messages; actual terminal cause only if supplied |
 | error | error / failed terminal, including null-seq runtime-only failure |
 
@@ -283,8 +284,9 @@ old `{type:'cost_update',record}` and preserves all optional price/normalized-us
 fields. It is a **bounded cost projection, not a complete legacy --json gate**.
 Headless selects actual owning root/tree via event.payload ancestry before writing
 that record; it must not infer a root from whichever turn is currently active.
-Old --json stays unavailable until real argument-stream, public command/ordered
-turn-item/final/approval and other required producer contracts exist. Raw wire
+Old --json stays unavailable until complete public command/ordered
+turn-item/final/approval and other required producer contracts exist; actual
+argument stream is now published and mapped in the followup below. Raw wire
 JSON is not legacy parity and no complete conversation_event producer is claimed.
 
 Native branch_started now supplies optional actual parent/root ownership; the
@@ -363,3 +365,40 @@ return durable unavailable failures until their real native authority lands.
 Decoder/replay registration of command facts and retryContext/requestConfiguration
 metadata remains a separate native owner integration dependency. No checks or
 runtime acceptance evidence is claimed before M6.
+
+
+## Session live stream, replayed result and silent notice followup (684f9ae0)
+
+Native producer original `e2f24aa3` (lead import `210bba91`) and Session publication
+`684f9ae0` now provide real live `tool_call_streaming_delta`. Protocol emits one
+null-seq frame with producing turnId, physical modelStep, unchanged actual cumulative
+argumentCharCount, and only supplied toolName/callId/itemId/callIndex. Call/item/
+index identities stay distinct; no execution ID, fake delta, completed tool/item
+or persisted/replayed progress is created. Native branch envelopes produce a
+null-seq subagent wrapper with actual task/branch/parent/root and inner child turn;
+root active identity/usage/transcript are untouched. Shared reducer intentionally
+retains no streaming replay state. `legacyToolCallStreamingDelta` returns only the
+old type/count/optional name, with actual scope left on wire envelopes. --json is
+still gated pending the remaining authoritative final/legacy coverage contracts.
+
+`684f9ae0` also adds authoritative native pending/finished `replayed:boolean`.
+`publicCommandResult` forwards it on both successful and negative receipt replies.
+Read-only command_status returns actual receipt status WITHOUT a replayed flag:
+reading a retained receipt does not classify an invocation as first or duplicate.
+No snapshot/timing inference or protocol idempotency mechanism was introduced.
+This supersedes the missing-replayed dependency recorded for f14c9baa above.
+
+The same native Fact union now includes background_notice_enqueued and
+background_notices_delivered. Protocol preserves each accepted boundary, native
+notice/planning text/task IDs, original delivery request/turn/notice IDs and retained
+snapshot.notifications. The public fold retains all notices/deliveries as native
+state does; clients derive pending IDs by excluding delivered notice IDs, not by
+guessing parent completion or fabricating notification text. Real silent
+turn_started carries silent:true and NO synthetic human input in public input/
+transcript. drain_background_notifications forwards its stable requestId unchanged
+to native drainBackgroundNotifications and returns the exact typed started/
+duplicate/empty/busy result, or not_admitting failure; started is actual silent
+turn admission, not completion. It is not a replacement Session waiter or implicit
+loop. Headless owns its native-task-aware drain/wait sequence and timeout/cancel
+reporting. Native notification decoder registration remains its owner's dependency.
+No tests/checks/builds/reviews/runtime evidence collected.

@@ -58,6 +58,7 @@ export function snapshotDirectState(state: DirectSessionState & { readonly tasks
     turnResults,
     requestCosts: state.requestCosts.map(publicRequestCost),
     commands: state.commands.map(publicCommandReceipt),
+    notifications: structuredClone(state.notifications),
     admissions: (state.queue ? state.queue.records.map(record => record.admission) : state.admissions).map(admission => ({ ...admission })),
     usage: { ...state.usage }, reasoning: state.reasoning,
     reasoningIdentity: previous?.reasoning === state.reasoning ? previous.reasoningIdentity ?? null : null,

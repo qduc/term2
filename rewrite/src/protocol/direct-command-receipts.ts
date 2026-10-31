@@ -36,16 +36,24 @@ export function publicCommandReceipt(receipt: DirectCommandReceipt): WireCommand
 export function publicCommandResult(commandId: string, result: DirectCommandResult): WireCommandResult {
   if (result.kind === 'conflict') return { ok: false, code: 'request_conflict', commandId, message: 'Command identity already belongs to a different request.' };
   if (result.kind === 'not_admitting') return { ok: false, code: 'not_admitting', commandId, message: result.reason };
-  const receipt = publicCommandReceipt(result.receipt);
-  if (result.kind === 'pending') return { ok: true, kind: 'command_pending', receipt };
+  return receiptResult(publicCommandReceipt(result.receipt), result.kind, result.replayed);
+}
+
+/** Status reads have no first-vs-duplicate invocation claim. Only the native
+ * command result supplies replayed; never infer it from a snapshot or timing.
+ */
+function receiptResult(receipt: WireCommandReceipt, kind: 'pending' | 'finished', replayed?: boolean): WireCommandResult {
+  const replay = replayed === undefined ? {} : { replayed };
+  if (kind === 'pending') return { ok: true, kind: 'command_pending', receipt, ...replay };
   const outcome = receipt.outcome;
   if (!outcome) throw new Error('Finished native command has no accepted outcome');
   if (outcome.kind === 'rejected' || outcome.kind === 'interrupted') return {
     ok: false, code: outcome.kind === 'rejected' ? 'command_rejected' : 'command_interrupted',
-    commandId, message: outcome.kind === 'rejected' ? outcome.message : 'Command outcome was not observed; effects must not be replayed.',
-    receipt: { ...receipt, outcome },
+    commandId: receipt.request.commandId,
+    message: outcome.kind === 'rejected' ? outcome.message : 'Command outcome was not observed; effects must not be replayed.',
+    receipt: { ...receipt, outcome }, ...replay,
   };
-  return { ok: true, kind: 'command_finished', receipt: { ...receipt, outcome } };
+  return { ok: true, kind: 'command_finished', receipt: { ...receipt, outcome }, ...replay };
 }
 
 /** Read actual retained Session receipts after a cache miss; unknown is not
@@ -56,7 +64,7 @@ export function commandStatus(session: DirectSession, commandId: string): WireCo
   try {
     const receipt = capture.state.commands.find(receipt => receipt.request.commandId === commandId);
     return receipt
-      ? publicCommandResult(commandId, { kind: receipt.outcome === undefined ? 'pending' : 'finished', receipt })
+      ? receiptResult(publicCommandReceipt(receipt), receipt.outcome === undefined ? 'pending' : 'finished')
       : { ok: false, code: 'not_found', commandId, message: 'No retained command receipt has this identity.' };
   } finally { capture.unsubscribe(); }
 }

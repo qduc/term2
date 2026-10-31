@@ -43,6 +43,19 @@ export class DirectContinuity {
 
   /** Full input in, provider-ready input out. New user turns cannot inherit tool debt. */
   prepare(canonical: ModelRequest, binding: DirectContinuityBinding, newTurn = false): PreparedDirectRequest {
+    const selected = this.preview(canonical, binding, newTurn);
+    if (!selected.chained) this.#checkpoint = undefined;
+    const ticket = ++this.#ticket;
+    this.#pending = { ticket, binding: structuredClone(binding), canonical: structuredClone(canonical) };
+    return { ticket, ...selected };
+  }
+
+  /** Select the exact provider-ready input without changing checkpoints, tickets or pending requests. */
+  preview(
+    canonical: ModelRequest,
+    binding: DirectContinuityBinding,
+    newTurn = false,
+  ): Omit<PreparedDirectRequest, 'ticket'> {
     const checkpoint = this.#checkpoint;
     const canChain =
       !this.#broken &&
@@ -53,11 +66,7 @@ export class DirectContinuity {
       hasPrefix(canonical.input, checkpoint.history) &&
       !(newTurn && checkpoint.debt.length > 0) &&
       paysToolDebt(canonical.input.slice(checkpoint.history.length), checkpoint.debt);
-    if (!canChain) this.#checkpoint = undefined;
-    const ticket = ++this.#ticket;
-    this.#pending = { ticket, binding: structuredClone(binding), canonical: structuredClone(canonical) };
     return {
-      ticket,
       chained: canChain,
       request:
         canChain && checkpoint

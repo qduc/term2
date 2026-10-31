@@ -1,6 +1,7 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
-import type { WireDecision, WireGrant, WireInteraction } from '../../protocol/direct-wire.js';
+import type { WireGrant, WireInteraction } from '../../protocol/direct-wire.js';
 
+import type { AcpAnswer } from './contract.js';
 import { requestQuestion } from './questions.js';
 
 // Preserve existing option ids. Scoped choices are offered only when Session
@@ -30,7 +31,7 @@ export async function requestPermission(input: {
   readonly interaction: WireInteraction;
   readonly client: acp.AgentContext;
   readonly signal: AbortSignal;
-}): Promise<WireDecision> {
+}): Promise<AcpAnswer> {
   const interaction = input.interaction;
   if (interaction.kind === 'question') return await requestQuestion(input);
   // Unsandboxed grants remain excluded from ACP's security posture even if an
@@ -59,24 +60,42 @@ export async function requestPermission(input: {
       },
       { cancellationSignal: input.signal },
     );
-    if (input.signal.aborted || response?.outcome.outcome !== 'selected') {
-      return { kind: 'deny', reason: 'Permission request was cancelled.' };
+    if (input.signal.aborted) {
+      return {
+        decision: { kind: 'deny', reason: 'Permission request was cancelled.' },
+        provenance: { source: 'system' },
+      };
+    }
+    if (response?.outcome.outcome === 'cancelled') {
+      return {
+        decision: { kind: 'deny', reason: 'Permission request was cancelled.' },
+        provenance: { source: 'user' },
+      };
+    }
+    if (response?.outcome.outcome !== 'selected') {
+      return { decision: { kind: 'deny', reason: 'Invalid permission response.' }, provenance: { source: 'system' } };
     }
     // Older clients used allow-once for the approve option; retain that alias.
     switch (response.outcome.optionId) {
       case 'approve':
       case 'allow-once':
-        return { kind: 'allow' };
+        return { decision: { kind: 'allow' }, provenance: { source: 'user' } };
       case 'reject':
-        return { kind: 'deny', reason: 'Permission denied by client.' };
+        return { decision: { kind: 'deny', reason: 'Permission denied by client.' }, provenance: { source: 'user' } };
       default: {
         const grant = grants.find((grant) => grant === response.outcome.optionId);
         return grant
-          ? { kind: 'grant', grant }
-          : { kind: 'deny', reason: 'Client selected an unknown permission option.' };
+          ? { decision: { kind: 'grant', grant }, provenance: { source: 'user' } }
+          : {
+              decision: { kind: 'deny', reason: 'Client selected an unknown permission option.' },
+              provenance: { source: 'system' },
+            };
       }
     }
   } catch {
-    return { kind: 'deny', reason: 'Permission request failed or is not supported by the client.' };
+    return {
+      decision: { kind: 'deny', reason: 'Permission request failed or is not supported by the client.' },
+      provenance: { source: 'system' },
+    };
   }
 }

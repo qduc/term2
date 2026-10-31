@@ -120,6 +120,7 @@ async function runTui(request: InteractiveRequest, target: DirectSessionTarget, 
       sessionId === undefined
         ? await app.host.createSession(app.principal, target.grant)
         : await app.host.connect(app.principal, sessionId);
+    if (request.goal) await app.setGoal(initial.sessionId, request.goal, 'launcher');
 
     // Ask before Ink takes stdin: the terminal's reply arrives as input.
     const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)

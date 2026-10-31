@@ -1,6 +1,7 @@
 /** What `cli.ts` hands the direct application after parsing. No Session or engine authority crosses here. */
 import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
 import type { ServeArgs } from '../../../source/gateway/serve-args.js';
+import type { DurableGoal } from '../session/direct-goal.js';
 import type { RunHandle, RunRequest } from './run-types.js';
 import type { ProfileSelection } from './tool-contract.js';
 
@@ -36,6 +37,8 @@ export type DirectHeadlessRequest = RunRequest & {
   readonly lite?: boolean;
   /** With `resumeId`: continue on a new copy and leave that session as it is. */
   readonly fork?: boolean;
+  /** Written to the session before the prompt runs. */
+  readonly goal?: DurableGoal;
 };
 
 /** `context_paused` and `blocked` are the resumable stops that exit 2. */
@@ -61,6 +64,8 @@ export type DirectLaunchRequest =
       readonly ssh?: DirectSshRequest;
       /** With `resumeId`: continue on a new copy and leave that session as it is. */
       readonly fork?: boolean;
+      /** Written to the session before the UI opens. */
+      readonly goal?: DurableGoal;
     })
   | (DirectLaunchBase & { readonly kind: 'acp'; readonly args: AcpArgs })
   | (DirectLaunchBase & { readonly kind: 'serve'; readonly args: ServeArgs })

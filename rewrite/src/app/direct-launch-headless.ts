@@ -37,6 +37,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         sessionId === undefined
           ? await app.host.createSession(app.principal, opened.grant)
           : await app.host.connect(app.principal, sessionId);
+      if (request.goal) await app.setGoal(connection.sessionId, request.goal, 'launcher');
       active = true;
       const { outcome } = await runDirectHeadless(connection, {
         prompt,

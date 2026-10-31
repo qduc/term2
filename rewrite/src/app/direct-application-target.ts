@@ -25,7 +25,7 @@ export type DirectSessionTarget = {
   readonly grant: WorkspaceGrant;
   readonly authority: DirectAuthority;
   /** Adds to every session's tool surface. Empty for a local target. */
-  readonly surface: Pick<ToolSurfaceOptions, 'remote' | 'remoteContext'>;
+  readonly surface: Pick<ToolSurfaceOptions, 'remote' | 'projectInstructions'>;
   /**
    * A stored session records only a path, and the same path exists on any host.
    * This immutable binding is what ties it to its SSH endpoint.
@@ -85,17 +85,24 @@ export async function openDirectSessionTarget(
   });
   try {
     const { workspace } = remote;
+    // The surface keeps these only for a profile that enables project instructions.
+    const { instructions } = await loadDirectRemoteProjectContext(remote, signal);
     return {
       root: workspace.root,
       grant: { workspaceId: workspace.root, access: workspace.access },
       authority: remoteAuthority(workspace),
-      surface: { remote, remoteContext: await loadDirectRemoteProjectContext(remote, signal) },
+      surface: { remote, projectInstructions: instructions },
       binding: { client: 'ssh', id: workspace.target },
       restart: { target: ssh.target, directory: workspace.root, port: remote.sshInfo.port },
+      // Sessions close it too, after they drain. A target with none still has to.
       close: () => remote.close(),
     };
   } catch (error) {
-    await remote.close().catch(() => undefined);
+    try {
+      await remote.close();
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], 'SSH workspace setup and disconnect failed.');
+    }
     throw error;
   }
 }

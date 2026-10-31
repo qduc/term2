@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import { DirectProtocolError } from '../protocol/direct-errors.js';
 import type { DirectAccess, Principal, WorkspaceGrant } from '../host/in-process-direct-types.js';
+import type { DirectLocalStore } from '../session/direct-store.js';
 import type { Workspace } from '../tools/index.js';
 
 export type DirectAuthority = {
@@ -17,7 +18,12 @@ export type DirectAuthority = {
   resolveStored(root: string): Workspace | Promise<Workspace>;
   /** May a stored session actually run here, rather than only be listed. */
   canRun(workspace: Workspace): boolean;
+  /** For an authority that records who owns a session. Replaces the store's own create. */
+  createSession?: DirectLocalStore['create'];
 };
+
+/** For an authority that needs the store itself, which is built after the runtimes. */
+export type DirectAuthorityFactory = (store: DirectLocalStore) => DirectAuthority;
 
 export const LOCAL_PRINCIPAL: Principal = { userId: 'local', via: 'local' };
 

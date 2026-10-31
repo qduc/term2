@@ -12,11 +12,20 @@ import { defaultServeStateDir } from '../../../source/gateway/serve-args.js';
 import { getDefaultShellSandboxRunner } from '../../../source/utils/shell/sandbox/shell-sandbox-runner.js';
 import { createDirectServerHost, createServerAuthentication } from '../host/server.js';
 import { SqliteReplayLedger } from '../host/server-auth.js';
+import type { Principal } from '../host/in-process-direct-types.js';
 import type { ServerSessionPresentation, ServerTransportOptions } from '../host/server-contracts.js';
 import { DirectProtocolError } from '../protocol/direct-errors.js';
+import type { DirectLocalStore } from '../session/direct-store.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
-import type { DirectAuthority } from './direct-application-workspaces.js';
-import { createDirectHostConfig, type DirectHostConfig } from './direct-host-config.js';
+import type { DirectAuthorityFactory } from './direct-application-workspaces.js';
+import {
+  bindDirectSessionAccess,
+  createDirectProductPorts,
+  directServeToolPosture,
+  DirectGlobalConfiguration,
+  DirectWorkspaceAuthority,
+  sessionStart,
+} from './direct-host-config.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
 
 type ServeRequest = Extract<DirectLaunchRequest, { readonly kind: 'serve' }>;
@@ -91,29 +100,77 @@ async function warnIfSandboxUnavailable(): Promise<void> {
   }
 }
 
-/** Admission is one authority. Only the local owner reaches a session at all, so a bad assertion subject fails closed. */
-function serverAuthority(config: DirectHostConfig, owner: string): DirectAuthority {
-  return {
-    authorize(principal) {
-      if (principal.userId !== owner) throw new DirectProtocolError('forbidden', 'Only the local owner may use this server.');
-    },
-    resolveGrant: (principal, grant) => config.resolveGrant(principal, grant),
-    resolveStored: (root) => config.resolveStored(root),
-    // A read grant is a real grant here, enforced by the tools. Stored roots with no grant already threw.
-    canRun: () => true,
+/**
+ * Only the local owner reaches a session at all, so a bad assertion subject fails
+ * closed. Every session records its owner and grant, and that record, not its
+ * path, is what admits a read or write. `resolveGrant` must stay synchronous:
+ * it hands the owner to `createSession` through the caller's async context.
+ */
+function serverAuthority(
+  grants: DirectWorkspaceAuthority,
+  directory: string,
+  owner: string,
+): DirectAuthorityFactory {
+  return (store) => {
+    const access = bindDirectSessionAccess({ authority: grants, sessions: store, directory });
+    return {
+      async authorize(principal, request) {
+        if (principal.userId !== owner) {
+          throw new DirectProtocolError('forbidden', 'Only the local owner may use this server.');
+        }
+        await access.authorize(principal, request);
+      },
+      resolveGrant: (principal, grant) => access.resolveWorkspace(principal, grant),
+      resolveStored: (root) => access.resolveStoredRoot(root),
+      // A read grant is a real grant here, enforced by the tools. Stored roots with no grant already threw.
+      canRun: () => true,
+      createSession: (workspace, model, binding) =>
+        access.sessions.create(workspace, model, binding) as ReturnType<DirectLocalStore['create']>,
+    };
   };
 }
 
-function presentation(app: DirectApplication, config: DirectHostConfig): ServerSessionPresentation {
+type PresentationOptions = {
+  readonly app: DirectApplication;
+  readonly directory: string;
+  readonly grants: DirectWorkspaceAuthority;
+  readonly configuration: DirectGlobalConfiguration;
+  readonly allowWrite: boolean;
+};
+
+function presentation(options: PresentationOptions): ServerSessionPresentation {
+  const { app, directory, grants, configuration, allowWrite } = options;
+  const owned = (principal: Principal, sessionId: string) => {
+    const started = sessionStart(directory, sessionId);
+    if (started.binding?.client !== principal.userId) {
+      throw new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
+    }
+    return { started, grant: grants.resolveGrant(principal, started.binding.id) };
+  };
   return {
-    async metadata(principal, snapshot) {
+    metadata(principal, snapshot) {
       const { createdAt, updatedAt, earliestSeq } = app.sessionDetails(snapshot.sessionId, snapshot.seq);
-      const root = await app.sessionRoot(principal, snapshot.sessionId);
       return {
-        workspaceId: config.workspaceIdFor(root),
+        workspaceId: owned(principal, snapshot.sessionId).grant.workspaceId,
         createdAt,
         updatedAt,
         earliestReplayableSequence: earliestSeq,
+      };
+    },
+    configuration(principal, snapshot) {
+      const { started, grant } = owned(principal, snapshot.sessionId);
+      const { workspace } = grants.resolveWorkspace(principal, grant);
+      const { revision, defaultsRevision } = configuration.read();
+      return {
+        sessionId: snapshot.sessionId,
+        providerId: snapshot.model.provider,
+        modelId: snapshot.model.model,
+        // The start fact leaves this out when nothing was chosen.
+        reasoningEffort: started.reasoning ?? 'default',
+        mode: app.sessionDetails(snapshot.sessionId).profileId ?? started.profileId ?? 'unknown',
+        toolPolicy: directServeToolPosture(workspace.access === 'read_write' && allowWrite),
+        configRevision: revision,
+        defaultsRevision,
       };
     },
   };
@@ -137,31 +194,38 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
   }
   await warnIfSandboxUnavailable();
 
-  const { settings, logger } = selection;
-  const config = await createDirectHostConfig({
-    stateDir,
-    localOwnerUserId: args.localOwnerUserId,
-    workspaceRoots: args.workspaceRoots,
+  // Grants and globals live here, in this state directory, and never in a conversation.
+  const grants = new DirectWorkspaceAuthority({
     allowWrite: args.allowWrite,
-    settings,
-    logger,
+    allowedRoots: args.workspaceRoots,
+    stateDirectory: stateDir,
   });
+  const product = createDirectProductPorts();
+  const configuration = new DirectGlobalConfiguration(
+    product.settings,
+    product.credentials,
+    product.providers,
+    product.oauth,
+    product.models,
+    args.allowWrite,
+  );
+  const directory = path.join(stateDir, 'conversations');
   const ledger = new SqliteReplayLedger(path.join(stateDir, 'replay.sqlite'));
   const app = await createDirectApplication({
-    conversationsDir: path.join(stateDir, 'conversations'),
+    conversationsDir: directory,
     selection,
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
     approvalAlwaysAsks: true,
-    authority: serverAuthority(config, args.localOwnerUserId),
+    authority: serverAuthority(grants, directory, args.localOwnerUserId),
   });
   const auditPath = path.join(stateDir, 'server-audit.jsonl');
   const transport = createDirectServerHost(
     {
       host: app.host,
-      workspaces: config.workspaces,
-      models: () => config.models(),
-      configuration: config.configuration,
-      presentation: presentation(app, config),
+      workspaces: grants,
+      models: () => configuration.listModels(),
+      configuration,
+      presentation: presentation({ app, directory, grants, configuration, allowWrite: args.allowWrite }),
       localOwnerUserId: args.localOwnerUserId,
       audit: (event) => appendFile(auditPath, `${JSON.stringify(event)}\n`, { mode: 0o600 }),
     },
@@ -210,7 +274,6 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       await transport.stop();
       await app.close();
     } finally {
-      await config.close?.();
       ledger.close();
     }
   }

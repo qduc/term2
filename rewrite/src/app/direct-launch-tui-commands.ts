@@ -8,6 +8,7 @@
  * connections cannot drop, and a fresh snapshot needs no reasoning about what
  * transient state a cursor covers.
  */
+import { createDurableGoal, formatGoalStatus } from '../../../source/services/conversation/durable-goal.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import { isControlSocketName } from '../clients/control/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
@@ -86,6 +87,37 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return {};
   };
 
+  /** `/goal`, with the same arguments as today. A failed update is a message, not an error. */
+  const goal = async (sessionId: string, input: string): Promise<CommandResult> => {
+    const [action, ...parts] = input.trim().split(/\s+/);
+    const empty = 'No durable goal is set. Use /goal set <outcome> [--criteria <text>].';
+    const write = async (next: Parameters<typeof formatGoalStatus>[0]): Promise<CommandResult> => {
+      await app.setGoal(sessionId, next, 'user');
+      return { message: formatGoalStatus(next) };
+    };
+    try {
+      if (!action || action === 'show') {
+        const current = await app.goal(sessionId);
+        return { message: current ? formatGoalStatus(current) : empty };
+      }
+      if (action === 'set') {
+        const text = parts.join(' ');
+        const marker = text.indexOf(' --criteria ');
+        const outcome = marker < 0 ? text : text.slice(0, marker);
+        const criteria = marker < 0 ? undefined : text.slice(marker + ' --criteria '.length);
+        return await write(createDurableGoal(outcome, criteria));
+      }
+      if (action === 'achieved' || action === 'abandon') {
+        const current = await app.goal(sessionId);
+        if (!current) throw new Error('No durable goal is set. Use /goal set <outcome> first.');
+        return await write({ ...current, status: action === 'achieved' ? 'achieved' : 'abandoned' });
+      }
+      return { message: 'Usage: /goal [show|set <outcome> [--criteria <text>]|achieved|abandon]' };
+    } catch (error) {
+      return { message: `Goal update failed: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  };
+
   const bridgeStatus = (): BridgeStatus => {
     const { server, isStartup } = bridge;
     return {
@@ -149,6 +181,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           return sandbox(connection.sessionId);
         case 'auto-approve':
           return autoApprove(connection.sessionId, argument);
+        case 'goal':
+          return goal(connection.sessionId, input.trim().slice('/goal'.length));
         case 'restart':
           if (argument === 'stop') throw new Error('/restart stop needs direct task cancel, which is not available yet.');
           if (argument) throw new Error('Usage: /restart');

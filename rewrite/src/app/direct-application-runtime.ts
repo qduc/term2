@@ -2,13 +2,19 @@
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
+import { AutomaticMemoryCanary } from '../../../source/services/memory/automatic-memory-canary.js';
+import { MemoryCapabilityBuilder } from '../../../source/services/memory/memory-capabilities.js';
 import { createProviderRegistry } from '../model/provider.js';
+import type { DirectBackgroundTasks } from '../session/direct-background.js';
+import type { DirectContextFactory } from '../session/direct-capabilities.js';
 import type { DirectBinding } from '../session/facade-types.js';
+import { createDirectAutomaticMemory } from '../session/direct-memory.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
-import type { DirectHookRuntime, DirectSessionHooks } from './direct-application-hooks.js';
+import type { DirectHookRuntime } from './direct-application-hooks.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
+import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './run.js';
 import { createAppSettings } from './settings.js';
@@ -37,18 +43,13 @@ export type DirectRuntimeRecord = {
   readonly surface: AgentSurface;
   readonly scope: SessionScope;
   readonly settings: ProfileSelection['settings'];
-  readonly hooks: DirectSessionHooks | null;
   readonly profileId: string;
-};
-
-/** The fields past the store's type wait for Session to take them: see the composition report. */
-export type DirectApplicationRuntime = DirectConversationRuntime & {
-  /** Absent when completion verification is off, which the stop policy reports. */
-  readonly verification?: DirectVerificationOperations;
+  /** Set once the Session has replayed, which is before any client can reach it. */
+  readonly tasks: () => DirectBackgroundTasks | undefined;
 };
 
 export type DirectRuntimes = {
-  create(context: DirectRuntimeContext): DirectApplicationRuntime;
+  create(context: DirectRuntimeContext): DirectConversationRuntime;
   /** An open session's runtime, for app-owned policy and commands. */
   get(sessionId: string): DirectRuntimeRecord | undefined;
 };
@@ -97,6 +98,23 @@ function verificationOperations(
   });
 }
 
+/** The opt-in canary, on the same terms as today. It never runs over SSH. */
+function automaticMemory(
+  settings: ProfileSelection['settings'],
+  { id, workspace }: DirectRuntimeContext,
+  port: Parameters<DirectContextFactory>[0],
+): ReturnType<DirectContextFactory>['automaticMemory'] {
+  if (process.env.TERM2_AUTOMATIC_MEMORY_CANARY !== '1' || workspace.target !== 'local') return undefined;
+  if (!settings.get('memory.enabled')) return undefined;
+  return createDirectAutomaticMemory({
+    sessionId: id,
+    canary: new AutomaticMemoryCanary(new MemoryCapabilityBuilder(settings).projectStore(workspace.root)),
+    allowed: () => settings.get('memory.enabled') === true,
+    readState: () => port.read().memory,
+    commit: (facts) => port.commit(port.read().goal.generation, facts),
+  });
+}
+
 export function createDirectRuntimes(
   options: DirectRuntimeOptions,
   hookRuntime: DirectHookRuntime | null,
@@ -121,35 +139,51 @@ export function createDirectRuntimes(
         throw new Error('resume conversation belongs to a different SSH workspace');
       }
       const selection = { settings: sessionSettings(options, context), logger, sessionContext };
-      const surface = loadSurface(selection, { ...options.surface(context.id), workspace: context.workspace });
+      const surfaceOptions = options.surface(context.id);
+      const surface = loadSurface(selection, { ...surfaceOptions, workspace: context.workspace });
       const scope = scopeFor(context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(selection.settings.get('app.activeProfileId')));
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
-      const hooks = hookRuntime?.session(context, selection.settings) ?? null;
+      let tasks: DirectBackgroundTasks | undefined;
       records.set(context.id, {
         surface,
         scope,
         settings: selection.settings,
-        hooks,
         profileId: profile.activeProfileId,
+        tasks: () => tasks,
       });
       options.onSurface?.(surface, profile);
       const models = withGenerationGuard(withSessionScope(createProviderRegistry(selection), scope), selection);
       const verification = verificationOperations(selection, models, context);
+      const interactive = surfaceOptions.interactive === true;
+      const contextFactory: DirectContextFactory = (port) => {
+        tasks = port.tasks;
+        const hooks = hookRuntime?.session(context, selection.settings);
+        const memoryNotices = automaticMemory(selection.settings, context, port);
+        return {
+          ...(hooks ? { hooks } : {}),
+          ...(verification ? { verification: { operations: verification } } : {}),
+          ...(memoryNotices ? { automaticMemory: memoryNotices } : {}),
+          verificationEnabled: () => selection.settings.get('agent.completionVerification') !== false,
+          // Only a client with a person behind it can answer these.
+          unattended: !interactive,
+          proposeGoal: interactive,
+        };
+      };
       return {
         deps: {
           models,
           tools: runtime.tools,
           toolContext: runtime.toolContext,
           maxParallelToolCalls: runtime.maxParallelToolCalls,
+          ...runPolicy(selection.settings, context.id, context.model),
+          context: contextFactory,
         },
         request: { ...request, ...(notice ? { notice } : {}) },
         profile: { id: profile.activeProfileId, version: profile.activeProfileVersion, digest: profile.activeProfileDigest },
         appVersion: installationVersion,
-        ...(verification ? { verification } : {}),
         async dispose() {
           records.delete(context.id);
-          await hooks?.end();
           await runtime.dispose?.();
         },
       };

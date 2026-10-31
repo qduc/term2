@@ -3,10 +3,12 @@ import { installationVersion } from '../../../source/providers/fetch/logging-mid
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import { createProviderRegistry } from '../model/provider.js';
+import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
 import type { DirectHookRuntime, DirectSessionHooks } from './direct-application-hooks.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
+import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './run.js';
 import { createAppSettings } from './settings.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
@@ -30,8 +32,14 @@ export type DirectRuntimeRecord = {
   readonly profileId: string;
 };
 
+/** The fields past the store's type wait for Session to take them: see the composition report. */
+export type DirectApplicationRuntime = DirectConversationRuntime & {
+  /** Absent when completion verification is off, which the stop policy reports. */
+  readonly verification?: DirectVerificationOperations;
+};
+
 export type DirectRuntimes = {
-  create(context: DirectRuntimeContext): DirectConversationRuntime;
+  create(context: DirectRuntimeContext): DirectApplicationRuntime;
   /** An open session's runtime, for app-owned policy and commands. */
   get(sessionId: string): DirectRuntimeRecord | undefined;
 };
@@ -57,6 +65,25 @@ function sessionSettings(
   const reasoning = metadata ? metadata.reasoning ?? 'default' : defaults.get('agent.reasoningEffort');
   settings.set('agent.reasoningEffort', reasoning, { persist: false });
   return settings;
+}
+
+/**
+ * `verifier.model` names a model on the session's provider. Empty means the
+ * session's own model, as today: the request is still fresh and transcript-free,
+ * and it stays on the provider this session already bills to.
+ */
+function verificationOperations(
+  { settings }: ProfileSelection,
+  models: DirectConversationRuntime['deps']['models'],
+  { model, workspace }: DirectRuntimeContext,
+): DirectVerificationOperations | undefined {
+  if (settings.get('agent.completionVerification') === false) return undefined;
+  const configured = settings.get('verifier.model');
+  return createDirectVerificationOperations({
+    models,
+    model: configured ? { provider: model.provider, model: configured } : model,
+    workspace,
+  });
 }
 
 export function createDirectRuntimes(
@@ -92,9 +119,11 @@ export function createDirectRuntimes(
         profileId: profile.activeProfileId,
       });
       options.onSurface?.(surface, profile);
+      const models = withGenerationGuard(withSessionScope(createProviderRegistry(selection), scope), selection);
+      const verification = verificationOperations(selection, models, context);
       return {
         deps: {
-          models: withGenerationGuard(withSessionScope(createProviderRegistry(selection), scope), selection),
+          models,
           tools: runtime.tools,
           toolContext: runtime.toolContext,
           maxParallelToolCalls: runtime.maxParallelToolCalls,
@@ -102,6 +131,7 @@ export function createDirectRuntimes(
         request: { ...request, ...(notice ? { notice } : {}) },
         profile: { id: profile.activeProfileId, version: profile.activeProfileVersion, digest: profile.activeProfileDigest },
         appVersion: installationVersion,
+        ...(verification ? { verification } : {}),
         async dispose() {
           records.delete(context.id);
           await hooks?.end();

@@ -26,8 +26,10 @@ export type DirectHeadlessRequest = RunRequest & {
   readonly quiet?: boolean;
 };
 
-/** `context_paused` is the resumable stop that exits 2. */
-export type DirectHeadlessResult = { readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' };
+/** `context_paused` and `blocked` are the resumable stops that exit 2. */
+export type DirectHeadlessResult = {
+  readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked';
+};
 export type DirectHeadlessHandle = Omit<RunHandle, 'result'> & { readonly result: Promise<DirectHeadlessResult> };
 
 export type DirectControlSocketRequest = {

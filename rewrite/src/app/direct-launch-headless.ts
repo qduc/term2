@@ -45,8 +45,15 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         decideApproval: app.headlessPolicy(connection.sessionId, autoApprove, stop.signal),
         ...(resumeId === undefined ? {} : { expectedSessionId: resumeId }),
       });
-      const known = outcome === 'completed' || outcome === 'cancelled' || outcome === 'context_paused';
-      return { kind: known ? outcome : 'failed' };
+      switch (outcome) {
+        case 'completed':
+        case 'cancelled':
+        case 'context_paused':
+        case 'blocked':
+          return { kind: outcome };
+        default:
+          return { kind: 'failed' };
+      }
     } catch (error) {
       io.stderr.write(`error ${error instanceof Error ? error.message : String(error)}\n`);
       return { kind: 'failed' };

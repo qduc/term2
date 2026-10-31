@@ -88,8 +88,8 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
         if ((await options.workspaces.cwd(request.sessionId)) !== cwd) {
           throw acp.RequestError.invalidParams(undefined, 'cwd does not match the session workspace');
         }
-        // The SDK supports cursors beyond 'start', but Host has not committed
-        // atomic historical attachment semantics. Do not fake cursor replay.
+        // Host numeric replay is tail-only and requires retained client state.
+        // No ACP cursor variant defines that state/watermark contract yet.
         if (request.replayFrom && request.replayFrom.type !== 'start') {
           throw acp.RequestError.invalidParams(undefined, 'Only replayFrom: start is supported by direct ACP');
         }

@@ -1,7 +1,12 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
-import type { WireDecision, WireInteraction, WireQuestion, WireQuestionAnswer } from '../../protocol/direct-wire.js';
+import type { WireInteraction, WireQuestion, WireQuestionAnswer } from '../../protocol/direct-wire.js';
 
-const stopped = (): WireDecision => ({ kind: 'decline', stopAfterApprovalResolution: true });
+import type { AcpAnswer } from './contract.js';
+
+const stopped = (source: 'user' | 'system' = 'system'): AcpAnswer => ({
+  decision: { kind: 'decline', stopAfterApprovalResolution: true },
+  provenance: { source },
+});
 
 type Field = { readonly question: WireQuestion; readonly key: string; readonly customKey: string };
 
@@ -92,7 +97,7 @@ export async function requestQuestion(input: {
   readonly interaction: WireInteraction;
   readonly client: acp.AgentContext;
   readonly signal: AbortSignal;
-}): Promise<WireDecision> {
+}): Promise<AcpAnswer> {
   try {
     const { schema, fields } = form(input.interaction);
     const response = await input.client.request(
@@ -107,7 +112,8 @@ export async function requestQuestion(input: {
       { cancellationSignal: input.signal },
     );
     if (input.signal.aborted) return stopped();
-    if (response.action === 'decline') return { kind: 'decline' };
+    if (response.action === 'decline') return { decision: { kind: 'decline' }, provenance: { source: 'user' } };
+    if (response.action === 'cancel') return stopped('user');
     if (
       response.action !== 'accept' ||
       !response.content ||
@@ -116,10 +122,11 @@ export async function requestQuestion(input: {
     )
       return stopped();
     const content = response.content as Record<string, unknown>;
-    if (fields.length) return { kind: 'answers', answers: answers(fields, content) };
+    if (fields.length)
+      return { decision: { kind: 'answers', answers: answers(fields, content) }, provenance: { source: 'user' } };
     if (Object.keys(content).length !== 1 || typeof content.answer !== 'string' || !content.answer.trim())
       return stopped();
-    return { kind: 'answer', answer: content.answer };
+    return { decision: { kind: 'answer', answer: content.answer }, provenance: { source: 'user' } };
   } catch {
     return stopped();
   }

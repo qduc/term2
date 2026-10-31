@@ -1,10 +1,11 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import type { WireEvent, WireInteraction } from '../../protocol/direct-wire.js';
+import type { WireBudgetRequest, WireCommand, WireEvent, WireInteraction } from '../../protocol/direct-wire.js';
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
 import { errorMessage } from './contract.js';
 import { AcpRenderer, MissingAcpWireContract, terminalOutcome } from './render.js';
-import { requestPermission } from './permissions.js';
+import { requestPermission } from './requests.js';
+import { requestBudget } from './budget.js';
 import type { PromptInput } from './input.js';
 
 type ActivePrompt = {
@@ -35,7 +36,7 @@ function reservePrompt(): ActivePrompt {
   return { turnId: null, messageId: null, ready, release, outcome, resolve, reject };
 }
 
-type PermissionTask = {
+type RequestTask = {
   readonly turnId: string | null;
   readonly controller: AbortController;
   readonly done: Promise<void>;
@@ -48,8 +49,9 @@ type PermissionTask = {
  */
 export class AcpAttachment {
   private readonly renderer = new AcpRenderer();
+  private readonly branchRenderers = new Map<string, AcpRenderer>();
   private readonly lifetime = new AbortController();
-  private readonly permissions = new Map<string, PermissionTask>();
+  private readonly requests = new Map<string, RequestTask>();
   private active: ActivePrompt | null = null;
   private closed = false;
   private foregroundTurnId: string | null;
@@ -85,6 +87,7 @@ export class AcpAttachment {
       });
     }
     for (const permission of this.connection.snapshot.pendingInteractions) this.openPermission(permission);
+    for (const request of this.connection.snapshot.pendingBudgets ?? []) this.openBudget(request);
     this.pump = this.consume().catch((error: unknown) => this.fail(error));
   }
 
@@ -142,11 +145,14 @@ export class AcpAttachment {
 
   /** Cancel foreground work explicitly; only its actual terminal settles the prompt. */
   async cancel(): Promise<void> {
-    const prompt = this.active;
-    for (const task of this.permissions.values()) {
-      if (prompt?.turnId && task.turnId === prompt.turnId) task.controller.abort();
+    const turnId = this.active?.turnId ?? this.foregroundTurnId;
+    if (!turnId) return;
+    for (const task of this.requests.values()) {
+      if (task.turnId === turnId) task.controller.abort();
     }
-    const result = await this.connection.send({ type: 'cancel', target: { kind: 'foreground' } });
+    // Compare under Session admission ownership, never cancel a replacement turn
+    // or discard another client's queued work from an ACP cancellation.
+    const result = await this.connection.send({ type: 'cancel', expectedTurnId: turnId, discardQueue: false });
     if (!result.ok) throw new acp.RequestError(-32000, result.message);
   }
 
@@ -178,8 +184,9 @@ export class AcpAttachment {
     if (this.closed) return;
     this.closed = true;
     this.lifetime.abort();
-    for (const task of this.permissions.values()) task.controller.abort();
-    this.permissions.clear();
+    for (const task of this.requests.values()) task.controller.abort();
+    this.requests.clear();
+    this.branchRenderers.clear();
     this.active?.release();
     this.active?.reject(new Error('ACP session attachment closed'));
     this.closeWaiter?.reject(new Error('ACP session attachment closed'));
@@ -203,9 +210,15 @@ export class AcpAttachment {
     if (!this.closed) throw new Error('ACP host subscription ended unexpectedly');
   }
 
-  private async onEvent(event: WireEvent, nested = false): Promise<void> {
+  private async onEvent(event: WireEvent, nested = false, renderer = this.renderer): Promise<void> {
     if (event.type === 'subagent') {
-      await this.onEvent(event.payload.event, true);
+      const branchId = event.payload.branchId ?? event.payload.agentId;
+      let branch = this.branchRenderers.get(branchId);
+      if (!branch) {
+        branch = new AcpRenderer();
+        this.branchRenderers.set(branchId, branch);
+      }
+      await this.onEvent(event.payload.event, true, branch);
       return;
     }
     if (!nested && event.type === 'turn_started') {
@@ -217,17 +230,23 @@ export class AcpAttachment {
     if (!nested && event.type === 'snapshot') {
       this.foregroundTurnId = event.payload.snapshot.activeTurnId;
       this.status = event.payload.snapshot.status;
-      const terminal = event.payload.snapshot.terminal;
-      if (terminal && this.active?.turnId === terminal.turnId) this.active.resolve(terminalOutcome(terminal));
-      if (terminal && this.closeWaiter?.turnId === terminal.turnId) this.closeWaiter.resolve();
-      const pending = new Set(event.payload.snapshot.pendingInteractions.map((interaction) => interaction.requestId));
-      for (const [id, task] of this.permissions) {
+      const snapshot = event.payload.snapshot;
+      for (const terminal of [...(snapshot.turnResults ?? []), ...(snapshot.terminal ? [snapshot.terminal] : [])]) {
+        if (this.active?.turnId === terminal.turnId) this.active.resolve(terminalOutcome(terminal));
+        if (this.closeWaiter?.turnId === terminal.turnId) this.closeWaiter.resolve();
+      }
+      const pending = new Set([
+        ...snapshot.pendingInteractions.map((interaction) => interaction.requestId),
+        ...(snapshot.pendingBudgets ?? []).map((request) => request.requestId),
+      ]);
+      for (const [id, task] of this.requests) {
         if (!pending.has(id)) {
           task.controller.abort();
-          this.permissions.delete(id);
+          this.requests.delete(id);
         }
       }
-      for (const interaction of event.payload.snapshot.pendingInteractions) this.openPermission(interaction);
+      for (const interaction of snapshot.pendingInteractions) this.openPermission(interaction);
+      for (const request of snapshot.pendingBudgets ?? []) this.openBudget(request);
     }
     if (!nested && event.type === 'status_changed') {
       const wasRunning = this.status === 'running' || this.status === 'awaiting_interaction';
@@ -236,13 +255,22 @@ export class AcpAttachment {
         await this.emit({ sessionUpdate: 'state_update', state: 'running' });
       }
     }
-    for (const update of this.renderer.event(event)) await (this.active?.emit ?? this.emit.bind(this))(update);
+    for (const update of renderer.event(event)) await (this.active?.emit ?? this.emit.bind(this))(update);
     if (event.type === 'interaction_opened') {
       this.openPermission(event.payload.interaction);
     }
-    if (event.type === 'interaction_resolved') {
-      this.permissions.get(event.payload.requestId)?.controller.abort();
-      this.permissions.delete(event.payload.requestId);
+    if (event.type === 'budget_opened') this.openBudget(event.payload.request);
+    if (event.type === 'interaction_resolved' || event.type === 'budget_closed') {
+      this.requests.get(event.payload.requestId)?.controller.abort();
+      this.requests.delete(event.payload.requestId);
+    }
+    if (event.type === 'turn_ended') {
+      for (const [id, task] of this.requests) {
+        if (task.turnId === event.turnId) {
+          task.controller.abort();
+          this.requests.delete(id);
+        }
+      }
     }
     if (!nested && event.type === 'turn_ended') {
       if (this.active && event.turnId === this.active.turnId) this.active.resolve(terminalOutcome(event.payload));
@@ -256,29 +284,43 @@ export class AcpAttachment {
     }
   }
 
-  private openPermission(permission: WireInteraction): void {
-    if (this.closed || this.permissions.has(permission.requestId)) return;
-    const controller = new AbortController();
-    const signals = [this.lifetime.signal, controller.signal];
-    if (this.active?.turnId === permission.turnId && this.active?.signal) signals.push(this.active.signal);
-    const signal = AbortSignal.any(signals);
-    const done = this.answerPermission(permission, signal).catch((error: unknown) => {
-      if (!signal.aborted) this.fail(error);
-    });
-    this.permissions.set(permission.requestId, { turnId: permission.turnId, controller, done });
+  private openPermission(interaction: WireInteraction): void {
+    this.openRequest(interaction.requestId, interaction.turnId, async (signal) => ({
+      type: 'answer',
+      requestId: interaction.requestId,
+      ...(await requestPermission({ sessionId: this.connection.sessionId, interaction, client: this.client, signal })),
+    }));
   }
 
-  private async answerPermission(permission: WireInteraction, signal: AbortSignal): Promise<void> {
-    const decision = await requestPermission({
-      sessionId: this.connection.sessionId,
-      interaction: permission,
-      client: this.client,
-      signal,
+  private openBudget(request: WireBudgetRequest): void {
+    this.openRequest(request.requestId, request.turnId, async (signal) => ({
+      type: 'answer_budget',
+      requestId: request.requestId,
+      ...(await requestBudget({ sessionId: this.connection.sessionId, request, client: this.client, signal })),
+    }));
+  }
+
+  /** Each real request owns one cancellable client exchange and one targeted native answer. */
+  private openRequest(requestId: string, turnId: string, command: (signal: AbortSignal) => Promise<WireCommand>): void {
+    if (this.closed || this.requests.has(requestId)) return;
+    const controller = new AbortController();
+    const signals = [this.lifetime.signal, controller.signal];
+    if (this.active?.turnId === turnId && this.active?.signal) signals.push(this.active.signal);
+    const signal = AbortSignal.any(signals);
+    const done = this.answerRequest(command, signal).catch((error: unknown) => {
+      if (!signal.aborted) this.fail(error);
     });
-    // A resolved interaction or a detached subscription has no remaining owner
-    // to answer. Explicit cancellation is already routed through the host.
+    this.requests.set(requestId, { turnId, controller, done });
+  }
+
+  private async answerRequest(
+    command: (signal: AbortSignal) => Promise<WireCommand>,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const answer = await command(signal);
+    // A resolved request or detached subscription has no remaining owner to answer.
     if (signal.aborted) return;
-    const result = await this.connection.send({ type: 'answer', requestId: permission.requestId, decision });
+    const result = await this.connection.send(answer);
     // Another connection may have resolved it while the user was choosing.
     if (!result.ok && result.code !== 'stale_interaction') throw new acp.RequestError(-32000, result.message);
   }

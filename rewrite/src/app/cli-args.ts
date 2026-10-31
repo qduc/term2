@@ -73,8 +73,6 @@ const SESSION_HELD = 'session goals need a Session goal API in the direct app (M
 const JSON_HELD =
   'the old NDJSON event schema needs a protocol-owned read model, which the direct protocol does not expose yet';
 const SSH_HELD = 'the tool surface cannot run a remote workspace yet (lead: ToolSurfaceOptions.remote and remoteContext)';
-const FORK_HELD =
-  'the launch does not yet call forkDirectConversation with the store workspace resolver (app owner: fork field)';
 
 /** Builds one flag. `suffix` is its help placeholder: ' <x>' takes a value, '[=<x>]' takes only an inline one. */
 const opt = (names: string[], suffix: string, help: string, refusal?: string, value?: Flag['value']): Flag => {
@@ -118,7 +116,7 @@ const FLAGS: readonly Flag[] = [
   opt(['--list-models'], ' [search]', 'Print available models grouped by provider, filtered by an optional search term'),
   opt(['--refresh'], '', 'With --list-models, bypass the model catalog cache and re-fetch before listing'),
   opt(['-R', '--resume'], ' <id>', 'Resume an exact direct conversation ID with a follow-up prompt.'),
-  opt(['--fork'], '', 'Fork the resumed conversation into a new session (requires --resume)', FORK_HELD),
+  opt(['--fork'], '', 'Fork the resumed conversation into a new session (requires --resume)'),
   opt(['-h', '--help'], '', 'Show help'),
   opt(['-v', '--version'], '', 'Show version'),
 ];

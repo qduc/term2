@@ -12,6 +12,7 @@ import type { HeadlessApprovalDecider } from '../clients/headless/index.js';
 import { decideHeadlessApproval } from '../clients/headless/index.js';
 import { DirectProtocolError } from '../protocol/direct-errors.js';
 import type { DirectCommandCapabilities } from '../protocol/direct-capabilities.js';
+import { forkDirectConversation } from '../session/direct-fork.js';
 import { createDirectSessionStore, type DirectLocalStore } from '../session/direct-store.js';
 import type { DirectSession } from '../session/facade-types.js';
 import { readFacts } from '../session/log.js';
@@ -50,6 +51,8 @@ export type DirectApplication = {
   headlessPolicy(sessionId: string, autoApprove: boolean, signal: AbortSignal): HeadlessApprovalDecider;
   /** Canonical workspace of a direct session, for clients whose snapshot has none. */
   sessionRoot(principal: Principal, sessionId: string): Promise<string>;
+  /** Copies a session this mode may run into a new one, without opening the source. Returns the new id. */
+  forkSession(sourceId: string): Promise<string>;
   /** Pass a snapshot's `seq` to read that cut rather than the log's current end. */
   sessionDetails(sessionId: string, seq?: number | null): DirectSessionDetails;
   close(): Promise<void>;
@@ -116,6 +119,20 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       const session = sessions.find((candidate) => candidate.id === sessionId);
       if (!session) throw new DirectProtocolError('not_found', 'Unknown direct session.');
       return session.workspace.root;
+    },
+    async forkSession(sourceId) {
+      const { id } = await forkDirectConversation({
+        directory: options.conversationsDir,
+        sourceId,
+        ...(sessionBinding ? { expectedBinding: sessionBinding } : {}),
+        // Refused here, or the copy would exist and then fail to open.
+        async resolveWorkspace(root) {
+          const workspace = await authority.resolveStored(root);
+          if (!authority.canRun(workspace)) throw new Error('fork source belongs to a different workspace');
+          return workspace;
+        },
+      });
+      return id;
     },
     sessionDetails(sessionId, seq) {
       const logPath = path.join(options.conversationsDir, `${sessionId}.jsonl`);

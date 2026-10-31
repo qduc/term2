@@ -34,6 +34,8 @@ export type DirectHeadlessRequest = RunRequest & {
   readonly ssh?: DirectSshRequest;
   /** Lets `ssh` omit `remoteDir`. */
   readonly lite?: boolean;
+  /** With `resumeId`: continue on a new copy and leave that session as it is. */
+  readonly fork?: boolean;
 };
 
 /** `context_paused` and `blocked` are the resumable stops that exit 2. */
@@ -57,6 +59,8 @@ export type DirectLaunchRequest =
       readonly lite: boolean;
       readonly controlSocket?: DirectControlSocketRequest;
       readonly ssh?: DirectSshRequest;
+      /** With `resumeId`: continue on a new copy and leave that session as it is. */
+      readonly fork?: boolean;
     })
   | (DirectLaunchBase & { readonly kind: 'acp'; readonly args: AcpArgs })
   | (DirectLaunchBase & { readonly kind: 'serve'; readonly args: ServeArgs })

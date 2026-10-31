@@ -90,7 +90,7 @@ function DirectTui({
 type Restart = { plan?: DirectRestartPlan };
 
 async function runTui(request: InteractiveRequest, target: DirectSessionTarget, pending: Restart): Promise<number> {
-  const { conversationsDir, selection, resumeId, profileExplicit, controlSocket } = request;
+  const { conversationsDir, selection, resumeId, fork, profileExplicit, controlSocket } = request;
   const { settings } = selection;
   const { root } = target;
   const bridge = createDirectControlBridge(() => ({ app, root }));
@@ -114,10 +114,12 @@ async function runTui(request: InteractiveRequest, target: DirectSessionTarget, 
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   try {
+    const sessionId = resumeId !== undefined && fork ? await app.forkSession(resumeId) : resumeId;
+    if (sessionId !== resumeId) stderr.write(`Forked conversation ${resumeId} → ${sessionId}\n`);
     const initial =
-      resumeId === undefined
+      sessionId === undefined
         ? await app.host.createSession(app.principal, target.grant)
-        : await app.host.connect(app.principal, resumeId);
+        : await app.host.connect(app.principal, sessionId);
 
     // Ask before Ink takes stdin: the terminal's reply arrives as input.
     const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)

@@ -31,10 +31,12 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         },
       });
       application = app;
+      const sessionId = resumeId !== undefined && request.fork ? await app.forkSession(resumeId) : resumeId;
+      if (sessionId !== resumeId) io.stderr.write(`Forked conversation ${resumeId} → ${sessionId}\n`);
       const connection =
-        resumeId === undefined
+        sessionId === undefined
           ? await app.host.createSession(app.principal, opened.grant)
-          : await app.host.connect(app.principal, resumeId);
+          : await app.host.connect(app.principal, sessionId);
       active = true;
       const { outcome } = await runDirectHeadless(connection, {
         prompt,
@@ -46,7 +48,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         ...(request.quiet === undefined ? {} : { quiet: request.quiet }),
         signal: stop.signal,
         decideApproval: app.headlessPolicy(connection.sessionId, autoApprove, stop.signal),
-        ...(resumeId === undefined ? {} : { expectedSessionId: resumeId }),
+        ...(sessionId === undefined ? {} : { expectedSessionId: sessionId }),
       });
       switch (outcome) {
         case 'completed':

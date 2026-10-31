@@ -340,6 +340,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
     // --fork is still refused in cli-args.ts until the launch calls the fork operation with the store's resolver.
     ...(options.fork ? { fork: true } : {}),
+    ...(options.goal === null ? {} : { goal: options.goal }),
     profileExplicit: options.profile !== null || options.lite,
     output: options.output.json ? 'json' : 'plain',
     showReasoning: options.output.showReasoning,
@@ -405,6 +406,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     ...(options.ssh === null ? {} : { ssh: options.ssh }),
     // --fork is still refused in cli-args.ts until the fork operation is on the candidate.
     ...(options.fork ? { fork: true } : {}),
+    ...(options.goal === null ? {} : { goal: options.goal }),
   };
   return launchDirect(request);
 }

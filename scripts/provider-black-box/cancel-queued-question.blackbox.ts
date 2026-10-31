@@ -39,14 +39,14 @@ it('delivers a pending steer after cancelling an unanswered question', async () 
   });
   const child = await lease.start({
     command: process.execPath,
-    // ask_user needs a Profile with user interaction; Bare (what --lite now
-    // selects) has none. --lite still bypasses the home-directory start guard
-    // (cwd is HOME here), and --profile full overrides the Profile it selects.
+    // This journey needs Pair capabilities; full/standard now alias Bare.
+    // Keep --lite to bypass the home-directory start guard (cwd is HOME),
+    // then select Pair explicitly rather than relying on a legacy alias.
     args: [
       process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
       '--lite',
       '--profile',
-      'full',
+      'pair',
     ],
     cwd: lease.root,
     cols: 120,

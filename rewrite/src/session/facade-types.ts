@@ -101,6 +101,7 @@ export type DirectSessionState = {
   readonly admissions: readonly DirectAdmission[];
   readonly usage: Usage;
   readonly commands: import('./direct-command-types.js').DirectCommandReceipts;
+  readonly notifications: import('./direct-notifications.js').DirectNotificationState;
   readonly requestCosts: readonly import('./facts.js').DirectRequestCostFact[];
   readonly pendingBudgets: readonly Extract<Fact, { readonly type: 'budget_opened' }>[];
   readonly timeline: readonly DirectTimelineEntry[];
@@ -116,6 +117,23 @@ export type DirectSessionState = {
   }[];
 };
 /** Position is a private live publication ordinal, never a durable fact sequence. */
+/** Live argument bytes retain real branch ancestry and never acquire an execution ID. */
+export type DirectArgumentStream = {
+  readonly type: 'tool_call_streaming_delta';
+  readonly turnId: TurnId;
+  readonly modelStep: number;
+  readonly argumentCharCount: number;
+  readonly toolName?: string;
+  readonly callId?: import('../model/index.js').ToolCallId;
+  readonly itemId?: string;
+  readonly callIndex?: number;
+};
+export type DirectBranchTransient = DirectArgumentStream & {
+  readonly branchId: string;
+  readonly taskId: import('./direct-background-types.js').DirectTaskId;
+  readonly parentTurnId: TurnId;
+  readonly rootTurnId: TurnId;
+};
 export type DirectSessionUpdate =
   | { readonly type: 'fact'; readonly position: number; readonly seq: number; readonly at: string; readonly fact: Fact }
   | {
@@ -127,6 +145,8 @@ export type DirectSessionUpdate =
             readonly notice: import('./direct-memory.js').DirectAutomaticMemoryNotice;
           }
         | DirectBackgroundProgress
+        | DirectArgumentStream
+        | DirectBranchTransient
         | { readonly type: 'reasoning_delta'; readonly delta: string }
         | { readonly type: 'tool_progress'; readonly executionId: ExecutionId; readonly chunk: string };
     }
@@ -151,6 +171,14 @@ export interface DirectSession {
   command(
     request: import('./direct-command-types.js').DirectCommandRequest,
   ): Promise<import('./direct-command-types.js').DirectCommandResult>;
+  /** Drain one current notice batch into a real silent root turn; duplicate keys return the original admission. */
+  drainBackgroundNotifications(
+    clientRequestId: string,
+  ): Promise<import('./direct-notifications.js').DirectNotificationDrainResult>;
+  configureTaskCheckIn(
+    target: string,
+    policy: import('./direct-background-check-ins.js').DirectBackgroundCheckInPolicy,
+  ): ReturnType<import('./direct-background-check-ins.js').DirectBackgroundCheckIns['configure']>;
   rewindTargets(): readonly import('./direct-command-types.js').DirectRewindTarget[];
   submit(request: DirectSubmission): Promise<DirectAdmission>;
   submitWithDelivery(request: DirectQueueSubmission): Promise<DirectAdmission>;

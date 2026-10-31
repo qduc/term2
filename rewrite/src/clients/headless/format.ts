@@ -1,5 +1,5 @@
 /** Plain-output formatting shared by the old headless CLI and this client. */
-import type { WireInteraction, WireTool } from '../../protocol/direct-wire.js';
+import type { WireEventPayloads, WireInteraction, WireTool } from '../../protocol/direct-wire.js';
 
 const safePreview = (value: unknown, maxLength = 500): string => {
   try {
@@ -59,4 +59,16 @@ export function interactionLine(interaction: WireInteraction): string {
 
 export function rejectionLine(reason: string | undefined): string {
   return `Approval Rejected: ${reason ?? 'No reason provided'}\n`;
+}
+
+/** Old retry wording when the protocol supplies the metadata; explicit fallback otherwise. */
+export function retryLine(payload: WireEventPayloads['retrying'], agentId?: string): string {
+  if (agentId === undefined && payload.retryType === 'flex_service_tier') {
+    return `[retry] service_tier: ${payload.error.message}\n`;
+  }
+  const label = agentId === undefined ? '[retry]' : `[subagent ${agentId} retry]`;
+  if (payload.toolName !== undefined && payload.maxRetries !== undefined) {
+    return `${label} ${payload.toolName} (${payload.attempt}/${payload.maxRetries}): ${payload.error.message}\n`;
+  }
+  return `${label} attempt ${payload.attempt} in ${payload.delayMs}ms: ${payload.error.message}\n`;
 }

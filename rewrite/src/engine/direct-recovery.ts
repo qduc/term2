@@ -71,7 +71,9 @@ export type DirectRecoveryDecision =
     };
 
 type RecoveryKind = Extract<DirectRecoveryDecision, { kind: 'retry' }>['recovery'];
-type RecoveryChoice = { kind: RecoveryKind; automaticReplay: boolean };
+type RecoveryChoice =
+  | { kind: 'transient'; automaticReplay: false }
+  | { kind: Exclude<RecoveryKind, 'transient'>; automaticReplay: boolean };
 
 export type DirectRecoveryOptions = {
   readonly maxTransientRetries: number;
@@ -184,8 +186,13 @@ function chooseRecovery(context: DirectRecoveryContext): RecoveryChoice | undefi
   if (evidence === 'model_behavior') return { kind: 'model_behavior', automaticReplay: true };
   if (evidence === 'service_tier_rejected') return { kind: 'service_tier', automaticReplay: false };
   if (evidence === 'transport_downgrade') return { kind: 'transport', automaticReplay: true };
-  if (failure.error.retryable && ['network', 'rate_limit', 'provider'].includes(failure.error.kind)) {
-    return { kind: 'transient', automaticReplay: true };
+  if (!evidence && failure.error.retryable && ['network', 'rate_limit', 'provider'].includes(failure.error.kind)) {
+    // Engine-owned pre-output transport retries replace the adapter's former
+    // hidden retry loop. Re-preparing full history is not a whole-turn replay:
+    // spend the physical dispatch envelope, leaving the separate replay claim
+    // for explicit chain/model-behavior recovery. Accepted output and ambiguous
+    // outcomes have already been excluded above; no tool batch is replayed.
+    return { kind: 'transient', automaticReplay: false };
   }
   return undefined;
 }

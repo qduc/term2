@@ -3,9 +3,11 @@
  * session needs. Every mode is a client of this host. Only `host.dispose()` ends
  * Sessions, so a client disconnecting never stops work another client can see.
  */
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
+import { SkillsService, type SkillInfo } from '../../../source/services/skills/skills-service.js';
 import { createDirectInProcessHost } from '../host/in-process-direct.js';
 import type { DirectHost, Principal } from '../host/in-process-direct-types.js';
 import type { HeadlessApprovalDecider } from '../clients/headless/index.js';
@@ -21,9 +23,13 @@ import { replay } from '../session/replay.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
-import type { ProfileSelection } from './tool-contract.js';
 import { startDirectHooks, type DirectHookOptions } from './direct-application-hooks.js';
-import { createDirectRuntimes, type DirectRuntimeOptions, type DirectRuntimes } from './direct-application-runtime.js';
+import {
+  createDirectRuntimes,
+  type DirectRuntimeOptions,
+  type DirectRuntimes,
+  type DirectSessionSettings,
+} from './direct-application-runtime.js';
 import { rollSessionOver } from './direct-application-rollover.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority, type DirectAuthorityFactory } from './direct-application-workspaces.js';
 import { createDirectInputPreview } from './direct-input-preview.js';
@@ -45,7 +51,9 @@ export type DirectSessionDetails = {
   readonly earliestSeq: number;
   readonly logPath: string;
   readonly profileId: string | null;
-  readonly settings: ProfileSelection['settings'] | null;
+  readonly settings: DirectSessionSettings | null;
+  /** The session's tools read a copy of `settings`, so a change needs a rebuild to reach them. */
+  readonly rebuilt: boolean;
   contextWindow(model: ModelRef): number | null;
 };
 
@@ -64,6 +72,10 @@ export type DirectApplication = {
   goal(sessionId: string): Promise<DurableGoal | undefined>;
   /** Pass a snapshot's `seq` to read that cut rather than the log's current end. */
   sessionDetails(sessionId: string, seq?: number | null): DirectSessionDetails;
+  /** The skills under a local workspace root, read fresh so a new one shows up without a restart. */
+  skills(root: string): readonly SkillInfo[];
+  /** Starts a new session on `model`, or this one's, with `text` as its first turn. Returns its id. */
+  handoff(sessionId: string, model: ModelRef | undefined, text: string): Promise<string>;
   close(): Promise<void>;
 };
 
@@ -174,8 +186,33 @@ export async function createDirectApplication(options: DirectApplicationOptions)
         logPath,
         profileId: record?.profileId ?? null,
         settings: record?.settings ?? null,
+        rebuilt: record?.rebuilt ?? false,
         contextWindow: ({ provider, model }) => getModelContextWindow(provider, model) ?? null,
       };
+    },
+    skills(root) {
+      const skills = new SkillsService(options.selection.logger, root);
+      skills.discoverSkills();
+      return skills.getAvailableSkills();
+    },
+    async handoff(sessionId, model, text) {
+      const session = await store.open(sessionId);
+      const state = stateOf(session);
+      if (state.activeTurnId !== null) throw new DirectProtocolError('rejected', 'Stop the running turn first.');
+      const target = model ?? state.model;
+      runtimes.authorizeModel(target, state.model);
+      const next = await successor(store, runtimes, options.conversationsDir, session, state, target);
+      const admission = await next.submitWithDelivery({
+        clientRequestId: randomUUID(),
+        content: [{ type: 'text', text }],
+        delivery: 'auto',
+        origin: { kind: 'tui' },
+      });
+      // Printed so the text survives: nothing retries it.
+      if (admission.kind === 'rejected') {
+        throw new Error(`Session ${next.id} did not take the handoff: ${admission.reason}\n\n${text}`);
+      }
+      return next.id;
     },
     async close() {
       try {
@@ -199,6 +236,22 @@ function writeGoal(session: DirectSession, goal: DurableGoal | undefined, source
   }
 }
 
+/** A new session that keeps this one's workspace, owner, settings and goal. Its log is left alone. */
+async function successor(
+  store: DirectLocalStore,
+  runtimes: DirectRuntimes,
+  directory: string,
+  session: DirectSession,
+  state: DirectSessionState,
+  model: ModelRef,
+): Promise<DirectSession> {
+  const binding = sessionStart(directory, session.id).binding;
+  const next = await runtimes.inheriting(session.id, () => store.create(state.workspace, model, binding));
+  const { goal } = state.context.goal;
+  if (goal) writeGoal(next, goal, 'launcher');
+  return next;
+}
+
 /**
  * `reset` is a new session in the same workspace, not a change to this one: the
  * old log stays intact and other clients stay attached to it. It keeps the old
@@ -217,11 +270,7 @@ function applicationCapabilities(
     async reset() {
       const state = stateOf(session);
       if (state.activeTurnId !== null) throw new DirectProtocolError('rejected', 'Stop the running turn first.');
-      const binding = sessionStart(directory, session.id).binding;
-      const next = await runtimes.inheriting(session.id, () => store.create(state.workspace, state.model, binding));
-      const { goal } = state.context.goal;
-      if (goal) writeGoal(next, goal, 'launcher');
-      return { sessionId: next.id };
+      return { sessionId: (await successor(store, runtimes, directory, session, state, state.model)).id };
     },
     async controlTask(taskId, action) {
       const tasks = runtimes.get(session.id)?.tasks();

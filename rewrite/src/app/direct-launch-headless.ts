@@ -45,6 +45,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         output,
         autoApprove,
         profileMetadata,
+        backgroundWaitTimeoutMs: selection.settings.get('agent.backgroundWaitTimeoutMs'),
         ...(request.showReasoning === undefined ? {} : { showReasoning: request.showReasoning }),
         ...(request.quiet === undefined ? {} : { quiet: request.quiet }),
         signal: stop.signal,

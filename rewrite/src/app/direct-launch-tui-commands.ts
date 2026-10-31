@@ -10,16 +10,20 @@
  */
 import { randomUUID } from 'node:crypto';
 import { createDurableGoal, formatGoalStatus } from '../../../source/services/conversation/durable-goal.js';
+import { composeHandoffMessage } from '../../../source/services/handoff/handoff-flow-reducer.js';
+import { loadMcpConfig } from '../../../source/services/mcp/mcp-config.js';
+import { injectSkillIntoTurn } from '../../../source/types/user-turn.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import { isControlSocketName } from '../clients/control/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
-import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
+import { receiptNotice, sendNativeCommand, submitText } from '../clients/tui/commands.js';
 import type { BridgeStatus, TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireCommand, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
 import type { DirectSessionTarget } from './direct-application-target.js';
 import type { DirectControlBridge } from './direct-launch-control.js';
 import { prepareRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
+import { createDirectTuiSettings } from './direct-launch-tui-settings.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
 
@@ -36,8 +40,6 @@ export type DirectTuiCommandOptions = {
   readonly restart: (plan: DirectRestartPlan) => void;
 };
 
-const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
-
 type Configuration = Extract<WireCommand, { type: 'configure' }>['configuration'];
 
 /**
@@ -47,6 +49,12 @@ type Configuration = Extract<WireCommand, { type: 'configure' }>['configuration'
 async function configure(connection: TuiConnection, configuration: Configuration): Promise<CommandResult> {
   const command = { type: 'configure', commandId: randomUUID(), configuration } as const;
   return { message: receiptNotice(await sendNativeCommand(connection, command)) };
+}
+
+function parseModel(reference: string | undefined): { provider: string; model: string } {
+  const separator = reference?.indexOf('/') ?? -1;
+  if (!reference || separator <= 0) throw new Error('Use <provider>/<model>.');
+  return { provider: reference.slice(0, separator), model: reference.slice(separator + 1) };
 }
 
 function assistantTexts(snapshot: WireSnapshot): readonly string[] {
@@ -60,11 +68,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   const { app, root, bridge, remote, latest, publish, restart } = options;
   const { host, principal } = app;
 
-  const settingsOf = (sessionId: string) => {
-    const { settings } = app.sessionDetails(sessionId);
-    if (!settings) throw new Error('This session has no live runtime.');
-    return settings;
-  };
+  const configuration = createDirectTuiSettings(app, latest);
 
   const resume = async (sessionId: string | undefined): Promise<CommandResult> => {
     if (sessionId) {
@@ -76,10 +80,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   };
 
   const model = async (connection: TuiConnection, reference: string | undefined): Promise<CommandResult> => {
-    const separator = reference?.indexOf('/') ?? -1;
-    if (!reference || separator <= 0) throw new Error('Use /model <provider>/<model>.');
-    const selected = { provider: reference.slice(0, separator), model: reference.slice(separator + 1) };
-    return configure(connection, { model: selected });
+    return configure(connection, { model: parseModel(reference) });
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
@@ -146,17 +147,51 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return { message: `Input ${inputTokens}, cached ${cachedInputTokens}, output ${outputTokens} tokens.` };
   };
 
-  const sandbox = (sessionId: string): CommandResult => {
-    const settings = settingsOf(sessionId);
-    const enabled = settings.get('sandbox.enabled') !== true;
-    settings.set('sandbox.enabled', enabled, { persist: false });
-    return { message: `Shell sandbox ${enabled ? 'enabled' : 'disabled'} for this session.` };
+  /** A skill always belongs to a request, so naming one alone hands the line back to finish. */
+  const skills = async (connection: TuiConnection, input: string): Promise<CommandResult> => {
+    if (remote) return { message: 'Skills are read from this machine, so they are not available over SSH.' };
+    const [, name, request] = /^\/skills(?:\s+(\S+)(?:\s+([\s\S]*))?)?$/.exec(input.trim()) ?? [];
+    const available = app.skills(root);
+    if (!name) {
+      const list = available.map((skill) => `${skill.name}: ${skill.description}`);
+      return { message: list.length ? list.join('\n') : 'No skills found.' };
+    }
+    const skill = available.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase());
+    if (!skill) return { message: `Unknown skill: "${name}". Use /skills to list them.` };
+    if (!request) {
+      return {
+        message: `Skill "${skill.name}": type your request after it.`,
+        draft: { text: `/skills ${skill.name} `, attachments: [] },
+      };
+    }
+    const { name: skillName, description, body } = skill;
+    const turn = { text: request, skill: { name: skillName, description, body } };
+    await submitText(connection, injectSkillIntoTurn(turn).text);
+    return {};
   };
 
-  const autoApprove = (sessionId: string, mode: string | undefined): CommandResult => {
-    if (!mode || !APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);
-    settingsOf(sessionId).set('shell.autoApproveMode', mode as never, { persist: false });
-    return { message: `Tool auto-approval set to ${mode} for this session.` };
+  const handoff = async (connection: TuiConnection, input: string): Promise<CommandResult> => {
+    const captured = assistantTexts(latest()).at(-1);
+    if (captured === undefined) return { message: 'No assistant response available to hand off.' };
+    const args = input.trim().slice('/handoff'.length).trim();
+    const [first] = args.split(/\s+/);
+    const named = first?.includes('/') ? parseModel(first) : undefined;
+    const handoffMessage = (named ? args.slice(first!.length) : args).trim() || undefined;
+    const text = composeHandoffMessage({
+      capturedText: captured,
+      stage: 'selecting_model',
+      ...(handoffMessage ? { handoffMessage } : {}),
+    });
+    return { sessionId: await app.handoff(connection.sessionId, named, text) };
+  };
+
+  /** Configuration is all this can show: nothing in this executable connects a server yet. */
+  const mcp = async (): Promise<CommandResult> => {
+    if (remote) return { message: 'MCP servers are not available over SSH in this executable.' };
+    const { servers, notes, userConfigPath } = await loadMcpConfig({ workspaceRoot: root });
+    if (!servers.length) return { message: `No MCP servers configured. Define them in ${userConfigPath}.` };
+    const lines = servers.map(({ name, provenance, transport }) => `  ${name} (${provenance} ${transport})`);
+    return { message: ['Configured, not connected in this executable:', ...lines, ...notes].join('\n') };
   };
 
   return {
@@ -178,9 +213,24 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'usage':
           return usage();
         case 'sandbox':
-          return sandbox(connection.sessionId);
+          return configuration.sandbox(connection);
         case 'auto-approve':
-          return autoApprove(connection.sessionId, argument);
+          return configuration.autoApprove(connection, argument);
+        case 'settings':
+          return configuration.settings(connection, rest.join(' '));
+        case 'plan':
+        case 'bare':
+        case 'mentor':
+        case 'orchestrator':
+          return configuration.toggle(connection, name);
+        case 'profile':
+          return configuration.profile(connection, argument);
+        case 'skills':
+          return skills(connection, input);
+        case 'handoff':
+          return handoff(connection, input);
+        case 'mcp':
+          return mcp();
         case 'goal':
           return goal(connection.sessionId, input.trim().slice('/goal'.length));
         case 'restart':

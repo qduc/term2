@@ -7,7 +7,11 @@ import { buildEnvOverrides } from '../../../source/services/settings/settings-se
 import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectBackgroundTasks } from '../session/direct-background.js';
-import type { DirectContextCapabilities, DirectContextFactory } from '../session/direct-capabilities.js';
+import type {
+  DirectContextCapabilities,
+  DirectContextFactory,
+  DirectContextPort,
+} from '../session/direct-capabilities.js';
 import type { DirectBinding } from '../session/facade-types.js';
 import type { DirectCommandConfiguration, DirectCommandOutcome } from '../session/direct-command-types.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
@@ -61,22 +65,29 @@ export type DirectPreparedConfiguration = DirectConfiguredGeneration & { install
 export type DirectRuntimeRecord = {
   readonly surface: AgentSurface;
   readonly scope: SessionScope;
-  readonly settings: ProfileSelection['settings'];
+  /** The session's own settings, and the one place a change is written. */
+  readonly settings: DirectSessionSettings;
   readonly profileId: string;
+  /** Its tools read a copy of `settings`, so a change needs a rebuild to reach them. */
+  readonly rebuilt: boolean;
   /** Set once the Session has replayed, which is before any client can reach it. */
   readonly tasks: () => DirectBackgroundTasks | undefined;
 };
 
 export type DirectRuntimes = {
   create(context: DirectRuntimeContext): DirectConversationRuntime;
+  /** Throws unless this application lets a session move from `previous` to `next`. */
+  authorizeModel(next: ModelRef, previous: ModelRef): void;
   /** An open session's runtime, for app-owned policy and commands. */
   get(sessionId: string): DirectRuntimeRecord | undefined;
   /** A session created during `operation` starts with this session's profile and effort, not the launch defaults. */
   inheriting<Result>(sessionId: string, operation: () => Promise<Result>): Promise<Result>;
 };
 
+export type DirectSessionSettings = ReturnType<typeof createAppSettings>['service'];
+
 /** The settings a new session continues from, carried through the store's creation call. */
-const continuedSettings = new AsyncLocalStorage<ProfileSelection['settings']>();
+const continuedSettings = new AsyncLocalStorage<DirectSessionSettings>();
 
 /**
  * A session owns its settings. `selection.settings` only supplies defaults: one
@@ -86,7 +97,7 @@ const continuedSettings = new AsyncLocalStorage<ProfileSelection['settings']>();
 function sessionSettings(
   { selection, profileExplicit, approvalAlwaysAsks }: DirectRuntimeOptions,
   { metadata, model }: DirectRuntimeContext,
-): ProfileSelection['settings'] {
+): DirectSessionSettings {
   const defaults = continuedSettings.getStore() ?? selection.settings;
   const { service: settings } = createAppSettings({
     env: buildEnvOverrides(),
@@ -129,12 +140,18 @@ function sameModelOnly(next: ModelRef, previous: ModelRef): void {
   throw new Error('This client may not move the session to another model.');
 }
 
+/** Each tool graph has its own check-in tools, and all of them act on this one Session. */
+function bindCheckIns(surface: AgentSurface, port: DirectContextPort): void {
+  surface.runtime.bindTaskCheckIn((target, policy) => port.configureTaskCheckIn(target, policy));
+}
+
 export function createDirectRuntimes(
   options: DirectRuntimeOptions,
   hookRuntime: DirectHookRuntime | null,
 ): DirectRuntimes {
   const records = new Map<string, DirectRuntimeRecord>();
   const { logger, sessionContext } = options.selection;
+  const authorizeModel = options.authorizeModel ?? sameModelOnly;
 
   const scopeFor = (id: string, startedAt: string): SessionScope => {
     const context = { sessionId: id, sessionStartedAt: startedAt, promptCacheKey: id };
@@ -142,6 +159,7 @@ export function createDirectRuntimes(
   };
 
   return {
+    authorizeModel,
     create(context) {
       // Metadata records a path, so the store resolves a foreign root narrower
       // rather than refusing it. Running it would act outside this mode's admission.
@@ -152,7 +170,8 @@ export function createDirectRuntimes(
       if (context.binding?.client === 'ssh' && context.binding.id !== options.sessionBinding?.id) {
         throw new Error('resume conversation belongs to a different SSH workspace');
       }
-      const selection = { settings: sessionSettings(options, context), logger, sessionContext };
+      const settings = sessionSettings(options, context);
+      const selection = { settings, logger, sessionContext };
       const surfaceOptions = options.surface(context.id);
       // The Session owns memory, so the surface must not offer it a second time. It
       // borrows SSH because the connection outlives this tool graph and this session.
@@ -161,13 +180,13 @@ export function createDirectRuntimes(
         borrowDirectConfigSurfaceOptions({ ...surfaceOptions, includeMemory: false, workspace: context.workspace }),
       );
       const scope = scopeFor(context.id, new Date().toISOString());
-      const profile = getProfileMetadata(String(selection.settings.get('app.activeProfileId')));
+      const profile = getProfileMetadata(String(settings.get('app.activeProfileId')));
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
       let tasks: DirectBackgroundTasks | undefined;
-      const publish = (published: AgentSurface, settings: ProfileSelection['settings'], profileId: string): void => {
-        records.set(context.id, { surface: published, scope, settings, profileId, tasks: () => tasks });
+      const publish = (published: AgentSurface, profileId: string, rebuilt: boolean): void => {
+        records.set(context.id, { surface: published, scope, settings, profileId, rebuilt, tasks: () => tasks });
       };
-      publish(surface, selection.settings, profile.activeProfileId);
+      publish(surface, profile.activeProfileId, false);
       options.onSurface?.(surface, profile);
       const models = withGenerationGuard(withSessionScope(createProviderRegistry(selection), scope), selection);
       const verification = verificationOperations(selection, models, context);
@@ -178,23 +197,23 @@ export function createDirectRuntimes(
       const generations: (() => void | Promise<void>)[] = [() => runtime.dispose?.()];
       let installed: {
         readonly context: DirectRuntimeContext;
-        readonly selection: ProfileSelection;
-        readonly capabilities?: DirectContextCapabilities;
-      } = { context, selection };
+        readonly bound?: { readonly port: DirectContextPort; readonly capabilities: DirectContextCapabilities };
+      } = { context };
       const rollover = (request?: SessionRolloverRequest) => options.rollover(context.id, request);
       const configure = async (configuration: DirectCommandConfiguration): Promise<DirectPreparedConfiguration> => {
-        const { capabilities } = installed;
-        if (!capabilities) throw new Error('This session has not finished starting.');
+        const { bound } = installed;
+        if (!bound) throw new Error('This session has not finished starting.');
         const generation = await prepareDirectConfiguration({
           context: installed.context,
-          selection: installed.selection,
+          selection,
           scope,
           surfaceOptions,
           configuration,
-          capabilities,
+          capabilities: bound.capabilities,
           memoryBinding,
-          authorizeModel: options.authorizeModel ?? sameModelOnly,
+          authorizeModel,
         });
+        bindCheckIns(generation.surface, bound.port);
         return {
           ...generation,
           // The Session replaces its whole dependency set, so its own commands must survive.
@@ -202,26 +221,31 @@ export function createDirectRuntimes(
           install() {
             installed = {
               context: { ...installed.context, model: generation.configuration.model },
-              selection: { ...installed.selection, settings: generation.settings },
-              capabilities: generation.capabilities,
+              bound: { port: bound.port, capabilities: generation.capabilities },
             };
             generations.push(generation.dispose);
-            publish(generation.surface, generation.settings, generation.profile.id);
+            publish(generation.surface, generation.profile.id, true);
             try {
+              // Generations are read-only copies, so the next one has to start from this.
+              const { modelSelection, reasoningEffort, temperature } = generation.intent;
+              settings.set('agent.modelSelection', modelSelection, { persist: false });
+              settings.set('agent.reasoningEffort', reasoningEffort, { persist: false });
+              if (temperature !== undefined) settings.set('agent.temperature', temperature, { persist: false });
               options.onSurface?.(generation.surface, getProfileMetadata(generation.profile.id));
             } catch (error) {
-              logger.warn(`Could not report the new surface: ${String(error)}`);
+              logger.warn(`Could not record the new configuration: ${String(error)}`);
             }
           },
         };
       };
       const contextFactory: DirectContextFactory = (port) => {
         tasks = port.tasks;
-        const hooks = hookRuntime?.session(context, selection.settings);
+        bindCheckIns(surface, port);
+        const hooks = hookRuntime?.session(context, settings);
         const capabilities: DirectContextCapabilities = {
           ...createDirectSessionMemory(
             {
-              settings: selection.settings,
+              settings,
               workspace: context.workspace,
               subject: { kind: 'main' },
               adaptTool: (definition) => memoryBinding.adapt(surface, definition),
@@ -231,16 +255,16 @@ export function createDirectRuntimes(
           ),
           ...(hooks ? { hooks } : {}),
           ...(verification ? { verification: { operations: verification } } : {}),
-          verificationEnabled: () => selection.settings.get('agent.completionVerification') !== false,
+          verificationEnabled: () => settings.get('agent.completionVerification') !== false,
           backgroundCheckIns: () => ({
-            enabled: selection.settings.get('agent.backgroundCheckIn.enabled'),
-            intervalMs: selection.settings.get('agent.backgroundCheckIn.intervalMs'),
+            enabled: settings.get('agent.backgroundCheckIn.enabled'),
+            intervalMs: settings.get('agent.backgroundCheckIn.intervalMs'),
           }),
           // Only a client with a person behind it can answer these.
           unattended: !interactive,
           proposeGoal: interactive,
         };
-        installed = { ...installed, capabilities };
+        installed = { ...installed, bound: { port, capabilities } };
         return capabilities;
       };
       return {
@@ -249,16 +273,16 @@ export function createDirectRuntimes(
           tools: runtime.tools,
           toolContext: runtime.toolContext,
           maxParallelToolCalls: runtime.maxParallelToolCalls,
-          ...runPolicy(selection.settings, context.id, context.model),
+          ...runPolicy(settings, context.id, context.model),
           context: contextFactory,
-          authorizeNested: createNestedAuthorizer(selection.settings, context.model, runtime.resolveNestedAuthority),
+          authorizeNested: createNestedAuthorizer(settings, context.model, runtime.resolveNestedAuthority),
           rollover,
           configure,
         },
         request: {
           ...request,
           ...(notice ? { notice } : {}),
-          previewMode: readDirectInputPreviewConfiguration(selection.settings, context.model).mode,
+          previewMode: readDirectInputPreviewConfiguration(settings, context.model).mode,
         },
         profile: {
           id: profile.activeProfileId,

@@ -1,51 +1,60 @@
 import { useRef, useState } from 'react';
-import { appendHistory, readHistory } from './history.js';
+import { appendHistory, readHistory, type HistoryEntry } from './history.js';
 
-/** Session-local editor history. Navigation restores the unfinished draft at the end. */
-export function useEditor(initialHistory: readonly string[]) {
+type EditorDraft = HistoryEntry & { readonly cursor: number };
+
+/** History preserves text, attachments and the unfinished draft's cursor while navigating. */
+export function useEditor(initialHistory: readonly HistoryEntry[]) {
   const [value, setValue] = useState('');
   const [inputKey, setInputKey] = useState(0);
+  const [cursorOverride, setCursorOverride] = useState<number | undefined>();
+  const cursor = useRef(0);
   const [loaded] = useState(() => {
     try { return { entries: readHistory(), error: null as string | null }; }
-    catch (error) { return { entries: [] as string[], error: `History unavailable: ${error instanceof Error ? error.message : String(error)}` }; }
+    catch (error) { return { entries: [] as HistoryEntry[], error: `History unavailable: ${error instanceof Error ? error.message : String(error)}` }; }
   });
   const history = useRef(loaded.entries.length ? loaded.entries : [...initialHistory]);
   const [historyError, setHistoryError] = useState(loaded.error);
   const position = useRef(-1);
-  const draft = useRef('');
+  const draft = useRef<EditorDraft>({ text: '', attachments: [], cursor: 0 });
   const valueRef = useRef(value);
   valueRef.current = value;
 
-  const change = (next: string) => {
-    valueRef.current = next;
-    setValue(next);
+  const change = (next: string) => { valueRef.current = next; setValue(next); };
+  const replace = (next: string, at = next.length) => {
+    change(next);
+    cursor.current = at;
+    setCursorOverride(at);
+    setInputKey(key => key + 1);
   };
-  const navigate = (direction: 'up' | 'down' | 'left' | 'right') => {
-    if (direction !== 'up' && direction !== 'down') return;
+  const cursorChanged = (offset: number) => {
+    cursor.current = offset;
+    if (cursorOverride === offset) setCursorOverride(undefined);
+  };
+  const navigate = (direction: 'up' | 'down' | 'left' | 'right', current: HistoryEntry): EditorDraft | null => {
+    if (direction !== 'up' && direction !== 'down') return null;
     const entries = history.current;
-    if (!entries.length || (direction === 'down' && position.current === -1)) return;
+    if (!entries.length || (direction === 'down' && position.current === -1)) return null;
     if (direction === 'up') {
-      if (position.current === -1) draft.current = valueRef.current;
+      if (position.current === -1) draft.current = { ...current, cursor: cursor.current };
       position.current = position.current === -1 ? entries.length - 1 : Math.max(0, position.current - 1);
     } else {
       position.current += 1;
       if (position.current >= entries.length) position.current = -1;
     }
-    change(position.current === -1 ? draft.current : entries[position.current]);
-    // ink-prompt owns the cursor; remounting resets it after replacing the buffer,
-    // the same approach used by the current InputBox history navigation.
-    setInputKey(key => key + 1);
+    const entry = position.current === -1 ? draft.current : { ...entries[position.current], cursor: entries[position.current].text.length };
+    return entry;
   };
-  const accepted = (submitted: string, remember: boolean) => {
-    if (remember && submitted.trim() && history.current.at(-1) !== submitted) {
-      history.current.push(submitted);
-      try { appendHistory(submitted); setHistoryError(null); }
+  const accepted = (submitted: string, remember: boolean, attachments: HistoryEntry['attachments'] = []) => {
+    const entry = { text: submitted, attachments };
+    if (remember && (submitted.trim() || attachments.length) && JSON.stringify(history.current.at(-1)) !== JSON.stringify(entry)) {
+      history.current.push(entry);
+      try { appendHistory(entry); setHistoryError(null); }
       catch (error) { setHistoryError(`History not saved: ${error instanceof Error ? error.message : String(error)}`); }
     }
     position.current = -1;
-    draft.current = '';
-    // Do not erase a draft edited while the admission was in flight.
+    draft.current = { text: '', attachments: [], cursor: 0 };
     if (valueRef.current === submitted) change('');
   };
-  return { value, change, navigate, accepted, inputKey, historyError };
+  return { value, change, replace, navigate, accepted, inputKey, historyError, cursorChanged, cursorOverride, cursor };
 }

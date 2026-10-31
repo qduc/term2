@@ -52,9 +52,9 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const [otherParts, setOtherParts] = useState<readonly WireContent[]>([]);
   const [originalParts, setOriginalParts] = useState<readonly WireContent[]>([]);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
-  const [editing, setEditing] = useState<{ id: string; restoreText: string; restoreImages: ImageRef[]; restoreOther: readonly WireContent[]; restoreOriginal: readonly WireContent[] } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; restoreText: string; restoreCursor: number; restoreImages: ImageRef[]; restoreOther: readonly WireContent[]; restoreOriginal: readonly WireContent[] } | null>(null);
   const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen && !rewindTargets);
-  const editor = useEditor(state.messages.filter(message => message.role === 'user').map(message => message.text));
+  const editor = useEditor(state.messages.filter(message => message.role === 'user').map(message => ({ text: message.historyText ?? message.text, attachments: message.attachments ?? [] })));
   const { InputFrame, PromptMarker, Hints } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
@@ -81,9 +81,9 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     editor.change(value);
   };
 
-  const restoreDraft = (draft: { readonly text: string; readonly attachments: readonly WireContent[] }) => {
+  const restoreDraft = (draft: { readonly text: string; readonly attachments: readonly WireContent[] }, cursor?: number) => {
     const restored = restoreAttachments(draft.attachments);
-    editor.change(draft.text); setImages(restored.images); setOtherParts(restored.other); setOriginalParts(draft.attachments);
+    editor.replace(draft.text, cursor); setImages(restored.images); setOtherParts(restored.other); setOriginalParts(draft.attachments);
   };
   const executeRewind = async (targetId: string, disposition: 'edit' | 'resend') => {
     if (pending.current) return;
@@ -108,11 +108,11 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     try {
       if (editing) {
         if (input.trim() === '/queue cancel') {
-          editor.change(editing.restoreText); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null); return;
+          editor.replace(editing.restoreText, editing.restoreCursor); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null); return;
         }
         try {
           await queueAction(connection, 'edit', editing.id, input, submittedImages.length ? wireImages(submittedImages, originalParts) : undefined);
-          editor.change(editing.restoreText); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null);
+          editor.replace(editing.restoreText, editing.restoreCursor); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null);
           setNotice('Queued message updated.'); return;
         } catch (error) {
           if (error instanceof WireCommandFailure && error.code === 'too_late') {
@@ -194,8 +194,8 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
           if (!item || match[3] !== undefined) throw new Error('Use /queue clear-images <number>.');
           await queueAction(connection, 'edit', item.id, item.text, []);
         } else if (action === 'edit' && item && match[3] === undefined) {
-          setEditing({ id: item.id, restoreText: '', restoreImages: images, restoreOther: otherParts, restoreOriginal: originalParts });
-          editor.change(item.text); setImages([]); setOtherParts([]); setOriginalParts([]);
+          setEditing({ id: item.id, restoreText: '', restoreCursor: 0, restoreImages: images, restoreOther: otherParts, restoreOriginal: originalParts });
+          editor.replace(item.text); setImages([]); setOtherParts([]); setOriginalParts([]);
           setNotice('Editing queued text. Existing attachments will be retained unless you paste replacements. /queue cancel restores your draft.'); return;
         } else await queueAction(connection, action, item?.id, match[3]);
       } else if (input.trim() === '/cancel') {
@@ -216,7 +216,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         setImages([]); setOtherParts([]); setOriginalParts([]);
       }
       // Do not add interaction answers to recallable input history.
-      editor.accepted(input, !input.startsWith('/answer '));
+      editor.accepted(input, !input.startsWith('/answer '), input.startsWith('/') && !/^\/(steer|followup)\s/.test(input) ? [] : wireAttachments(submittedImages, otherParts, originalParts));
       answerOwners.current = null;
       queueOwners.current = null;
     } catch (error) {
@@ -246,7 +246,12 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         value={editor.value}
         onChange={changeInput}
         onSubmit={(value, submittedImages) => { void submit(value, submittedImages); }}
-        onBoundaryArrow={editor.navigate}
+        onBoundaryArrow={direction => {
+          const entry = editor.navigate(direction, { text: editor.value, attachments: wireAttachments(images, otherParts, originalParts) });
+          if (entry) restoreDraft(entry, entry.cursor);
+        }}
+        onCursorChange={editor.cursorChanged}
+        cursorOverride={editor.cursorOverride}
         width={Math.max(1, columns - 4)}
         maxHeight={Math.max(1, rows - 8)}
         isActive={!busy && !connectionError && !interactionOpen && !rewindTargets}

@@ -43,6 +43,7 @@ export function Activity({ state }: { readonly state: TuiState }): React.ReactEl
       {interaction.choices.map((choice, choiceIndex) => <Text key={choice.id}>  {choiceIndex + 1}. {choice.label}</Text>)}
       <Text color={theme.textSubtle}>/answer {index + 1} &lt;choice number&gt;{interaction.acceptsText ? ' [text]' : ''}</Text>
     </Box>)}
+    {state.liveEvents?.map(event => <Text key={event.key}>{event.text}</Text>)}
     {state.notices.map((notice, index) => <Text key={index}>{notice}</Text>)}
   </Box>;
 }

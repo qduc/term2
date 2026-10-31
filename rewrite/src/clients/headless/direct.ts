@@ -135,9 +135,11 @@ export async function runDirectHeadless(
     turnId: targetTurnId,
   });
 
-  /** Old headless never answers a run-budget check-in; it parks and exits 2. */
+  /** Headless never answers a run-budget check-in; it exits 2 without a grant. */
   const reportBudgetPause = (evidence?: WireBudgetEvidence): DirectHeadlessResult => {
-    const recovery = `Work and completed results are retained. Resume with --resume ${sessionId} interactively to review the budget before continuing; --auto-approve only approves tools.`;
+    // Session disposal currently closes the pending budget as a system stop.
+    // Do not promise an interactive review that does not exist.
+    const recovery = `Run budget paused. Work and completed results are retained, but this one-shot run cannot leave the budget request open: exiting closes it as a system stop. Resume with --resume ${sessionId} to inspect the stopped turn; budget review and extension are not available in headless. --auto-approve only approves tools.`;
     if (output === 'json') {
       json({
         type: 'run_budget_paused',

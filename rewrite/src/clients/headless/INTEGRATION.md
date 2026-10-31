@@ -75,16 +75,17 @@ conversation storage.
   treated the same way; other failures remain failures.
 - `budget_opened` for the submitted turn, or a pending budget in the attach
   snapshot, is reported as `run_budget_paused`/exit 2 without answering it.
-  `--auto-approve` never grants run budget or turns. The app/host must retain
-  that pending check-in for interactive resume; disposal must not turn it into
-  an accepted stop.
+  `--auto-approve` never grants run budget or turns. Today Session disposal and
+  crash replay close the pending check-in as a system stop, so the diagnostic
+  deliberately does not promise a resumable budget review. A real Session park
+  is required before the old review wording can return.
 - Exit codes: completed 0; failed, interrupted, cancelled or a command/stream
   error 1; resumable context failures (`request_input_limit`,
   `context_compaction_hard_fit`, `provider_context_overflow`, `context_paused`)
   and the accepted terminal causes `goal_check_unresolved` /
   `completion_verification_blocked` return 2 (`context_paused` / `blocked`).
-  A pending/opened run-budget check-in returns `budget_paused`/exit 2 with the
-  old recovery text; headless never grants budget. The app must map `blocked`
+  A pending/opened run-budget check-in returns `budget_paused`/exit 2 with
+  truthful terminal wording; headless never grants budget. The app must map `blocked`
   and `budget_paused` to exit 2.
 - An abort before the turn starts detaches without cancelling another turn;
   the app's host disposal owns a queued admission. An abort after it starts

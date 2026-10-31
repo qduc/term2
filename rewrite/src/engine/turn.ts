@@ -77,6 +77,11 @@ async function modelStepRun(
   history: Item[],
   modelStep: number,
 ): Promise<RootCall[]> {
+  // Session commits queued steering before returning model-facing input. Do not
+  // emit duplicate item facts: queue_steered is the canonical durable evidence.
+  const steering = await deps.takeSteering?.(spec.turnId);
+  if (signal.aborted) throw cancelled();
+  if (steering?.length) history.push(...steering);
   const calls: RootCall[] = [];
   const stepItems: Item[] = [];
   let text = '';

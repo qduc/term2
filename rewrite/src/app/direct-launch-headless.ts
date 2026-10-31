@@ -24,7 +24,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         hooks: { root, mode: 'non-interactive' },
         onSurface(surface, profile) {
           profileMetadata = profile;
-          if (output === 'plain' && !request.quiet) io.stderr.write(`Profile: ${surface.profileName}\n`);
+          io.stderr.write(`Profile: ${surface.profileName}\n`);
         },
       });
       application = app;

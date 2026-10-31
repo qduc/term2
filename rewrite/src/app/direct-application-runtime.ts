@@ -14,6 +14,7 @@ import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-
 export type DirectRuntimeOptions = {
   readonly selection: ProfileSelection;
   readonly profileExplicit?: boolean;
+  readonly canRun: (workspace: DirectRuntimeContext['workspace']) => boolean;
   /** Fixed per mode. The workspace comes from each session's own authority. */
   readonly surface: Omit<ToolSurfaceOptions, 'workspace'>;
   /** After any resumed selection is restored, so this reports what actually runs. */
@@ -74,7 +75,7 @@ export function createDirectRuntimes(
     create(context) {
       // Metadata records a path, so the store resolves a foreign root narrower
       // rather than refusing it. Running it would act outside this mode's admission.
-      if (context.metadata && context.workspace.access !== 'read_write') {
+      if (context.metadata && !options.canRun(context.workspace)) {
         throw new Error('resume conversation belongs to a different workspace');
       }
       const selection = { settings: sessionSettings(options, context), logger, sessionContext };

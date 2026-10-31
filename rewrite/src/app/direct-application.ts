@@ -23,7 +23,7 @@ import { startDirectHooks, type DirectHookOptions } from './direct-application-h
 import { createDirectRuntimes, type DirectRuntimeOptions, type DirectRuntimes } from './direct-application-runtime.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority } from './direct-application-workspaces.js';
 
-export type DirectApplicationOptions = DirectRuntimeOptions & {
+export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly conversationsDir: string;
   readonly authority: DirectAuthority;
   /** The modes with public hooks today: the terminal UI and headless. ACP and serve have none. */
@@ -33,6 +33,10 @@ export type DirectApplicationOptions = DirectRuntimeOptions & {
 /** Read from the session's own log and runtime, for clients that report it. */
 export type DirectSessionDetails = {
   readonly createdAt: string;
+  /** The log's last write. Every accepted fact lands there, so this is real activity. */
+  readonly updatedAt: string;
+  /** Logs are never truncated, so a cursor can reach back to the first line. */
+  readonly earliestSeq: number;
   readonly logPath: string;
   readonly profileId: string | null;
   readonly settings: ProfileSelection['settings'] | null;
@@ -51,15 +55,15 @@ export type DirectApplication = {
 };
 
 /** The log's first line is the session's real creation, whichever client attaches later. */
-function createdAt(logPath: string): string {
+function firstLine(logPath: string): { readonly at: string; readonly seq: number } {
   const [first = ''] = fs.readFileSync(logPath, 'utf8').split('\n', 1);
-  return (JSON.parse(first) as { readonly at: string }).at;
+  return JSON.parse(first) as { readonly at: string; readonly seq: number };
 }
 
 export async function createDirectApplication(options: DirectApplicationOptions): Promise<DirectApplication> {
   const { authority, selection } = options;
   const hooks = options.hooks ? await startDirectHooks(options.hooks, selection) : null;
-  const runtimes = createDirectRuntimes(options, hooks);
+  const runtimes = createDirectRuntimes({ ...options, canRun: (workspace) => authority.canRun(workspace) }, hooks);
   const store = createDirectSessionStore({
     directory: options.conversationsDir,
     resolveWorkspace: (root) => authority.resolveStored(root),
@@ -94,8 +98,11 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     sessionDetails(sessionId) {
       const logPath = path.join(options.conversationsDir, `${sessionId}.jsonl`);
       const record = runtimes.get(sessionId);
+      const { at, seq } = firstLine(logPath);
       return {
-        createdAt: createdAt(logPath),
+        createdAt: at,
+        updatedAt: fs.statSync(logPath).mtime.toISOString(),
+        earliestSeq: seq,
         logPath,
         profileId: record?.profileId ?? null,
         settings: record?.settings ?? null,

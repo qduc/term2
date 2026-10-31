@@ -20,6 +20,6 @@ export async function launchDirect(request: DirectLaunchRequest): Promise<number
     case 'discord':
       return (await import('./direct-launch-control.js')).launchDiscord(request.argv);
     case 'serve':
-      throw new Error('term2 serve is not wired into the direct executable yet.');
+      return (await import('./direct-launch-serve.js')).launchServe(request);
   }
 }

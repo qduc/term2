@@ -15,6 +15,8 @@ export type DirectAuthority = {
    * throwing here would fail a whole listing because of one other project's session.
    */
   resolveStored(root: string): Workspace | Promise<Workspace>;
+  /** May a stored session actually run here, rather than only be listed. */
+  canRun(workspace: Workspace): boolean;
 };
 
 export const LOCAL_PRINCIPAL: Principal = { userId: 'local', via: 'local' };
@@ -46,5 +48,7 @@ export function createLocalAuthority(admits: (root: string) => boolean): DirectA
       return resolved;
     },
     resolveStored: workspace,
+    // Narrowing here only means "not admitted", so a local mode never runs it.
+    canRun: ({ access }) => access === 'read_write',
   };
 }

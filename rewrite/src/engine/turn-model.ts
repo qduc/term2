@@ -190,11 +190,11 @@ export class TurnModel {
     const summaryModel: Model = {
       ref: model.ref,
       contextWindow: model.contextWindow,
-      stream: (summary, signal) => control.#summary(model, summary, history, signal),
+      stream: (summary, signal) => control.#summary(model, summary, history, signal, request.instructions),
       ...(model.compact
         ? {
             compact: async (native: ModelRequest, signal: AbortSignal) => {
-              const { request: prepared, modelStep } = await control.#auxiliary(native, history);
+              const { request: prepared, modelStep } = await control.#auxiliary(native, history, request.instructions);
               control.budget.dispatched();
               try {
                 const items = await model.compact!(prepared, signal);
@@ -253,7 +253,11 @@ export class TurnModel {
     this.#continuity.clear();
   }
 
-  async #auxiliary(request: ModelRequest, history: Item[]): Promise<{ request: ModelRequest; modelStep: number }> {
+  async #auxiliary(
+    request: ModelRequest,
+    history: Item[],
+    preparedInstructions: string,
+  ): Promise<{ request: ModelRequest; modelStep: number }> {
     const steering = [...(await this.#steering(history))];
     const action = await this.budget.beforeRequest(history);
     steering.push(...(await this.#steering(history)));
@@ -261,7 +265,14 @@ export class TurnModel {
     if (action === 'stop') throw new NativeBudgetExhausted('Run budget exhausted before context compaction');
     this.#checkLimit();
     const modelStep = ++this.#step;
-    const canonical = { ...request, input: [...request.input, ...steering] };
+    const canonical = {
+      ...request,
+      // The live-prefix summary inherits the preflight envelope; rebuild its
+      // dynamic goal/memory layer once, rather than appending it twice. Chunk
+      // summaries have their own compaction instructions and keep those intact.
+      instructions: request.instructions === preparedInstructions ? this.spec.instructions : request.instructions,
+      input: [...request.input, ...steering],
+    };
     const surface = await this.deps.prepareRequest?.(canonical, {
       turnId: this.spec.turnId,
       modelStep,
@@ -288,8 +299,9 @@ export class TurnModel {
     request: ModelRequest,
     history: Item[],
     signal: AbortSignal,
+    preparedInstructions: string,
   ): AsyncGenerator<ModelEvent> {
-    const prepared = await this.#auxiliary(request, history);
+    const prepared = await this.#auxiliary(request, history, preparedInstructions);
     const requestId = `${this.spec.turnId}:model:${prepared.modelStep}`;
     let usage: Usage | undefined;
     let done: Done | undefined;

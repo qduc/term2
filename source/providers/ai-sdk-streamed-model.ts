@@ -187,6 +187,7 @@ export function createAiSdkStreamedModel(
           toolCalls.set(part.id, current);
           yield {
             type: 'tool_call_streaming_delta',
+            callId: part.id,
             ...(current.name ? { toolName: current.name } : {}),
             argumentCharCount: current.argumentCharCount,
           };

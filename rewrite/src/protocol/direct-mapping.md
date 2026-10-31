@@ -425,3 +425,28 @@ turn admission, not completion. It is not a replacement Session waiter or implic
 loop. Headless owns its native-task-aware drain/wait sequence and timeout/cancel
 reporting. Native notification decoder registration remains its owner's dependency.
 No tests/checks/builds/reviews/runtime evidence collected.
+
+## Bounded legacy JSON live deltas, not a final window
+
+`direct-json.ts#legacyTextDelta` and `legacyReasoningDelta` copy actual wire
+chunks into their source ConversationEvent DTOs with `type` and `delta` only.
+Both source DTOs make fullText optional. The helpers deliberately omit it:
+message-local drafts are not the legacy turn-wide accumulated stream, and native
+reasoning transients provide no durable complete prefix/block identity. An accepted
+reasoning summary is not emitted as a new reasoning_delta. The original wire
+turn/branch envelope retains ownership; consumers must select the correct scope
+before using these unscoped legacy DTOs. No event, cursor or identity is allocated.
+
+`DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE` is statically false. It is an explicit
+negative declaration for the complete legacy final contract, not a per-session
+runtime readiness promise. Existing cost, command-message and argument-progress
+helpers plus these delta helpers are partial slices, not an ungating condition.
+
+The consumed native turnResults contain public messages and terminal metadata,
+not authoritative ordered PersistedAssistantTurnItem records, per-turn terminal
+usage/reasoning or source live/final command/cost partition. Session cumulative
+usage and public message/tool/timeline projections must not be presented as those
+windows. No legacy final, remaining live event family, private providerHistory or
+complete --json parity is supplied by these helpers. Headless owns its existing
+client completion/error records and keeps --json fail-closed until genuine native
+public final-window authority and required event coverage are delivered.

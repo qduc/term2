@@ -167,7 +167,7 @@ Local editor/navigation/reset actions are intentionally not wire commands.
 | streaming/thinking_started | reasoning_delta/accepted reasoning; local clock indicator |
 | streaming/thinking_cleared | local indicator/turn transition; no invented model-step clear |
 | streaming/retry_countdown | retrying presentation; real producer still pending |
-| streaming/tool_info | tool_called/started/progress; argument-stream info pending |
+| streaming/tool_info | tool_called/started/progress plus actual live scoped argument count/name; no parsed-call substitute |
 | streaming/speed_updated | client-local measurement of real text deltas |
 | approval/requested | interaction_opened |
 | approval/resolved | interaction_resolved |

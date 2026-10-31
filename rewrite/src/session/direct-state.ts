@@ -104,7 +104,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
   }
   if (fact.type === 'tool_started') add('tool', fact.executionId, fact.turnId);
   if (fact.type === 'task_started') add('task', fact.task.taskId, fact.task.parentTurnId);
-  state = { ...state, timeline, context: reduceDirectContext(state.context, fact) };
+  state = { ...state, timeline, context: reduceDirectContext(state.context, fact, state.queue.records) };
   if (isDirectTaskFact(fact)) {
     const tasks = reduceDirectBackground(state.tasks, fact);
     const rootRequests = state.pendingInteractions.filter((request) => !('taskId' in request));

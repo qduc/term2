@@ -50,3 +50,8 @@ export function directOriginKey(origin?: DirectOrigin): readonly unknown[] | nul
     return [value.kind, value.source, value.sender, value.discordMessageId ?? null, value.relayedBy ?? null];
   return [value.kind, value.id ?? null, value.kind === 'control' ? value.source ?? null : null];
 }
+
+/** Automatic control/agent/reaction input never opens a fresh human decision window. */
+export function isDirectHumanOrigin(origin?: DirectOrigin): boolean {
+  return !origin || (origin.kind === 'discord' ? origin.source === 'human' : origin.kind !== 'control');
+}

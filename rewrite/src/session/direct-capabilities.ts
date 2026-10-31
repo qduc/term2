@@ -5,6 +5,7 @@ import type { Tool, ToolRegistry } from '../tools/index.js';
 import type { Fact, FactLine } from './facts.js';
 import {
   planDirectInstructions,
+  startsDirectHumanWindow,
   planDirectHumanContext,
   type DirectContextState,
   type DirectContextFact,
@@ -234,8 +235,13 @@ export function directAcceptedGoalWindow(facts: readonly Fact[]): readonly Direc
   let turnId: TurnId | undefined;
   let stepOffset = 0;
   const partials = new Map<number, { text: string; completed: boolean }>();
+  const admissions = new Map<ItemId, import('./direct-queue-types.js').DirectQueueRecord>();
   for (const fact of facts) {
+    if (fact.type === 'queue_submitted') admissions.set(fact.record.messageId, fact.record);
     if (fact.type === 'turn_started' || fact.type === 'queue_steered') {
+      const human = startsDirectHumanWindow(fact, [...admissions.values()]);
+      // An automatic steer is provider context, not a new goal or model-step boundary.
+      if (fact.type === 'queue_steered' && !human) continue;
       if (fact.type === 'turn_started' && fact.retryContext) {
         if (fact.retryContext.sourceTurnId !== turnId) throw new Error('Retry goal window has no accepted source turn');
         const through = window.findIndex(({ item }) => item.id === fact.retryContext!.throughItemId);
@@ -243,7 +249,7 @@ export function directAcceptedGoalWindow(facts: readonly Fact[]): readonly Direc
         // Physical modelStep numbering restarts on a new Turn. Goal evidence
         // must not treat the retried step as the old step's parallel calls.
         stepOffset = Math.max(-1, ...window.map(({ modelStep }) => modelStep)) + 1;
-      } else if (fact.type === 'turn_started' && fact.silent) {
+      } else if (fact.type === 'turn_started' && !human) {
         stepOffset = Math.max(-1, ...window.map(({ modelStep }) => modelStep)) + 1;
       } else {
         window = [];

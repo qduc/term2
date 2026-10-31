@@ -42,7 +42,7 @@ import type {
   DirectCommandOutcome,
   DirectCommandResult,
 } from './direct-command-types.js';
-import { parseDirectOrigin } from './direct-origin.js';
+import { parseDirectOrigin, isDirectHumanOrigin } from './direct-origin.js';
 import { DirectSubagents } from './direct-subagent.js';
 import { DirectContinuity, type DirectContinuityBinding } from '../engine/direct-recovery-continuity.js';
 import { directPreviewConfiguration, directPreviewOccurrences } from './direct-preview.js';
@@ -136,7 +136,7 @@ function conversation(
     if (isDirectNotificationFactType(fact.type))
       notifications = reduceDirectNotifications(notifications, fact as DirectNotificationFact);
     if (changesRootHistory(fact)) ++historyRevision;
-    context = reduceDirectContext(context, fact);
+    context = reduceDirectContext(context, fact, queueState.records);
     if (isDirectQueueFact(fact)) queueState = reduceDirectQueue(queueState, fact);
     if (isDirectTaskFact(fact)) taskStates = reduceDirectBackground(taskStates, fact);
     if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened')
@@ -196,7 +196,7 @@ function conversation(
         projectedNotices = reduceDirectNotifications(projectedNotices, fact as DirectNotificationFact);
       if (isDirectCommandFactType(fact.type))
         projectedReceipts = reduceDirectCommandReceipts(projectedReceipts, fact as DirectCommandFact);
-      projectedContext = reduceDirectContext(projectedContext, fact);
+      projectedContext = reduceDirectContext(projectedContext, fact, projectedQueue.records);
       if (isDirectQueueFact(fact)) projectedQueue = reduceDirectQueue(projectedQueue, fact);
       if (isDirectTaskFact(fact)) projectedTasks = reduceDirectBackground(projectedTasks, fact);
       if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened') {
@@ -473,7 +473,7 @@ function conversation(
               admission?.type === 'turn_started' &&
               !admission.silent &&
               !admission.retryContext &&
-              humanOrigin(admission.submission?.origin)
+              isDirectHumanOrigin(admission.submission?.origin)
             ) {
               const content = admission.input.flatMap((item) =>
                 item.type === 'user_message' ? [...item.content] : [],
@@ -601,7 +601,7 @@ function conversation(
     }
     const turnId = planned?.turnId ?? (`turn-${nextTurnId++}` as TurnId);
     const snapshot = planned?.accepted ? { history: planned.history!, compactionState: undefined } : liveReplay();
-    const isHuman = !planned?.accepted && !planned?.silent && humanOrigin(request.submission?.origin);
+    const isHuman = !planned?.accepted && !planned?.silent && isDirectHumanOrigin(request.submission?.origin);
     const human = isHuman
       ? capabilities!.humanPlan(request.submission?.messageId ?? turnId, request.input)
       : { facts: capabilities!.memoryFacts(), modelInput: request.input };
@@ -1337,11 +1337,6 @@ function withNotice(input: readonly Item[], notice: string): readonly Item[] {
     content[textIndex] = { ...part, text: `${notice}\n\n${part.text}` };
     return { ...item, content };
   });
-}
-
-/** Automatic/relayed agent input is not a human context/admission grant. */
-function humanOrigin(origin?: DirectOrigin): boolean {
-  return !origin || (origin.kind === 'discord' ? origin.source === 'human' : origin.kind !== 'control');
 }
 
 /** Physical audit/branch progress do not invalidate a root history token. */

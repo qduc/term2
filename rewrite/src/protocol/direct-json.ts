@@ -2,8 +2,29 @@
  * complete --json read model: callers must retain the fail-closed legacy gate.
  */
 import type { CommandMessage } from '../../../source/tools/types.js';
-import type { CommandMessageEvent, CostUpdateEvent, ToolCallStreamingDeltaEvent } from '../../../source/services/conversation/conversation-events.js';
+import type { CommandMessageEvent, CostUpdateEvent, ReasoningDeltaEvent, TextDeltaEvent, ToolCallStreamingDeltaEvent } from '../../../source/services/conversation/conversation-events.js';
 import type { WireEvent } from './direct-wire.js';
+
+/** Static negative capability for the complete old final contract, not runtime
+ * readiness. Bounded helpers below do not supply final/turnItems/providerHistory.
+ */
+export const DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE = false;
+
+/** Copy the actual text chunk only. Select its owning turn/branch before emitting.
+ * fullText is optional in the source DTO and deliberately omitted: a message draft
+ * or public transcript is not the complete legacy turn-wide streamed prefix.
+ */
+export function legacyTextDelta(event: Extract<WireEvent, { readonly type: 'text_delta' }>): TextDeltaEvent {
+  return { type: 'text_delta', delta: event.payload.delta };
+}
+
+/** Copy only a real live reasoning chunk, not an accepted summary relabelled as a
+ * delta. No fullText: native transients do not supply a complete replayable prefix.
+ * Ownership remains on the wire envelope; this helper creates no block identity.
+ */
+export function legacyReasoningDelta(event: Extract<WireEvent, { readonly type: 'reasoning_delta' }>): ReasoningDeltaEvent {
+  return { type: 'reasoning_delta', delta: event.payload.delta };
+}
 
 /** Project one actual settled request record verbatim; ancestry remains on the wire
  * envelope. Select the owning root/tree before using this in a per-run legacy sink.

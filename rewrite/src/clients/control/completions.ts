@@ -5,6 +5,7 @@
 import { setImmediate } from 'node:timers';
 import type { WireAdmission, WireEvent, WireSnapshot } from '../../protocol/direct-wire.js';
 import type { BridgeOutcome } from './transport.js';
+import { submissionOutcome } from './submission-result.js';
 
 type Admission = Exclude<WireAdmission, { readonly kind: 'duplicate' | 'rejected' }>;
 export interface ControlDelivery {
@@ -32,12 +33,15 @@ function callback(action: (() => void) | undefined): void {
 
 function terminal(state: WireSnapshot, ended: NonNullable<WireSnapshot['terminal']>): BridgeOutcome {
   if (ended.outcome !== 'completed') return { state: 'interrupted' };
+  if (ended.finalText !== undefined)
+    return ended.finalText === null ? { state: 'pending' } : { state: 'final', text: ended.finalText };
   // Last completed assistant message is the final answer, not an earlier tool preface
   // or another turn's streamed draft. Never concatenate model-step identities.
   const messages = state.messages.filter(
     (message) => message.turnId === ended.turnId && message.role === 'assistant' && !message.draft,
   );
-  return { state: 'final', text: messages.at(-1)?.text ?? '' };
+  const final = messages.at(-1);
+  return final ? { state: 'final', text: final.text } : { state: 'pending' };
 }
 
 /** Retains observations only while callbacks or an in-flight admission need them.
@@ -69,7 +73,7 @@ export class ControlCompletions {
       (delivery.turnId !== undefined &&
         (state.activeTurnId === delivery.turnId ||
           state.pendingInteractions.some((item) => item.turnId === delivery.turnId)));
-    if (replayed && !live) {
+    if (replayed && !live && !state.submissions?.some((item) => item.clientRequestId === admission.clientRequestId)) {
       // Only the actual matching terminal can establish completion. An older
       // duplicate absent from the retained terminal remains uncertain, not final.
       this.#complete(delivery, { state: 'interrupted' });
@@ -127,6 +131,18 @@ export class ControlCompletions {
   #update(delivery: ControlDelivery, state: WireSnapshot): void {
     const admission = delivery.admission;
     if (!admission) return;
+    const record = state.submissions?.find(
+      (item) => item.clientRequestId === admission.clientRequestId && item.messageId === admission.messageId,
+    );
+    if (record) {
+      delivery.turnId = record.turnId;
+      if (record.stage !== 'queued' && record.stage !== 'pending_steer') this.#settleSteer(delivery);
+      const outcome = submissionOutcome(record, state);
+      if (outcome.state !== 'pending') this.#complete(delivery, outcome);
+      if (!delivery.complete) delivery.completed = true;
+      if (delivery.completed && delivery.steerSettled) this.#deliveries.delete(delivery);
+      return;
+    }
     const latest = state.admissions.find((item) => item.clientRequestId === admission.clientRequestId);
     const admitted = latest?.kind === 'duplicate' ? latest.original : latest;
     if (admitted?.kind === 'rejected') {
@@ -139,12 +155,16 @@ export class ControlCompletions {
     const observation = delivery.turnId ? this.#observations.get(delivery.turnId) : undefined;
     const queued = state.queue.some((item) => item.messageId === admission.messageId);
     if (queued) delivery.seenQueued = true;
-    if (matching || observation?.outcome || (delivery.seenQueued && !queued)) this.#settleSteer(delivery);
-    const pending = state.pendingInteractions.some((item) => item.turnId === delivery.turnId);
+    if (matching || (observation?.outcome && observation.outcome.state !== 'pending')) this.#settleSteer(delivery);
+    const pending =
+      state.pendingInteractions.some((item) => item.turnId === delivery.turnId) ||
+      state.pendingBudgets?.some((item) => item.turnId === delivery.turnId);
     if (state.terminal && state.terminal.turnId === delivery.turnId) {
-      this.#complete(delivery, terminal(state, state.terminal));
+      const outcome = terminal(state, state.terminal);
+      if (outcome.state !== 'pending') this.#complete(delivery, outcome);
       this.#settleSteer(delivery);
-    } else if (observation?.outcome) this.#complete(delivery, observation.outcome);
+    } else if (observation?.outcome && observation.outcome.state !== 'pending')
+      this.#complete(delivery, observation.outcome);
     else if (pending) this.#complete(delivery, { state: 'awaiting_approval' });
     if (!delivery.complete) delivery.completed = true;
     if (delivery.completed && delivery.steerSettled) this.#deliveries.delete(delivery);

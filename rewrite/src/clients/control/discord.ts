@@ -11,7 +11,7 @@ export {
   type DiscordBridgeConfig,
 } from '../../../../source/services/discord/discord-bridge.js';
 export { DiscordGatewayNudge } from '../../../../source/services/discord/discord-gateway.js';
-export { createFailClosedDiscordSend } from '../../../../source/services/discord/discord-send-capability.js';
+export { createFailClosedDiscordSend, createSessionDiscordSend } from './discord-send.js';
 export {
   sendDiscord,
   type DiscordSend,

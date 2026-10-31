@@ -108,6 +108,11 @@ export async function startDirectControlSocket(options: DirectControlSocketOptio
         socket.bind(replacement);
         previous.close();
         socket.refreshAdvertisement();
+      } catch (error) {
+        // The app may already own the successor Session. Do not leave a usable
+        // predecessor binding (or a half-published successor) after failed rebind.
+        await close();
+        throw error;
       } finally {
         pause.release();
       }

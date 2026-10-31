@@ -1,0 +1,252 @@
+/** Filesystem store for the separate direct log namespace; never opens adopted data. */
+import { randomUUID } from 'node:crypto';
+import { lstat, mkdir, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import type { ModelRef } from '../model/index.js';
+import type { Workspace } from '../tools/index.js';
+import { createConversation, openConversation } from './conversation.js';
+import type { ConversationDeps, TurnRequest } from './direct-types.js';
+import type { DirectBinding, DirectSessionStore } from './facade-types.js';
+import type { Fact, SessionStartedFact } from './facts.js';
+import { createDirectSession, type DirectLiveSession } from './direct-session.js';
+import { createLog, openLog, readFacts, type ConversationLog } from './log.js';
+import { replay } from './replay.js';
+
+export type DirectRuntimeContext = {
+  readonly id: string;
+  readonly workspace: Workspace;
+  readonly model: ModelRef;
+  /** Existing metadata must select the actual restored profile/settings on open. */
+  readonly metadata?: SessionStartedFact;
+};
+export type DirectConversationRuntime = {
+  readonly deps: Omit<ConversationDeps, 'log'>;
+  readonly request: Omit<TurnRequest, 'input' | 'model'>;
+  readonly profile: SessionStartedFact['profile'];
+  readonly appVersion: string;
+  dispose?(): void | Promise<void>;
+};
+export type DirectSessionStoreOptions = {
+  /** Required, separate conversations-next directory. No default to old storage. */
+  readonly directory: string;
+  /** Re-resolves authority: v1 session metadata stores a path, not a workspace grant. */
+  readonly resolveWorkspace: (root: string) => Workspace | Promise<Workspace>;
+  /** App assembles models/tools/settings. Construction must not run a provider or tool. */
+  readonly createRuntime: (
+    context: DirectRuntimeContext,
+  ) => DirectConversationRuntime | Promise<DirectConversationRuntime>;
+};
+export interface DirectLocalStore extends DirectSessionStore {
+  create(workspace: Workspace, model: ModelRef, binding?: DirectBinding): Promise<DirectLiveSession>;
+  open(id: string, binding?: DirectBinding): Promise<DirectLiveSession>;
+}
+
+type Summary = { readonly id: string; readonly workspace: Workspace; readonly model: ModelRef };
+const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * One live writable facade per ID in this store. Opening replays without writing
+ * or resuming execution. No index, side journal, migration or second writer exists.
+ * Bindings fail explicitly until the authoritative direct facts can persist them.
+ */
+export function createDirectSessionStore(options: DirectSessionStoreOptions): DirectLocalStore {
+  const directory = path.resolve(options.directory);
+  const sessions = new Map<string, Promise<DirectLiveSession>>();
+  let closed = false;
+  let closePromise: Promise<void> | undefined;
+  const assertOpen = (): void => {
+    if (closed) throw new Error('direct Session store is closed');
+  };
+  const resolveWorkspace = async (root: string): Promise<Workspace> => {
+    const workspace = await options.resolveWorkspace(root);
+    if (path.resolve(workspace.root) !== path.resolve(root))
+      throw new Error('resolved workspace does not match the stored root');
+    return { ...workspace, root: path.resolve(workspace.root) };
+  };
+  const remember = (id: string, construct: () => Promise<DirectLiveSession>): Promise<DirectLiveSession> => {
+    const existing = sessions.get(id);
+    if (existing) return existing;
+    const pending = Promise.resolve().then(construct);
+    sessions.set(id, pending);
+    void pending.catch(() => {
+      if (sessions.get(id) === pending) sessions.delete(id);
+    });
+    return pending;
+  };
+  const construct = async (context: DirectRuntimeContext, initial: readonly Fact[]): Promise<DirectLiveSession> => {
+    let runtime: DirectConversationRuntime | undefined;
+    let log: ConversationLog | undefined;
+    try {
+      runtime = await options.createRuntime(context);
+      if (runtime.deps.toolContext && !sameWorkspace(runtime.deps.toolContext.workspace, context.workspace)) {
+        throw new Error('direct tool runtime workspace does not match Session authority');
+      }
+      if (
+        context.metadata &&
+        (!sameProfile(runtime.profile, context.metadata.profile) ||
+          runtime.request.reasoning !== context.metadata.reasoning)
+      ) {
+        throw new Error('direct runtime did not restore the stored profile/reasoning');
+      }
+      // Refuse newly introduced foreign files before acquiring this writer too.
+      await directNames(directory);
+      log = context.metadata ? openLog(logPath(directory, context.id)) : createLog(directory, context.id);
+      const ownedRuntime = runtime;
+      const ownedLog = log;
+      return createDirectSession({
+        id: context.id,
+        workspace: context.workspace,
+        model: context.model,
+        log: ownedLog,
+        facts: initial,
+        request: ownedRuntime.request,
+        attach(observedLog) {
+          if (context.metadata) return openConversation({ ...ownedRuntime.deps, log: observedLog, facts: initial });
+          return createConversation({
+            ...ownedRuntime.deps,
+            log: observedLog,
+            meta: {
+              id: context.id,
+              workspace: context.workspace.root,
+              model: context.model,
+              profile: ownedRuntime.profile,
+              appVersion: ownedRuntime.appVersion,
+              ...(ownedRuntime.request.reasoning !== undefined ? { reasoning: ownedRuntime.request.reasoning } : {}),
+            },
+          });
+        },
+        dispose: () => ownedRuntime.dispose?.(),
+        released: () => {
+          sessions.delete(context.id);
+        },
+      });
+    } catch (error) {
+      const failures: unknown[] = [error];
+      try {
+        log?.close();
+      } catch (closeError) {
+        failures.push(closeError);
+      }
+      try {
+        await runtime?.dispose?.();
+      } catch (disposeError) {
+        failures.push(disposeError);
+      }
+      if (failures.length > 1) throw new AggregateError(failures, 'direct Session construction and cleanup failed');
+      throw error;
+    }
+  };
+
+  return {
+    async create(workspace, model, binding) {
+      assertOpen();
+      requireNoBinding(binding);
+      const authority = await resolveWorkspace(workspace.root);
+      if (!sameWorkspace(authority, workspace))
+        throw new Error('requested workspace does not match resolved authority');
+      // Inspect names before mkdir or parsing anything. An old directory is never imported.
+      await directNames(directory);
+      await mkdir(directory, { recursive: true });
+      assertOpen();
+      const id = `conv_${randomUUID()}`;
+      return remember(id, () => construct({ id, workspace: authority, model: structuredClone(model) }, []));
+    },
+    async open(id, binding) {
+      assertOpen();
+      requireNoBinding(binding);
+      requireDirectId(id);
+      const existing = sessions.get(id);
+      if (existing) return existing;
+      // Install the promise before any awaits so concurrent opens share the writer.
+      return remember(id, async () => {
+        await directNames(directory);
+        const facts = readFacts(logPath(directory, id));
+        const metadata = sessionMetadata(id, facts);
+        replay(facts); // validates the actual direct history; never repairs on open
+        const workspace = await resolveWorkspace(metadata.workspace);
+        return construct({ id, workspace, model: metadata.model, metadata }, facts);
+      });
+    },
+    async list(cursor) {
+      assertOpen();
+      if (cursor !== undefined) requireDirectId(cursor);
+      const ids = (await directNames(directory)).map((name) => name.slice(0, -'.jsonl'.length)).sort();
+      const summaries: Summary[] = [];
+      // No arbitrary page size/retention policy: return the complete remaining direct namespace.
+      for (const id of ids) {
+        if (cursor !== undefined && id <= cursor) continue;
+        const metadata = sessionMetadata(id, readFacts(logPath(directory, id)));
+        summaries.push({ id, workspace: await resolveWorkspace(metadata.workspace), model: metadata.model });
+      }
+      return { sessions: summaries };
+    },
+    close() {
+      if (closePromise) return closePromise;
+      closed = true;
+      closePromise = (async () => {
+        // Pending opens are owned too: await assembly, then drain and release each.
+        const results = await Promise.allSettled(
+          [...sessions.values()].map(async (pending) => (await pending).close()),
+        );
+        const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+        if (errors.length) throw new AggregateError(errors, 'direct Session store could not release every runtime');
+      })();
+      return closePromise;
+    },
+  };
+}
+
+function requireNoBinding(binding: DirectBinding | undefined): void {
+  if (binding !== undefined)
+    throw new Error('direct Session bindings require a durable shared fact; binding is not available');
+}
+
+function requireDirectId(id: string): void {
+  if (!DIRECT_ID.test(id)) throw new Error('expected an exact direct conv_<uuid> Session ID');
+}
+
+function logPath(directory: string, id: string): string {
+  requireDirectId(id);
+  return path.join(directory, `${id}.jsonl`);
+}
+
+function sessionMetadata(id: string, facts: readonly Fact[]): SessionStartedFact {
+  const first = facts[0];
+  if (
+    first?.type !== 'session_started' ||
+    first.id !== id ||
+    facts.slice(1).some((fact) => fact.type === 'session_started')
+  ) {
+    throw new Error(`direct Session ${id} has invalid or mismatched session_started metadata`);
+  }
+  return first;
+}
+
+function sameWorkspace(left: Workspace, right: Workspace): boolean {
+  return (
+    path.resolve(left.root) === path.resolve(right.root) && left.access === right.access && left.target === right.target
+  );
+}
+
+/** Reads names first and refuses foreign entries without opening any old data. */
+async function directNames(directory: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await readdir(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  for (const name of names) {
+    if (!name.endsWith('.jsonl') || !DIRECT_ID.test(name.slice(0, -'.jsonl'.length))) {
+      throw new Error(`refusing direct conversations directory with foreign entry ${JSON.stringify(name)}`);
+    }
+    if (!(await lstat(path.join(directory, name))).isFile())
+      throw new Error(`direct log is not a regular file: ${name}`);
+  }
+  return names;
+}
+
+function sameProfile(left: SessionStartedFact['profile'], right: SessionStartedFact['profile']): boolean {
+  return left.id === right.id && left.version === right.version && left.digest === right.digest;
+}

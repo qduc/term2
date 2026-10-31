@@ -1,4 +1,4 @@
-import type { WireContent, WireQuestion } from '../../protocol/direct-wire.js';
+import type { JsonValue, WireContent, WireQuestion, WireSnapshot } from '../../protocol/direct-wire.js';
 
 /** Client display state. This is a view model, not a wire or persistence format. */
 export type Message = {
@@ -17,6 +17,10 @@ export type ToolView = {
   readonly status: 'pending' | 'running' | 'completed' | 'failed' | 'rejected';
   readonly detail?: string;
   readonly parent?: string;
+  readonly input?: JsonValue;
+  readonly display?: JsonValue;
+  readonly content?: readonly WireContent[];
+  readonly outcomeUnknown?: boolean;
 };
 
 export type InteractionView = {
@@ -32,7 +36,7 @@ export type InteractionView = {
 };
 
 export type QueueItem = { readonly id: string; readonly text: string; readonly delivery: string };
-export type TaskView = { readonly id: string; readonly label: string; readonly status: string; readonly detail?: string };
+export type TaskView = { readonly id: string; readonly label: string; readonly status: string; readonly detail?: string; readonly turnId?: string; readonly agentId?: string; readonly role?: string };
 
 export type TuiState = {
   readonly sessionId: string;
@@ -40,6 +44,7 @@ export type TuiState = {
   readonly activeTurnId: string | null;
   readonly model: string;
   readonly messages: readonly Message[];
+  readonly timeline: WireSnapshot['timeline'];
   /** Draft identity must include model step, so separate responses cannot merge. */
   readonly drafts: Readonly<Record<string, string>>;
   readonly reasoning: Readonly<Record<string, string>>;

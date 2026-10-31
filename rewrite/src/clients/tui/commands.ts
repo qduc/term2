@@ -76,3 +76,8 @@ export async function changeSession(connection: TuiConnection, type: 'reset' | '
   if (result.kind !== 'session_changed') throw new Error(`Unexpected session response: ${result.kind}`);
   return result.sessionId;
 }
+
+/** Request a specific task operation; an acknowledgement is not task completion. */
+export async function controlTask(connection: TuiConnection, taskId: string, action: 'cancel' | 'check_in' | 'foreground'): Promise<void> {
+  requireAccepted(await connection.send({ type: 'task_control', taskId, action }));
+}

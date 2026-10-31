@@ -1,15 +1,22 @@
 /** Filesystem store for the separate direct log namespace; never opens adopted data. */
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readdir } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import { createConversation, openConversation } from './conversation.js';
 import type { ConversationDeps, TurnRequest } from './direct-types.js';
 import type { DirectBinding, DirectSessionStore } from './facade-types.js';
-import type { Fact, FactLine, SessionStartedFact } from './facts.js';
+import type { FactLine, SessionStartedFact } from './facts.js';
 import { createDirectSession, type DirectLiveSession } from './direct-session.js';
-import { createLog, openLog, readFacts, readFactLines, type ConversationLog } from './log.js';
+import type { ConversationLog } from './log.js';
+import {
+  createDirectRollingLog,
+  directLogNames,
+  readDirectLogLineage,
+  readDirectLogLineages,
+  type DirectLogLineage,
+} from './direct-rolling-log.js';
 import { replay } from './replay.js';
 import { latestDirectConfiguration, type DirectConfigurationState } from './direct-configuration.js';
 
@@ -88,7 +95,11 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
     });
     return pending;
   };
-  const construct = async (context: DirectRuntimeContext, entries: readonly FactLine[]): Promise<DirectLiveSession> => {
+  const construct = async (
+    context: DirectRuntimeContext,
+    entries: readonly FactLine[],
+    lineage?: DirectLogLineage,
+  ): Promise<DirectLiveSession> => {
     const initial = entries.map((entry) => entry.fact);
     let runtime: DirectConversationRuntime | undefined;
     let log: ConversationLog | undefined;
@@ -107,8 +118,9 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         throw new Error('direct runtime did not restore the stored profile/reasoning');
       }
       // Refuse newly introduced foreign files before acquiring this writer too.
-      await directNames(directory);
-      log = context.metadata ? openLog(logPath(directory, context.id)) : createLog(directory, context.id);
+      directLogNames(directory);
+      const rollingLog = createDirectRollingLog(directory, context.id, lineage);
+      log = rollingLog;
       const ownedRuntime = runtime;
       const ownedLog = log;
       return createDirectSession({
@@ -121,6 +133,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         attach(observedLog, publish) {
           const liveDeps = {
             ...ownedRuntime.deps,
+            rotationBoundary: () => rollingLog.head(),
             publishTask: (event: import('./direct-background-types.js').DirectBackgroundProgress) => {
               ownedRuntime.deps.publishTask?.(event);
               publish(event);
@@ -186,7 +199,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       if (!sameWorkspace(authority, workspace))
         throw new Error('requested workspace does not match resolved authority');
       // Inspect names before mkdir or parsing anything. An old directory is never imported.
-      await directNames(directory);
+      directLogNames(directory);
       await mkdir(directory, { recursive: true });
       assertOpen();
       const id = `conv_${randomUUID()}`;
@@ -208,21 +221,21 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       binding = binding ? structuredClone(binding) : undefined;
       validateBinding(binding);
       requireDirectId(id);
-      await directNames(directory);
-      const entries = readFactLines(logPath(directory, id));
+      directLogNames(directory);
+      const lineage = readDirectLogLineage(directory, id);
+      const { entries, metadata, logicalSessionId } = lineage;
       const facts = entries.map((entry) => entry.fact);
-      const metadata = sessionMetadata(id, facts);
       const configuration = latestDirectConfiguration(facts);
       validateExpectedBinding(metadata.binding, binding);
       replay(facts); // validates actual direct history; never repairs on open
       assertOpen();
       // Every caller's binding is checked before joining a shared live writer.
       // remember installs its construction promise before workspace/runtime assembly.
-      return remember(id, async () => {
+      return remember(logicalSessionId, async () => {
         const workspace = await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity);
         return construct(
           {
-            id,
+            id: logicalSessionId,
             workspace,
             model: configuration?.configuration.model ?? metadata.model,
             metadata,
@@ -230,19 +243,20 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
             ...(metadata.binding ? { binding: metadata.binding } : {}),
           },
           entries,
+          lineage,
         );
       });
     },
     async list(cursor) {
       assertOpen();
       if (cursor !== undefined) requireDirectId(cursor);
-      const ids = (await directNames(directory)).map((name) => name.slice(0, -'.jsonl'.length)).sort();
       const summaries: Summary[] = [];
       // No arbitrary page size/retention policy: return the complete remaining direct namespace.
-      for (const id of ids) {
+      for (const lineage of readDirectLogLineages(directory)) {
+        const id = lineage.logicalSessionId;
         if (cursor !== undefined && id <= cursor) continue;
-        const facts = readFacts(logPath(directory, id));
-        const metadata = sessionMetadata(id, facts);
+        const facts = lineage.entries.map((entry) => entry.fact);
+        const metadata = lineage.metadata;
         let workspace: Workspace;
         try {
           // A shared directory is a catalogue, not a grant. Foreign workspaces
@@ -257,7 +271,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
           model: latestDirectConfiguration(facts)?.configuration.model ?? metadata.model,
         });
       }
-      return { sessions: summaries };
+      return { sessions: summaries.sort((left, right) => left.id.localeCompare(right.id)) };
     },
     close() {
       if (closePromise) return closePromise;
@@ -298,48 +312,12 @@ function requireDirectId(id: string): void {
   if (!DIRECT_ID.test(id)) throw new Error('expected an exact direct conv_<uuid> Session ID');
 }
 
-function logPath(directory: string, id: string): string {
-  requireDirectId(id);
-  return path.join(directory, `${id}.jsonl`);
-}
-
-function sessionMetadata(id: string, facts: readonly Fact[]): SessionStartedFact {
-  const first = facts[0];
-  if (
-    first?.type !== 'session_started' ||
-    first.id !== id ||
-    facts.slice(1).some((fact) => fact.type === 'session_started')
-  ) {
-    throw new Error(`direct Session ${id} has invalid or mismatched session_started metadata`);
-  }
-  return first;
-}
-
 function sameWorkspace(left: Workspace, right: Workspace): boolean {
   return (
     left.access === right.access &&
     left.target === right.target &&
     (left.target === 'local' ? path.resolve(left.root) === path.resolve(right.root) : left.root === right.root)
   );
-}
-
-/** Reads names first and refuses foreign entries without opening any old data. */
-async function directNames(directory: string): Promise<string[]> {
-  let names: string[];
-  try {
-    names = await readdir(directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
-  }
-  for (const name of names) {
-    if (!name.endsWith('.jsonl') || !DIRECT_ID.test(name.slice(0, -'.jsonl'.length))) {
-      throw new Error(`refusing direct conversations directory with foreign entry ${JSON.stringify(name)}`);
-    }
-    if (!(await lstat(path.join(directory, name))).isFile())
-      throw new Error(`direct log is not a regular file: ${name}`);
-  }
-  return names;
 }
 
 function sameProfile(left: SessionStartedFact['profile'], right: SessionStartedFact['profile']): boolean {

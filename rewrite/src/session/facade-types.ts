@@ -82,6 +82,8 @@ export type DirectDraft = {
 };
 export type DirectSessionState = {
   readonly id: string;
+  /** Current physical log; public id and all attached owners stay logical/stable. */
+  readonly backingSessionId: string;
   readonly workspace: Workspace;
   readonly model: ModelRef;
   readonly configuration?: import('./direct-configuration.js').DirectConfigurationState;

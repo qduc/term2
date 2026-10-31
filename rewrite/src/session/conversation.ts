@@ -28,6 +28,7 @@ import {
 } from './direct-notifications.js';
 import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './direct-configuration.js';
 import { directRolloverAtBoundary } from './direct-rollover.js';
+import { parseDirectSessionRotation } from './direct-session-rotation.js';
 import { captureDirectFinalWindow } from './direct-final.js';
 import { captureDirectCommandHistory } from './direct-history-capture.js';
 import { listDirectRewindTargets, planDirectHistoryCommand } from './direct-command-history.js';
@@ -124,7 +125,7 @@ function conversation(
   } | null = null;
   const rolloverDestination = (): string | undefined => {
     for (const receipt of commandReceipts) {
-      if (receipt.outcome?.kind === 'rolled_over') return receipt.outcome.sessionId;
+      if (receipt.outcome?.kind === 'rolled_over' && receipt.outcome.sessionId !== id) return receipt.outcome.sessionId;
     }
     return undefined;
   };
@@ -326,6 +327,9 @@ function conversation(
   };
   let supplied = deps.context?.({
     sessionId: id,
+    get backingSessionId() {
+      return deps.rotationBoundary?.().sessionId ?? id;
+    },
     read: () => structuredClone(context),
     commit: (generation, next) => contextCommit(generation, next),
     tasks,
@@ -805,6 +809,82 @@ function conversation(
       history: liveReplay().history,
       executionsSettled: !active && !completionHeld,
     });
+  // Prepare every potentially throwing value before durable configuration acceptance.
+  const prepareGeneration = (candidate: DirectPreparedConfiguration) => {
+    if (
+      candidate.capabilities.hooks !== supplied?.hooks ||
+      candidate.capabilities.automaticMemory !== supplied?.automaticMemory ||
+      candidate.capabilities.memory?.globalContext !== supplied?.memory?.globalContext ||
+      candidate.capabilities.memory?.facts !== supplied?.memory?.facts
+    )
+      throw new Error('Configure attempted to replace the Session hooks or memory lifetime');
+    const expectedWorkspace = deps.toolContext?.workspace;
+    const nextWorkspace = candidate.deps.toolContext?.workspace;
+    if (
+      expectedWorkspace &&
+      (!nextWorkspace ||
+        nextWorkspace.root !== expectedWorkspace.root ||
+        nextWorkspace.target !== expectedWorkspace.target ||
+        nextWorkspace.access !== expectedWorkspace.access)
+    )
+      throw new Error('Configure cannot change Session workspace authority');
+    const configurationFact = parseDirectConfigurationFact({
+      type: 'configuration_changed',
+      configuration: candidate.configuration,
+      intent: candidate.intent,
+      profile: candidate.profile,
+    });
+    const nextRequest = { ...candidate.request, model: candidate.configuration.model };
+    const nextDeps: ConversationDeps = {
+      ...candidate.deps,
+      log: deps.log,
+      context: deps.context,
+      rotationBoundary: deps.rotationBoundary,
+      configure: candidate.deps.configure ?? runtimeDeps.configure,
+      rollover: candidate.deps.rollover ?? runtimeDeps.rollover,
+      publishTask: deps.publishTask,
+      publishBranch: deps.publishBranch,
+      publishNotice: deps.publishNotice,
+    };
+    // Never reuse an opaque provider checkpoint across a configuration revision.
+    const nextContinuity = nextDeps.continuity
+      ? { ...nextDeps.continuity, state: nextDeps.continuity.state ?? new DirectContinuity() }
+      : undefined;
+    return { configurationFact, nextRequest, nextDeps, nextContinuity };
+  };
+  const installGeneration = (
+    candidate: DirectPreparedConfiguration,
+    prepared: ReturnType<typeof prepareGeneration>,
+  ): void => {
+    const { nextRequest, nextDeps, nextContinuity } = prepared;
+    try {
+      continuity?.state.clear();
+      runtimeDeps = nextDeps;
+      continuity = nextContinuity;
+      configuredRequest = nextRequest;
+      queueSettings = nextRequest;
+      supplied = candidate.capabilities;
+      capabilities!.replace(candidate.deps.tools, supplied);
+      checkInSettings = supplied.backgroundCheckIns;
+      candidate.install();
+    } catch (error) {
+      poison(error);
+      throw error;
+    }
+  };
+  // Live detached work is allowed. Only actual foreground/pending decisions veto.
+  const rolloverBlocked = (commandId: string): boolean => {
+    if (active || queueState.active) return true;
+    if (completionHeld && directRolloverAtBoundary(facts, completionHeld)?.commandId !== commandId) return true;
+    if (taskStates.some((task) => task.pendingInteractions.length > 0)) return true;
+    const waiting = new Set<string>();
+    for (const fact of facts) {
+      if (fact.type === 'interaction_opened') waiting.add(fact.request.requestId);
+      if (fact.type === 'budget_opened') waiting.add(fact.requestId);
+      if (fact.type === 'interaction_closed' || fact.type === 'budget_closed') waiting.delete(fact.requestId);
+    }
+    return waiting.size > 0;
+  };
   return {
     id,
     tasks,
@@ -925,10 +1005,147 @@ function conversation(
       const work = async (): Promise<{ result: DirectCommandResult; started?: StartedConversationTurn }> => {
         try {
           if (request.operation.kind === 'rollover') {
-            // Do not drain/cancel first: the authority must see the real live
-            // turn, questions, budgets, queue and task vetoes. New admission is
-            // held for this entire await; its actual result is never retried.
-            return { result: finish(await runtimeDeps.rollover!(request.operation.request)) };
+            if (!deps.rotationBoundary)
+              return {
+                result: finish({
+                  kind: 'rejected',
+                  code: 'unavailable',
+                  message: 'Physical rotation authority is unavailable.',
+                }),
+              };
+            if (rolloverBlocked(request.commandId))
+              return {
+                result: finish({
+                  kind: 'rejected',
+                  code: 'busy',
+                  message: 'Settle the foreground and pending decisions before rollover.',
+                }),
+              };
+            const expectedRevision = revision();
+            let candidate: DirectPreparedConfiguration | undefined;
+            let installed = false;
+            try {
+              const preparedRollover = await runtimeDeps.rollover!(request.operation.request, owner.abort.signal);
+              if (preparedRollover.kind === 'rejected') return { result: finish(preparedRollover) };
+              candidate = preparedRollover.generation;
+              if (closed || logFailure || owner.abort.signal.aborted)
+                return {
+                  result: finish({
+                    kind: 'rejected',
+                    code: 'cancelled',
+                    message: 'Rollover was cancelled before acceptance.',
+                  }),
+                };
+              if (commandOwner !== owner || revision() !== expectedRevision)
+                return {
+                  result: finish({
+                    kind: 'rejected',
+                    code: 'stale',
+                    message: 'Session history changed during rollover preparation.',
+                  }),
+                };
+              if (rolloverBlocked(request.commandId))
+                return {
+                  result: finish({
+                    kind: 'rejected',
+                    code: 'busy',
+                    message: 'A foreground decision arrived during rollover preparation.',
+                  }),
+                };
+              if (Boolean(request.operation.request) !== (preparedRollover.handoff !== undefined))
+                throw new Error('Rollover preparation must supply a brief exactly when one was requested');
+              const prepared = prepareGeneration(candidate);
+              const { type: _configurationType, ...selection } = prepared.configurationFact;
+              const seedFacts: Fact[] = [];
+              let seed:
+                | { turnId: TurnId; input: readonly Item[]; submission: NonNullable<TurnRequest['submission']> }
+                | undefined;
+              let handoff: import('./direct-session-rotation.js').DirectSessionRotationFact['handoff'];
+              if (preparedRollover.handoff !== undefined) {
+                const clientRequestId = `rollover:${randomUUID()}`;
+                const messageId = randomUUID();
+                const turnId = `turn-${nextTurnId++}` as TurnId;
+                const origin = { kind: 'control' as const, id: 'session-rollover' };
+                const admission = submitDirectQueue(
+                  queueState,
+                  {
+                    clientRequestId,
+                    content: preparedRollover.handoff,
+                    origin,
+                    delivery: 'follow_up',
+                  },
+                  { ...environment(), newMessageId: () => messageId, newTurnId: () => turnId, dispatchHeld: true },
+                );
+                if (admission.result.kind !== 'queued') throw new Error('Rollover handoff could not be admitted');
+                const record = admission.state.records.find((entry) => entry.messageId === messageId)!;
+                const input: readonly Item[] = [
+                  {
+                    type: 'user_message',
+                    id: messageId as import('../model/index.js').ItemId,
+                    content: record.content,
+                  },
+                ];
+                const submission = { clientRequestId, messageId, origin };
+                // Decoder authorizes ONLY this header-correlated priority seed.
+                const priorityStart = {
+                  type: 'queue_started' as const,
+                  messageId,
+                  turnId,
+                  rolloverCommandId: request.commandId,
+                };
+                seedFacts.push(...admission.facts, priorityStart, {
+                  type: 'turn_started',
+                  turnId,
+                  input,
+                  submission,
+                  ...(directPreviewConfiguration({ ...prepared.nextRequest, input })
+                    ? {
+                        requestConfiguration: directPreviewConfiguration({ ...prepared.nextRequest, input }),
+                      }
+                    : {}),
+                });
+                seed = { turnId, input, submission };
+                handoff = { clientRequestId, messageId, turnId };
+              }
+              // Progress during app preparation is valid: capture the REAL head
+              // only after the final synchronous foreground/interaction veto.
+              const boundary = deps.rotationBoundary();
+              const rotation = parseDirectSessionRotation({
+                type: 'session_rotated',
+                logicalSessionId: id,
+                sessionId: preparedRollover.successorId,
+                predecessor: { sessionId: boundary.sessionId, throughSeq: boundary.seq },
+                commandId: request.commandId,
+                ...selection,
+                history: [],
+                ...(handoff ? { handoff } : {}),
+              });
+              const finished = planDirectCommandFinish(commandReceipts, request.commandId, {
+                kind: 'rolled_over',
+                sessionId: id,
+              });
+              if (!commit([rotation, ...seedFacts, finished])) throw new Error(logFailure!.message);
+              installed = true; // Accepted generation ownership is never discarded.
+              installGeneration(candidate, prepared);
+              const started = seed
+                ? start(
+                    { ...prepared.nextRequest, input: seed.input, submission: seed.submission },
+                    { turnId: seed.turnId, facts: [], accepted: true, history: [] },
+                  )
+                : undefined;
+              return {
+                result: {
+                  kind: 'finished',
+                  replayed: false,
+                  receipt: structuredClone(
+                    commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+                  ),
+                },
+                ...(started ? { started } : {}),
+              };
+            } finally {
+              if (candidate && !installed) await candidate.dispose();
+            }
           }
           if (request.operation.kind !== 'configure') {
             active?.cancel();
@@ -964,44 +1181,8 @@ function conversation(
                     message: 'Prepared configuration lost its Session reservation or revision.',
                   }),
                 };
-              if (
-                candidate.capabilities.hooks !== supplied?.hooks ||
-                candidate.capabilities.automaticMemory !== supplied?.automaticMemory ||
-                candidate.capabilities.memory?.globalContext !== supplied?.memory?.globalContext ||
-                candidate.capabilities.memory?.facts !== supplied?.memory?.facts
-              )
-                throw new Error('Configure attempted to replace the Session hooks or memory lifetime');
-              const expectedWorkspace = deps.toolContext?.workspace;
-              const nextWorkspace = candidate.deps.toolContext?.workspace;
-              if (
-                expectedWorkspace &&
-                (!nextWorkspace ||
-                  nextWorkspace.root !== expectedWorkspace.root ||
-                  nextWorkspace.target !== expectedWorkspace.target ||
-                  nextWorkspace.access !== expectedWorkspace.access)
-              )
-                throw new Error('Configure cannot change Session workspace authority');
-              const configurationFact = parseDirectConfigurationFact({
-                type: 'configuration_changed',
-                configuration: candidate.configuration,
-                intent: candidate.intent,
-                profile: candidate.profile,
-              });
-              const nextRequest = { ...candidate.request, model: candidate.configuration.model };
-              const nextDeps: ConversationDeps = {
-                ...candidate.deps,
-                log: deps.log,
-                context: deps.context,
-                configure: candidate.deps.configure ?? runtimeDeps.configure,
-                rollover: candidate.deps.rollover ?? runtimeDeps.rollover,
-                publishTask: deps.publishTask,
-                publishBranch: deps.publishBranch,
-                publishNotice: deps.publishNotice,
-              };
-              // Never reuse an opaque provider checkpoint across a configuration revision.
-              const nextContinuity = nextDeps.continuity
-                ? { ...nextDeps.continuity, state: nextDeps.continuity.state ?? new DirectContinuity() }
-                : undefined;
+              const prepared = prepareGeneration(candidate);
+              const { configurationFact } = prepared;
               const finished = planDirectCommandFinish(commandReceipts, request.commandId, {
                 kind: 'configured',
                 configuration: candidate.configuration,
@@ -1010,20 +1191,7 @@ function conversation(
               // Never discard a durably accepted generation, even if the app
               // violates its no-throw installation contract.
               installed = true;
-              try {
-                continuity?.state.clear();
-                runtimeDeps = nextDeps;
-                continuity = nextContinuity;
-                configuredRequest = nextRequest;
-                queueSettings = nextRequest;
-                supplied = candidate.capabilities;
-                capabilities!.replace(candidate.deps.tools, supplied);
-                checkInSettings = supplied.backgroundCheckIns;
-                candidate.install();
-              } catch (error) {
-                poison(error);
-                throw error;
-              }
+              installGeneration(candidate, prepared);
               return {
                 result: {
                   kind: 'finished',
@@ -1474,6 +1642,7 @@ function changesRootHistory(fact: Fact): boolean {
     'item',
     'history_replaced',
     'configuration_changed',
+    'session_rotated',
     'queue_steered',
     'memory_personal_snapshot',
   ].includes(fact.type);

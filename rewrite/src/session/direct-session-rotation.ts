@@ -3,7 +3,11 @@ import { z } from 'zod';
 import type { TurnId } from '../engine/index.js';
 import type { ContentPart } from '../model/index.js';
 import type { DirectCommandOutcome, DirectRolloverRequest } from './direct-command-types.js';
-import { directConfigurationFactSchema, type DirectPreparedConfiguration } from './direct-configuration.js';
+import {
+  directConfigurationFactSchema,
+  parseDirectConfigurationFact,
+  type DirectPreparedConfiguration,
+} from './direct-configuration.js';
 
 const identifier = z.string().min(1);
 const backingId = z.string().regex(/^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
@@ -51,5 +55,12 @@ export type DirectRolloverPreparer = (
 
 /** Decode only data; reopening never invokes a rollover callback or restarts a task. */
 export function parseDirectSessionRotation(raw: unknown): DirectSessionRotationFact {
-  return directSessionRotationSchema.parse(raw);
+  const fact = directSessionRotationSchema.parse(raw);
+  parseDirectConfigurationFact({
+    type: 'configuration_changed',
+    configuration: fact.configuration,
+    intent: fact.intent,
+    profile: fact.profile,
+  });
+  return fact;
 }

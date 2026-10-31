@@ -61,8 +61,13 @@ export function parseDirectConfigurationFact(raw: unknown): DirectConfigurationF
 export function latestDirectConfiguration(facts: readonly Fact[]): DirectConfigurationState | undefined {
   for (let index = facts.length - 1; index >= 0; --index) {
     const fact = facts[index]!;
-    if (fact.type === 'configuration_changed') {
-      const { type: _type, ...state } = parseDirectConfigurationFact(fact);
+    if (fact.type === 'configuration_changed' || fact.type === 'session_rotated') {
+      const { type: _type, ...state } = parseDirectConfigurationFact({
+        type: 'configuration_changed',
+        configuration: fact.configuration,
+        intent: fact.intent,
+        profile: fact.profile,
+      });
       return structuredClone(state);
     }
   }

@@ -19,6 +19,7 @@ export class TurnModel {
   #step = 0;
   #mainRequests = 0;
   #hasOutput = false;
+  #requestHasOutput = false;
   #compactionState: TurnSpec['compactionState'];
   #lastInputTokens: number | undefined;
   #standardTier = false;
@@ -77,6 +78,7 @@ export class TurnModel {
           fullHistoryAvailable: pairs,
           freshStartAllowed: pairs,
           hasCommittedOutput: this.#hasOutput,
+          hasCurrentRequestOutput: this.#requestHasOutput,
           tools: { completed: this.tools.completed, allCompleted: true, completedPairsInHistory: pairs },
         });
         if (!decision || decision.kind === 'stop') throw error;
@@ -326,6 +328,7 @@ export class TurnModel {
   }
 
   async #stream(request: ModelRequest, history: Item[], modelStep: number): Promise<{ calls: RootCall[]; done: Done }> {
+    this.#requestHasOutput = false;
     const calls: RootCall[] = [];
     const items: Item[] = [];
     let text = '';
@@ -343,9 +346,12 @@ export class TurnModel {
             if (!text) textPosition = items.length;
             text += event.delta;
             this.#hasOutput = true;
+            this.#requestHasOutput = true;
             break;
           case 'reasoning_delta':
             await this.events.publish({ type: 'reasoning_delta', delta: event.delta });
+            this.#hasOutput = true;
+            this.#requestHasOutput = true;
             break;
           case 'item': {
             const call = event.item.type === 'tool_call' ? this.tools.root(event.item, modelStep) : undefined;
@@ -357,6 +363,7 @@ export class TurnModel {
             });
             items.push(event.item);
             this.#hasOutput = true;
+            this.#requestHasOutput = true;
             if (event.item.type === 'assistant_message') text = '';
             if (call) {
               calls.push(call);
@@ -373,6 +380,7 @@ export class TurnModel {
           case 'usage':
             usage = event.usage;
             await this.events.publish({ type: 'usage', usage, modelStep });
+            this.#requestHasOutput = true;
             break;
           case 'done':
             done = event;

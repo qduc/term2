@@ -1,5 +1,5 @@
 /**
- * Copy one authorized direct conversation into a new log in the same
+ * Copy one authorized logical conversation into a new physical lineage in the same
  * conversations-next directory. Copied envelopes keep their original `at`
  * and every accepted fact, including goal, queue, memory, branch and task
  * facts. ConversationLog.append is not used for those lines because it
@@ -27,6 +27,8 @@ import type { Workspace } from '../tools/index.js';
 import type { DirectBinding } from './facade-types.js';
 import { LOG_FORMAT_VERSION, type Fact, type FactLine, type SessionStartedFact } from './facts.js';
 import { readFactLines } from './log.js';
+import { readDirectLogLineage } from './direct-rolling-log.js';
+import { latestDirectConfiguration } from './direct-configuration.js';
 import { replay } from './replay.js';
 
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -64,10 +66,13 @@ type ForkedStart = SessionStartedFact & {
 };
 
 /**
- * Throws when the source is missing, unauthorized, foreign, or not a valid
+ * Resolves a logical or physical alias through its accepted head. Throws when
+ * the source is missing, unauthorized, foreign, or not a valid
  * replay, or when the current grant does not match the stored identity.
  * Those failures happen before the new log is created. A failed write is
- * deleted. Success returns the new id and does not modify the source.
+ * deleted, including earlier copied segments. Success returns the new logical
+ * id and does not modify the source. A process death may leave an accepted fork
+ * prefix, just as a killed single-file copy may leave a terminated prefix.
  */
 export async function forkDirectConversation(request: DirectForkRequest): Promise<DirectForkResult> {
   if (typeof request.directory !== 'string' || request.directory.length === 0) {
@@ -83,35 +88,71 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
 
   const directory = path.resolve(request.directory);
   await assertDirectDirectory(directory, sourceId);
-  const sourceLines = readFactLines(logPath(directory, sourceId));
-  const metadata = sessionMetadata(
-    sourceId,
-    sourceLines.map((line) => line.fact),
-  );
+  const lineage = readDirectLogLineage(directory, sourceId);
+  const sourceLines = lineage.entries;
+  const metadata = lineage.metadata;
   validateExpectedBinding(metadata.binding, expected);
   // Reject a log this Session cannot replay before any new file exists.
   // Clone first so projection cannot alias the envelopes we copy.
   replay(sourceLines.map((line) => structuredClone(line.fact)));
   const workspace = await resolveAuthority(request.resolveWorkspace, metadata.workspace, storedIdentity(metadata));
   const id = newDirectId();
+  const physicalIds = new Map(
+    lineage.segments.map((segment, index) => [segment.sessionId, index === 0 ? id : newDirectId()]),
+  );
   const copied = sourceLines.map((line) => ({
     v: line.v,
     seq: line.seq,
     at: line.at,
-    fact: retargetFact(line.fact, sourceId, id, workspace),
+    fact: retargetFact(line.fact, lineage.logicalSessionId, id, workspace, physicalIds, sourceId),
   }));
   const projected = replay(copied.map((line) => line.fact));
   const stampedAt = new Date().toISOString();
   const recovery = projected.recoveryFacts.map((fact, index) => ({
     v: LOG_FORMAT_VERSION,
-    seq: copied.length + index + 1,
+    seq: copied.at(-1)!.seq + index + 1,
     at: stampedAt,
     fact,
   }));
   const lines = [...copied, ...recovery];
   const stable = replay(lines.map((line) => line.fact));
   if (stable.recoveryFacts.length !== 0) throw new Error('direct fork replay did not settle');
-  await writeFork(directory, sourceId, id, lines);
+  const created: string[] = [];
+  try {
+    for (const [index, segment] of lineage.segments.entries()) {
+      const destinationId = physicalIds.get(segment.sessionId)!;
+      const isHead = index === lineage.segments.length - 1;
+      const segmentLines = lines.filter(
+        (line) => line.seq > segment.afterSeq && (isHead || line.seq <= segment.throughSeq),
+      );
+      await writeFork(directory, sourceId, destinationId, segmentLines, segment.afterSeq);
+      created.push(destinationId);
+    }
+    // Validate the copied physical links as well as the combined replay. Nothing
+    // from the source is opened as a writer or resumed while copying.
+    const readBack = readDirectLogLineage(directory, id);
+    if (readBack.entries.length !== lines.length || readBack.segments.length !== lineage.segments.length)
+      throw new Error('direct fork did not retain its complete physical lineage');
+    if (
+      provenanceOf(readBack.metadata) !== sourceId ||
+      !sameExactGrant(workspaceIdentityOf(readBack.metadata), workspace)
+    )
+      throw new Error('direct fork lost its provenance or workspace grant');
+    if (replay(readBack.entries.map((line) => line.fact)).recoveryFacts.length !== 0)
+      throw new Error('direct fork replay did not settle');
+  } catch (error) {
+    const failures: unknown[] = [error];
+    // Only files this invocation actually created are eligible for cleanup.
+    for (const destinationId of created.reverse()) {
+      try {
+        await unlink(logPath(directory, destinationId));
+      } catch (cleanup) {
+        if ((cleanup as NodeJS.ErrnoException).code !== 'ENOENT') failures.push(cleanup);
+      }
+    }
+    if (failures.length > 1) throw new AggregateError(failures, 'direct fork failed and copied lineage cleanup failed');
+    throw error;
+  }
 
   const started = lines[0]?.fact;
   if (started?.type !== 'session_started') throw new Error('direct fork lost its session_started fact');
@@ -119,7 +160,9 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
     sourceId,
     id,
     workspace,
-    model: structuredClone(started.model),
+    model: structuredClone(
+      latestDirectConfiguration(lines.map((line) => line.fact))?.configuration.model ?? started.model,
+    ),
     ...(started.binding ? { binding: structuredClone(started.binding) } : {}),
     status: stable.status,
     materializedRecovery: recovery.length,
@@ -157,7 +200,14 @@ async function assertDirectDirectory(directory: string, sourceId: string): Promi
  * forkedFrom is the immediate source, on the single session_started fact.
  * The persisted identity is the current grant, never the source's old record.
  */
-function retargetFact(fact: Fact, sourceId: string, id: string, authority: Workspace): Fact {
+function retargetFact(
+  fact: Fact,
+  sourceId: string,
+  id: string,
+  authority: Workspace,
+  physicalIds: ReadonlyMap<string, string>,
+  provenanceSourceId: string,
+): Fact {
   const copy = structuredClone(fact);
   if (copy.type === 'session_started') {
     if (copy.id !== sourceId) {
@@ -168,10 +218,19 @@ function retargetFact(fact: Fact, sourceId: string, id: string, authority: Works
       id,
       workspace: authority.root,
       workspaceIdentity: { root: authority.root, target: authority.target, access: authority.access },
-      forkedFrom: sourceId,
+      forkedFrom: provenanceSourceId,
     };
     return started;
   }
+  if (copy.type === 'session_rotated') {
+    const sessionId = physicalIds.get(copy.sessionId);
+    const predecessorId = physicalIds.get(copy.predecessor.sessionId);
+    if (copy.logicalSessionId !== sourceId || !sessionId || !predecessorId)
+      throw new Error('direct fork rotation is outside the verified source lineage');
+    return { ...copy, logicalSessionId: id, sessionId, predecessor: { ...copy.predecessor, sessionId: predecessorId } };
+  }
+  if (copy.type === 'command_finished' && copy.outcome.kind === 'rolled_over' && copy.outcome.sessionId === sourceId)
+    return { ...copy, outcome: { ...copy.outcome, sessionId: id } };
   if (copy.type === 'task_started') {
     if (copy.task.sessionId !== sourceId) {
       throw new Error('direct fork task belongs to a different Session');
@@ -187,7 +246,13 @@ function retargetFact(fact: Fact, sourceId: string, id: string, authority: Works
   return copy;
 }
 
-async function writeFork(directory: string, sourceId: string, id: string, lines: readonly FactLine[]): Promise<void> {
+async function writeFork(
+  directory: string,
+  sourceId: string,
+  id: string,
+  lines: readonly FactLine[],
+  afterSeq: number,
+): Promise<void> {
   const target = logPath(directory, id);
   if (id === sourceId || path.resolve(target) === path.resolve(logPath(directory, sourceId))) {
     throw new Error('direct fork refused to write the source log');
@@ -208,7 +273,7 @@ async function writeFork(directory: string, sourceId: string, id: string, lines:
     closeSync(fd);
     fd = undefined;
     if (!readFileSync(target).equals(payload)) throw new Error('direct fork log did not retain the copied envelopes');
-    const readBack = readFactLines(target);
+    const readBack = readFactLines(target, { afterSeq });
     if (readBack.length !== lines.length) throw new Error('direct fork log did not retain every copied fact');
     for (let index = 0; index < lines.length; index += 1) {
       const expected = lines[index]!;
@@ -216,21 +281,6 @@ async function writeFork(directory: string, sourceId: string, id: string, lines:
       if (actual.at !== expected.at || actual.seq !== expected.seq || actual.fact.type !== expected.fact.type) {
         throw new Error('direct fork changed an envelope timestamp, sequence or fact type');
       }
-    }
-    const started = readBack[0]?.fact;
-    const expectedStart = lines[0]?.fact;
-    if (
-      started?.type !== 'session_started' ||
-      expectedStart?.type !== 'session_started' ||
-      started.id !== id ||
-      started.workspace !== expectedStart.workspace ||
-      provenanceOf(started) !== sourceId ||
-      !sameExactGrant(workspaceIdentityOf(started), workspaceIdentityOf(expectedStart))
-    ) {
-      throw new Error('direct fork lost its provenance or workspace grant');
-    }
-    if (replay(readBack.map((line) => line.fact)).recoveryFacts.length !== 0) {
-      throw new Error('direct fork replay did not settle');
     }
   } catch (error) {
     if (fd !== undefined) {
@@ -327,20 +377,6 @@ function workspaceIdentityOf(fact: Fact): Workspace | undefined {
   return isWorkspaceGrant(identity)
     ? { root: identity.root, target: identity.target, access: identity.access }
     : undefined;
-}
-
-function sessionMetadata(id: string, facts: readonly Fact[]): SessionStartedFact {
-  const first = facts[0];
-  if (
-    first?.type !== 'session_started' ||
-    first.id !== id ||
-    typeof first.workspace !== 'string' ||
-    first.workspace.length === 0 ||
-    facts.slice(1).some((fact) => fact.type === 'session_started')
-  ) {
-    throw new Error(`direct Session ${id} has invalid or mismatched session_started metadata`);
-  }
-  return first;
 }
 
 function validateBinding(binding: DirectBinding | undefined): void {

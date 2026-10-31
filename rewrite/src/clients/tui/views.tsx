@@ -55,6 +55,7 @@ export function Activity({ state }: { readonly state: TuiState }): React.ReactEl
   return <Box flexDirection="column">
     <Text color={theme.textSubtle}>{state.model} · {state.status}{state.usage ? ` · ${state.usage}` : ''}{state.cost ? ` · ${state.cost}` : ''}</Text>
     {state.queueState !== 'idle' ? <Text>Queue: {state.queueState}{state.queuePauseReason ? ` · ${state.queuePauseReason}` : ''}</Text> : null}
+    {state.commands.map(receipt => <Text key={receipt.request.commandId}>Command {receipt.request.commandId} · {receipt.request.operation.kind} · {receipt.outcome?.kind ?? 'pending'}{receipt.outcome?.kind === 'rejected' ? `: ${receipt.outcome.message}` : ''}{receipt.outcome?.kind === 'interrupted' ? ' · outcome unknown' : ''}</Text>)}
     {state.budgets.length ? <Text>Pending budget decisions: {state.budgets.length} · Ctrl+B</Text> : null}
     {state.goal ? <Text>Goal: {state.goal}</Text> : null}
     {state.verification ? <Text>Verification: {state.verification}</Text> : null}

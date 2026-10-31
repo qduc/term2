@@ -1,4 +1,4 @@
-import type { JsonValue, WireBudgetRequest, WireContent, WireGrant, WireQuestion, WireSnapshot, WireTask, WireToolResult } from '../../protocol/direct-wire.js';
+import type { JsonValue, WireBudgetRequest, WireContent, WireCommandReceipt, WireGrant, WireQuestion, WireSnapshot, WireTask, WireToolResult } from '../../protocol/direct-wire.js';
 
 /** Client display state. This is a view model, not a wire or persistence format. */
 export type Message = {
@@ -52,6 +52,7 @@ export type TuiState = {
   readonly tools: readonly ToolView[];
   readonly unmatchedTools: readonly WireToolResult[];
   readonly budgets: readonly WireBudgetRequest[];
+  readonly commands: readonly WireCommandReceipt[];
   readonly interactions: readonly InteractionView[];
   readonly queue: readonly QueueItem[];
   readonly queueState: string;

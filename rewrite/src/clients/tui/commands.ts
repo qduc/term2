@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TuiConnection } from './integration.js';
-import type { WireCommandResult, WireContent, WireBudgetDecision, WireDecision, WireSubmission } from '../../protocol/direct-wire.js';
+import type { WireCommand, WireCommandReceipt, WireCommandResult, WireContent, WireBudgetDecision, WireDecision, WireSubmission } from '../../protocol/direct-wire.js';
 
 export class WireCommandFailure extends Error {
   constructor(readonly code: string, message: string) { super(message); }
@@ -39,13 +39,50 @@ export async function answerBudget(connection: TuiConnection, requestId: string,
   requireAccepted(await connection.send({ type: 'answer_budget', requestId, decision, provenance: { source: 'user' } }));
 }
 
-/** Handle slash operations with unambiguous direct wire equivalents; return false for app-owned commands. */
-export async function directSlashCommand(connection: TuiConnection, input: string): Promise<boolean> {
+/** A single keyed invocation is sent once; transport uncertainty never triggers a repeat. */
+export type NativeReceiptResult =
+  | { readonly kind: 'pending'; readonly receipt: WireCommandReceipt }
+  | { readonly kind: 'finished'; readonly receipt: WireCommandReceipt }
+  | { readonly kind: 'rejected' | 'interrupted' | 'error' | 'uncertain'; readonly commandId: string; readonly message: string; readonly receipt?: WireCommandReceipt };
+
+type NativeCommand = Extract<WireCommand, { type: 'retry' | 'compact' | 'configure' | 'rewind' | 'rollover' }>;
+
+/** Preserve the caller's invocation identity even when transport loses its reply. */
+export async function sendNativeCommand(connection: TuiConnection, command: NativeCommand): Promise<NativeReceiptResult> {
+  try { return nativeResult(command.commandId, await connection.send(command)); }
+  catch (error) { return { kind: 'uncertain', commandId: command.commandId, message: error instanceof Error ? error.message : String(error) }; }
+}
+
+function nativeResult(commandId: string, result: WireCommandResult): NativeReceiptResult {
+  if (!result.ok) return { kind: result.code === 'command_rejected' ? 'rejected' : result.code === 'command_interrupted' ? 'interrupted' : ['request_conflict', 'not_admitting', 'forbidden', 'invalid_command'].includes(result.code) ? 'error' : 'uncertain', commandId, message: `${result.code}: ${result.message}`, ...('receipt' in result ? { receipt: result.receipt } : {}) };
+  if (result.kind === 'command_pending') return { kind: 'pending', receipt: result.receipt };
+  if (result.kind === 'command_finished') return { kind: 'finished', receipt: result.receipt };
+  return { kind: 'uncertain', commandId, message: `Unexpected response: ${result.kind}` };
+}
+
+/** Read only; never re-execute a command when its status is unknown or absent. */
+export async function commandStatus(connection: TuiConnection, commandId: string): Promise<NativeReceiptResult> {
+  try { return nativeResult(commandId, await connection.send({ type: 'command_status', commandId })); }
+  catch (error) { return { kind: 'uncertain', commandId, message: error instanceof Error ? error.message : String(error) }; }
+}
+
+export function receiptNotice(result: NativeReceiptResult): string {
+  if (result.kind === 'pending') return `Command ${result.receipt.request.commandId} pending (not completed); do not repeat it. Use /command-status ${result.receipt.request.commandId}.`;
+  if (result.kind === 'finished') {
+    const { request, outcome } = result.receipt;
+    return `Command ${request.commandId} finished: ${outcome?.kind ?? 'outcome unavailable'}.${outcome?.kind === 'rewound' || outcome?.kind === 'rolled_over' ? ` Use /command-apply ${request.commandId} to apply the result.` : ''}`;
+  }
+  return `Command ${result.commandId} ${result.kind}: ${result.message}${result.kind === 'uncertain' || result.kind === 'interrupted' ? ` Outcome may be unknown; use /command-status ${result.commandId}; do not repeat blindly.` : ''}`;
+}
+
+/** Handle direct slash operations without treating a pending receipt as success. */
+export async function directSlashCommand(connection: TuiConnection, input: string): Promise<string | null> {
+  const commandId = randomUUID();
   switch (input.trim()) {
-    case '/compact': requireAccepted(await connection.send({ type: 'compact' })); return true;
-    case '/retry-turn': requireAccepted(await connection.send({ type: 'retry', target: 'turn' })); return true;
-    case '/retry-tool': requireAccepted(await connection.send({ type: 'retry', target: 'tool' })); return true;
-    default: return false;
+    case '/compact': return receiptNotice(await sendNativeCommand(connection, { type: 'compact', commandId }));
+    case '/retry-turn': return receiptNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'turn' }));
+    case '/retry-tool': return receiptNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'tool' }));
+    default: return null;
   }
 }
 
@@ -71,17 +108,9 @@ export async function listRewindTargets(connection: TuiConnection) {
   return result.targets;
 }
 
-/** Rewind to the chosen stable ID and return the Session-owned editable draft. */
-export async function rewindTo(connection: TuiConnection, targetId: string) {
-  const result = await connection.send({ type: 'rewind', targetId });
-  if (!result.ok) throw new WireCommandFailure(result.code, result.message);
-  if (result.kind !== 'rewound') throw new Error(`Unexpected rewind response: ${result.kind}`);
-  return result.draft;
-}
-
-/** Change direct session; the app must attach the returned ID. */
-export async function changeSession(connection: TuiConnection, type: 'reset' | 'rollover'): Promise<string> {
-  const result = await connection.send({ type });
+/** Reset has a direct successor response; rollover uses the keyed native command. */
+export async function resetSession(connection: TuiConnection): Promise<string> {
+  const result = await connection.send({ type: 'reset' });
   if (!result.ok) throw new WireCommandFailure(result.code, result.message);
   if (result.kind !== 'session_changed') throw new Error(`Unexpected session response: ${result.kind}`);
   return result.sessionId;

@@ -1,6 +1,6 @@
 # Direct TUI integration
 
-This subtree targets the staged direct protocol at `3628ef322046211c122eb5612f4fefb1e9a59ba5` (candidate `1e78bb50`). The app owns connection, theme/skin providers, exit, host commands and session switching. Missing capabilities surface their real errors; the TUI does not call Session/Engine or create a fallback runtime.
+This subtree targets the staged direct protocol at `82d37ded91705090bc6b253301c7411ac5d5e389` and native command writer `f14c9baa`. The app owns connection, theme/skin providers, exit, host commands and session switching. Missing capabilities surface their real errors; the TUI does not call Session/Engine or create a fallback runtime.
 
 The client folds `reduceWireEvent` into a fresh snapshot or a retained snapshot at the exact replay cursor. The app must retain state and cursor from the same consumption cut. Closing detaches without cancelling. Mixed transcript order is used only when supplied by `timeline`; unmatched tool results and other unordered items are identified separately. Images in tool results are placeholders.
 
@@ -9,5 +9,7 @@ Ctrl+G handles request-ID-scoped questions and approvals, including only explici
 Enter steers during an active turn, Alt+Enter submits a follow-up, and idle Enter uses auto delivery. Queue operations use native commands; the queue editor retains original non-primary content, sends replacements only when changed, and never automatically resubmits a late edit. If content is unavailable it cannot recover unknown attachments. `/rewind` restores the Session draft and only resends on explicit request. History uses `envPaths('term2').data/tui-history-next.json` and stores image bytes; question answers are excluded. Concurrent history writers can race.
 
 The app's `switchSession` attaches the successor and returns an optional notice after publication (including a control socket rebind failure). The unkeyed exported `Tui` retains that notice above its keyed session child. `/bridge` uses app-owned socket lifecycle callbacks.
+
+Retry, compact, rewind and rollover use a fresh stable UUID per deliberate invocation and are sent once. Pending is not success; transport loss or interrupted outcome is reported as uncertain, without automatically repeating the effect. The retained ID can be queried with `/command-status <id>`; `/command-apply <id>` explicitly restores a completed rewind draft or follows a completed rollover successor. A pending rewind originally requested as resend is restored for review, not automatically resent. Snapshot command receipts remain visible. App-owned configure commands need the same keyed receipt semantics; they are not implemented by this subtree.
 
 No tests, behavioral probes, typechecks, guards, builds, independent review or cold reads have run. Post-M6 verification must cover snapshot/replay, input ownership and terminal rendering, attachments and late queue edits, task and budget decisions, switching/rebind notices, and actual application integration.

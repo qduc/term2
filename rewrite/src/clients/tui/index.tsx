@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiConnection } from './integration.js';
@@ -16,7 +17,7 @@ import { restoreAttachments, wireAttachments } from './draft.js';
 import { useEditor } from './editor.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
-import { answerBudget, answerInteraction, cancelForeground, changeSession, controlTask, directSlashCommand, listRewindTargets, queueAction, rewindTo, submitText, WireCommandFailure } from './commands.js';
+import { answerBudget, answerInteraction, cancelForeground, commandStatus, controlTask, directSlashCommand, listRewindTargets, queueAction, receiptNotice, resetSession, sendNativeCommand, submitText, WireCommandFailure } from './commands.js';
 
 export type { TuiIntegration } from './integration.js';
 export type { TuiState, ViewUpdate, Message, ToolView, InteractionView, QueueItem, TaskView } from './state.js';
@@ -102,8 +103,12 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     if (pending.current) return;
     pending.current = true; setBusy(true); setNotice(null); setRewindTargets(null);
     try {
-      const draft = await rewindTo(connection, targetId);
-      if (!draft) { setNotice('Nothing to rewind.'); return; }
+      const result = await sendNativeCommand(connection, { type: 'rewind', commandId: randomUUID(), targetId });
+      if (result.kind !== 'finished' || result.receipt.outcome?.kind !== 'rewound') { setNotice(receiptNotice(result)); return; }
+      const content = result.receipt.outcome.draft.content;
+      const primary = content.findIndex(part => part.type === 'text');
+      const first = content[primary];
+      const draft = { text: first?.type === 'text' ? first.text : '', attachments: content.filter((_part, index) => index !== primary) };
       restoreDraft(draft);
       if (disposition === 'resend') {
         await submitText(connection, draft.text, draft.attachments, 'auto');
@@ -197,9 +202,33 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         setNotice(status.attachment
           ? `Session attached: ${status.attachment.name}; local control socket ${status.attachment.socketPath}; Discord input ${status.attachment.discordInputEnabled ? 'enabled' : 'disabled'} (Discord connectivity not verified); session ${status.sessionId}${status.startup ? '; startup socket' : ''}.`
           : `Session not attached; session ${status.sessionId}. To enable remote input, use /bridge connect [name].`);
+      } else if (/^\/command-(status|apply)(?:\s|$)/.test(input)) {
+        const match = /^\/command-(status|apply)\s+(\S+)$/.exec(input.trim());
+        if (!match) throw new Error('Use /command-status <id> or /command-apply <id>.');
+        const result = await commandStatus(connection, match[2]);
+        if (match[1] === 'status' || result.kind !== 'finished') { setNotice(receiptNotice(result)); }
+        else {
+          const outcome = result.receipt.outcome;
+          if (outcome?.kind === 'rewound') {
+            const primary = outcome.draft.content.findIndex(part => part.type === 'text');
+            const first = outcome.draft.content[primary];
+            restoreDraft({ text: first?.type === 'text' ? first.text : '', attachments: outcome.draft.content.filter((_part, index) => index !== primary) });
+            setNotice('Rewind draft restored. Review before sending.'); return;
+          }
+          if (outcome?.kind === 'rolled_over') {
+            if (!switchSession) throw new Error(`Session ${outcome.sessionId} needs an app session switch.`);
+            await switchSession(outcome.sessionId);
+          } else setNotice(receiptNotice(result));
+        }
       } else if (input.trim() === '/clear' || input.trim() === '/rollover') {
         if (!switchSession) throw new Error('Session switching is unavailable in this app.');
-        const sessionId = await changeSession(connection, input.trim() === '/clear' ? 'reset' : 'rollover');
+        let sessionId: string;
+        if (input.trim() === '/clear') sessionId = await resetSession(connection);
+        else {
+          const result = await sendNativeCommand(connection, { type: 'rollover', commandId: randomUUID() });
+          if (result.kind !== 'finished' || result.receipt.outcome?.kind !== 'rolled_over') { setNotice(receiptNotice(result)); editor.accepted(input, true, []); return; }
+          sessionId = result.receipt.outcome.sessionId;
+        }
         try { await switchSession(sessionId); }
         catch (error) { throw new Error(`Session ${sessionId} was created; switching reported: ${error instanceof Error ? error.message : String(error)}`); }
       } else if (/^\/queue(?:\s|$)/.test(input)) {
@@ -227,7 +256,9 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
       } else if (input.trim() === '/cancel') {
         setNotice(await cancelForeground(connection, state.activeTurnId ?? undefined));
       } else if (input.startsWith('/')) {
-        if (!await directSlashCommand(connection, input)) {
+        const directNotice = await directSlashCommand(connection, input);
+        if (directNotice !== null) setNotice(directNotice);
+        else {
           const result = await integration.command(connection, input);
           if (result.message) setNotice(result.message);
           if (result.draft) { restoreDraft(result.draft); return; }

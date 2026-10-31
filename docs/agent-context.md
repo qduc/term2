@@ -55,6 +55,7 @@ Do each bug fix or feature in its own worktree: `git worktree add .worktrees/<sl
 
 - Create worktrees under `.worktrees/`, never as a sibling directory like `../term2-<slug>`. The shell sandbox only grants writes to the workspace root and the temp dir (`allowWrite` in `source/utils/shell/sandbox/sandbox-policy.ts`), so a sibling checkout fails to write — sometimes half-created, with `.git/worktrees/<slug>/` metadata but no checkout.
 - Run `pnpm install` directly in each worktree. pnpm links from its global content-addressable store, so this does not duplicate disk space. Do not symlink `node_modules` from the primary checkout — that caused broken `pnpm exec` resolution in the past.
+- Within one worktree, finish builds before starting built-CLI tests or verifier runs: a root build replaces `dist/`, so overlapping readers can fail with missing modules or `EPIPE`. While a verifier uses the existing build, run any additional fixture checks directly through Vitest without rebuilding; serialize the next build until those readers finish.
 - Never `git checkout` another branch in the primary checkout — other agents have HEAD-dependent work in flight.
 - Git refuses a merge that would clobber another agent's uncommitted edits. Coordinate; don't stash their files aside.
 

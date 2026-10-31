@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type {
   WireAdmission,
+  WireBackgroundNotice,
   WireBudgetEvidence,
   WireCommandResult,
   WireDecision,
@@ -103,29 +104,39 @@ export async function runDirectHeadless(
   const autoApprove = options.autoApprove ?? false;
   const quiet = options.quiet ?? false;
   const sessionId = connection.sessionId;
-  const runStartedAt = Date.now();
+  const backgroundWaitTimeoutMs =
+    options.backgroundWaitTimeoutMs !== undefined &&
+    Number.isFinite(options.backgroundWaitTimeoutMs) &&
+    options.backgroundWaitTimeoutMs >= 0
+      ? options.backgroundWaitTimeoutMs
+      : 3_600_000;
   const tasks = new Map<string, WireTask>();
   for (const task of connection.snapshot.tasks) tasks.set(task.id, task);
+  const notices = new Map<string, WireBackgroundNotice>();
+  const delivered = new Set<string>();
+  for (const notice of connection.snapshot.notifications?.notices ?? []) notices.set(notice.id, notice);
+  for (const delivery of connection.snapshot.notifications?.deliveries ?? []) {
+    for (const id of delivery.notificationIds) delivered.add(id);
+  }
 
-  /** Old headless waited for background work and delivered its notification turns.
-   * Until Session exposes that admission/drain/wait contract, a completed
-   * foreground turn must not be reported as completed while that work is live or
-   * was launched into the background during this run.
-   */
-  const unsettledBackground = (): WireTask[] =>
+  const activeTasks = (): WireTask[] =>
     [...tasks.values()].filter(
-      (task) =>
-        task.status === 'running' ||
-        task.status === 'awaiting_interaction' ||
-        task.status === 'cancelling' ||
-        (task.mode === 'background' && task.startedAt !== undefined && task.startedAt >= runStartedAt),
+      (task) => task.status === 'running' || task.status === 'awaiting_interaction' || task.status === 'cancelling',
     );
+  const pendingNotices = (): WireBackgroundNotice[] =>
+    [...notices.values()].filter((notice) => !delivered.has(notice.id));
   const requestId = options.requestId ?? `req_${randomUUID()}`;
   const reportedErrors = new Set<string>();
   const answered = new Set<string>();
   let targetTurnId: string | null = null;
+  let lastTurnId: string | null = null;
   let finalText = '';
   let streamedText = '';
+  let completedText = '';
+  let background: { deadline: number; nextDrainAt: number; drainRequestId: string | null } | null = null;
+  let wakeBackground: (() => void) | null = null;
+  let abortedInBackground = false;
+  let backgroundCancelled = false;
   /** Per-message streamed length, so a completed message writes only its missing suffix. */
   const streamedByMessage = new Map<string, number>();
   let cancelSent = false;
@@ -150,7 +161,7 @@ export async function runDirectHeadless(
     outcome,
     finalText: final,
     sessionId,
-    turnId: targetTurnId,
+    turnId: lastTurnId ?? targetTurnId,
   });
 
   /** Headless never answers a run-budget check-in; it exits 2 without a grant. */
@@ -172,18 +183,54 @@ export async function runDirectHeadless(
     return result('budget_paused', 2);
   };
 
+  const cancelBackgroundWork = (): void => {
+    if (backgroundCancelled) return;
+    backgroundCancelled = true;
+    if (targetTurnId !== null) {
+      void connection.send({ type: 'cancel', expectedTurnId: targetTurnId }).catch(() => undefined);
+    }
+    for (const task of activeTasks()) {
+      void connection
+        .send({ type: 'task_control', taskId: task.id, action: 'cancel' })
+        .catch(() => undefined);
+    }
+  };
+
+  const finish = (): DirectHeadlessResult => {
+    const final = completedText;
+    if (output === 'plain') io.stdout.write('\n');
+    else json({ type: 'completed', finalText: final });
+    return result('completed', 0, final);
+  };
+
+  const failBackground = (message: string): DirectHeadlessResult => {
+    cancelBackgroundWork();
+    const outstanding = activeTasks();
+    const details = outstanding
+      .map((task) => `${task.kind ?? 'task'} ${task.name ?? task.label ?? task.id} [${task.id}] (${task.status})`)
+      .join(', ');
+    errorText(`${message}${details.length > 0 ? ` Outstanding: ${details}` : ''}`);
+    return result('error', 1);
+  };
+
   // The old --json schema is a ConversationEvent read model, not the wire event
-  // stream. Protocol now exposes accepted request-cost and source command slices,
-  // but native argument streaming and an authoritative final/turn-item window are
-  // still absent. Do not present a partial stream as legacy parity.
+  // stream. Protocol now exposes accepted live argument, request-cost and source
+  // command slices, but an authoritative final/turn-item window is still absent.
+  // Do not present a partial stream as legacy parity.
   if (output === 'json') {
     errorText(
-      '--json output requires native argument-stream records and an authoritative final/turn-item window; accepted cost and command slices alone are not the legacy schema.',
+      '--json output requires an authoritative final/turn-item window; live argument-stream, cost and command slices alone are not the legacy schema.',
     );
     return result('error', 1);
   }
 
   const onAbort = (): void => {
+    if (background !== null) {
+      abortedInBackground = true;
+      cancelBackgroundWork();
+      wakeBackground?.();
+      return;
+    }
     if (targetTurnId === null) {
       // No turn to cancel yet. Detach and report cancellation; the app's host
       // shutdown owns any queued admission. Never cancel another turn by accident.
@@ -310,9 +357,150 @@ export async function runDirectHeadless(
     }
 
     iterator = connection.events[Symbol.asyncIterator]();
+    let pendingNext: Promise<IteratorResult<WireEvent>> | null = null;
+    const nextEvent = (): Promise<IteratorResult<WireEvent>> => {
+      if (pendingNext !== null) return pendingNext;
+      const pending = iterator!.next();
+      pendingNext = pending;
+      void pending.catch(() => {
+        if (pendingNext === pending) pendingNext = null;
+      });
+      return pending;
+    };
+    const waitEvent = async (
+      ms: number,
+    ): Promise<
+      | { readonly kind: 'event'; readonly value: IteratorResult<WireEvent> }
+      | { readonly kind: 'timeout' }
+      | { readonly kind: 'wake' }
+    > => {
+      if (ms <= 0) return { kind: 'timeout' };
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let wake!: () => void;
+      const wakePromise = new Promise<'wake'>((resolve) => {
+        wake = () => resolve('wake');
+      });
+      wakeBackground = wake;
+      try {
+        const waited = await Promise.race([
+          nextEvent().then((value) => ({ kind: 'event' as const, value })),
+          new Promise<'timeout'>((resolve) => {
+            timer = setTimeout(() => resolve('timeout'), ms);
+          }),
+          wakePromise,
+        ]);
+        if (waited.kind === 'event') pendingNext = null;
+        return waited;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        wakeBackground = null;
+      }
+    };
+
+    /** Drain real notice batches and wait for all background work, as old headless did. */
+    const driveBackground = async (): Promise<DirectHeadlessResult | { readonly waitMs: number } | null> => {
+      const phase = background;
+      if (phase === null || targetTurnId !== null) return null;
+      if (abortedInBackground || options.signal?.aborted) {
+        return failBackground('Background work interrupted; unfinished work was cancelled.');
+      }
+      const now = Date.now();
+      const pending = pendingNotices();
+      const active = activeTasks();
+      if (pending.length === 0 && active.length === 0) return finish();
+      if (now >= phase.deadline) {
+        return failBackground(
+          `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
+        );
+      }
+      if (pending.length > 0 && now >= phase.nextDrainAt) {
+        const drainRequestId = phase.drainRequestId ?? `drain_${randomUUID()}`;
+        phase.drainRequestId = drainRequestId;
+        let drained: WireCommandResult;
+        try {
+          drained = await connection.send({ type: 'drain_background_notifications', requestId: drainRequestId });
+        } catch (error) {
+          return failBackground(
+            `Background notification drain failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        if (!drained.ok) {
+          return failBackground(`Background notification drain was not admitted: ${drained.message}`);
+        }
+        if (drained.kind !== 'background_drain') {
+          return failBackground(`Unexpected background drain result: ${drained.kind}.`);
+        }
+        const result = drained.result;
+        if (result.kind === 'started' || result.kind === 'duplicate') {
+          targetTurnId = result.turnId;
+          lastTurnId = result.turnId;
+          finalText = '';
+          streamedText = '';
+          streamedByMessage.clear();
+          phase.drainRequestId = null;
+          phase.nextDrainAt = 0;
+          return null;
+        }
+        phase.drainRequestId = null;
+        phase.nextDrainAt = Date.now() + 100;
+      }
+      const remaining = phase.deadline - Date.now();
+      const untilDrain = phase.nextDrainAt - Date.now();
+      return { waitMs: Math.max(0, Math.min(remaining, pending.length > 0 ? untilDrain : remaining)) };
+    };
+
+    let ready: IteratorResult<WireEvent> | null = null;
     for (;;) {
-      const next = await iterator.next();
+      if (background !== null && targetTurnId === null) {
+        const driven = await driveBackground();
+        if (driven !== null) {
+          if (!('waitMs' in driven)) return driven;
+          const waited = await waitEvent(driven.waitMs);
+          if (waited.kind === 'timeout') {
+            return failBackground(
+              `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
+            );
+          }
+          if (waited.kind === 'wake') {
+            return failBackground('Background work interrupted; unfinished work was cancelled.');
+          }
+          ready = waited.value;
+        } else {
+          continue;
+        }
+      }
+      if (ready === null) {
+        if (background !== null) {
+          const remaining = background.deadline - Date.now();
+          if (remaining <= 0) {
+            return failBackground(
+              `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
+            );
+          }
+          const waited = await waitEvent(remaining);
+          if (waited.kind === 'timeout') {
+            return failBackground(
+              `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
+            );
+          }
+          if (waited.kind === 'wake') {
+            return failBackground('Background work interrupted; unfinished work was cancelled.');
+          }
+          ready = waited.value;
+        } else {
+          ready = await nextEvent();
+        }
+      }
+      const next = ready;
+      ready = null;
       if (next.done) {
+        if (abortedInBackground || options.signal?.aborted) {
+          return failBackground('Background work interrupted; unfinished work was cancelled.');
+        }
+        if (background !== null) {
+          if (pendingNotices().length === 0 && activeTasks().length === 0) return finish();
+          return failBackground('Connection ended before background work settled.');
+        }
         if (abortedBeforeStart || options.signal?.aborted) return result('cancelled', 1);
         errorText('Turn ended without a terminal event.');
         return result('failed', 1);
@@ -321,6 +509,14 @@ export async function runDirectHeadless(
       if (event.sessionId !== sessionId) continue;
       if (output === 'json') json(event);
 
+      if (event.type === 'background_notice_enqueued') {
+        notices.set(event.payload.notice.id, event.payload.notice);
+        continue;
+      }
+      if (event.type === 'background_notices_delivered') {
+        for (const id of event.payload.notificationIds) delivered.add(id);
+        continue;
+      }
       if (event.type === 'interaction_opened') {
         const failure = await answer(event.payload.interaction);
         if (failure) return failure;
@@ -405,27 +601,27 @@ export async function runDirectHeadless(
           break;
         case 'turn_ended': {
           if (!forTurn) break;
+          lastTurnId = targetTurnId;
           const outcome = event.payload.outcome;
           const terminalCause = event.payload.terminalCause;
+          if (background !== null && (abortedInBackground || options.signal?.aborted)) {
+            return failBackground('Background work interrupted; unfinished work was cancelled.');
+          }
           if (outcome !== 'cancelled' && terminalCause !== undefined && BLOCKED_TERMINAL_CAUSES.has(terminalCause)) {
             if (event.payload.notice !== undefined) io.stderr.write(`${event.payload.notice}\n`);
             return result('blocked', 2);
           }
           if (outcome === 'completed') {
-            const unsettled = unsettledBackground();
-            if (unsettled.length > 0) {
-              const details = unsettled
-                .map((task) => `${task.kind ?? 'task'} ${task.name ?? task.label ?? task.id} [${task.id}] (${task.status})`)
-                .join(', ');
-              errorText(
-                `Background work is not settled: ${details}. Direct headless has no Session-owned notification/wait contract, so completion is not reported.`,
-              );
-              return result('error', 1);
+            completedText = finalText || streamedText || completedText;
+            if (background === null) {
+              background = { deadline: Date.now() + backgroundWaitTimeoutMs, nextDrainAt: 0, drainRequestId: null };
+              targetTurnId = null;
+              continue;
             }
-            const final = finalText || streamedText;
-            if (output === 'plain') io.stdout.write('\n');
-            else json({ type: 'completed', finalText: final });
-            return result('completed', 0, final);
+            targetTurnId = null;
+            background.nextDrainAt = 0;
+            background.drainRequestId = null;
+            continue;
           }
           if (outcome === 'cancelled') return result('cancelled', 1);
           if (outcome === 'interrupted') {

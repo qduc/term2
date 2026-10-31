@@ -27,7 +27,9 @@ conversation storage.
    through as raw padded base64
    image parts; `delivery` is omitted by default, and an explicit non-`auto`
    mode needs the real `submitWithDelivery` capability or is reported
-   unavailable.
+   unavailable. Pass `backgroundWaitTimeoutMs` from
+   `agent.backgroundWaitTimeoutMs` (default one hour) so the drain/wait bound
+   stays app-configured.
 4. Pass `decideApproval` when the app can supply the exact
    `NonInteractiveApprovalPolicy` decision (including shell safety and the
    yellow-command evaluator) for a wire interaction. Without it the built-in
@@ -64,11 +66,11 @@ conversation storage.
   required]`, `[question]`, retry and notice lines); errors, `Approval
   Rejected` verdicts and reasoning (when enabled) remain. JSON mode is
   unaffected.
-- `json` currently fails explicitly (exit 1) before submit because native
-  argument streaming and an authoritative final/turn-item window are missing.
-  Accepted cost/command slices alone are not the old schema. Emitting wire
-  events under the old flag would misstate parity; remove the gate only when
-  the protocol-owned read model is complete.
+- `json` currently fails explicitly (exit 1) before submit because an
+  authoritative final/turn-item window is still missing. Live argument-stream,
+  cost and command slices exist, but alone are not the old schema. Emitting wire
+  events under the old flag would misstate parity; remove the gate only when the
+  protocol-owned read model is complete.
 - A stale interaction answer after abort is expected (Session closes pending
   interactions). The client keeps the ordered stream and lets the cancelled
   terminal decide instead of reporting a failure. A stale `closed` failure is
@@ -110,11 +112,12 @@ conversation storage.
 - **`--json` schema:** old `--json` streams private `ConversationEvent`
   records (`tool_call_streaming_delta`, `cost_update`, `command_message`,
   `final` with `turnItems`/`costRecords`, ...). Protocol now provides exact
-  accepted slices for request costs (`legacyRequestCostUpdate`) and
-  source-formatted commands (`legacyCommandMessages`), but native argument
-  streaming and an authoritative final/turn-item window are still absent.
-  Those slices alone are not the legacy schema, so `--json` still exits 1 with
-  a precise missing-producer error. Never emit raw wire events as legacy JSON.
+  accepted slices for live argument counts (`legacyToolCallStreamingDelta`),
+  request costs (`legacyRequestCostUpdate`) and source-formatted commands
+  (`legacyCommandMessages`), but an authoritative final/turn-item window is
+  still absent. Those slices alone are not the legacy schema, so `--json` still
+  exits 1 with a precise missing-producer error. Never emit raw wire events as
+  legacy JSON.
 - **Approval policy inputs:** the wire exposes `toolName`, `input`, `summary`,
   `detail`, `risk`, typed `questions` and `supportedGrants` (empty under the
   current M2 request contract), but not the old safety classification, the
@@ -127,14 +130,17 @@ conversation storage.
   default declines. Old ask_user parity still needs the app to choose answers,
   and grants need a real scope-validating capability before any non-empty
   `supportedGrants` appears.
-- **Background work:** task state/progress and terminal task results are real
-  wire data, but the Session-owned silent notification admission, drain/wait,
-  `agent.backgroundWaitTimeoutMs` and interruption/timeout records are still
-  missing. The client tracks `task_changed` and, if any task is active or a
-  background task was launched during this run, refuses to report the foreground
-  terminal as completion. It exits 1 with the outstanding task IDs instead of
-  synthesizing a notification, waiting without a wake contract, or claiming
-  success while work/results cannot be delivered.
+- **Background work:** Session now owns durable notices/deliveries and the
+  atomic silent drain. The client watches `snapshot.notifications`,
+  `background_notice_enqueued`/`background_notices_delivered` and `task_changed`;
+  after the submitted turn it drains pending batches through
+  `drain_background_notifications` (stable request ID), follows each silent
+  `turn_started` to its terminal, answers task interactions, and waits until no
+  notice or active task remains. The total wait is bounded by
+  `backgroundWaitTimeoutMs` (old `agent.backgroundWaitTimeoutMs`, default one
+  hour). Timeout/signal cancel the active silent turn and active tasks through
+  `cancel`/`task_control`, then exit 1 with the outstanding IDs. It never
+  synthesizes notice text, delivery identity or completion.
 - **Generation guards:** the old app wrapped provider streams in
   `GenerationGuard`; deadline/idle caps remain app/model policy, not client
   state.

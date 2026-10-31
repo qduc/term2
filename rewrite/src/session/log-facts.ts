@@ -20,6 +20,7 @@ const nativeTypes = new Set([
   'turn_ended',
   'history_replaced',
   'model_response_completed',
+  'request_cost_recorded',
   'budget_opened',
   'budget_closed',
   'budget_observed',
@@ -102,6 +103,7 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
   }
   switch (fact['type']) {
     case 'session_started': {
+      optionalText(fact, 'forkedFrom');
       if ('binding' in fact) {
         const binding = object(fact['binding'], 'binding');
         text(binding['client'], 'binding.client');
@@ -222,6 +224,12 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
           fail('costUsd');
       }
       break;
+    case 'request_cost_recorded':
+      text(fact['turnId'], 'turnId');
+      text(fact['rootTurnId'], 'rootTurnId');
+      optionalText(fact, 'parentTurnId');
+      validateRequestCost(fact['record'], where);
+      break;
     case 'budget_opened': {
       text(fact['turnId'], 'turnId');
       text(fact['requestId'], 'requestId');
@@ -273,6 +281,8 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
       if ('notice' in fact && typeof fact['notice'] !== 'string') fail('notice');
       break;
     case 'branch_started':
+      optionalText(fact, 'parentTurnId');
+      optionalText(fact, 'rootTurnId');
       text(fact['branchId'], 'branchId');
       text(fact['taskId'], 'taskId');
       text(fact['turnId'], 'turnId');
@@ -461,5 +471,53 @@ function validateBudgetEvidence(value: unknown, where: string): void {
       break;
     default:
       invalid();
+  }
+}
+
+/** Validate the clean ModelRequestCost/NormalizedUsage data without repricing or stripping extensions. */
+function validateRequestCost(value: unknown, where: string): void {
+  const fail = (field: string): never => {
+    throw new Error(`${where}: invalid request cost ${field}`);
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('record');
+  const record = value as Record<string, unknown>;
+  for (const field of ['requestId', 'provider', 'model'])
+    if (typeof record[field] !== 'string' || !record[field]) fail(field);
+  if (!['standard', 'flex', 'batch', 'unknown'].includes(record['serviceTier'] as string)) fail('serviceTier');
+  if (!['completed', 'failed', 'cancelled'].includes(record['outcome'] as string)) fail('outcome');
+  // Provider charges can include credits. Integer micros are signed, not a catalog-rate constraint.
+  if ('usdMicros' in record && (typeof record['usdMicros'] !== 'number' || !Number.isSafeInteger(record['usdMicros'])))
+    fail('usdMicros');
+  if ('source' in record && record['source'] !== 'provider' && record['source'] !== 'catalog') fail('source');
+  for (const field of ['pricingVersion', 'pricedFromProvider'])
+    if (field in record && typeof record[field] !== 'string') fail(field);
+  if (
+    'unpricedReason' in record &&
+    !['missing_usage', 'unknown_provider', 'unknown_model', 'unknown_tier', 'ambiguous_usage'].includes(
+      record['unpricedReason'] as string,
+    )
+  )
+    fail('unpricedReason');
+  if ('usage' in record) {
+    const raw = record['usage'];
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('usage');
+    const usage = raw as Record<string, unknown>;
+    for (const field of [
+      'prompt_tokens',
+      'completion_tokens',
+      'total_tokens',
+      'reasoning_tokens',
+      'cache_read_tokens',
+      'cache_creation_tokens',
+      'prompt_ms',
+      'completion_ms',
+      'tokens_per_second',
+      'ttft_ms',
+    ])
+      if (field in usage && (typeof usage[field] !== 'number' || !Number.isFinite(usage[field])))
+        fail(`usage.${field}`);
+    for (const field of ['tokens_per_second_estimated', 'tokens_per_second_burst'])
+      if (field in usage && typeof usage[field] !== 'boolean') fail(`usage.${field}`);
+    if ('upstream_provider' in usage && typeof usage['upstream_provider'] !== 'string') fail('usage.upstream_provider');
   }
 }

@@ -40,6 +40,7 @@ export function initialDirectState(id: string, workspace: Workspace, model: Mode
     tasks: [],
     queue: createDirectQueueState(),
     turnResults: [],
+    requestCosts: [],
     pendingBudgets: [],
     timeline: [],
   };
@@ -125,6 +126,11 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       return {
         ...state,
         pendingBudgets: state.pendingBudgets.filter((request) => request.requestId !== fact.requestId),
+      };
+    case 'request_cost_recorded':
+      return {
+        ...state,
+        requestCosts: [...state.requestCosts.filter((entry) => entry.record.requestId !== fact.record.requestId), fact],
       };
     case 'session_started':
       return { ...state, model: fact.model };

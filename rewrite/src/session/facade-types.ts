@@ -100,6 +100,7 @@ export type DirectSessionState = {
   readonly pendingInteractions: readonly InteractionRequest[];
   readonly admissions: readonly DirectAdmission[];
   readonly usage: Usage;
+  readonly requestCosts: readonly import('./facts.js').DirectRequestCostFact[];
   readonly pendingBudgets: readonly Extract<Fact, { readonly type: 'budget_opened' }>[];
   readonly timeline: readonly DirectTimelineEntry[];
   readonly context: DirectContextState;

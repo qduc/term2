@@ -17,7 +17,7 @@ import type { DirectBackgroundFact } from './direct-background-types.js';
 import type { DirectQueueFact } from './direct-queue-types.js';
 import type { DirectContextFact } from './direct-context.js';
 import type { BudgetDecision } from '../engine/direct-types.js';
-import type { RunBudgetEvent, RunBudgetSnapshot } from '../engine/direct-recovery-budget.js';
+import type { ModelRequestCost, RunBudgetEvent, RunBudgetSnapshot } from '../engine/direct-recovery-budget.js';
 import type { StopReason } from '../model/index.js';
 import type { ToolResult } from '../tools/index.js';
 import type { DirectBinding, DirectOrigin } from './facade-types.js';
@@ -29,6 +29,9 @@ export type SessionStartedFact = {
   readonly type: 'session_started';
   readonly id: string;
   readonly workspace: string;
+  /** Full authorized identity; legacy direct path-only records require a current local grant. */
+  readonly workspaceIdentity?: import('../tools/index.js').Workspace;
+  readonly forkedFrom?: string;
   readonly model: ModelRef;
   readonly reasoning?: ReasoningEffort;
   readonly profile: { readonly id: string; readonly version: string; readonly digest: string };
@@ -139,10 +142,21 @@ export type DirectHistoryFact = {
   readonly checkpointReceipts?: readonly string[];
 };
 
+/** Physical accounting is independent of transcript edits and includes nested/summary/failed requests. */
+export type DirectRequestCostFact = {
+  readonly type: 'request_cost_recorded';
+  readonly turnId: TurnId;
+  readonly rootTurnId: TurnId;
+  readonly parentTurnId?: TurnId;
+  readonly record: ModelRequestCost;
+};
+
 /** Child audit is isolated from the foreground transcript, but uses the same writer. */
 export type DirectBranchFact =
   | {
       readonly type: 'branch_started';
+      readonly parentTurnId?: TurnId;
+      readonly rootTurnId?: TurnId;
       readonly branchId: string;
       readonly taskId: string;
       readonly turnId: TurnId;
@@ -161,6 +175,7 @@ export type Fact =
   | DirectTurnFact
   | DirectHistoryFact
   | DirectBranchFact
+  | DirectRequestCostFact
   | DirectQueueFact
   | DirectBackgroundFact
   | DirectContextFact;

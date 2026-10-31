@@ -47,7 +47,9 @@ export type TurnBudget = {
   readonly policy: RunBudgetPolicy;
   readonly state?: RunBudget;
   /** Other accepted run/child costs; engine merges by stable requestId. */
-  readonly costRecords?: () => readonly ModelRequestCost[];
+  readonly costRecords?: (turnId: TurnId) => readonly ModelRequestCost[];
+  /** Publish actual request accounting to the owning run/tree accumulator. */
+  readonly onRequestCost?: (record: ModelRequestCost, context: { readonly turnId: TurnId }) => void;
   readonly wrapUpOnCritical?: boolean;
   /** Exact effect evidence, never inferred from a tool name or an error. */
   readonly toolEffect?: (name: string, input: unknown) => 'mutating' | undefined;

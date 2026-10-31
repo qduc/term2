@@ -25,7 +25,7 @@ export type DirectTuiCommandOptions = {
   readonly bridge: DirectControlBridge;
   /** The current session as this client last folded it. */
   readonly latest: () => WireSnapshot;
-  /** Shows this connection. Control has already moved, so the two never disagree. */
+  /** Shows this connection. Control has already moved or closed, so the two never disagree. */
   readonly publish: (connection: DirectConnection) => void;
   /** The app closes the host, then runs this plan. */
   readonly restart: (plan: DirectRestartPlan) => void;
@@ -158,13 +158,11 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     },
     async switchSession(sessionId) {
       const next = await host.connect(principal, sessionId);
-      try {
-        await bridge.rebind(sessionId);
-      } catch (error) {
-        next.close();
-        throw error;
-      }
+      // The session has really changed by now, so the client follows it even if control cannot.
+      const control = bridge.rebind(sessionId);
+      await control.catch(() => undefined);
       publish(next);
+      await control;
     },
     bridge: {
       status: async () => bridgeStatus(),

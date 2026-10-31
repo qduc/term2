@@ -39,12 +39,19 @@ export type DirectControlBridge = {
   attachAtStartup(sessionId: string, request: DirectControlSocketRequest): Promise<string>;
   connect(sessionId: string, name: string): Promise<ControlServer>;
   disconnect(): Promise<void>;
-  /** After a real session change. A detached bridge has nothing to move. */
+  /**
+   * After a real session change. A socket that cannot follow closes and this
+   * throws, so nothing keeps advertising the session the client just left.
+   */
   rebind(sessionId: string): Promise<void>;
   /** Stops control input for a restart. The new process owns the socket name next. */
   hold(): DirectControlHold | undefined;
   close(): Promise<void>;
 };
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function metadataFor(app: DirectApplication, root: string): (snapshot: WireSnapshot) => ControlSessionMetadata {
   // A session's creation time never changes, and this runs on every status read.
@@ -91,7 +98,7 @@ export function createDirectControlBridge(
         process.env.XDG_RUNTIME_DIR ?? '',
         sessionId,
       ),
-      isDiscordInputEnabled: () => boundSession === sessionId && attached?.socket.discordInputEnabled === true,
+      isDiscordInputEnabled: () => boundSession === sessionId && attached?.socket.discordSendEnabled === true,
     }),
     get server() {
       return attached?.socket;
@@ -106,7 +113,7 @@ export function createDirectControlBridge(
         startup = true;
         return `Control socket on: ${name} (pid ${process.pid})`;
       } catch (error) {
-        return `Control socket off: ${error instanceof Error ? error.message : String(error)}`;
+        return `Control socket off: ${messageOf(error)}`;
       }
     },
     async connect(sessionId, name) {
@@ -128,9 +135,18 @@ export function createDirectControlBridge(
       await closing?.close();
     },
     async rebind(sessionId) {
-      if (!attached) return;
-      await attached.rebind(sessionId);
-      boundSession = sessionId;
+      const current = attached;
+      if (!current) return;
+      try {
+        await current.rebind(sessionId);
+        boundSession = sessionId;
+      } catch (error) {
+        attached = undefined;
+        boundSession = undefined;
+        startup = false;
+        await current.close().catch(() => undefined);
+        throw new Error(`Control socket closed: ${messageOf(error)}`);
+      }
     },
     hold: () => attached?.socket.pauseMutations(),
     async close() {

@@ -94,7 +94,7 @@ async function modelStepRun(
         await events.publish({ type: 'reasoning_delta', delta: event.delta });
         break;
       case 'item': {
-        const call = event.item.type === 'tool_call' ? tools.root(event.item) : undefined;
+        const call = event.item.type === 'tool_call' ? tools.root(event.item, modelStep) : undefined;
         await events.publish({
           type: 'item',
           item: event.item,

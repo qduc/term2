@@ -25,7 +25,12 @@ type Execution = {
   open: boolean;
   admitted: boolean;
 };
-export type RootCall = { readonly item: CallItem; readonly executionId: ExecutionId; readonly execution: Execution };
+export type RootCall = {
+  readonly item: CallItem;
+  readonly executionId: ExecutionId;
+  readonly execution: Execution;
+  readonly modelStep: number;
+};
 type Plan = {
   readonly call: RootCall;
   readonly tool?: Tool;
@@ -72,9 +77,9 @@ export class TurnTools {
   }
 
   /** Provider call IDs are presentation only; even repeated IDs allocate a fresh occurrence. */
-  root(item: CallItem): RootCall {
+  root(item: CallItem, modelStep: number): RootCall {
     const execution = this.#allocate(item.toolName, item.input, item.callId);
-    return { item, executionId: execution.executionId, execution };
+    return { item, executionId: execution.executionId, execution, modelStep };
   }
 
   /** Plan all complete calls, then settle contiguous safe batches in provider order. */
@@ -205,7 +210,7 @@ export class TurnTools {
       ...(result.providerOutput !== undefined ? { providerOutput: result.providerOutput } : {}),
       ...(call.item.toolType !== undefined ? { toolType: call.item.toolType } : {}),
     };
-    await this.events.publish({ type: 'item', item, executionId: call.executionId });
+    await this.events.publish({ type: 'item', item, executionId: call.executionId, modelStep: call.modelStep });
     history.push(item);
   }
 

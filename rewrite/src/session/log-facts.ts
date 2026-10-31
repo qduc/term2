@@ -261,6 +261,8 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
       if (!Array.isArray(record['providerOutput'])) fail('result.providerOutput');
       for (const part of record['providerOutput'] as unknown[]) object(part, 'result.providerOutput[]');
     }
+    // Accepted audit only. Replay must not treat this as a live root stop.
+    if ('stopAfterExecution' in record && record['stopAfterExecution'] !== true) fail('result.stopAfterExecution');
   };
   const resolution = (value: unknown): void => {
     const record = object(value, 'resolution');
@@ -361,9 +363,10 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
       break;
     }
     case 'item': {
+      const item = object(fact['item'], 'item');
+      if (item['type'] === 'tool_result' && 'stopAfterExecution' in item) fail('item.stopAfterExecution');
       if ('executionId' in fact) {
         text(fact['executionId'], 'executionId');
-        const item = object(fact['item'], 'item');
         if (item['type'] !== 'tool_call' && item['type'] !== 'tool_result') fail('executionId');
       }
       break;
@@ -650,7 +653,8 @@ function validateHistory(value: unknown, where: string): void {
           typeof item.callId !== 'string' ||
           !item.callId ||
           typeof item.output !== 'string' ||
-          typeof item.isError !== 'boolean'
+          typeof item.isError !== 'boolean' ||
+          'stopAfterExecution' in item
         )
           throw new Error(`${where}: invalid tool result`);
         break;

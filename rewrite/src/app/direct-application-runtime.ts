@@ -4,17 +4,21 @@ import type { SessionRolloverRequest } from '../../../source/contracts/session-r
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
+import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectBackgroundTasks } from '../session/direct-background.js';
-import type { DirectContextFactory } from '../session/direct-capabilities.js';
+import type { DirectContextCapabilities, DirectContextFactory } from '../session/direct-capabilities.js';
 import type { DirectBinding } from '../session/facade-types.js';
-import type { DirectCommandOutcome } from '../session/direct-command-types.js';
+import type { DirectCommandConfiguration, DirectCommandOutcome } from '../session/direct-command-types.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
 import type { DirectHookRuntime } from './direct-application-hooks.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
 import { createNestedAuthorizer } from './direct-application-nested.js';
+import { createDirectConfigMemoryBinding } from './direct-config-memory.js';
+import { borrowDirectConfigSurfaceOptions } from './direct-config-remote.js';
+import { prepareDirectConfiguration, type DirectConfiguredGeneration } from './direct-config-runtime.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
@@ -37,11 +41,21 @@ export type DirectRuntimeOptions = {
   readonly sessionBinding?: DirectBinding;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
   readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
-  /** Runs inside the Session's command reservation, so this session admits nothing meanwhile. */
+  /** Decides whether a session may move to another model. Without it, none may. */
+  readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void;
+  /** Runs inside the Session's command reservation. */
   readonly rollover: (sessionId: string, request?: SessionRolloverRequest) => Promise<DirectCommandOutcome>;
   /** After any resumed selection is restored, so this reports what actually runs. */
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
+
+/**
+ * A configured runtime the Session may still throw away: `dispose()` discards it.
+ * `install()` is the Session's own last step, after the durable append and in the
+ * same synchronous step as its swap, so it cannot throw. From then on the runtime
+ * belongs to this session until shutdown.
+ */
+export type DirectPreparedConfiguration = DirectConfiguredGeneration & { install(): void };
 
 /** What the app holds for one open session. */
 export type DirectRuntimeRecord = {
@@ -84,6 +98,7 @@ function sessionSettings(
   settings.set('agent.modelSelection', model, { persist: false });
   const reasoning = metadata ? metadata.reasoning ?? 'default' : defaults.get('agent.reasoningEffort');
   settings.set('agent.reasoningEffort', reasoning, { persist: false });
+  if (metadata?.temperature !== undefined) settings.set('agent.temperature', metadata.temperature, { persist: false });
   if (approvalAlwaysAsks) settings.set('shell.autoApproveMode', 'off', { persist: false });
   return settings;
 }
@@ -106,6 +121,12 @@ function verificationOperations(
     model: configured ? { provider: model.provider, model: configured } : model,
     workspace,
   });
+}
+
+/** Effort and temperature are a session's own to tune. The model decides who gets billed. */
+function sameModelOnly(next: ModelRef, previous: ModelRef): void {
+  if (next.provider === previous.provider && next.model === previous.model) return;
+  throw new Error('This client may not move the session to another model.');
 }
 
 export function createDirectRuntimes(
@@ -133,33 +154,77 @@ export function createDirectRuntimes(
       }
       const selection = { settings: sessionSettings(options, context), logger, sessionContext };
       const surfaceOptions = options.surface(context.id);
-      // The Session owns memory, so the surface must not offer it a second time.
-      const surface = loadSurface(selection, { ...surfaceOptions, includeMemory: false, workspace: context.workspace });
+      // The Session owns memory, so the surface must not offer it a second time. It
+      // borrows SSH because the connection outlives this tool graph and this session.
+      const surface = loadSurface(
+        selection,
+        borrowDirectConfigSurfaceOptions({ ...surfaceOptions, includeMemory: false, workspace: context.workspace }),
+      );
       const scope = scopeFor(context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(selection.settings.get('app.activeProfileId')));
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
       let tasks: DirectBackgroundTasks | undefined;
-      records.set(context.id, {
-        surface,
-        scope,
-        settings: selection.settings,
-        profileId: profile.activeProfileId,
-        tasks: () => tasks,
-      });
+      const publish = (published: AgentSurface, settings: ProfileSelection['settings'], profileId: string): void => {
+        records.set(context.id, { surface: published, scope, settings, profileId, tasks: () => tasks });
+      };
+      publish(surface, selection.settings, profile.activeProfileId);
       options.onSurface?.(surface, profile);
       const models = withGenerationGuard(withSessionScope(createProviderRegistry(selection), scope), selection);
       const verification = verificationOperations(selection, models, context);
       const interactive = surfaceOptions.interactive === true;
+      const memoryBinding = createDirectConfigMemoryBinding();
+      // Background work may still hold an older graph, and these hold only local
+      // listeners and policies, so each stays until the session shuts down.
+      const generations: (() => void | Promise<void>)[] = [() => runtime.dispose?.()];
+      let installed: {
+        readonly context: DirectRuntimeContext;
+        readonly selection: ProfileSelection;
+        readonly capabilities?: DirectContextCapabilities;
+      } = { context, selection };
+      const rollover = (request?: SessionRolloverRequest) => options.rollover(context.id, request);
+      const configure = async (configuration: DirectCommandConfiguration): Promise<DirectPreparedConfiguration> => {
+        const { capabilities } = installed;
+        if (!capabilities) throw new Error('This session has not finished starting.');
+        const generation = await prepareDirectConfiguration({
+          context: installed.context,
+          selection: installed.selection,
+          scope,
+          surfaceOptions,
+          configuration,
+          capabilities,
+          memoryBinding,
+          authorizeModel: options.authorizeModel ?? sameModelOnly,
+        });
+        return {
+          ...generation,
+          // The Session replaces its whole dependency set, so its own commands must survive.
+          deps: { ...generation.deps, rollover, configure },
+          install() {
+            installed = {
+              context: { ...installed.context, model: generation.configuration.model },
+              selection: { ...installed.selection, settings: generation.settings },
+              capabilities: generation.capabilities,
+            };
+            generations.push(generation.dispose);
+            publish(generation.surface, generation.settings, generation.profile.id);
+            try {
+              options.onSurface?.(generation.surface, getProfileMetadata(generation.profile.id));
+            } catch (error) {
+              logger.warn(`Could not report the new surface: ${String(error)}`);
+            }
+          },
+        };
+      };
       const contextFactory: DirectContextFactory = (port) => {
         tasks = port.tasks;
         const hooks = hookRuntime?.session(context, selection.settings);
-        return {
+        const capabilities: DirectContextCapabilities = {
           ...createDirectSessionMemory(
             {
               settings: selection.settings,
               workspace: context.workspace,
               subject: { kind: 'main' },
-              adaptTool: runtime.adaptTool,
+              adaptTool: (definition) => memoryBinding.adapt(surface, definition),
               onWarning: (message) => logger.warn(message),
             },
             port,
@@ -167,10 +232,16 @@ export function createDirectRuntimes(
           ...(hooks ? { hooks } : {}),
           ...(verification ? { verification: { operations: verification } } : {}),
           verificationEnabled: () => selection.settings.get('agent.completionVerification') !== false,
+          backgroundCheckIns: () => ({
+            enabled: selection.settings.get('agent.backgroundCheckIn.enabled'),
+            intervalMs: selection.settings.get('agent.backgroundCheckIn.intervalMs'),
+          }),
           // Only a client with a person behind it can answer these.
           unattended: !interactive,
           proposeGoal: interactive,
         };
+        installed = { ...installed, capabilities };
+        return capabilities;
       };
       return {
         deps: {
@@ -181,7 +252,8 @@ export function createDirectRuntimes(
           ...runPolicy(selection.settings, context.id, context.model),
           context: contextFactory,
           authorizeNested: createNestedAuthorizer(selection.settings, context.model, runtime.resolveNestedAuthority),
-          rollover: (request?: SessionRolloverRequest) => options.rollover(context.id, request),
+          rollover,
+          configure,
         },
         request: {
           ...request,
@@ -196,7 +268,9 @@ export function createDirectRuntimes(
         appVersion: installationVersion,
         async dispose() {
           records.delete(context.id);
-          await runtime.dispose?.();
+          const results = await Promise.allSettled(generations.map(async (dispose) => dispose()));
+          const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+          if (failures.length) throw new AggregateError(failures, 'A tool graph could not be released.');
         },
       };
     },

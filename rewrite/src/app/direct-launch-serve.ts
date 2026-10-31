@@ -165,8 +165,12 @@ function presentation(options: PresentationOptions): ServerSessionPresentation {
         sessionId: snapshot.sessionId,
         providerId: snapshot.model.provider,
         modelId: snapshot.model.model,
-        // The start fact leaves this out when nothing was chosen.
-        reasoningEffort: started.reasoning ?? 'default',
+        // A live session may have been reconfigured since it started. The start fact
+        // leaves this out when nothing was chosen.
+        reasoningEffort:
+          app.sessionDetails(snapshot.sessionId).settings?.get('agent.reasoningEffort') ??
+          started.reasoning ??
+          'default',
         mode: app.sessionDetails(snapshot.sessionId).profileId ?? started.profileId ?? 'unknown',
         toolPolicy: directServeToolPosture(workspace.access === 'read_write' && allowWrite),
         configRevision: revision,

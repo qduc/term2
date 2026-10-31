@@ -99,6 +99,8 @@ async function runTui(request: InteractiveRequest, target: DirectSessionTarget, 
     selection,
     ...(profileExplicit !== undefined ? { profileExplicit } : {}),
     surface: (sessionId) => ({ interactive: true, ...bridge.outbound(sessionId), ...target.surface }),
+    // The person at this terminal named the model, as with `-m` today.
+    authorizeModel: () => undefined,
     authority: target.authority,
     ...(target.binding ? { sessionBinding: target.binding } : {}),
     hooks: { root: fs.realpathSync(process.cwd()), mode: 'interactive' },

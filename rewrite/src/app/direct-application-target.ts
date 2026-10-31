@@ -97,7 +97,7 @@ export async function openDirectSessionTarget(
       surface: { remote, projectInstructions: instructions },
       binding: { client: 'ssh', id: workspace.target },
       restart: { target: ssh.target, directory: workspace.root, port: remote.sshInfo.port },
-      // Sessions close it too, after they drain. A target with none still has to.
+      // The one close. Sessions borrow this, so one draining cannot cut off another.
       close: () => remote.close(),
     };
   } catch (error) {

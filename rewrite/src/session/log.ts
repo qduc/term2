@@ -32,6 +32,10 @@ const FACT_TYPES: ReadonlySet<string> = new Set([
   'turn_started',
   'text_delta',
   'item',
+  'tool_started',
+  'tool_finished',
+  'interaction_opened',
+  'interaction_closed',
   'usage',
   'turn_ended',
 ]);
@@ -114,11 +118,156 @@ function parseLog(data: Buffer, path: string): ParsedLog {
       throw new Error(`${where}: unknown fact type ${JSON.stringify(String(type))}`);
     }
 
+    validateFact(fact as Record<string, unknown>, where);
     facts.push(fact as Fact);
     lastSeq = seq;
   }
 
   return { facts, lastSeq, complete };
+}
+
+/** Validate additive direct facts without changing the v1 envelope or M1 payload rules. */
+function validateFact(fact: Record<string, unknown>, where: string): void {
+  const fail = (field: string): never => {
+    throw new Error(`${where}: invalid ${String(fact['type'])}.${field}`);
+  };
+  const text = (value: unknown, field: string): void => {
+    if (typeof value !== 'string' || value.length === 0) fail(field);
+  };
+  const optionalText = (record: Record<string, unknown>, field: string): void => {
+    if (field in record) text(record[field], field);
+  };
+  const object = (value: unknown, field: string): Record<string, unknown> => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(field);
+    return value as Record<string, unknown>;
+  };
+  const hasInput = (record: Record<string, unknown>): void => {
+    if (!('input' in record)) fail('input');
+  };
+  const result = (value: unknown): void => {
+    const record = object(value, 'result');
+    if (typeof record['output'] !== 'string' || typeof record['isError'] !== 'boolean') fail('result');
+    if ('providerOutput' in record) {
+      if (!Array.isArray(record['providerOutput'])) fail('result.providerOutput');
+      for (const part of record['providerOutput'] as unknown[]) object(part, 'result.providerOutput[]');
+    }
+  };
+  const resolution = (value: unknown): void => {
+    const record = object(value, 'resolution');
+    switch (record['kind']) {
+      case 'allow':
+      case 'cancelled':
+      case 'interrupted':
+        break;
+      case 'deny':
+        if ('reason' in record && typeof record['reason'] !== 'string') fail('resolution.reason');
+        break;
+      case 'answer':
+        if (typeof record['answer'] !== 'string') fail('resolution.answer');
+        break;
+      default:
+        fail('resolution.kind');
+    }
+    if ('stopAfterApprovalResolution' in record && typeof record['stopAfterApprovalResolution'] !== 'boolean') {
+      fail('resolution.stopAfterApprovalResolution');
+    }
+  };
+
+  if (
+    'modelStep' in fact &&
+    (typeof fact['modelStep'] !== 'number' || !Number.isSafeInteger(fact['modelStep']) || fact['modelStep'] < 0)
+  ) {
+    fail('modelStep');
+  }
+  switch (fact['type']) {
+    case 'session_started': {
+      if ('binding' in fact) {
+        const binding = object(fact['binding'], 'binding');
+        text(binding['client'], 'binding.client');
+        text(binding['id'], 'binding.id');
+      }
+      break;
+    }
+    case 'turn_started': {
+      if (!('submission' in fact)) break;
+      const submission = object(fact['submission'], 'submission');
+      text(submission['clientRequestId'], 'submission.clientRequestId');
+      text(submission['messageId'], 'submission.messageId');
+      if ('origin' in submission) {
+        const origin = object(submission['origin'], 'submission.origin');
+        if (!['cli', 'tui', 'acp', 'control', 'discord', 'api'].includes(origin['kind'] as string)) {
+          fail('submission.origin.kind');
+        }
+        if ('id' in origin && typeof origin['id'] !== 'string') fail('submission.origin.id');
+      }
+      const input = fact['input'];
+      if (!Array.isArray(input)) fail('input');
+      // Correlation must identify this admission's user input, not an assistant,
+      // an earlier turn's message or metadata that only happens to reuse the ID.
+      if (
+        !(input as unknown[]).some((item) => {
+          if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
+          const record = item as Record<string, unknown>;
+          return record['type'] === 'user_message' && record['id'] === submission['messageId'];
+        })
+      ) {
+        fail('submission.messageId');
+      }
+      break;
+    }
+    case 'item': {
+      if ('executionId' in fact) {
+        text(fact['executionId'], 'executionId');
+        const item = object(fact['item'], 'item');
+        if (item['type'] !== 'tool_call' && item['type'] !== 'tool_result') fail('executionId');
+      }
+      break;
+    }
+    case 'tool_started':
+      text(fact['turnId'], 'turnId');
+      text(fact['executionId'], 'executionId');
+      optionalText(fact, 'parentExecutionId');
+      if (fact['parentExecutionId'] === fact['executionId']) fail('parentExecutionId');
+      text(fact['callId'], 'callId');
+      text(fact['toolName'], 'toolName');
+      hasInput(fact);
+      break;
+    case 'tool_finished':
+      text(fact['turnId'], 'turnId');
+      text(fact['executionId'], 'executionId');
+      result(fact['result']);
+      break;
+    case 'interaction_opened': {
+      text(fact['turnId'], 'turnId');
+      const request = object(fact['request'], 'request');
+      text(request['requestId'], 'request.requestId');
+      text(request['turnId'], 'request.turnId');
+      if (request['turnId'] !== fact['turnId']) fail('request.turnId');
+      if (request['kind'] !== 'approval' && request['kind'] !== 'question') fail('request.kind');
+      text(request['toolName'], 'request.toolName');
+      if (typeof request['summary'] !== 'string') fail('request.summary');
+      if ('detail' in request && typeof request['detail'] !== 'string') fail('request.detail');
+      optionalText(request, 'executionId');
+      optionalText(request, 'parentExecutionId');
+      optionalText(request, 'sourceCallId');
+      if (
+        'risk' in request &&
+        request['risk'] !== 'low' &&
+        request['risk'] !== 'medium' &&
+        request['risk'] !== 'high'
+      ) {
+        fail('request.risk');
+      }
+      if ('presentation' in request) object(request['presentation'], 'request.presentation');
+      hasInput(request);
+      break;
+    }
+    case 'interaction_closed':
+      text(fact['turnId'], 'turnId');
+      text(fact['requestId'], 'requestId');
+      resolution(fact['resolution']);
+      break;
+  }
 }
 
 function errorMessage(error: unknown): string {

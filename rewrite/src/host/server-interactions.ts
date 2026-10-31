@@ -3,31 +3,19 @@
  */
 import type {
   WireDecision,
+  WireBudgetRequest,
+  WireBudgetDecision,
   WireInteraction,
   WireQuestion,
   WireQuestionAnswer,
   WireSnapshot,
 } from '../protocol/direct-wire.js';
+import type { PendingInteractionDto } from '@qduc/agent-wire';
 import type { InteractionResolveBody } from './server-contracts.js';
 import { ServerHttpError } from './server-errors.js';
 
-type Question = {
-  index: number;
-  question: string;
-  options: { label: string; description?: string }[];
-  multiSelect: boolean;
-};
 type Choice = { id: string; label: string };
-export type ServerInteraction = {
-  version: 1;
-  interactionId: string;
-  kind: 'tool_approval' | 'ask_user';
-  variant: 'ordinary_tool' | 'ask_user';
-  descriptor: { agentName: string; toolName: string; argumentsText: string };
-  choices: Choice[];
-  revision: number;
-  askUser?: { questions: Question[]; answers: (string | readonly string[])[]; currentQuestionIndex: number };
-};
+export type ServerInteraction = PendingInteractionDto;
 type Progress = { answers: (string | readonly string[])[] };
 type Resolution = { kind: 'next'; interaction: ServerInteraction } | { kind: 'decision'; decision: WireDecision };
 const DECLINE = 'User declined to answer.';
@@ -111,6 +99,46 @@ export class ServerInteractions {
           }
         : {}),
     };
+  }
+  /** Run-budget checks are non-tool capabilities. They never become a fake tool approval. */
+  projectBudget(request: WireBudgetRequest): ServerInteraction {
+    return {
+      version: 1,
+      interactionId: request.requestId,
+      kind: 'check_in',
+      variant: 'run_budget',
+      revision: 1,
+      descriptor: {
+        agentName: 'assistant',
+        toolName: 'run_budget',
+        argumentsText: safeText(JSON.stringify(request.evidence), 8_192),
+        checkIn: 'run_budget',
+        runBudgetEvidence: {
+          pricedUsdMicros: request.snapshot.pricedUsdMicros,
+          unpricedTokens: request.snapshot.unpricedTokens,
+          activeTimeMs: request.snapshot.activeTimeMs,
+          turns: request.snapshot.turns,
+          extensionsGranted: request.snapshot.extensionsGranted,
+          ...(request.evidence.type === 'budget_stage'
+            ? {
+                used: request.evidence.evidence.used,
+                limit: request.evidence.evidence.limit,
+                headroom: request.evidence.evidence.headroom,
+              }
+            : { count: request.evidence.count, threshold: request.evidence.threshold }),
+        },
+      },
+      choices: [
+        { id: 'approve', label: 'Continue' },
+        { id: 'reject', label: 'Stop' },
+      ],
+    };
+  }
+  resolveBudget(request: WireBudgetRequest, body: InteractionResolveBody): WireBudgetDecision {
+    if (body.revision !== 1) throw new ServerHttpError(409, 'stale_interaction', 'interaction revision is stale');
+    if (body.approvalAnswer !== undefined || body.rejectionReason !== undefined) return invalid();
+    if (!this.projectBudget(request).choices.some((choice) => choice.id === body.answer)) return invalid();
+    return body.answer === 'approve' ? { kind: 'extend', grantedBy: 'human' } : { kind: 'stop' };
   }
   resolve(sessionId: string, interaction: WireInteraction, body: InteractionResolveBody): Resolution {
     const dto = this.project(sessionId, interaction);

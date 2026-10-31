@@ -76,7 +76,11 @@ export async function handleSessionRoute(
       const interaction = connection.snapshot.pendingInteractions.find(
         (entry) => entry.requestId === route.interactionId,
       );
-      if (!interaction) return publicError(409, 'stale_interaction', 'interaction is stale');
+      if (!interaction) {
+        const budget = connection.snapshot.pendingBudgets?.find((entry) => entry.requestId === route.interactionId);
+        if (!budget) return publicError(409, 'stale_interaction', 'interaction is stale');
+        return resolveBudget(input, budget, direct, interactions);
+      }
       let command: WireCommand;
       if (direct) {
         if (
@@ -90,6 +94,7 @@ export async function handleSessionRoute(
           type: 'answer',
           requestId: interaction.requestId,
           decision: (body as { decision?: unknown }).decision,
+          provenance: { source: 'user', automaticApproval: false },
         });
       } else {
         const resolution = interactions.resolve(
@@ -99,7 +104,12 @@ export async function handleSessionRoute(
         );
         if (resolution.kind === 'next')
           return { status: 200, body: { accepted: false, interaction: resolution.interaction } };
-        command = { type: 'answer', requestId: interaction.requestId, decision: resolution.decision };
+        command = {
+          type: 'answer',
+          requestId: interaction.requestId,
+          decision: resolution.decision,
+          provenance: { source: 'user', automaticApproval: false },
+        };
       }
       if (
         command.type === 'answer' &&
@@ -145,17 +155,73 @@ export async function handleSessionRoute(
         type: 'cancel',
         target: { kind: 'foreground' },
         expectedTurnId: body.turnId,
+        discardQueue: true,
       });
       if (!result.ok) return commandFailure(result);
-      if (result.kind !== 'accepted') return unavailable('turn abort receipt');
+      if (result.kind !== 'abort') return unavailable('turn abort receipt');
+      if (result.result.kind === 'not_admitting')
+        return publicError(409, 'session_not_admitting', 'session is interrupted');
+      if (result.result.kind === 'no_op') {
+        // no_op also includes cancellation already requested; it is not physical settlement.
+        // Only immutable accepted terminal evidence permits the pinned alreadySettled claim.
+        const settled =
+          connection.snapshot.turnResults?.some((turn) => turn.turnId === body.turnId) ||
+          connection.snapshot.terminal?.turnId === body.turnId;
+        return settled
+          ? {
+              status: 200,
+              body: { sessionId: connection.sessionId, turnId: body.turnId, accepted: false, alreadySettled: true },
+            }
+          : publicError(409, 'session_not_admitting', 'turn cancellation was not admitted');
+      }
       return {
         status: 202,
-        body: { sessionId: connection.sessionId, turnId: body.turnId, accepted: true },
+        body: { sessionId: connection.sessionId, turnId: result.result.turnId, accepted: true },
       };
     }
     default:
       return publicError(403, 'gateway_unavailable', 'gateway operation is unavailable');
   }
+}
+/** Budget decisions go through the non-tool answer capability with authenticated user provenance. */
+async function resolveBudget(
+  input: ServerSessionRequest,
+  budget: import('../protocol/direct-wire.js').WireBudgetRequest,
+  direct: boolean,
+  interactions: ServerInteractions,
+): Promise<ServerResult> {
+  const { body, connection } = input;
+  let command: WireCommand;
+  if (direct) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((key) => key !== 'decision'))
+      return invalid('budget request is invalid');
+    command = parseWireCommand({
+      type: 'answer_budget',
+      requestId: budget.requestId,
+      decision: (body as { decision?: unknown }).decision,
+      provenance: { source: 'user', automaticApproval: false },
+    });
+    if (
+      command.type === 'answer_budget' &&
+      command.decision.kind === 'extend' &&
+      command.decision.grantedBy !== 'human'
+    )
+      return invalid('HTTP budget extensions require human authority');
+  } else {
+    command = {
+      type: 'answer_budget',
+      requestId: budget.requestId,
+      decision: interactions.resolveBudget(budget, body as import('./server-contracts.js').InteractionResolveBody),
+      provenance: { source: 'user', automaticApproval: false },
+    };
+  }
+  const result = await connection.send(command);
+  if (!result.ok) return commandFailure(result);
+  if (result.kind !== 'accepted') return unavailable('budget answer receipt');
+  return {
+    status: 202,
+    body: { sessionId: connection.sessionId, turnId: budget.turnId, interactionId: budget.requestId, accepted: true },
+  };
 }
 async function configureSession(
   input: ServerSessionRequest,

@@ -2,6 +2,7 @@
  * supplied direct connection supports Session captureFrom; null cursors have no ID. The gateway's
  * historical agent-wire envelope still needs enrichment; x-term2-event-format is explicit.
  */
+import type { AgentEventEnvelope } from '@qduc/agent-wire';
 import type { DirectConnection, DirectReplayConnection } from './in-process-direct-types.js';
 import type { WireEvent } from '../protocol/direct-wire.js';
 import type { ServerResult } from './server-contracts.js';
@@ -11,8 +12,37 @@ export const SERVER_EVENT_HEARTBEAT_INTERVAL_MS = 15_000;
 // detach only the network subscriber: durable Session work and future attachments remain intact.
 const DRAIN_TIMEOUT_MS = 10_000;
 const MAX_BUFFERED_EVENTS = 256;
+type StreamFrame = { readonly id: number | null; readonly data: unknown };
+type StreamEncoding = {
+  readonly format: 'direct-wire-v1' | 'agent-wire-v1';
+  readonly snapshot: boolean;
+  encode(event: WireEvent): StreamFrame | null;
+};
 /** Owns attachment cleanup only. Backpressure never cancels the Session or blocks its execution. */
 export function directEventStream(connection: DirectConnection | DirectReplayConnection): ServerResult {
+  return eventStream(connection, {
+    format: 'direct-wire-v1',
+    snapshot: true,
+    encode: (event) => ({ id: event.seq, data: event }),
+  });
+}
+/** Canonical SSE consumes only the atomic accepted tail, never a current snapshot before history.
+ * Encoding is supplied by the server's semantic adapter; this transport owns no domain projection.
+ */
+export function canonicalEventStream(
+  connection: DirectReplayConnection,
+  encode: (event: WireEvent) => AgentEventEnvelope | null,
+): ServerResult {
+  return eventStream(connection, {
+    format: 'agent-wire-v1',
+    snapshot: false,
+    encode(event) {
+      const envelope = encode(event);
+      return envelope ? { id: envelope.id, data: envelope } : null;
+    },
+  });
+}
+function eventStream(connection: DirectConnection | DirectReplayConnection, encoding: StreamEncoding): ServerResult {
   const replay = 'replay' in connection ? connection.replay : null;
   const resumable = replay !== null || (connection.snapshot !== null && connection.snapshot.seq !== null);
 
@@ -24,7 +54,7 @@ export function directEventStream(connection: DirectConnection | DirectReplayCon
       'cache-control': 'no-cache',
       connection: 'keep-alive',
       'x-accel-buffering': 'no',
-      'x-term2-event-format': 'direct-wire-v1',
+      'x-term2-event-format': encoding.format,
       'x-term2-event-mode': replay ? 'replay-live' : 'snapshot-live',
       'x-term2-replay': resumable ? 'atomic' : 'unavailable',
       ...(replay ? { 'x-term2-replay-from': String(replay.fromSeq), 'x-term2-replay-to': String(replay.toSeq) } : {}),
@@ -59,13 +89,15 @@ export function directEventStream(connection: DirectConnection | DirectReplayCon
           disconnect();
           return;
         }
-        const write = (event: WireEvent): boolean =>
-          !closed &&
-          !response.destroyed &&
-          !response.writableEnded &&
-          response.write(
-            `${resumable && event.seq !== null ? `id: ${event.seq}\n` : ''}data: ${JSON.stringify(event)}\n\n`,
+        const write = (event: WireEvent): boolean => {
+          if (closed || response.destroyed || response.writableEnded) return false;
+          const frame = encoding.encode(event);
+          // Folded read-model updates are not SSE frames and consume no numeric cursor.
+          if (!frame) return true;
+          return response.write(
+            `${resumable && frame.id !== null ? `id: ${frame.id}\n` : ''}data: ${JSON.stringify(frame.data)}\n\n`,
           );
+        };
         const writeDraining = async (event: WireEvent) => {
           if (write(event) || closed) return;
           await new Promise<void>((resolve) => {
@@ -111,7 +143,7 @@ export function directEventStream(connection: DirectConnection | DirectReplayCon
           disconnect();
         });
         try {
-          if (connection.snapshot)
+          if (encoding.snapshot && connection.snapshot)
             await writeDraining({
               sessionId: connection.sessionId,
               seq: connection.snapshot.seq,

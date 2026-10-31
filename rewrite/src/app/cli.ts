@@ -17,6 +17,8 @@ import { SessionContextService } from '../../../source/services/session/session-
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import { shouldWarnOnHomeDirectoryStart } from '../../../source/utils/home-directory-start-guard.js';
 import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
+import type { InteractivePickerRequest } from '../../../source/services/models/model-resolution.js';
+import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
 import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
 import { createAppSettings } from './settings.js';
 import {
@@ -219,12 +221,14 @@ async function runListModelsCommand(search: string | null, refresh: boolean): Pr
 /**
  * Applies --model, --provider and --reasoning to the session settings, in the
  * current CLI's order and with its messages. Returns the error to print, or null.
- * A bare `-m` is a no-op here: the picker needs a TTY and no prompt.
+ * `pickerEligible` is the current CLI's picker gate (TTY, no prompt, no --json,
+ * no harness marker). Only the interactive path sets it; headless is always unattended.
  */
 async function applyModelOverrides(
   options: SessionOptions,
   settings: ReturnType<typeof createAppSettings>['service'],
   logger: LoggingService,
+  pickerEligible: boolean,
 ): Promise<string | null> {
   const reasoning = options.reasoning?.trim() || undefined;
   const validReasoning =
@@ -248,18 +252,51 @@ async function applyModelOverrides(
     return 'Error: --provider requires --model; provider-only selection is not supported.';
   }
 
+  const picker = pickerEligible ? await import('../../../source/services/models/model-picker-host.js') : undefined;
+
+  // A bare -m opens the picker itself (old cli.tsx); Escape keeps the configured model.
+  if (options.model === '') {
+    if (picker === undefined) return null;
+    const picked = await picker.runModelPickerHost({ settingsService: settings, loggingService: logger });
+    if (picked.status !== 'cancelled') {
+      settings.set(
+        'agent.modelSelection',
+        { model: picked.selection.modelId, provider: picked.selection.provider },
+        { persist: false },
+      );
+    }
+    return null;
+  }
+
   const modelFlag = options.model?.trim();
   if (!modelFlag) return null;
   const { resolveModelFlag } = await import('../../../source/services/models/model-resolution.js');
+  // The picker replaces the readline fallback and the hard no_match error, as the current CLI does.
+  const interactivePicker =
+    picker === undefined
+      ? undefined
+      : async (request: InteractivePickerRequest) => {
+          const picked = await picker.runModelPickerHost({
+            settingsService: settings,
+            loggingService: logger,
+            initialQuery: request.initialQuery,
+            initialProvider: request.initialProvider,
+            lockProvider: request.lockProvider,
+            bannerLines: request.bannerLines,
+          });
+          return picked.status === 'selected' ? picked.selection : null;
+        };
   const resolution = await resolveModelFlag({
     modelFlag,
     providerFlag: provider,
     settingsService: settings,
     loggingService: logger,
-    unattended: true,
+    interactivePicker,
+    unattended: !pickerEligible,
   });
   if (resolution.status === 'no_match') return resolution.error;
-  if (resolution.status === 'cancelled') return 'Cancelled.';
+  // Escape returns to the configured default when the picker was offered; otherwise the run stops.
+  if (resolution.status === 'cancelled') return pickerEligible ? null : 'Cancelled.';
   for (const warning of resolution.warnings ?? []) stderr.write(`${warning}\n`);
   // --model is a per-session override: persist:false keeps the saved defaults intact.
   settings.set('agent.modelSelection', { model: resolution.modelId, provider: resolution.provider }, { persist: false });
@@ -287,7 +324,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     disableFilePersistence: true,
     loggingService: logger,
   });
-  const modelError = await applyModelOverrides(options, settings, logger);
+  const modelError = await applyModelOverrides(options, settings, logger, false);
   if (modelError !== null) {
     stderr.write(`${modelError}\n`);
     return 1;
@@ -340,7 +377,9 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     disableFilePersistence: true,
     loggingService: logger,
   });
-  const modelError = await applyModelOverrides(options, settings, logger);
+  // The picker gate of source/services/models/model-picker-host.tsx: TTY on both ends, no --json, no harness marker.
+  const pickerEligible = Boolean(stdin.isTTY && stdout.isTTY) && !options.output.json && !process.env[HARNESS_IDLE_ENV];
+  const modelError = await applyModelOverrides(options, settings, logger, pickerEligible);
   if (modelError !== null) {
     stderr.write(`${modelError}\n`);
     return 1;
@@ -403,10 +442,6 @@ async function main(argv: readonly string[]): Promise<number> {
         if (command.options.resumeId !== null) throw new Error('--resume requires a follow-up prompt');
         stderr.write(`${NO_PROMPT_MESSAGE}\n`);
         return 1;
-      }
-      // A bare -m opens the model picker on a TTY unless --json or the harness-idle marker is set (source/cli.tsx).
-      if (command.options.model === '' && !command.options.output.json && !process.env['TERM2_HARNESS_IDLE_PATH']) {
-        throw refused({ flag: '-m', reason: 'the model picker is not in the direct TUI yet (picker host owner)' });
       }
       return runInteractive(command.options);
     case 'headless':

@@ -3,15 +3,13 @@
  * when a direct payload does not itself carry the immutable data needed by the pinned DTO.
  */
 import type { AgentEventEnvelope, AgentEventType } from '@qduc/agent-wire';
-import type { WireAdmission, WireEvent, WireTool } from '../protocol/direct-wire.js';
+import type { WireAdmission, WireEvent, WireTask } from '../protocol/direct-wire.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { ServerHttpError } from './server-errors.js';
 
 export type CanonicalEventContext = {
-  /** Exact execution occurrence, never a provider call-id lookup or latest-tool fallback. */
-  readonly tool?: WireTool;
-  /** Session-correlated completed answer for THIS terminal's turn, including an empty answer. */
-  readonly finalText?: string;
+  /** Accepted immutable task owner at the replay cut; never the latest unrelated task. */
+  readonly task?: WireTask;
 };
 type Candidate = { type: AgentEventType; payload: Readonly<Record<string, unknown>> };
 
@@ -65,15 +63,14 @@ function canonicalCandidate(
         },
       };
     case 'tool_finished': {
-      const tool = context.tool;
-      if (!tool || tool.executionId !== event.payload.executionId || tool.turnId !== turnId)
-        return missing('canonical tool results require their accepted execution metadata');
+      const toolName = event.payload.toolName;
+      if (toolName === undefined) return missing('canonical tool results require their accepted execution metadata');
       return {
         type: 'command_message',
         payload: {
           turnId: requiredTurn(event),
-          callId: tool.executionId,
-          toolName: text(tool.toolName, 256),
+          callId: event.payload.executionId,
+          toolName: text(toolName, 256),
           status: event.payload.isError ? 'failed' : 'completed',
           ...(event.payload.isError
             ? { error: text(event.payload.output, 10_000) }
@@ -83,8 +80,21 @@ function canonicalCandidate(
     }
     case 'interaction_opened': {
       // Task-scoped interactions need the true nested owner/role, not a root relabeling.
-      if (event.payload.interaction.taskId)
-        return missing('canonical nested interactions require their accepted owner metadata');
+      if (event.payload.interaction.taskId) {
+        const task = context.task;
+        if (!task || task.id !== event.payload.interaction.taskId || !task.turnId || !task.role)
+          return missing('canonical nested interactions require their accepted owner metadata');
+        return {
+          type: 'subagent_approval_required',
+          payload: {
+            turnId: task.turnId,
+            childTurnId: event.payload.interaction.turnId,
+            agentId: task.id,
+            role: text(task.role, 256),
+            interaction: interactions.project(event.sessionId, event.payload.interaction),
+          },
+        };
+      }
       return {
         type: 'approval_required',
         payload: {
@@ -101,6 +111,9 @@ function canonicalCandidate(
         payload: {
           turnId: requiredTurn(event),
           interactionId: event.payload.requestId,
+          ...(task
+            ? { turnId: task.turnId, agentId: task.id, role: text(task.role!, 256), childTurnId: event.turnId }
+            : {}),
           outcome:
             resolution.kind === 'cancelled' || resolution.kind === 'interrupted'
               ? 'cancelled'
@@ -133,17 +146,17 @@ function canonicalCandidate(
       };
     case 'turn_ended': {
       const terminal = event.payload;
+      const finalText = terminal.finalText;
       const identity = { turnId: requiredTurn(event) };
       const cause = {
         ...(terminal.terminalCause !== undefined ? { terminalCause: text(terminal.terminalCause, 128) } : {}),
         ...(terminal.notice !== undefined ? { notice: text(terminal.notice) } : {}),
       };
       if (terminal.outcome === 'completed') {
-        if (context.finalText === undefined)
-          return missing('canonical completion requires Session-correlated terminal text');
+        if (finalText == null) return missing('canonical completion requires Session-correlated terminal text');
         return {
           type: 'turn_completed',
-          payload: { ...identity, outcome: 'completed', text: text(context.finalText, 16_384), ...cause },
+          payload: { ...identity, outcome: 'completed', text: text(finalText, 16_384), ...cause },
         };
       }
       if (terminal.outcome === 'cancelled')
@@ -154,11 +167,39 @@ function canonicalCandidate(
           ...identity,
           outcome: 'failed',
           reason: terminal.outcome === 'interrupted' ? 'interrupted' : errorReason(terminal.error?.kind),
-          ...(context.finalText !== undefined ? { finalText: text(context.finalText, 16_384) } : {}),
+          ...(finalText != null ? { finalText: text(finalText, 16_384) } : {}),
           ...cause,
         },
       };
     }
+    case 'budget_opened':
+      return {
+        type: 'approval_required',
+        payload: { turnId: requiredTurn(event), interaction: interactions.projectBudget(event.payload.request) },
+      };
+    case 'budget_closed':
+      return {
+        type: 'interaction_resolved',
+        payload: {
+          turnId: requiredTurn(event),
+          interactionId: event.payload.requestId,
+          ...(task
+            ? { turnId: task.turnId, agentId: task.id, role: text(task.role!, 256), childTurnId: event.turnId }
+            : {}),
+          outcome: event.payload.decision.kind === 'stop' ? 'rejected' : 'approved',
+        },
+      };
+    case 'budget_observed':
+    case 'history_replaced':
+    case 'model_response_completed':
+      return null;
+    case 'subagent':
+      return nestedCandidate(event, interactions, context);
+    case 'task_changed':
+      if (event.payload.task.kind === 'shell') return null;
+      return missing('canonical task lifecycle requires accepted nested terminal and descriptor data');
+    case 'compacted':
+      return missing('canonical compaction requires accepted provider, strategy and timing evidence');
     // These change the public read model but have no equivalent pinned root event. In particular,
     // a message is not a terminal, and a cumulative reasoning summary is not a reasoning delta.
     case 'snapshot':
@@ -169,10 +210,7 @@ function canonicalCandidate(
     case 'status_changed':
     case 'retry_eligibility':
     case 'configuration':
-    case 'task_changed':
     case 'task_progress':
-    case 'subagent':
-    case 'compacted':
     case 'cost':
     case 'notice':
     case 'goal':
@@ -180,6 +218,83 @@ function canonicalCandidate(
     case 'verification':
     case 'error':
       return null;
+  }
+}
+/** Child publication keeps the outer accepted boundary and the real parent/child identities.
+ * Completed child messages are text turns; partial chunks are not mislabeled as completed replies.
+ */
+function nestedCandidate(
+  event: Extract<WireEvent, { type: 'subagent' }>,
+  interactions: ServerInteractions,
+  context: CanonicalEventContext,
+): Candidate | null {
+  const { event: child, agentId } = event.payload;
+  const task = context.task;
+  if (!task || task.id !== agentId || !task.turnId)
+    return missing('canonical child events require their accepted parent task identity');
+  const role = event.payload.role ?? task.role;
+  if (!role) return missing('canonical child events require their accepted role');
+  const finalText = child.type === 'turn_ended' ? child.payload.finalText : undefined;
+  const identity = {
+    turnId: task.turnId,
+    agentId: text(agentId, 256),
+    role: text(role, 256),
+    ...(child.turnId !== null ? { childTurnId: child.turnId } : {}),
+    ...(event.payload.branchId ? { branchId: event.payload.branchId } : {}),
+  };
+  switch (child.type) {
+    case 'tool_started':
+      return {
+        type: 'subagent_tool_started',
+        payload: {
+          ...identity,
+          toolCallId: child.payload.tool.executionId,
+          toolName: text(child.payload.tool.toolName, 256),
+        },
+      };
+    case 'tool_finished': {
+      const candidate = canonicalCandidate(child, interactions, context);
+      if (!candidate) return null;
+      return { type: 'subagent_command_message', payload: { ...candidate.payload, ...identity } };
+    }
+    case 'message':
+      return child.payload.message.role === 'assistant' && !child.payload.message.draft
+        ? { type: 'subagent_text_turn', payload: { ...identity, text: text(child.payload.message.text, 16_384) } }
+        : null;
+    case 'interaction_opened':
+      return {
+        type: 'subagent_approval_required',
+        payload: { ...identity, interaction: interactions.project(event.sessionId, child.payload.interaction) },
+      };
+    case 'turn_ended':
+      if (finalText == null) return missing('canonical child completion requires its Session-correlated terminal text');
+      return {
+        type: child.payload.outcome === 'interrupted' ? 'subagent_interrupted' : 'subagent_completed',
+        payload: {
+          ...identity,
+          status: child.payload.outcome,
+          finalText: text(finalText, 16_384),
+          ...(child.payload.terminalCause !== undefined
+            ? { terminalCause: text(child.payload.terminalCause, 128) }
+            : {}),
+          ...(child.payload.error ? { error: text(child.payload.error.message) } : {}),
+        },
+      };
+    case 'retrying': {
+      const candidate = canonicalCandidate(child, interactions, context);
+      return candidate ? { ...candidate, payload: { ...candidate.payload, ...identity } } : null;
+    }
+    case 'turn_started':
+    // The authoritative task descriptor owns subagent_started; the child root is not a new task.
+    case 'text_delta':
+    case 'reasoning':
+    case 'reasoning_delta':
+    case 'tool_called':
+    case 'tool_progress':
+    case 'usage':
+      return null;
+    default:
+      return missing('canonical child lifecycle requires its accepted task-owned projection');
   }
 }
 function admissionCandidate(admission: WireAdmission): Candidate | null {

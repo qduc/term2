@@ -32,6 +32,7 @@ export async function projectServerSession(
       true,
     );
   const pending = snapshot.pendingInteractions[0];
+  const budget = snapshot.pendingBudgets?.[0];
   return {
     ...sessionListItem(snapshot, metadata),
     earliestReplayableSequence: metadata.earliestReplayableSequence,
@@ -39,6 +40,8 @@ export async function projectServerSession(
     transcript: { messages: transcriptMessages(snapshot), updatedAt: metadata.updatedAt },
     interaction: pending
       ? { state: 'pending', interaction: interactions.project(snapshot.sessionId, pending), turnId: pending.turnId }
+      : budget
+      ? { state: 'pending', interaction: interactions.projectBudget(budget), turnId: budget.turnId }
       : null,
   };
 }

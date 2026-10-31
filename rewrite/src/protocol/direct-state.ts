@@ -11,7 +11,7 @@ import { publicRequestCost } from './direct-costs.js';
 import { publicBudgetRequest } from './direct-budget.js';
 import { publicTurnResults } from './direct-turn-results.js';
 import { publicQueue } from './direct-queue.js';
-import { publicTask } from './direct-tasks.js';
+import { publicTask, publicTaskInteraction } from './direct-tasks.js';
 import { contentText, publicContent, publicInteraction, publicJson, publicToolContent, publicTerminal } from './direct-public.js';
 
 /** The concrete Session read model can report a poisoned writer without an accepted
@@ -51,7 +51,7 @@ export function snapshotDirectState(state: DirectSessionState & { readonly tasks
     unmatchedToolResults: previous?.unmatchedToolResults ?? [],
     pendingInteractions: [...new Map([
       ...state.pendingInteractions.map(publicInteraction),
-      ...(state.tasks ?? []).flatMap(task => task.pendingInteractions.map(publicInteraction)),
+      ...(state.tasks ?? []).flatMap(task => task.pendingInteractions.map(request => publicTaskInteraction(request, publicTask(task)))),
     ].map(request => [request.requestId, request])).values()],
     pendingBudgets: state.pendingBudgets.map(publicBudgetRequest),
     budgetObservations: previous?.budgetObservations ?? [],

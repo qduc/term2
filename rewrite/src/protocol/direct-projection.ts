@@ -11,7 +11,7 @@ import { commandFactEvent } from './direct-command-receipts.js';
 import { publicRequestCost } from './direct-costs.js';
 import { budgetFactEvent } from './direct-budget.js';
 import { completedFinalText } from './direct-turn-results.js';
-import { publicQueue } from './direct-queue.js';
+import { publicQueue, publicQueueChange } from './direct-queue.js';
 import { taskFactEvent } from './direct-tasks.js';
 import type { Fact } from '../session/facts.js';
 import type { WireEvent, WireEventPayloads, WireEventType, WireSnapshot } from './direct-wire.js';
@@ -118,7 +118,7 @@ export class DirectProjection {
           : [];
         this.#queue = reduceDirectQueue(this.#queue, fact);
         const queue = publicQueue(this.#queue, this.#state.turnResults);
-        return [this.#event('queue_changed', { entries: queue.queue, state: queue.queueState, pauseReason: queue.queuePauseReason, submissions: queue.submissions,
+        return [this.#event('queue_changed', { change: publicQueueChange(fact), entries: queue.queue, state: queue.queueState, pauseReason: queue.queuePauseReason, submissions: queue.submissions,
           ...(fact.type === 'queue_submitted' ? { admission: fact.record.admission } : {}),
           ...(messages.length ? { messages } : {}),
         }, seq, turnId)];

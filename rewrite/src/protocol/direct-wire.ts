@@ -29,6 +29,8 @@ export type WireInteraction = {
   readonly executionId?: string;
   readonly parentExecutionId?: string;
   readonly taskId?: string;
+  /** Accepted task descriptor ownership, independent of the child request turn. */
+  readonly taskOwner?: WireTaskOwner;
   readonly sessionId?: string;
   readonly origin?: WireOrigin;
   readonly kind: 'approval' | 'question';
@@ -90,6 +92,18 @@ export type WireSubmissionRecord = {
   /** null means the accepted projection lacks a correlated completed answer. */
   readonly finalText: string | null;
 };
+/** Exact native queue boundary, not one fabricated event per affected reservation. */
+export type WireQueueChange =
+  | { readonly type: 'queue_submitted'; readonly record: WireSubmissionRecord }
+  | { readonly type: 'queue_edited'; readonly messageId: string; readonly content: readonly WireContent[] }
+  | { readonly type: 'queue_retracted'; readonly messageId: string }
+  | { readonly type: 'queue_discarded'; readonly messageIds: readonly string[] }
+  | { readonly type: 'queue_started'; readonly messageId: string; readonly turnId: string }
+  | { readonly type: 'queue_steered'; readonly messageIds: readonly string[]; readonly turnId: string }
+  | { readonly type: 'queue_cancelling'; readonly turnId: string; readonly cancelledMessageIds: readonly string[]; readonly retainedMessageIds: readonly string[] }
+  | { readonly type: 'queue_settled'; readonly turnId: string; readonly outcome: 'completed' | 'cancelled' | 'failed' | 'interrupted'; readonly preservePendingSteers?: boolean }
+  | { readonly type: 'queue_resumed' }
+  | { readonly type: 'queue_recovered' };
 export type WireTerminal = { readonly finalText?: string | null; readonly outcome: 'completed' | 'cancelled' | 'failed' | 'interrupted'; readonly error?: WireError; readonly terminalCause?: string; readonly notice?: string };
 /** Public budget evidence, copied from accepted native observations, not a cost quote. */
 export type WireAnswerProvenance = { readonly source: 'user' | 'policy' | 'system'; readonly automaticApproval?: boolean };
@@ -137,6 +151,8 @@ export type WireTask = {
   readonly progress?: string;
   readonly result?: WireTaskResult;
 };
+/** Public task descriptor ownership; does not imply the parent foreground still runs. */
+export type WireTaskOwner = Pick<WireTask, 'id' | 'turnId' | 'sessionId' | 'parentExecutionId' | 'sourceCallId' | 'origin' | 'kind' | 'name' | 'role'>;
 export type WireRetry = { readonly turn: boolean; readonly tool: boolean };
 export type WireError = { readonly kind: string; readonly message: string; readonly retryable?: boolean };
 export type WireNotice = { readonly kind: string; readonly message: string };
@@ -234,7 +250,7 @@ export type WireEventPayloads = {
   tool_progress: { readonly executionId: string; readonly chunk: string };
   tool_finished: WireToolResult;
   interaction_opened: { readonly interaction: WireInteraction };
-  interaction_resolved: { readonly taskId?: string; readonly requestId: string; readonly resolution: WireDecision | { readonly kind: 'cancelled' | 'interrupted' }; readonly provenance?: WireAnswerProvenance };
+  interaction_resolved: { readonly taskId?: string; readonly taskOwner?: WireTaskOwner; readonly requestId: string; readonly resolution: WireDecision | { readonly kind: 'cancelled' | 'interrupted' }; readonly provenance?: WireAnswerProvenance };
   budget_opened: { readonly request: WireBudgetRequest };
   budget_closed: { readonly requestId: string; readonly decision: WireBudgetResolution; readonly source: 'user' | 'parent' | 'system' };
   budget_observed: { readonly evidence: WireBudgetEvidence };
@@ -253,8 +269,8 @@ export type WireEventPayloads = {
   retrying: { readonly attempt: number; readonly delayMs: number; readonly error: WireError; readonly toolName?: string; readonly maxRetries?: number; readonly retryType?: string; readonly retryAfterMs?: number; readonly agentId?: string };
   retry_eligibility: WireRetry;
   configuration: WireConfiguration;
-  queue_changed: { readonly entries: readonly WireQueueEntry[]; readonly state: WireSnapshot['queueState']; readonly pauseReason?: WireSnapshot['queuePauseReason']; readonly admission?: WireAdmission; readonly messages?: readonly WireMessage[]; readonly submissions?: readonly WireSubmissionRecord[] };
-  task_changed: { readonly task: WireTask };
+  queue_changed: { readonly change: WireQueueChange; readonly entries: readonly WireQueueEntry[]; readonly state: WireSnapshot['queueState']; readonly pauseReason?: WireSnapshot['queuePauseReason']; readonly admission?: WireAdmission; readonly messages?: readonly WireMessage[]; readonly submissions?: readonly WireSubmissionRecord[] };
+  task_changed: { readonly change: 'task_started' | 'task_backgrounded' | 'task_stop_requested' | 'task_finished'; readonly at: number; readonly task: WireTask };
   task_progress: { readonly taskId: string; readonly at: number; readonly kind: 'text' | 'tool_progress' | 'activity'; readonly chunk: string; readonly executionId?: string };
   subagent: { readonly agentId: string; readonly branchId?: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string; readonly event: WireEvent };
   compacted: { readonly replaced: number; readonly summaryId: string };

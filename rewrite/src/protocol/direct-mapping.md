@@ -77,22 +77,45 @@ The imported unions are the actual helpers, not a parallel Session API:
 union. Native Session integration is published through bbff1582/83f61600; this
 protocol maps that source-backed contract. Combined execution remains unverified.
 
-- Task start/background/stop/finish -> one task_changed per fact. Task progress ->
-  transient task_progress. Task kind, ID, parent turn/execution, origin, source
-  call ID, mode and actual timestamps survive. Cancelling is not completed.
+- Task start/background/stop/finish -> one task_changed per fact, with native
+  `change: task_started|task_backgrounded|task_stop_requested|task_finished` and
+  numeric `at` copied from descriptor.startedAt or the corresponding fact.at.
+  Envelope occurredAt remains the original accepted FactLine timestamp, not a
+  generated task time. Task progress -> transient task_progress. Task kind, ID,
+  parent turn/execution, origin, source call ID, mode and actual timestamps survive.
+  Cancelling is not completed; child turn_ended is not task_finished.
   Known shell output / nested assistant text is public; arbitrary result objects
   and nested provider items are not. Real branch observations use the scoped
   subagent wrapper, not root tool/usage arrays.
-- Task interaction open/close -> one interaction frame with taskId/origin. Root
-  turn completion does not delete task questions; background questions do not
-  mark root foreground awaiting_interaction. Exact request IDs remain answerable
+- Task interaction open/close -> one interaction frame with accepted task owner.
+  Open carries interaction.taskOwner; close carries payload.taskOwner. This public
+  descriptor slice contains id, parent turn as turnId, sessionId and actual optional
+  parentExecutionId/sourceCallId/origin/kind/name/role. It is taken from the accepted
+  prefix when replaying, not a latest-live snapshot or client event cache. The outer
+  turnId is the task parent; the open request retains its actual child turnId.
+  Snapshot task questions carry the same owner slice. Root turn completion does
+  not delete task questions; background questions do not mark root foreground
+  awaiting_interaction. Exact request IDs remain answerable
   through Session, independent of the parent Turn. Session must actually route
   answers this way; protocol cannot resurrect a parent continuation.
-- Each queue fact -> ONE queue_changed with full public pending entries/state,
-  pause reason, retained submission records, optional admission and optional
-  batch of steered user messages. The projector folds the real queue reducer and
+- Each queue fact -> ONE queue_changed with `change` retaining the exact native
+  type and public body: submitted record, edited content, retracted ID, discarded
+  IDs, started ID/turn, steered IDs/turn, cancelling turn/cancelled+retained IDs,
+  settled turn/outcome/optional preservePendingSteers, resumed or recovered.
+  Full public pending entries/state, pause reason, retained submission records,
+  optional admission and optional batch of steered user messages remain alongside
+  the boundary. Aggregate cancelled/discarded IDs are not per-reservation rejection
+  events; separately numbered canonical rejections require native boundaries or
+  an explicitly supported pinned aggregate policy, not cursor splitting.
+  The projector folds the real queue reducer and
   obtains canonical raw steer input BEFORE reducing queue_steered. It never
   appends a second item fact or emits N cursor-sharing message frames.
+- Original task input and toolsUsed are not separate fields in the consumed native
+  task descriptor/result contract. DirectSubagents.start retains request.task as
+  label; the branch driver returns items/outcome. Protocol keeps label distinct
+  from result output and does not expose arbitrary provider items, relabel output
+  as input, or invent tools-used metadata. Native accepted public metadata is
+  required before those additional pinned fields can be projected.
 - Public submission records retain original/current content, delivery, origin,
   receipt, stage, owning turn and accepted outcome. finalText is null unless an
   accepted historical completed turn result is actually correlated to that turn.

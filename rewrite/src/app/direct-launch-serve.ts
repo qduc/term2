@@ -107,7 +107,7 @@ function serverAuthority(config: DirectHostConfig, owner: string): DirectAuthori
 function presentation(app: DirectApplication, config: DirectHostConfig): ServerSessionPresentation {
   return {
     async metadata(principal, snapshot) {
-      const { createdAt, updatedAt, earliestSeq } = app.sessionDetails(snapshot.sessionId);
+      const { createdAt, updatedAt, earliestSeq } = app.sessionDetails(snapshot.sessionId, snapshot.seq);
       const root = await app.sessionRoot(principal, snapshot.sessionId);
       return {
         workspaceId: config.workspaceIdFor(root),

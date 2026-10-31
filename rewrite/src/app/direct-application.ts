@@ -33,7 +33,7 @@ export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
 /** Read from the session's own log and runtime, for clients that report it. */
 export type DirectSessionDetails = {
   readonly createdAt: string;
-  /** The log's last write. Every accepted fact lands there, so this is real activity. */
+  /** When the last accepted fact at the requested cut was written. */
   readonly updatedAt: string;
   /** Logs are never truncated, so a cursor can reach back to the first line. */
   readonly earliestSeq: number;
@@ -50,14 +50,33 @@ export type DirectApplication = {
   headlessPolicy(sessionId: string, autoApprove: boolean, signal: AbortSignal): HeadlessApprovalDecider;
   /** Canonical workspace of a direct session, for clients whose snapshot has none. */
   sessionRoot(principal: Principal, sessionId: string): Promise<string>;
-  sessionDetails(sessionId: string): DirectSessionDetails;
+  /** Pass a snapshot's `seq` to read that cut rather than the log's current end. */
+  sessionDetails(sessionId: string, seq?: number | null): DirectSessionDetails;
   close(): Promise<void>;
 };
 
-/** The log's first line is the session's real creation, whichever client attaches later. */
-function firstLine(logPath: string): { readonly at: string; readonly seq: number } {
-  const [first = ''] = fs.readFileSync(logPath, 'utf8').split('\n', 1);
-  return JSON.parse(first) as { readonly at: string; readonly seq: number };
+type LogLine = { readonly at: string; readonly seq: number };
+
+/**
+ * The accepted times, read from the lines themselves. `seq` pins `updatedAt` to
+ * the caller's snapshot, so a newer append cannot overtake that cut. A torn last
+ * line was never accepted, and it is the only line that can fail to parse.
+ */
+function logTimes(logPath: string, seq?: number | null): { readonly first: LogLine; readonly last: LogLine } {
+  const parsed = fs
+    .readFileSync(logPath, 'utf8')
+    .split('\n')
+    .flatMap((line): LogLine[] => {
+      try {
+        return line ? [JSON.parse(line) as LogLine] : [];
+      } catch {
+        return [];
+      }
+    });
+  const first = parsed[0];
+  if (!first) throw new Error(`Direct log has no accepted lines: ${logPath}`);
+  const reached = parsed.filter((line) => seq === undefined || seq === null || line.seq <= seq);
+  return { first, last: reached[reached.length - 1] ?? first };
 }
 
 export async function createDirectApplication(options: DirectApplicationOptions): Promise<DirectApplication> {
@@ -95,14 +114,14 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       if (!session) throw new DirectProtocolError('not_found', 'Unknown direct session.');
       return session.workspace.root;
     },
-    sessionDetails(sessionId) {
+    sessionDetails(sessionId, seq) {
       const logPath = path.join(options.conversationsDir, `${sessionId}.jsonl`);
       const record = runtimes.get(sessionId);
-      const { at, seq } = firstLine(logPath);
+      const { first, last } = logTimes(logPath, seq);
       return {
-        createdAt: at,
-        updatedAt: fs.statSync(logPath).mtime.toISOString(),
-        earliestSeq: seq,
+        createdAt: first.at,
+        updatedAt: last.at,
+        earliestSeq: first.seq,
         logPath,
         profileId: record?.profileId ?? null,
         settings: record?.settings ?? null,

@@ -44,7 +44,9 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'tool_progress': return { ...state, tools: state.tools.map(tool => tool.executionId === event.payload.executionId
       ? { ...tool, progress: (tool.progress ?? '') + event.payload.chunk } : tool) };
     case 'tool_finished': return { ...state, tools: state.tools.map(tool => tool.executionId === event.payload.executionId
-      ? { ...tool, status: 'completed', output: event.payload.output, isError: event.payload.isError } : tool) };
+      ? { ...tool, status: 'completed', output: event.payload.output, isError: event.payload.isError,
+        ...(event.payload.display !== undefined ? { display: event.payload.display } : {}),
+        ...(event.payload.content !== undefined ? { content: event.payload.content } : {}) } : tool) };
     case 'interaction_opened': return { ...state,
       pendingInteractions: [...state.pendingInteractions.filter(item => item.requestId !== event.payload.interaction.requestId), event.payload.interaction],
       ...(state.activeTurnId === event.payload.interaction.turnId ? { status: 'awaiting_interaction' as const } : {}),

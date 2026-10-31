@@ -40,3 +40,19 @@ export function publicMessage(item: Item, turnId: string, modelStep?: number, ex
   }
   return null;
 }
+
+/** Normalize only known tool-result text/image parts, not opaque provider frames. */
+export function publicToolContent(parts: readonly Readonly<Record<string, unknown>>[] | undefined): readonly WireContent[] | undefined {
+  if (!parts) return undefined;
+  const content: WireContent[] = [];
+  for (const part of parts) {
+    if (part.type === 'text' && typeof part.text === 'string') content.push({ type: 'text', text: part.text });
+    if (part.type === 'image' && part.image && typeof part.image === 'object') {
+      const image = part.image as Record<string, unknown>;
+      if (typeof image.data === 'string' && typeof image.mediaType === 'string') {
+        content.push({ type: 'image', data: image.data, mediaType: image.mediaType });
+      }
+    }
+  }
+  return content;
+}

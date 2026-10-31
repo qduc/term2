@@ -5,7 +5,7 @@ import type { DirectSessionState, DirectSessionUpdate } from '../session/facade-
 import { directDraftId } from '../session/direct-state.js';
 import type { Fact } from '../session/facts.js';
 import type { WireEvent, WireEventPayloads, WireEventType, WireSnapshot } from './direct-wire.js';
-import { publicInteraction, publicJson, publicMessage } from './direct-public.js';
+import { publicInteraction, publicJson, publicMessage, publicToolContent } from './direct-public.js';
 import { snapshotDirectState } from './direct-state.js';
 import { reduceWireEvent } from './direct-reducer.js';
 
@@ -40,13 +40,15 @@ export class DirectProjection {
     const turnId = 'turnId' in fact ? fact.turnId : null;
     switch (fact.type) {
       case 'session_started': return [this.#event('configuration', { model: fact.model, ...(fact.reasoning ? { reasoning: fact.reasoning } : {}) }, seq, null)];
-      case 'submission_admitted': return [this.#event('admission', { admission: { kind: 'started', clientRequestId: fact.clientRequestId, messageId: fact.messageId, turnId: fact.turnId } }, seq, turnId)];
-      case 'turn_started': return [this.#event('turn_started', { foreground: true,
-        input: fact.input.flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; }),
-      }, seq, turnId)];
+      case 'turn_started': return [
+        ...(fact.submission ? [this.#event('admission', { admission: { kind: 'started', clientRequestId: fact.submission.clientRequestId, messageId: fact.submission.messageId, turnId: fact.turnId } }, seq, turnId)] : []),
+        this.#event('turn_started', { foreground: true,
+          input: fact.input.flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; }),
+        }, seq, turnId),
+      ];
       case 'text_delta': {
         const step = fact.modelStep ?? 1;
-        return [this.#event('text_delta', { delta: fact.delta, modelStep: step, messageId: directDraftId(fact.turnId, step) }, seq, turnId)];
+        return [this.#event('text_delta', { delta: fact.delta, modelStep: step, messageId: directDraftId(fact.turnId, fact.modelStep) }, seq, turnId)];
       }
       case 'item': return this.#item(fact, seq);
       case 'tool_started': return [this.#event('tool_started', { tool: {
@@ -55,6 +57,8 @@ export class DirectProjection {
       } }, seq, turnId)];
       case 'tool_finished': return [this.#event('tool_finished', {
         executionId: fact.executionId, output: fact.result.output, isError: fact.result.isError,
+        ...(fact.result.display !== undefined ? { display: publicJson(fact.result.display) } : {}),
+        ...(fact.result.providerOutput ? { content: publicToolContent(fact.result.providerOutput) } : {}),
       }, seq, turnId)];
       case 'interaction_opened': return [this.#event('interaction_opened', { interaction: publicInteraction(fact.request) }, seq, turnId)];
       case 'interaction_closed': return [this.#event('interaction_resolved', { requestId: fact.requestId, resolution: fact.resolution }, seq, turnId)];
@@ -80,6 +84,6 @@ export class DirectProjection {
     if (!message) return [];
     if (item.type !== 'assistant_message') return [this.#event('message', { message }, seq, turnId)];
     const step = fact.modelStep ?? 1;
-    return [this.#event('message', { message, replacesDraftId: directDraftId(turnId, step) }, seq, turnId)];
+    return [this.#event('message', { message, replacesDraftId: directDraftId(turnId, fact.modelStep) }, seq, turnId)];
   }
 }

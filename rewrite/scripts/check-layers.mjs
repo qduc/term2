@@ -70,6 +70,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'model/retry.ts',
   'protocol/direct-json.ts',
   'session/direct-context.ts',
+  'session/direct-final.ts',
   'session/direct-goal-verification.ts',
   'session/direct-goal.ts',
   'session/direct-hooks.ts',

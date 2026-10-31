@@ -10,7 +10,7 @@ const rewriteSrc = path.join(repo, 'rewrite/src');
 const sourceRoot = path.join(repo, 'source');
 const allowlistPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'source-edge-allowlist.json');
 
-// Exact direct entry files from candidate 648dc51b and configure leaves fccb575f.
+// Exact direct entry files through candidate 410f756f (app/config/subagent adapters).
 // Type-only imports need admission too. Keep this a named list, not app/direct-*;
 // each admitted entry still has its complete source closure walked below.
 const DIRECT_SOURCE_IMPORTERS = new Set([
@@ -19,6 +19,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-application-hooks.ts',
   'app/direct-application-nested.ts',
   'app/direct-application-policy.ts',
+  'app/direct-application-rollover.ts',
   'app/direct-application-runtime.ts',
   'app/direct-application.ts',
   'app/direct-config-memory.ts',
@@ -32,6 +33,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-launch-serve.ts',
   'app/direct-launch-tui-commands.ts',
   'app/direct-launch-tui-restart.ts',
+  'app/direct-launch-tui-settings.ts',
   'app/direct-launch-tui.tsx',
   'app/direct-launch-types.ts',
   'app/direct-memory.ts',
@@ -39,6 +41,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-remote-context.ts',
   'app/direct-remote-tools.ts',
   'app/direct-remote.ts',
+  'app/direct-subagent-tools.ts',
   'app/direct-verifier-workspace.ts',
   'app/direct-verifier.ts',
   'app/run.ts',
@@ -105,6 +108,10 @@ const SOURCE_LAYERS = [
   ['shared', 'services/conversation/personal-memory-context.ts'],
   ['shared', 'services/discord/discord-reactions.ts'],
   ['shared', 'services/profiles/legacy-adapter.ts'],
+  // Pure rollover/handoff text and slash-command types reached by the app adapters.
+  ['shared', 'services/session-rollover/session-rollover-brief.ts'],
+  ['shared', 'services/handoff/handoff-flow-reducer.ts'],
+  ['shared', 'slash-commands.ts'],
   // This filesystem integration exercises root-agent assembly, not a memory tool implementation.
   ['app', 'services/memory/personal-memory.integration.test.ts'],
   ['config', 'env-setup.ts'],

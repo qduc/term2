@@ -8,6 +8,10 @@ import {
 import { isDirectContextFactType, parseDirectContextFact } from './direct-context.js';
 import { isDirectCommandFactType, parseDirectCommandFact } from './direct-command-receipts.js';
 import { isDirectNotificationFactType, parseDirectNotificationFact } from './direct-notifications.js';
+import { parseDirectConfigurationFact } from './direct-configuration.js';
+
+/** Same identity the store requires before it will write session_started.rolloverFrom. */
+const directSessionId = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function validateRequestConfiguration(value: unknown, fail: (field: string) => never): void {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail('requestConfiguration');
@@ -50,6 +54,7 @@ const nativeTypes = new Set([
   'task_finished',
   'task_interaction_opened',
   'task_interaction_closed',
+  'configuration_changed',
 ]);
 
 /** Unknown vocabulary still fails instead of disappearing during replay. */
@@ -81,6 +86,11 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
   }
   if (isDirectNotificationFactType(type)) {
     parseDirectNotificationFact(fact);
+    return;
+  }
+  if (type === 'configuration_changed') {
+    // Parser returns the original fact. Replay must not rebuild or apply it.
+    parseDirectConfigurationFact(fact);
     return;
   }
   const fail = (field: string): never => {
@@ -137,6 +147,11 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
   switch (fact['type']) {
     case 'session_started': {
       optionalText(fact, 'forkedFrom');
+      if (
+        'rolloverFrom' in fact &&
+        (typeof fact['rolloverFrom'] !== 'string' || !directSessionId.test(fact['rolloverFrom']))
+      )
+        fail('rolloverFrom');
       if ('workspaceIdentity' in fact) {
         const workspace = object(fact['workspaceIdentity'], 'workspaceIdentity');
         text(workspace['root'], 'workspaceIdentity.root');
@@ -387,6 +402,8 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
         text(workspace['target'], 'workspace.target');
         if (workspace['access'] !== 'read' && workspace['access'] !== 'read_write') fail('workspace.access');
       }
+      // Absent input stays unknown. An empty string is not an original task.
+      if ('input' in task && (typeof task['input'] !== 'string' || task['input'].length === 0)) fail('task.input');
       break;
     }
     case 'task_backgrounded':
@@ -399,6 +416,16 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
         if (!['completed', 'cancelled', 'failed', 'budget_exhausted', 'interrupted'].includes(result['kind'] as string))
           fail('result.kind');
         if (result['kind'] === 'interrupted') text(result['reason'], 'result.reason');
+        const value = result['value'];
+        if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'toolsUsed' in value) {
+          const toolsUsed = (value as Record<string, unknown>)['toolsUsed'];
+          if (!Array.isArray(toolsUsed)) fail('result.value.toolsUsed');
+          const seen = new Set<string>();
+          for (const name of toolsUsed) {
+            if (typeof name !== 'string' || name.length === 0 || seen.has(name)) fail('result.value.toolsUsed');
+            seen.add(name);
+          }
+        }
         if (result['kind'] === 'failed') {
           const error = object(result['error'], 'result.error');
           if (

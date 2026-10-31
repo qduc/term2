@@ -3,7 +3,7 @@ import { startNestedTurn } from '../engine/turn.js';
 import type { TurnDeps, TurnEvent, TurnHandle, TurnId, TurnResult } from '../engine/index.js';
 import type { ExecutionId, NestedRunRequest, NestedRunResult, ToolRegistry, Workspace } from '../tools/index.js';
 import type { Item } from '../model/index.js';
-import type { DirectBranchFact, DirectTurnFact, Fact } from './facts.js';
+import type { DirectBranchFact, DirectTurnFact, DirectHistoryFact, Fact } from './facts.js';
 import type { DirectSubagentContext, DirectSubagentDriver } from './direct-subagent.js';
 import { replay } from './replay.js';
 
@@ -24,7 +24,10 @@ export function createDirectBranchDriver(options: {
   readonly deps: TurnDeps;
   readonly authority: DirectNestedAuthority;
   readonly accept: (fact: DirectBranchFact) => void;
-  readonly factFor: (turnId: TurnId, event: Exclude<TurnEvent, { type: 'turn_ended' }>) => Fact | null;
+  readonly factFor: (
+    turnId: TurnId,
+    event: Exclude<TurnEvent, { type: 'turn_ended' }>,
+  ) => DirectTurnFact | DirectHistoryFact | null;
   readonly handles: Set<TurnHandle>;
 }): DirectSubagentDriver {
   return {
@@ -94,7 +97,9 @@ export function createDirectBranchDriver(options: {
               (fact) => fact.type !== 'turn_ended',
             );
             for (const repair of repairs) {
-              options.accept({ type: 'branch_event', branchId, fact: repair as DirectTurnFact });
+              if (repair.type !== 'item' && repair.type !== 'budget_closed')
+                throw new Error('Unexpected branch recovery fact');
+              options.accept({ type: 'branch_event', branchId, fact: repair });
               local.push(repair);
             }
             const fact: DirectTurnFact = {
@@ -125,7 +130,17 @@ export function createDirectBranchDriver(options: {
             );
           const fact = options.factFor(turnId, event);
           if (fact) {
-            options.accept({ type: 'branch_event', branchId, fact: fact as DirectTurnFact });
+            if (
+              fact.type === 'turn_started' ||
+              fact.type === 'interaction_opened' ||
+              fact.type === 'interaction_closed'
+            )
+              throw new Error('Branch interaction authority belongs to task facts');
+            options.accept({
+              type: 'branch_event',
+              branchId,
+              fact: fact.type === 'history_replaced' ? { ...fact, turnId } : fact,
+            });
             local.push(fact);
             if (fact.type === 'item') items.push(fact.item);
           }

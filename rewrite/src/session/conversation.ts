@@ -46,7 +46,7 @@ import type {
   TurnRequest,
   StartedConversationTurn,
 } from './direct-types.js';
-import type { Fact, FactLine, SessionStartedFact } from './facts.js';
+import type { Fact, FactLine, DirectTurnFact, DirectHistoryFact, SessionStartedFact } from './facts.js';
 import { replay } from './replay.js';
 
 export type { AnswerResult, Conversation, ConversationDeps, Turn, TurnRequest } from './direct-types.js';
@@ -700,7 +700,10 @@ function failedTurn(error: ModelError): Turn {
 }
 
 /** Reasoning/progress/attempt notices stay transient; authority-bearing facts fsync. */
-function factFor(turnId: TurnId, event: Exclude<TurnEvent, { type: 'turn_ended' }>): Fact | null {
+function factFor(
+  turnId: TurnId,
+  event: Exclude<TurnEvent, { type: 'turn_ended' }>,
+): DirectTurnFact | DirectHistoryFact | null {
   switch (event.type) {
     case 'text_delta':
       return {

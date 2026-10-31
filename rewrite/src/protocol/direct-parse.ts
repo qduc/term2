@@ -1,5 +1,5 @@
 /** Runtime command decoding shared by local and remote transports. Invalid input has no effect. */
-import type { WireCommand, WireConfiguration, WireContent, WireDecision, WireOrigin, WireQuestionAnswer } from './direct-wire.js';
+import type { WireAnswerProvenance, WireBudgetDecision, WireCommand, WireConfiguration, WireContent, WireDecision, WireOrigin, WireQuestionAnswer } from './direct-wire.js';
 import { DirectProtocolError } from './direct-errors.js';
 
 type ObjectValue = Record<string, unknown>;
@@ -87,6 +87,30 @@ export function parseWireOrigin(raw: unknown): WireOrigin {
   return { kind: choice(value.kind, ['cli', 'tui', 'acp', 'api'], 'origin'),
     ...(value.id !== undefined ? { id: id(value.id, 'origin id') } : {}) };
 }
+function provenance(raw: unknown): WireAnswerProvenance {
+  const value = object(raw); fields(value, ['source', 'automaticApproval']);
+  if (value.automaticApproval !== undefined && typeof value.automaticApproval !== 'boolean') invalid('Expected boolean automaticApproval');
+  return { source: choice(value.source, ['user', 'policy', 'system'], 'answer source'),
+    ...(value.automaticApproval !== undefined ? { automaticApproval: value.automaticApproval as boolean } : {}) };
+}
+function budgetDecision(raw: unknown): WireBudgetDecision {
+  const value = object(raw);
+  switch (value.kind) {
+    case 'extend': fields(value, ['kind', 'grantedBy']);
+      return { kind: 'extend', grantedBy: choice(value.grantedBy, ['human', 'parent'], 'budget grant source') };
+    case 'stop': fields(value, ['kind']); return { kind: 'stop' };
+    case 'steer': {
+      fields(value, ['kind', 'items']);
+      if (!Array.isArray(value.items)) return invalid('Expected budget steering items');
+      return { kind: 'steer', items: value.items.map(raw => {
+        const item = object(raw); fields(item, ['type', 'id', 'content']);
+        if (item.type !== 'user_message' || !Array.isArray(item.content)) return invalid('Expected user budget steering content');
+        return { type: 'user_message', id: id(item.id, 'item id'), content: item.content.map(content) };
+      }) };
+    }
+    default: return invalid('Invalid budget decision');
+  }
+}
 function configuration(raw: unknown): WireConfiguration {
   const value = object(raw); fields(value, ['model', 'reasoning', 'temperature']);
   let model: WireConfiguration['model'];
@@ -112,16 +136,20 @@ export function parseWireCommand(raw: unknown): WireCommand {
         ...(value.origin !== undefined ? { origin: parseWireOrigin(value.origin) } : {}),
         ...(value.delivery !== undefined ? { delivery: choice(value.delivery, ['auto', 'steer', 'follow_up', 'reject_if_busy'], 'delivery') } : {}) };
     }
-    case 'answer': fields(value, ['type', 'requestId', 'decision']);
-      return { type: 'answer', requestId: id(value.requestId, 'requestId'), decision: decision(value.decision) };
+    case 'answer': fields(value, ['type', 'requestId', 'decision', 'provenance']);
+      return { type: 'answer', requestId: id(value.requestId, 'requestId'), decision: decision(value.decision), ...(value.provenance !== undefined ? { provenance: provenance(value.provenance) } : {}) };
+    case 'answer_budget': fields(value, ['type', 'requestId', 'decision', 'provenance']);
+      return { type: 'answer_budget', requestId: id(value.requestId, 'requestId'), decision: budgetDecision(value.decision), ...(value.provenance !== undefined ? { provenance: provenance(value.provenance) } : {}) };
     case 'cancel': {
-      fields(value, ['type', 'target', 'expectedTurnId']);
-      const expected = value.expectedTurnId !== undefined ? { expectedTurnId: id(value.expectedTurnId, 'expectedTurnId') } : {};
+      fields(value, ['type', 'target', 'expectedTurnId', 'discardQueue']);
+      if (value.discardQueue !== undefined && (typeof value.discardQueue !== 'boolean' || value.expectedTurnId === undefined)) invalid('discardQueue requires an expected-turn abort');
+      const expected = value.expectedTurnId !== undefined ? { expectedTurnId: id(value.expectedTurnId, 'expectedTurnId'), ...(value.discardQueue !== undefined ? { discardQueue: value.discardQueue as boolean } : {}) } : {};
       if (value.target === undefined) return { type: 'cancel', ...expected };
       const target = object(value.target);
       if (target.kind === 'foreground') { fields(target, ['kind']); return { type: 'cancel', target: { kind: 'foreground' }, ...expected }; }
       fields(target, ['kind', 'id']);
       if (target.kind !== 'task') return invalid('Invalid cancellation target');
+      if (value.expectedTurnId !== undefined) return invalid('Expected turn cannot target a task');
       return { type: 'cancel', target: { kind: 'task', id: id(target.id, 'task id') } };
     }
     case 'retry': fields(value, ['type', 'target', 'executionId']);

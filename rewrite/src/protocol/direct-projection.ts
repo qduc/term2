@@ -7,6 +7,8 @@ import type { DirectContextFact } from '../session/direct-context.js';
 import { contextFactEvent } from './direct-context.js';
 import type { DirectQueueFact, DirectQueueState } from '../session/direct-queue-types.js';
 import { createDirectQueueState, directQueueSteeredInput, reduceDirectQueue } from '../session/direct-queue-state.js';
+import { budgetFactEvent } from './direct-budget.js';
+import { completedFinalText } from './direct-turn-results.js';
 import { publicQueue } from './direct-queue.js';
 import type { DirectBackgroundFact, DirectBackgroundProgress } from '../session/direct-background-types.js';
 import { taskFactEvent } from './direct-tasks.js';
@@ -26,8 +28,11 @@ type FactUpdate = Extract<DirectProtocolUpdate, { type: 'fact' }>;
 export class DirectProjection {
   #state: WireSnapshot;
   #queue: DirectQueueState;
+  #workspace: DirectSessionState['workspace'];
+  #branches = new Map<string, { readonly projection: DirectProjection; readonly taskId: string; readonly role?: string }>();
   constructor(state: DirectSessionState & { readonly queue?: DirectQueueState }, seq: number | null = null) {
     this.#state = { ...snapshotDirectState(state), seq };
+    this.#workspace = state.workspace;
     this.#queue = state.queue ?? createDirectQueueState();
   }
   /** Reconstruct historical context from Session-owned accepted facts, not current state. */
@@ -82,7 +87,7 @@ export class DirectProjection {
     return { sessionId: this.#state.sessionId, seq, occurredAt: null, turnId, type, payload } as WireEvent;
   }
   #fact({ fact, seq }: FactUpdate): readonly WireEvent[] {
-    const turnId = 'turnId' in fact ? fact.turnId : null;
+    const turnId = 'turnId' in fact ? fact.turnId ?? null : null;
     switch (fact.type) {
       case 'goal_changed':
       case 'goal_proposed':
@@ -110,7 +115,7 @@ export class DirectProjection {
           ? directQueueSteeredInput(this.#queue, fact).flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; })
           : [];
         this.#queue = reduceDirectQueue(this.#queue, fact);
-        const queue = publicQueue(this.#queue, this.#state.messages);
+        const queue = publicQueue(this.#queue, this.#state.turnResults);
         return [this.#event('queue_changed', { entries: queue.queue, state: queue.queueState, pauseReason: queue.queuePauseReason, submissions: queue.submissions,
           ...(fact.type === 'queue_submitted' ? { admission: fact.record.admission } : {}),
           ...(messages.length ? { messages } : {}),
@@ -122,6 +127,20 @@ export class DirectProjection {
       case 'task_finished':
       case 'task_interaction_opened':
       case 'task_interaction_closed': return [taskFactEvent(fact, this.#state, seq)];
+      case 'budget_opened':
+      case 'budget_closed':
+      case 'budget_observed': return [budgetFactEvent(fact, this.#state.sessionId, seq)];
+      case 'history_replaced': return [this.#event('history_replaced', { reason: fact.reason }, seq, turnId)];
+      case 'model_response_completed': return [this.#event('model_response_completed', {
+        modelStep: fact.modelStep, stopReason: fact.stopReason, ...(fact.costUsd !== undefined ? { costUsd: fact.costUsd } : {}),
+      }, seq, turnId)];
+      case 'branch_started': {
+        const task = this.#state.tasks.find(task => task.id === fact.taskId);
+        const projection = DirectProjection.forReplay(initialDirectState(this.#state.sessionId, this.#workspace, task?.model ?? this.#state.model));
+        this.#branches.set(fact.branchId, { projection, taskId: fact.taskId, ...(task?.role ? { role: task.role } : {}) });
+        return this.#branch(fact.branchId, { type: 'turn_started', turnId: fact.turnId, input: fact.input }, seq);
+      }
+      case 'branch_event': return this.#branch(fact.branchId, fact.fact, seq);
       case 'session_started': return [this.#event('configuration', { model: fact.model, ...(fact.reasoning ? { reasoning: fact.reasoning } : {}) }, seq, null)];
       case 'turn_started': return [
         this.#event('turn_started', { foreground: true,
@@ -139,15 +158,28 @@ export class DirectProjection {
         input: publicJson(fact.input), status: 'started', ...(fact.parentExecutionId ? { parentExecutionId: fact.parentExecutionId } : {}),
       } }, seq, turnId)];
       case 'tool_finished': return [this.#event('tool_finished', {
-        executionId: fact.executionId, output: fact.result.output, isError: fact.result.isError,
+        executionId: fact.executionId, ...this.#toolIdentity(fact.executionId), output: fact.result.output, isError: fact.result.isError,
         ...(fact.result.display !== undefined ? { display: publicJson(fact.result.display) } : {}),
         ...(fact.result.providerOutput ? { content: publicToolContent(fact.result.providerOutput) } : {}),
       }, seq, turnId)];
       case 'interaction_opened': return [this.#event('interaction_opened', { interaction: publicInteraction(fact.request) }, seq, turnId)];
-      case 'interaction_closed': return [this.#event('interaction_resolved', { requestId: fact.requestId, resolution: fact.resolution }, seq, turnId)];
+      case 'interaction_closed': return [this.#event('interaction_resolved', { requestId: fact.requestId, resolution: fact.resolution, ...(fact.resolutionSource ? { provenance: { source: fact.resolutionSource, ...(fact.automaticApproval !== undefined ? { automaticApproval: fact.automaticApproval } : {}) } } : {}) }, seq, turnId)];
       case 'usage': return [this.#event('usage', { usage: fact.usage }, seq, turnId)];
-      case 'turn_ended': return [this.#event('turn_ended', publicTerminal(fact), seq, turnId)];
+      case 'turn_ended': return [this.#event('turn_ended', { ...publicTerminal(fact), finalText: completedFinalText(fact.outcome, this.#state.messages.filter(message => message.turnId === fact.turnId)) }, seq, turnId)];
     }
+  }
+  #toolIdentity(executionId: string) {
+    const tool = this.#state.tools.find(tool => tool.executionId === executionId);
+    return tool ? { toolName: tool.toolName, input: tool.input,
+      ...(tool.callId ? { callId: tool.callId } : {}), ...(tool.parentExecutionId ? { parentExecutionId: tool.parentExecutionId } : {}),
+    } : {};
+  }
+  /** Branch facts keep their one outer cursor; child frames never advance the root cursor. */
+  #branch(branchId: string, fact: Fact, seq: number): readonly WireEvent[] {
+    const branch = this.#branches.get(branchId);
+    if (!branch) throw new Error('Branch event has no accepted branch identity');
+    return branch.projection.update({ type: 'fact', position: 0, seq, fact }).map(event =>
+      this.#event('subagent', { agentId: branch.taskId, branchId, ...(branch.role ? { role: branch.role } : {}), event: { ...event, seq: null } }, seq, event.turnId));
   }
   #item(fact: Extract<Fact, { type: 'item' }>, seq: number): readonly WireEvent[] {
     const { item, executionId, turnId } = fact;
@@ -160,7 +192,7 @@ export class DirectProjection {
       if (!executionId) throw new Error('Tool result fact has no execution identity');
       // The provider-facing result is a separate accepted fact. Upsert by occurrence
       // instead of suppressing it using current capture state during historical replay.
-      return [this.#event('tool_finished', { executionId, output: item.output, isError: item.isError,
+      return [this.#event('tool_finished', { executionId, ...this.#toolIdentity(executionId), output: item.output, isError: item.isError,
         ...(item.providerOutput ? { content: publicToolContent(item.providerOutput) } : {}),
       }, seq, turnId)];
     }

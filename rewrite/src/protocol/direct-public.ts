@@ -70,5 +70,6 @@ export function publicTerminal(terminal: WireTerminal): WireTerminal {
     ...(terminal.error ? { error: { kind: terminal.error.kind, message: terminal.error.message, retryable: terminal.error.retryable } } : {}),
     ...(terminal.terminalCause !== undefined ? { terminalCause: terminal.terminalCause } : {}),
     ...(terminal.notice !== undefined ? { notice: terminal.notice } : {}),
+    ...(terminal.finalText !== undefined ? { finalText: terminal.finalText } : {}),
   };
 }

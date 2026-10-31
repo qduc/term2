@@ -1,4 +1,4 @@
-/** Snapshot projection of the actual M2 facade. Missing later fields are not inferred from private state. */
+/** Snapshot projection of the actual native facade. Missing later fields are not inferred from private state. */
 import type { DirectSessionState, DirectToolDisplay } from '../session/facade-types.js';
 import type { DirectDisplayTool, DirectPublicState } from '../session/direct-state.js';
 import { DIRECT_PROTOCOL_VERSION, type WireSnapshot } from './direct-wire.js';
@@ -6,6 +6,8 @@ import type { DirectContextState } from '../session/direct-context.js';
 import { publicContext } from './direct-context.js';
 import type { DirectTaskState } from '../session/direct-background-types.js';
 import type { DirectQueueState } from '../session/direct-queue-types.js';
+import { publicBudgetRequest } from './direct-budget.js';
+import { publicTurnResults } from './direct-turn-results.js';
 import { publicQueue } from './direct-queue.js';
 import { publicTask } from './direct-tasks.js';
 import { contentText, publicContent, publicInteraction, publicJson, publicToolContent, publicTerminal } from './direct-public.js';
@@ -29,6 +31,7 @@ export function snapshotDirectState(state: DirectSessionState & { readonly tasks
       const correlated = item as typeof item & { readonly turnId?: string; readonly modelStep?: number };
       return { ...known, ...(correlated.turnId ? { turnId: correlated.turnId } : {}), ...(correlated.modelStep !== undefined ? { modelStep: correlated.modelStep } : {}), ...(draft ? { draft: true, turnId: draft.turnId, modelStep: draft.modelStep } : {}), id: item.id, role: item.role, content, text: contentText(content) };
   });
+  const turnResults = publicTurnResults(state, messages);
   return {
     protocolVersion: DIRECT_PROTOCOL_VERSION, sessionId: state.id, seq: previous?.seq ?? null,
     status: state.status, model: { provider: state.model.provider, model: state.model.model },
@@ -48,15 +51,18 @@ export function snapshotDirectState(state: DirectSessionState & { readonly tasks
       ...state.pendingInteractions.map(publicInteraction),
       ...(state.tasks ?? []).flatMap(task => task.pendingInteractions.map(publicInteraction)),
     ].map(request => [request.requestId, request])).values()],
+    pendingBudgets: state.pendingBudgets.map(publicBudgetRequest),
+    budgetObservations: previous?.budgetObservations ?? [],
+    turnResults,
     admissions: (state.queue ? state.queue.records.map(record => record.admission) : state.admissions).map(admission => ({ ...admission })),
     usage: { ...state.usage }, reasoning: state.reasoning,
     reasoningIdentity: previous?.reasoning === state.reasoning ? previous.reasoningIdentity ?? null : null,
     retryEligibility: previous?.retryEligibility ?? { turn: false, tool: false },
-    ...(state.queue ? publicQueue(state.queue, messages) : { queue: previous?.queue ?? [], queueState: previous?.queueState ?? 'idle', queuePauseReason: previous?.queuePauseReason ?? null, submissions: previous?.submissions ?? [] }), tasks: state.tasks?.map(task => ({ ...previous?.tasks.find(known => known.id === task.taskId), ...publicTask(task) })) ?? previous?.tasks ?? [],
+    ...(state.queue ? publicQueue(state.queue, turnResults) : { queue: previous?.queue ?? [], queueState: previous?.queueState ?? 'idle', queuePauseReason: previous?.queuePauseReason ?? null, submissions: previous?.submissions ?? [] }), tasks: state.tasks?.map(task => ({ ...previous?.tasks.find(known => known.id === task.taskId), ...publicTask(task) })) ?? previous?.tasks ?? [],
     cost: previous?.cost ?? null,
     ...(state.context ? publicContext(state.context) : { goal: previous?.goal ?? null, goalGeneration: previous?.goalGeneration ?? 0, verification: previous?.verification ?? null }),
     goalProposal: previous?.goalProposal ?? null,
     notices: previous?.notices ?? [], lastError: runtimeDirectError(state) ?? state.terminal?.error ?? null,
-    terminal: state.terminal ? { turnId: state.terminal.turnId, ...publicTerminal(state.terminal) } : null, timeline: previous?.timeline ?? null,
+    terminal: state.terminal ? { turnId: state.terminal.turnId, ...publicTerminal(state.terminal), finalText: turnResults.find(result => result.turnId === state.terminal!.turnId)?.finalText ?? null } : null, timeline: state.timeline.filter((entry): entry is typeof entry & { readonly kind: 'message' | 'tool' } => entry.kind === 'message' || entry.kind === 'tool').map(({ kind, id }) => ({ kind, id })),
   };
 }

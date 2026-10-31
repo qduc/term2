@@ -16,6 +16,21 @@ import type {
   TurnDeps,
   TurnResult,
 } from '../engine/index.js';
+import { captureDirectCommandHistory } from './direct-history-capture.js';
+import { listDirectRewindTargets, planDirectHistoryCommand } from './direct-command-history.js';
+import {
+  isDirectCommandFactType,
+  planDirectCommandStart,
+  planDirectCommandFinish,
+  reduceDirectCommandReceipts,
+  recoverDirectCommands,
+} from './direct-command-receipts.js';
+import type {
+  DirectCommandFact,
+  DirectCommandReceipts,
+  DirectCommandOutcome,
+  DirectCommandResult,
+} from './direct-command-types.js';
 import { parseDirectOrigin } from './direct-origin.js';
 import { DirectSubagents } from './direct-subagent.js';
 import { DirectContinuity, type DirectContinuityBinding } from '../engine/direct-recovery-continuity.js';
@@ -83,11 +98,18 @@ function conversation(
   const continuity = deps.continuity
     ? { ...deps.continuity, state: deps.continuity.state ?? new DirectContinuity() }
     : undefined;
+  let commandReceipts: DirectCommandReceipts = [];
+  let historyRevision = 0;
+  let commandOwner: { readonly commandId: string; readonly abort: AbortController; done?: Promise<unknown> } | null =
+    null;
   let context = initialDirectContextState();
   let queueState: DirectQueueState = createDirectQueueState();
   let taskStates: readonly DirectTaskState[] = [];
   const requestIds = new Set<InteractionRequestId>();
   for (const fact of facts) {
+    if (isDirectCommandFactType(fact.type))
+      commandReceipts = reduceDirectCommandReceipts(commandReceipts, fact as DirectCommandFact);
+    if (changesRootHistory(fact)) ++historyRevision;
     context = reduceDirectContext(context, fact);
     if (isDirectQueueFact(fact)) queueState = reduceDirectQueue(queueState, fact);
     if (isDirectTaskFact(fact)) taskStates = reduceDirectBackground(taskStates, fact);
@@ -129,6 +151,7 @@ function conversation(
     logFailure = modelError(error);
     tasks?.poison(logFailure);
     active?.cancel();
+    commandOwner?.abort.abort();
     for (const handle of branchHandles) handle.cancel();
   };
   // Projection validation is synchronous and precedes disk mutation. Nothing
@@ -136,11 +159,14 @@ function conversation(
   const commit = (next: readonly Fact[]): boolean => {
     if (logFailure) return false;
     if (next.length === 0) return true;
+    let projectedReceipts = commandReceipts;
     let projectedContext = context;
     let projectedQueue = queueState;
     let projectedTasks = taskStates;
     const reserved = new Set(requestIds);
     for (const fact of next) {
+      if (isDirectCommandFactType(fact.type))
+        projectedReceipts = reduceDirectCommandReceipts(projectedReceipts, fact as DirectCommandFact);
       projectedContext = reduceDirectContext(projectedContext, fact);
       if (isDirectQueueFact(fact)) projectedQueue = reduceDirectQueue(projectedQueue, fact);
       if (isDirectTaskFact(fact)) projectedTasks = reduceDirectBackground(projectedTasks, fact);
@@ -156,6 +182,8 @@ function conversation(
       poison(error);
       return false;
     }
+    commandReceipts = projectedReceipts;
+    historyRevision += next.filter(changesRootHistory).length;
     context = projectedContext;
     queueState = projectedQueue;
     taskStates = projectedTasks;
@@ -202,7 +230,7 @@ function conversation(
     if (recoveryMaterialized) return !logFailure;
     const recovered = replay(facts);
     const taskRecovery = recoverDirectBackground(facts.filter(isDirectTaskFact), Date.now());
-    if (!commit([...recovered.recoveryFacts, ...taskRecovery])) return false;
+    if (!commit([...recovered.recoveryFacts, ...taskRecovery, ...recoverDirectCommands(commandReceipts)])) return false;
     recoveryMaterialized = true;
     return true;
   };
@@ -255,10 +283,10 @@ function conversation(
     newMessageId: randomUUID,
     newTurnId: () => `turn-${nextTurnId++}` as TurnId,
     now: () => new Date().toISOString(),
-    dispatchHeld: !!active || !!completionHeld || closed || !!logFailure,
+    dispatchHeld: !!active || !!completionHeld || !!commandOwner || closed || !!logFailure,
   });
   const boundary = (turnId: TurnId): readonly Item[] => {
-    if (!active || active.turnId !== turnId || active.cancelled || closed || logFailure) return [];
+    if (!active || active.turnId !== turnId || active.cancelled || commandOwner || closed || logFailure) return [];
     const plan = planDirectQueue(queueState, { kind: 'boundary', turnId }, environment());
     if (!commit(plan.facts)) throw new Error(logFailure!.message);
     return plan.effect?.kind === 'steer' ? plan.effect.modelInput : [];
@@ -474,10 +502,17 @@ function conversation(
 
   const start = (
     request: TurnRequest,
-    planned?: { readonly turnId: TurnId; readonly facts: readonly Fact[] },
+    planned?: {
+      readonly turnId: TurnId;
+      readonly facts: readonly Fact[];
+      /** Command admission already committed replacement/start/receipt in one batch. */
+      readonly accepted?: true;
+      readonly history?: readonly Item[];
+    },
   ): StartedConversationTurn => {
     if (closed) throw new Error(`conversation ${id} is closed`);
     if (active) throw new Error(`conversation ${id} already has an active turn`);
+    if (commandOwner && !planned?.accepted) throw new Error('Session history is reserved by a command');
     if (logFailure || !recover()) throw new Error(logFailure!.message);
     if (
       request.submission &&
@@ -487,12 +522,13 @@ function conversation(
       throw new Error('submission must identify one admitted user item');
     }
     const turnId = planned?.turnId ?? (`turn-${nextTurnId++}` as TurnId);
-    const snapshot = liveReplay();
-    const isHuman = humanOrigin(request.submission?.origin);
+    const snapshot = planned?.accepted ? { history: planned.history!, compactionState: undefined } : liveReplay();
+    const isHuman = !planned?.accepted && humanOrigin(request.submission?.origin);
     const human = isHuman
       ? capabilities!.humanPlan(request.submission?.messageId ?? turnId, request.input)
       : { facts: capabilities!.memoryFacts(), modelInput: request.input };
     if (
+      !planned?.accepted &&
       !commit([
         ...(planned?.facts ?? []),
         ...human.facts,
@@ -550,7 +586,7 @@ function conversation(
         {
           ...settings,
           turnId,
-          history: snapshot.history,
+          history: planned?.history ?? snapshot.history,
           ...(snapshot.compactionState ? { compactionState: snapshot.compactionState } : {}),
           newItems: notice ? withNotice(human.modelInput, notice) : human.modelInput,
         },
@@ -592,9 +628,165 @@ function conversation(
       { turnId: effect.turnId, facts: next },
     );
   };
+  const revision = (): string => `${id}:${historyRevision}`;
+  const commandSnapshot = () =>
+    captureDirectCommandHistory({
+      sessionId: id,
+      revision: revision(),
+      facts,
+      history: liveReplay().history,
+      executionsSettled: !active && !completionHeld,
+    });
   return {
     id,
     tasks,
+    cancelCommand() {
+      commandOwner?.abort.abort();
+    },
+    rewindTargets() {
+      if (active || completionHeld || commandOwner || closed || logFailure) return [];
+      return listDirectRewindTargets(commandSnapshot());
+    },
+    command(request, settings, settleForeground) {
+      request = structuredClone(request);
+      if (closed || logFailure || !recover())
+        return Promise.resolve({
+          result: { kind: 'not_admitting' as const, reason: logFailure?.message ?? 'Session is closed' },
+        });
+      const proposal = planDirectCommandStart(commandReceipts, request, revision());
+      if (proposal.kind !== 'start') return Promise.resolve({ result: structuredClone(proposal) });
+      // Reserve synchronously, before cancellation or any async model operation.
+      if (!commit([proposal.fact])) throw new Error(logFailure!.message);
+      const finish = (outcome: DirectCommandOutcome): DirectCommandResult => {
+        if (!commit([planDirectCommandFinish(commandReceipts, request.commandId, outcome)]))
+          throw new Error(logFailure!.message);
+        return {
+          kind: 'finished',
+          receipt: structuredClone(commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!),
+        };
+      };
+      if (commandOwner)
+        return Promise.resolve({
+          result: finish({ kind: 'rejected', code: 'busy', message: 'Another Session command owns history mutation.' }),
+        });
+      if (
+        request.operation.kind === 'configure' ||
+        request.operation.kind === 'rollover' ||
+        request.operation.kind === 'compact'
+      )
+        return Promise.resolve({
+          result: finish({
+            kind: 'rejected',
+            code: 'unavailable',
+            message: `${request.operation.kind} lacks its actual native runtime authority.`,
+          }),
+        });
+      const owner = {
+        commandId: request.commandId,
+        abort: new AbortController(),
+        done: undefined as Promise<unknown> | undefined,
+      };
+      commandOwner = owner;
+      const work = async (): Promise<{ result: DirectCommandResult; started?: StartedConversationTurn }> => {
+        try {
+          active?.cancel();
+          await settleForeground();
+          if (active) await active.stop();
+          if (closed || logFailure || owner.abort.signal.aborted)
+            return {
+              result: finish({
+                kind: 'rejected',
+                code: 'cancelled',
+                message: 'Session command was cancelled before mutation.',
+              }),
+            };
+          const snapshot = commandSnapshot();
+          const operation = request.operation;
+          if (operation.kind !== 'retry' && operation.kind !== 'rewind') throw new Error('Unsupported history command');
+          const plan = planDirectHistoryCommand(snapshot, operation);
+          if (plan.kind === 'rejected')
+            return { result: finish({ kind: 'rejected', code: plan.code, message: plan.message }) };
+          if (plan.expectedRevision !== revision() || commandOwner !== owner)
+            return {
+              result: finish({
+                kind: 'rejected',
+                code: 'stale',
+                message: 'Session history changed before command acceptance.',
+              }),
+            };
+          if (plan.next.kind === 'rewound') {
+            const outcome = { kind: 'rewound' as const, draft: plan.next.draft };
+            if (!commit([plan.fact, planDirectCommandFinish(commandReceipts, request.commandId, outcome)]))
+              throw new Error(logFailure!.message);
+            continuity?.state.clear();
+            return {
+              result: {
+                kind: 'finished',
+                receipt: structuredClone(
+                  commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+                ),
+              },
+            };
+          }
+          const source = [...facts].reverse().find((fact) => fact.type === 'turn_started');
+          const through = plan.fact.history.at(-1);
+          if (source?.type !== 'turn_started' || !through)
+            return {
+              result: finish({
+                kind: 'rejected',
+                code: 'ineligible',
+                message: 'Retry has no retained accepted root context.',
+              }),
+            };
+          const turnId = `turn-${nextTurnId++}` as TurnId;
+          const configuration = directPreviewConfiguration({ ...settings, input: [] });
+          if (
+            !commit([
+              plan.fact,
+              {
+                type: 'turn_started',
+                turnId,
+                input: [],
+                retryContext: { sourceTurnId: source.turnId, throughItemId: through.id },
+                ...(configuration ? { requestConfiguration: configuration } : {}),
+              },
+              planDirectCommandFinish(commandReceipts, request.commandId, { kind: 'retried', turnId }),
+            ])
+          )
+            throw new Error(logFailure!.message);
+          continuity?.state.clear();
+          const started = start(
+            { ...settings, input: [] },
+            { turnId, facts: [], accepted: true, history: plan.fact.history },
+          );
+          return {
+            result: {
+              kind: 'finished',
+              receipt: structuredClone(
+                commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+              ),
+            },
+            started,
+          };
+        } catch (error) {
+          if (logFailure) throw new Error(logFailure.message);
+          const accepted = commandReceipts.find((receipt) => receipt.request.commandId === request.commandId);
+          if (accepted?.outcome) return { result: { kind: 'finished', receipt: structuredClone(accepted) } };
+          return {
+            result: finish({
+              kind: 'rejected',
+              code: 'failed',
+              message: error instanceof Error ? error.message : String(error),
+            }),
+          };
+        } finally {
+          if (commandOwner === owner) commandOwner = null;
+        }
+      };
+      const done = work();
+      owner.done = done;
+      return done;
+    },
     abort(expectedTurnId, discardQueue = true) {
       if (closed || logFailure) return { kind: 'not_admitting', reason: logFailure?.message ?? 'session is closed' };
       const target = active?.turnId ?? completionHeld;
@@ -698,6 +890,7 @@ function conversation(
     },
     queue(command) {
       if (closed || logFailure || !recover()) return { kind: 'rejected', reason: 'invalid' };
+      if (command.kind === 'settled' && commandOwner) command = { ...command, preservePendingSteers: true };
       const plan = planDirectQueue(queueState, command, environment());
       if (plan.effect?.kind === 'start') throw new Error('Use advanceQueue for dispatch');
       if (!commit(plan.facts)) return { kind: 'rejected', reason: 'invalid' };
@@ -707,7 +900,7 @@ function conversation(
     },
     advanceQueue(settings) {
       if (settings) queueSettings = settings;
-      if (active || closed || logFailure || !queueSettings) return undefined;
+      if (active || commandOwner || closed || logFailure || !queueSettings) return undefined;
       const plan = planDirectQueue(queueState, { kind: 'dispatch' }, environment());
       if (plan.effect?.kind === 'start') return startEffect(plan.effect, plan.facts);
       if (!commit(plan.facts)) throw new Error(logFailure!.message);
@@ -724,7 +917,9 @@ function conversation(
     },
     async close() {
       closed = true;
+      commandOwner?.abort.abort();
       try {
+        await commandOwner?.done;
         await Promise.all([active?.stop(), tasks!.close()]);
         await capabilities!.close(!!logFailure);
       } finally {
@@ -849,4 +1044,17 @@ function withNotice(input: readonly Item[], notice: string): readonly Item[] {
 /** Automatic/relayed agent input is not a human context/admission grant. */
 function humanOrigin(origin?: DirectOrigin): boolean {
   return !origin || (origin.kind === 'discord' ? origin.source === 'human' : origin.kind !== 'control');
+}
+
+/** Physical audit/branch progress do not invalidate a root history token. */
+function changesRootHistory(fact: Fact): boolean {
+  return [
+    'turn_started',
+    'turn_ended',
+    'text_delta',
+    'item',
+    'history_replaced',
+    'queue_steered',
+    'memory_personal_snapshot',
+  ].includes(fact.type);
 }

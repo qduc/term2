@@ -66,6 +66,7 @@ const schemas = {
     type: z.literal('queue_settled'),
     turnId: id,
     outcome: z.enum(['completed', 'cancelled', 'failed', 'interrupted']),
+    preservePendingSteers: z.boolean().optional(),
   }),
   queue_resumed: z.object({ type: z.literal('queue_resumed') }),
   queue_recovered: z.object({ type: z.literal('queue_recovered') }),

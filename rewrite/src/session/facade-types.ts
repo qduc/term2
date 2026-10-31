@@ -100,6 +100,7 @@ export type DirectSessionState = {
   readonly pendingInteractions: readonly InteractionRequest[];
   readonly admissions: readonly DirectAdmission[];
   readonly usage: Usage;
+  readonly commands: import('./direct-command-types.js').DirectCommandReceipts;
   readonly requestCosts: readonly import('./facts.js').DirectRequestCostFact[];
   readonly pendingBudgets: readonly Extract<Fact, { readonly type: 'budget_opened' }>[];
   readonly timeline: readonly DirectTimelineEntry[];
@@ -146,6 +147,11 @@ export interface DirectSession {
   snapshotInputPreview(
     request: import('./direct-preview.js').DirectPreviewRequest,
   ): import('./direct-preview.js').DirectPreviewSnapshot;
+  /** Stable invocation identity and durable outcome; admission is not completion. */
+  command(
+    request: import('./direct-command-types.js').DirectCommandRequest,
+  ): Promise<import('./direct-command-types.js').DirectCommandResult>;
+  rewindTargets(): readonly import('./direct-command-types.js').DirectRewindTarget[];
   submit(request: DirectSubmission): Promise<DirectAdmission>;
   submitWithDelivery(request: DirectQueueSubmission): Promise<DirectAdmission>;
   editQueue(messageId: string, edit: DirectQueueEdit): Promise<DirectQueueMutation>;

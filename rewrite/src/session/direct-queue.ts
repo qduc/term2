@@ -208,9 +208,20 @@ export function planDirectQueue(
     }
     case 'settled':
       if (state.active?.turnId !== command.turnId) return makePlan(state, [], { kind: 'no_op' });
-      return makePlan(state, [{ type: 'queue_settled', turnId: command.turnId, outcome: command.outcome }], {
-        kind: 'accepted',
-      });
+      return makePlan(
+        state,
+        [
+          {
+            type: 'queue_settled',
+            turnId: command.turnId,
+            outcome: command.outcome,
+            ...(command.preservePendingSteers ? { preservePendingSteers: true } : {}),
+          },
+        ],
+        {
+          kind: 'accepted',
+        },
+      );
     case 'recover':
       if (!state.active && (!state.pending.length || state.pause)) return makePlan(state, [], { kind: 'no_op' });
       return makePlan(state, [{ type: 'queue_recovered' }], { kind: 'accepted' });

@@ -125,13 +125,14 @@ export function reduceDirectQueue(state: DirectQueueState, fact: DirectQueueFact
       const abandoned = directQueuePending(state).filter(
         (record) => record.stage === 'pending_steer' && record.turnId === fact.turnId,
       );
-      const next = stopping
-        ? removePending(
-            state,
-            abandoned.map((record) => record.messageId),
-            'cancelled',
-          )
-        : state;
+      const next =
+        stopping && !fact.preservePendingSteers
+          ? removePending(
+              state,
+              abandoned.map((record) => record.messageId),
+              'cancelled',
+            )
+          : state;
       const retained = state.active!.retainedMessageIds ?? next.pending;
       const pause =
         next.pending.length === 0

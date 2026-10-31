@@ -77,3 +77,9 @@ export type DirectHistoryCommandPlan =
         | { readonly kind: 'retry'; readonly input: readonly Item[] }
         | { readonly kind: 'rewound'; readonly draft: { readonly content: readonly ContentPart[] } };
     };
+
+/** A repeated invocation returns its original receipt, never another execution grant. */
+export type DirectCommandResult =
+  | { readonly kind: 'pending' | 'finished'; readonly receipt: DirectCommandReceipt }
+  | { readonly kind: 'conflict' }
+  | { readonly kind: 'not_admitting'; readonly reason: string };

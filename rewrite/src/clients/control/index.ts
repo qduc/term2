@@ -6,6 +6,7 @@ import { ControlSocketServer } from './transport.js';
 import { createDirectControlSessionPort } from './control-session-port.js';
 import type { DirectControlPortOptions, DirectControlSessionPort } from './types.js';
 
+export { controlCommandState, type ControlCommandState } from './command-results.js';
 export { createDirectControlSessionPort } from './control-session-port.js';
 export type {
   ControlSessionMetadata,

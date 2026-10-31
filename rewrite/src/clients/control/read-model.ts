@@ -6,6 +6,7 @@ import process from 'node:process';
 import type { JsonValue, WireInteraction, WireSnapshot } from '../../protocol/direct-wire.js';
 import { projectControlPhase, type ControlTopic } from './transport.js';
 import type { DirectControlPortOptions } from './types.js';
+import { controlCommands } from './command-results.js';
 
 function interactions(state: WireSnapshot) {
   const foreground = state.pendingInteractions.find(
@@ -34,11 +35,15 @@ function calls(state: WireSnapshot) {
 export function controlStatus(state: WireSnapshot, options: DirectControlPortOptions): unknown {
   const pending = interactions(state);
   const metadata = options.metadata(state);
+  const commands = controlCommands(state);
   return {
     ...projectControlPhase({
       foregroundToolName: pending.foreground?.kind === 'question' ? 'ask_user' : pending.foreground?.toolName,
       hasNestedApproval: pending.nested !== undefined,
-      activeTurn: state.status === 'running' || state.status === 'awaiting_interaction',
+      activeTurn:
+        state.status === 'running' ||
+        state.status === 'awaiting_interaction' ||
+        commands?.some((command) => command.state === 'pending') === true,
       queueOwnsSubmissions: state.queueState !== 'idle',
       queueActive: state.queue.length > 0,
     }),
@@ -50,6 +55,7 @@ export function controlStatus(state: WireSnapshot, options: DirectControlPortOpt
     queueStateKind: state.queueState,
     queuePauseReason: state.queuePauseReason ?? null,
     sessionId: state.sessionId,
+    commands,
     queue: state.queue.map((item) => ({
       id: item.messageId,
       text: item.text.slice(0, 500),
@@ -129,6 +135,7 @@ function pending(state: WireSnapshot) {
     // Keep every request answerable by its real identity, not only the v1 first two slots.
     interactions: state.pendingInteractions.map((item) => ({ ...common(item), kind: item.kind })),
     budgets: state.pendingBudgets ?? [],
+    commands: controlCommands(state),
   };
 }
 

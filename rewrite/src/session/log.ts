@@ -10,12 +10,13 @@
  * unknown fact type, a bad interior line or a seq gap throws.
  *
  * A fact is one *terminated* line. A final line without its newline is torn,
- * even when its bytes happen to parse: `readFacts` ignores it and `openLog`
- * truncates it before the next append. That is what keeps a killed process's
- * half-line from becoming history or from swallowing the next fact.
+ * even when its bytes happen to parse: `readFacts` ignores it, and the next
+ * non-empty append truncates it first. Opening alone changes no bytes. That is
+ * what keeps a killed process's half-line from becoming history or from
+ * swallowing the next fact.
  */
 
-import { closeSync, fsyncSync, openSync, readFileSync, truncateSync, writeSync } from 'node:fs';
+import { closeSync, fsyncSync, ftruncateSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { LOG_FORMAT_VERSION, type Fact, type FactLine } from './facts.js';
@@ -124,10 +125,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function createConversationLog(path: string, fd: number, firstSeq: number): ConversationLog {
+function createConversationLog(path: string, fd: number, firstSeq: number, tornFrom?: number): ConversationLog {
   let sequence = firstSeq;
   let handle: number | null = fd;
   let dead = false;
+  let pendingTruncate = tornFrom;
 
   return {
     path,
@@ -155,6 +157,10 @@ function createConversationLog(path: string, fd: number, firstSeq: number): Conv
       const buffer = Buffer.from(lines.join(''), 'utf8');
 
       try {
+        if (pendingTruncate !== undefined) {
+          ftruncateSync(fd, pendingTruncate);
+          pendingTruncate = undefined;
+        }
         let offset = 0;
         while (offset < buffer.length) {
           const written = writeSync(fd, buffer, offset, buffer.length - offset);
@@ -194,14 +200,11 @@ export function createLog(dir: string, id: string): ConversationLog {
   return createConversationLog(path, openSync(path, 'wx'), 1);
 }
 
-/** Truncates a torn final line and continues the seq. */
+/** Changes no bytes: continues the seq, and leaves a torn final line for the next append to remove. */
 export function openLog(path: string): ConversationLog {
   const data = readFileSync(path);
-  // Parse before writing: an interior corruption throws with the file untouched.
   const { lastSeq, complete } = parseLog(data, path);
-  if (complete !== data.length) truncateSync(path, complete);
-
-  return createConversationLog(path, openSync(path, 'a'), lastSeq + 1);
+  return createConversationLog(path, openSync(path, 'a'), lastSeq + 1, complete !== data.length ? complete : undefined);
 }
 
 /** Pure read; never writes. */

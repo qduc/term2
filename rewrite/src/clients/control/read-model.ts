@@ -42,12 +42,23 @@ export function controlStatus(state: WireSnapshot, options: DirectControlPortOpt
       queueOwnsSubmissions: state.queueState !== 'idle',
       queueActive: state.queue.length > 0,
     }),
+    // Budget pauses are not invented tool calls; the v1 phase still denotes
+    // terminal-only approval, with exact budget identities in get(pending).
+    ...(!pending.foreground && !pending.nested && state.pendingBudgets?.length
+      ? { phase: 'awaiting_approval', waitKind: 'approval' }
+      : {}),
     queueStateKind: state.queueState,
+    queuePauseReason: state.queuePauseReason ?? null,
     sessionId: state.sessionId,
     queue: state.queue.map((item) => ({
       id: item.messageId,
       text: item.text.slice(0, 500),
       stage: item.delivery === 'steering' ? 'pending_steer' : 'queued',
+      clientRequestId: item.clientRequestId,
+      content: item.content ?? null,
+      origin: item.origin ?? null,
+      receivedAt: item.receivedAt ?? null,
+      turnId: item.turnId ?? null,
     })),
     currentTool: calls(state)[0] ?? null,
     context: { contextWindow: metadata.contextWindow ?? null, promptTokens: null },
@@ -117,6 +128,7 @@ function pending(state: WireSnapshot) {
     nested: nested ? { ...common(nested), nestedCallId: callId(nested) } : null,
     // Keep every request answerable by its real identity, not only the v1 first two slots.
     interactions: state.pendingInteractions.map((item) => ({ ...common(item), kind: item.kind })),
+    budgets: state.pendingBudgets ?? [],
   };
 }
 
@@ -164,11 +176,18 @@ export function controlGet(state: WireSnapshot, topic: ControlTopic, options: Di
     case 'background':
       return {
         tasks: state.tasks.slice(0, 32).map((task) => ({
-          kind: task.agentId ? 'subagent' : null,
+          kind: task.kind ?? (task.agentId ? 'subagent' : null),
           id: task.id,
           status: task.status,
-          startedAt: null,
-          labelExcerpt: (task.text ?? task.role ?? '').slice(0, 500),
+          startedAt: task.startedAt ?? null,
+          turnId: task.turnId ?? null,
+          sessionId: task.sessionId ?? null,
+          parentExecutionId: task.parentExecutionId ?? null,
+          sourceCallId: task.sourceCallId ?? null,
+          origin: task.origin ?? null,
+          mode: task.mode ?? null,
+          completedAt: task.completedAt ?? null,
+          labelExcerpt: (task.label ?? task.name ?? task.text ?? task.role ?? '').slice(0, 500),
         })),
       };
   }

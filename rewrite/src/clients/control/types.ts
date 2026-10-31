@@ -1,7 +1,7 @@
 /** Composition inputs for the direct control adapter. None may access an old runtime. */
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import type { WireOrigin, WireSnapshot, WireSubmission } from '../../protocol/direct-wire.js';
-import type { BridgeInput, ControlSessionPort, ControlSocketServer } from './transport.js';
+import type { WireSnapshot, WireSubmission } from '../../protocol/direct-wire.js';
+import type { ControlSessionPort, ControlSocketServer } from './transport.js';
 
 export interface ControlSessionMetadata {
   readonly workspaceRoot: string | null;
@@ -28,14 +28,6 @@ export interface DirectControlPortOptions {
   readonly connection: DirectConnection;
   readonly controlSocket: Pick<ControlSocketServer, 'name' | 'startedAt'>;
   readonly metadata: (snapshot: WireSnapshot) => ControlSessionMetadata;
-  /** Full Discord origin is not represented by the 0a27e134 kind/id contract.
-   * Install only when the shared origin extension and authoritative Session
-   * admission support human/agent/reaction, sender and relay/message identities.
-   * This is a pure DTO encoder, not a Session call or authorization shortcut.
-   * Absence rejects bridgeSubmit as unavailable; no opaque-ID fallback claims
-   * that automatic peer data and human input have identical domain semantics.
-   */
-  readonly bridgeOrigin?: (origin: BridgeInput['origin']) => WireOrigin;
 }
 
 export interface DirectControlSessionPort extends ControlSessionPort {

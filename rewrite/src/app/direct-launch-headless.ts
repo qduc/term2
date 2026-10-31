@@ -16,12 +16,13 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): RunHand
     let profileMetadata: Readonly<Record<string, unknown>> = {};
     try {
       const root = fs.realpathSync(process.cwd());
-      const app = createDirectApplication({
+      const app = await createDirectApplication({
         conversationsDir,
         selection,
         ...(request.profileExplicit !== undefined ? { profileExplicit: request.profileExplicit } : {}),
         surface: { autoApprove, interactive: false },
         authority: createLocalAuthority((candidate) => candidate === root),
+        hooks: { root, mode: 'non-interactive' },
         onSurface(surface, profile) {
           profileMetadata = profile;
           if (output === 'plain') io.stderr.write(`Profile: ${surface.profileName}\n`);

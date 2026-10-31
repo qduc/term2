@@ -3,7 +3,9 @@
  * session needs. Every mode is a client of this host. Only `host.dispose()` ends
  * Sessions, so a client disconnecting never stops work another client can see.
  */
+import fs from 'node:fs';
 import path from 'node:path';
+import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
 import { createDirectInProcessHost } from '../host/in-process-direct.js';
 import type { DirectHost, Principal } from '../host/in-process-direct-types.js';
 import type { HeadlessApprovalDecider } from '../clients/headless/index.js';
@@ -16,12 +18,25 @@ import { readFacts } from '../session/log.js';
 import { replay } from '../session/replay.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
+import type { ProfileSelection } from './tool-contract.js';
+import { startDirectHooks, type DirectHookOptions } from './direct-application-hooks.js';
 import { createDirectRuntimes, type DirectRuntimeOptions, type DirectRuntimes } from './direct-application-runtime.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority } from './direct-application-workspaces.js';
 
 export type DirectApplicationOptions = DirectRuntimeOptions & {
   readonly conversationsDir: string;
   readonly authority: DirectAuthority;
+  /** The modes with public hooks today: the terminal UI and headless. ACP and serve have none. */
+  readonly hooks?: DirectHookOptions;
+};
+
+/** Read from the session's own log and runtime, for clients that report it. */
+export type DirectSessionDetails = {
+  readonly createdAt: string;
+  readonly logPath: string;
+  readonly profileId: string | null;
+  readonly settings: ProfileSelection['settings'] | null;
+  contextWindow(model: ModelRef): number | null;
 };
 
 export type DirectApplication = {
@@ -31,19 +46,35 @@ export type DirectApplication = {
   headlessPolicy(sessionId: string, autoApprove: boolean, signal: AbortSignal): HeadlessApprovalDecider;
   /** Canonical workspace of a direct session, for clients whose snapshot has none. */
   sessionRoot(principal: Principal, sessionId: string): Promise<string>;
+  sessionDetails(sessionId: string): DirectSessionDetails;
   close(): Promise<void>;
 };
 
-export function createDirectApplication(options: DirectApplicationOptions): DirectApplication {
+/** The log's first line is the session's real creation, whichever client attaches later. */
+function createdAt(logPath: string): string {
+  const [first = ''] = fs.readFileSync(logPath, 'utf8').split('\n', 1);
+  return (JSON.parse(first) as { readonly at: string }).at;
+}
+
+export async function createDirectApplication(options: DirectApplicationOptions): Promise<DirectApplication> {
   const { authority, selection } = options;
-  const runtimes = createDirectRuntimes(options);
+  const hooks = options.hooks ? await startDirectHooks(options.hooks, selection) : null;
+  const runtimes = createDirectRuntimes(options, hooks);
   const store = createDirectSessionStore({
     directory: options.conversationsDir,
     resolveWorkspace: (root) => authority.resolveStored(root),
     createRuntime: (context) => runtimes.create(context),
   });
+  const observed = async <Session extends DirectSession>(session: Session): Promise<Session> => {
+    await runtimes.get(session.id)?.hooks?.observe(session);
+    return session;
+  };
   const host = createDirectInProcessHost({
-    sessions: store,
+    sessions: {
+      ...store,
+      create: async (...request) => observed(await store.create(...request)),
+      open: async (...request) => observed(await store.open(...request)),
+    },
     defaultModel: selection.settings.get('agent.modelSelection') as ModelRef,
     authorize: (principal, access) => authority.authorize(principal, access),
     resolveWorkspace: (principal, grant) => authority.resolveGrant(principal, grant),
@@ -60,7 +91,24 @@ export function createDirectApplication(options: DirectApplicationOptions): Dire
       if (!session) throw new DirectProtocolError('not_found', 'Unknown direct session.');
       return session.workspace.root;
     },
-    close: () => host.dispose(),
+    sessionDetails(sessionId) {
+      const logPath = path.join(options.conversationsDir, `${sessionId}.jsonl`);
+      const record = runtimes.get(sessionId);
+      return {
+        createdAt: createdAt(logPath),
+        logPath,
+        profileId: record?.profileId ?? null,
+        settings: record?.settings ?? null,
+        contextWindow: ({ provider, model }) => getModelContextWindow(provider, model) ?? null,
+      };
+    },
+    async close() {
+      try {
+        await host.dispose();
+      } finally {
+        await hooks?.close();
+      }
+    },
   };
 }
 
@@ -99,8 +147,8 @@ function headlessPolicy(input: HeadlessPolicyInput): HeadlessApprovalDecider {
   const { store, runtimes, directory, sessionId, autoApprove, signal } = input;
   return async (interaction) => {
     if (interaction.kind === 'question') return decideHeadlessApproval(interaction, autoApprove);
-    const surface = runtimes.surface(sessionId);
-    if (!surface) throw new Error(`No runtime for session ${sessionId}`);
+    const runtime = runtimes.get(sessionId);
+    if (!runtime) throw new Error(`No runtime for session ${sessionId}`);
     const session = await store.open(sessionId);
     const { state, unsubscribe } = session.capture(() => undefined);
     unsubscribe();
@@ -108,8 +156,8 @@ function headlessPolicy(input: HeadlessPolicyInput): HeadlessApprovalDecider {
     // Already settled by cancellation. The answer this produces is reported stale.
     if (!request) return { decision: { kind: 'deny' } };
     const { history } = replay(readFacts(path.join(directory, `${sessionId}.jsonl`)));
-    const decision = await runtimes.scope(sessionId)(() =>
-      untilAborted(surface.decideInteraction(request, history), signal),
+    const decision = await runtime.scope(() =>
+      untilAborted(runtime.surface.decideInteraction(request, history), signal),
     );
     return { decision, reportRejection: autoApprove };
   };

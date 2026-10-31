@@ -94,7 +94,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
   await warnIfSandboxUnavailable(io);
 
   const { conversationsDir, selection } = request;
-  const app = createDirectApplication({
+  const app = await createDirectApplication({
     conversationsDir,
     selection,
     surface: { autoApprove: false, interactive: true, allowUnsandboxed: false },

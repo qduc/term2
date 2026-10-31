@@ -4,10 +4,11 @@ import { getProfileMetadata } from '../../../source/services/profiles/active-pro
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
+import { loadSurface } from './agent-surface.js';
+import type { DirectHookRuntime, DirectSessionHooks } from './direct-application-hooks.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
 import { withGenerationGuard } from './run.js';
 import { createAppSettings } from './settings.js';
-import { createToolSurface } from './tool-surface.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 export type DirectRuntimeOptions = {
@@ -19,11 +20,19 @@ export type DirectRuntimeOptions = {
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
 
+/** What the app holds for one open session. */
+export type DirectRuntimeRecord = {
+  readonly surface: AgentSurface;
+  readonly scope: SessionScope;
+  readonly settings: ProfileSelection['settings'];
+  readonly hooks: DirectSessionHooks | null;
+  readonly profileId: string;
+};
+
 export type DirectRuntimes = {
   create(context: DirectRuntimeContext): DirectConversationRuntime;
-  /** The live surface of an open session, for app-owned policy. */
-  surface(sessionId: string): AgentSurface | undefined;
-  scope(sessionId: string): SessionScope;
+  /** An open session's runtime, for app-owned policy and commands. */
+  get(sessionId: string): DirectRuntimeRecord | undefined;
 };
 
 /**
@@ -49,9 +58,11 @@ function sessionSettings(
   return settings;
 }
 
-export function createDirectRuntimes(options: DirectRuntimeOptions): DirectRuntimes {
-  const surfaces = new Map<string, AgentSurface>();
-  const scopes = new Map<string, SessionScope>();
+export function createDirectRuntimes(
+  options: DirectRuntimeOptions,
+  hookRuntime: DirectHookRuntime | null,
+): DirectRuntimes {
+  const records = new Map<string, DirectRuntimeRecord>();
   const { logger, sessionContext } = options.selection;
 
   const scopeFor = (id: string, startedAt: string): SessionScope => {
@@ -67,12 +78,18 @@ export function createDirectRuntimes(options: DirectRuntimeOptions): DirectRunti
         throw new Error('resume conversation belongs to a different workspace');
       }
       const selection = { settings: sessionSettings(options, context), logger, sessionContext };
-      const surface = createToolSurface(selection, { ...options.surface, workspace: context.workspace });
+      const surface = loadSurface(selection, { ...options.surface, workspace: context.workspace });
       const scope = scopeFor(context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(selection.settings.get('app.activeProfileId')));
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
-      surfaces.set(context.id, surface);
-      scopes.set(context.id, scope);
+      const hooks = hookRuntime?.session(context, selection.settings) ?? null;
+      records.set(context.id, {
+        surface,
+        scope,
+        settings: selection.settings,
+        hooks,
+        profileId: profile.activeProfileId,
+      });
       options.onSurface?.(surface, profile);
       return {
         deps: {
@@ -84,14 +101,13 @@ export function createDirectRuntimes(options: DirectRuntimeOptions): DirectRunti
         request: { ...request, ...(notice ? { notice } : {}) },
         profile: { id: profile.activeProfileId, version: profile.activeProfileVersion, digest: profile.activeProfileDigest },
         appVersion: installationVersion,
-        dispose() {
-          surfaces.delete(context.id);
-          scopes.delete(context.id);
-          return runtime.dispose?.();
+        async dispose() {
+          records.delete(context.id);
+          await hooks?.end();
+          await runtime.dispose?.();
         },
       };
     },
-    surface: (sessionId) => surfaces.get(sessionId),
-    scope: (sessionId) => scopes.get(sessionId) ?? ((operation) => operation()),
+    get: (sessionId) => records.get(sessionId),
   };
 }

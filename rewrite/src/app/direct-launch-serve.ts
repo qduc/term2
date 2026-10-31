@@ -150,7 +150,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
   const app = await createDirectApplication({
     conversationsDir: path.join(stateDir, 'conversations'),
     selection,
-    surface: { autoApprove: false, interactive: true, allowUnsandboxed: false },
+    surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
     authority: serverAuthority(config, args.localOwnerUserId),
   });
   const auditPath = path.join(stateDir, 'server-audit.jsonl');

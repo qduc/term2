@@ -19,7 +19,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         conversationsDir,
         selection,
         ...(request.profileExplicit !== undefined ? { profileExplicit: request.profileExplicit } : {}),
-        surface: { autoApprove, interactive: false },
+        surface: () => ({ autoApprove, interactive: false }),
         authority: createLocalAuthority((candidate) => candidate === root),
         hooks: { root, mode: 'non-interactive' },
         onSurface(surface, profile) {

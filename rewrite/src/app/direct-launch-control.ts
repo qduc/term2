@@ -5,7 +5,7 @@
 import { stderr, stdout } from 'node:process';
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import {
-  createFailClosedDiscordSend,
+  createSessionDiscordSend,
   runControlCommand,
   runDiscordBridge,
   startDirectControlSocket,
@@ -23,8 +23,15 @@ export type DirectControlHold = { readonly drained: Promise<void>; release(): vo
 
 /** The one socket on this process. `/bridge`, Discord send and session changes all act on it. */
 export type DirectControlBridge = {
-  readonly discordSend: DiscordSend;
-  isDiscordInputEnabled(): boolean;
+  /**
+   * Discord authority for the tools of one session. It holds only while the socket
+   * is bound to that session, so a session left behind by `/clear` cannot borrow
+   * its successor's binding.
+   */
+  outbound(sessionId: string): {
+    readonly discordSend: DiscordSend;
+    isDiscordInputEnabled(): boolean;
+  };
   readonly server: ControlServer | undefined;
   /** True when it came from the launch flag, which `/bridge disconnect` must not undo. */
   readonly isStartup: boolean;
@@ -61,6 +68,7 @@ export function createDirectControlBridge(
   target: () => { readonly app: DirectApplication; readonly root: string },
 ): DirectControlBridge {
   let attached: DirectControlSocket | undefined;
+  let boundSession: string | undefined;
   let startup = false;
   let connecting = false;
 
@@ -77,8 +85,14 @@ export function createDirectControlBridge(
   };
 
   return {
-    discordSend: createFailClosedDiscordSend(() => attached?.socket ?? null, process.env.XDG_RUNTIME_DIR ?? ''),
-    isDiscordInputEnabled: () => attached?.socket.discordInputEnabled === true,
+    outbound: (sessionId) => ({
+      discordSend: createSessionDiscordSend(
+        () => attached?.socket ?? null,
+        process.env.XDG_RUNTIME_DIR ?? '',
+        sessionId,
+      ),
+      isDiscordInputEnabled: () => boundSession === sessionId && attached?.socket.discordInputEnabled === true,
+    }),
     get server() {
       return attached?.socket;
     },
@@ -88,6 +102,7 @@ export function createDirectControlBridge(
     async attachAtStartup(sessionId, { name, discordInput }) {
       try {
         attached = await open(sessionId, name, discordInput);
+        boundSession = sessionId;
         startup = true;
         return `Control socket on: ${name} (pid ${process.pid})`;
       } catch (error) {
@@ -100,6 +115,7 @@ export function createDirectControlBridge(
       try {
         // Asking for the bridge by name is the opt-in to Discord input, as it is today.
         attached = await open(sessionId, name, true);
+        boundSession = sessionId;
         return attached.socket;
       } finally {
         connecting = false;
@@ -108,15 +124,19 @@ export function createDirectControlBridge(
     async disconnect() {
       const closing = attached;
       attached = undefined;
+      boundSession = undefined;
       await closing?.close();
     },
     async rebind(sessionId) {
-      await attached?.rebind(sessionId);
+      if (!attached) return;
+      await attached.rebind(sessionId);
+      boundSession = sessionId;
     },
     hold: () => attached?.socket.pauseMutations(),
     async close() {
       const closing = attached;
       attached = undefined;
+      boundSession = undefined;
       await closing?.close();
     },
   };

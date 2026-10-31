@@ -17,8 +17,8 @@ export type DirectRuntimeOptions = {
   readonly selection: ProfileSelection;
   readonly profileExplicit?: boolean;
   readonly canRun: (workspace: DirectRuntimeContext['workspace']) => boolean;
-  /** Fixed per mode. The workspace comes from each session's own authority. */
-  readonly surface: Omit<ToolSurfaceOptions, 'workspace'>;
+  /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
+  readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
   /** After any resumed selection is restored, so this reports what actually runs. */
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
@@ -106,7 +106,7 @@ export function createDirectRuntimes(
         throw new Error('resume conversation belongs to a different workspace');
       }
       const selection = { settings: sessionSettings(options, context), logger, sessionContext };
-      const surface = loadSurface(selection, { ...options.surface, workspace: context.workspace });
+      const surface = loadSurface(selection, { ...options.surface(context.id), workspace: context.workspace });
       const scope = scopeFor(context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(selection.settings.get('app.activeProfileId')));
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;

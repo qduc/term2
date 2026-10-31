@@ -95,11 +95,7 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
     conversationsDir,
     selection,
     ...(profileExplicit !== undefined ? { profileExplicit } : {}),
-    surface: {
-      interactive: true,
-      discordSend: bridge.discordSend,
-      isDiscordInputEnabled: bridge.isDiscordInputEnabled,
-    },
+    surface: (sessionId) => ({ interactive: true, ...bridge.outbound(sessionId) }),
     authority: createLocalAuthority((candidate) => candidate === root),
     hooks: { root, mode: 'interactive' },
   });

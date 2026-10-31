@@ -97,7 +97,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
   const app = await createDirectApplication({
     conversationsDir,
     selection,
-    surface: { autoApprove: false, interactive: true, allowUnsandboxed: false },
+    surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
     authority: createLocalAuthority((root) => {
       try {
         return fs.statSync(root).isDirectory();

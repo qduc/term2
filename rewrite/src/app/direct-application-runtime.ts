@@ -1,5 +1,6 @@
 /** Assembles one Session's runtime from the real tool surface. Runs no provider and no tool. */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { SessionRolloverRequest } from '../../../source/contracts/session-rollover.js';
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
@@ -37,7 +38,7 @@ export type DirectRuntimeOptions = {
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
   readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
   /** Runs inside the Session's command reservation, so this session admits nothing meanwhile. */
-  readonly rollover: (sessionId: string) => Promise<DirectCommandOutcome>;
+  readonly rollover: (sessionId: string, request?: SessionRolloverRequest) => Promise<DirectCommandOutcome>;
   /** After any resumed selection is restored, so this reports what actually runs. */
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
@@ -180,7 +181,7 @@ export function createDirectRuntimes(
           ...runPolicy(selection.settings, context.id, context.model),
           context: contextFactory,
           authorizeNested: createNestedAuthorizer(selection.settings, context.model, runtime.resolveNestedAuthority),
-          rollover: () => options.rollover(context.id),
+          rollover: (request?: SessionRolloverRequest) => options.rollover(context.id, request),
         },
         request: {
           ...request,

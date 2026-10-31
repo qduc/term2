@@ -8,12 +8,14 @@
  * connections cannot drop, and a fresh snapshot needs no reasoning about what
  * transient state a cursor covers.
  */
+import { randomUUID } from 'node:crypto';
 import { createDurableGoal, formatGoalStatus } from '../../../source/services/conversation/durable-goal.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import { isControlSocketName } from '../clients/control/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
+import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
 import type { BridgeStatus, TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
-import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/direct-wire.js';
+import type { WireCommand, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
 import type { DirectSessionTarget } from './direct-application-target.js';
 import type { DirectControlBridge } from './direct-launch-control.js';
@@ -36,17 +38,15 @@ export type DirectTuiCommandOptions = {
 
 const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
 
-async function send(
-  connection: TuiConnection,
-  command: WireCommand,
-): Promise<Exclude<WireCommandResult, { ok: false }>> {
-  const result = await connection.send(command);
-  if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
-  return result;
-}
+type Configuration = Extract<WireCommand, { type: 'configure' }>['configuration'];
 
-function configure(configuration: Extract<WireCommand, { type: 'configure' }>['configuration']): WireCommand {
-  return { type: 'configure', configuration };
+/**
+ * One typed command, one id, sent once. The notice names the id, because a pending
+ * or lost reply is read back with `/command-status`, never by sending it again.
+ */
+async function configure(connection: TuiConnection, configuration: Configuration): Promise<CommandResult> {
+  const command = { type: 'configure', commandId: randomUUID(), configuration } as const;
+  return { message: receiptNotice(await sendNativeCommand(connection, command)) };
 }
 
 function assistantTexts(snapshot: WireSnapshot): readonly string[] {
@@ -79,15 +79,12 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     const separator = reference?.indexOf('/') ?? -1;
     if (!reference || separator <= 0) throw new Error('Use /model <provider>/<model>.');
     const selected = { provider: reference.slice(0, separator), model: reference.slice(separator + 1) };
-    await send(connection, configure({ model: selected }));
-    return {};
+    return configure(connection, { model: selected });
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
     if (!value) throw new Error('Use /effort <level>.');
-    const reasoning = value as NonNullable<Parameters<typeof configure>[0]['reasoning']>;
-    await send(connection, configure({ reasoning }));
-    return {};
+    return configure(connection, { reasoning: value as NonNullable<Configuration['reasoning']> });
   };
 
   /** `/goal`, with the same arguments as today. A failed update is a message, not an error. */

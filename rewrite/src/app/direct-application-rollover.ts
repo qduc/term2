@@ -32,7 +32,7 @@ function veto(state: DirectSessionState): Refusal | undefined {
 export type DirectRolloverInput = {
   readonly sessionId: string;
   readonly state: DirectSessionState;
-  /** Absent for a client's `/rollover`, which has no handoff to deliver. */
+  /** The model's handoff. A client's `/rollover` has none, so its successor starts no turn. */
   readonly request?: SessionRolloverRequest;
   /** Writes the successor, keeping the source's workspace, model, owner and settings. */
   create(): Promise<DirectSession>;

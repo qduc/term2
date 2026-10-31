@@ -19,9 +19,9 @@ import { reduceWireEvent } from './direct-reducer.js';
 /** Accepts the exact committed helper vocabulary while shared Session capture wiring lands.
  * No operation is implemented by merely accepting this data type.
  */
-export type DirectProtocolUpdate = DirectSessionUpdate
+export type DirectProtocolUpdate = (DirectSessionUpdate
   | { readonly type: 'fact'; readonly position: number; readonly seq: number; readonly fact: DirectBackgroundFact | DirectQueueFact | DirectContextFact }
-  | { readonly type: 'transient'; readonly position: number; readonly event: DirectBackgroundProgress };
+  | { readonly type: 'transient'; readonly position: number; readonly event: DirectBackgroundProgress }) & { readonly at?: string };
 type FactUpdate = Extract<DirectProtocolUpdate, { type: 'fact' }>;
 export class DirectProjection {
   #state: WireSnapshot;
@@ -55,6 +55,7 @@ export class DirectProjection {
     } else {
       events = this.#fact(update);
     }
+    events = events.map(event => ({ ...event, occurredAt: update.type === 'fact' ? update.at ?? null : null }));
     for (const event of events) this.#state = reduceWireEvent(this.#state, event);
     if (update.type === 'fact') this.#state = { ...this.#state, seq: update.seq };
     return events;
@@ -78,7 +79,7 @@ export class DirectProjection {
       return events;
   }
   #event<K extends WireEventType>(type: K, payload: WireEventPayloads[K], seq: number | null, turnId: string | null): WireEvent {
-    return { sessionId: this.#state.sessionId, seq, turnId, type, payload } as WireEvent;
+    return { sessionId: this.#state.sessionId, seq, occurredAt: null, turnId, type, payload } as WireEvent;
   }
   #fact({ fact, seq }: FactUpdate): readonly WireEvent[] {
     const turnId = 'turnId' in fact ? fact.turnId : null;

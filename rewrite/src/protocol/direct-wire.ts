@@ -197,6 +197,8 @@ export type WireEventType = keyof WireEventPayloads;
 export type WireEvent = { [K in WireEventType]: {
   readonly sessionId: string;
   readonly seq: number | null;
+  /** Original accepted FactLine.at, null/absent for transient or unavailable metadata. */
+  readonly occurredAt?: string | null;
   readonly turnId: string | null;
   readonly type: K;
   readonly payload: WireEventPayloads[K];

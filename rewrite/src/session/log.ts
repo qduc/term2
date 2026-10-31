@@ -180,6 +180,41 @@ function validateFact(fact: Record<string, unknown>, where: string): void {
     fail('modelStep');
   }
   switch (fact['type']) {
+    case 'session_started': {
+      if ('binding' in fact) {
+        const binding = object(fact['binding'], 'binding');
+        text(binding['client'], 'binding.client');
+        text(binding['id'], 'binding.id');
+      }
+      break;
+    }
+    case 'turn_started': {
+      if (!('submission' in fact)) break;
+      const submission = object(fact['submission'], 'submission');
+      text(submission['clientRequestId'], 'submission.clientRequestId');
+      text(submission['messageId'], 'submission.messageId');
+      if ('origin' in submission) {
+        const origin = object(submission['origin'], 'submission.origin');
+        if (!['cli', 'tui', 'acp', 'control', 'discord', 'api'].includes(origin['kind'] as string)) {
+          fail('submission.origin.kind');
+        }
+        if ('id' in origin && typeof origin['id'] !== 'string') fail('submission.origin.id');
+      }
+      const input = fact['input'];
+      if (!Array.isArray(input)) fail('input');
+      // Correlation must identify this admission's user input, not an assistant,
+      // an earlier turn's message or metadata that only happens to reuse the ID.
+      if (
+        !(input as unknown[]).some((item) => {
+          if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
+          const record = item as Record<string, unknown>;
+          return record['type'] === 'user_message' && record['id'] === submission['messageId'];
+        })
+      ) {
+        fail('submission.messageId');
+      }
+      break;
+    }
     case 'item': {
       if ('executionId' in fact) {
         text(fact['executionId'], 'executionId');

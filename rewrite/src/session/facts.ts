@@ -6,7 +6,8 @@
  * input, and history replays exactly that.
  */
 
-import type { TurnId } from '../engine/index.js';
+import type { TurnId, ExecutionId, InteractionDecision, InteractionRequest, InteractionRequestId } from '../engine/index.js';
+import type { ToolResult } from '../tools/index.js';
 import type { Item, ModelError, ModelRef, ReasoningEffort, Usage } from '../model/index.js';
 
 export const LOG_FORMAT_VERSION = 1;
@@ -27,9 +28,13 @@ export type Fact =
   | SessionStartedFact
   | { readonly type: 'turn_started'; readonly turnId: TurnId; readonly input: readonly Item[] }
   /** Written but not fsynced. Replay turns unsuperseded deltas into an assistant message. */
-  | { readonly type: 'text_delta'; readonly turnId: TurnId; readonly delta: string }
-  | { readonly type: 'item'; readonly turnId: TurnId; readonly item: Item }
-  | { readonly type: 'usage'; readonly turnId: TurnId; readonly usage: Usage }
+  | { readonly type: 'text_delta'; readonly turnId: TurnId; readonly delta: string; readonly modelStep?: number }
+  | { readonly type: 'item'; readonly turnId: TurnId; readonly item: Item; readonly executionId?: ExecutionId; readonly modelStep?: number }
+  | { readonly type: 'tool_started'; readonly turnId: TurnId; readonly executionId: ExecutionId; readonly parentExecutionId?: ExecutionId; readonly callId: string; readonly toolName: string; readonly input: unknown }
+  | { readonly type: 'tool_finished'; readonly turnId: TurnId; readonly executionId: ExecutionId; readonly result: ToolResult }
+  | { readonly type: 'interaction_opened'; readonly turnId: TurnId; readonly request: InteractionRequest }
+  | { readonly type: 'interaction_closed'; readonly turnId: TurnId; readonly requestId: InteractionRequestId; readonly resolution: InteractionDecision | { readonly kind: 'cancelled' | 'interrupted' } }
+  | { readonly type: 'usage'; readonly turnId: TurnId; readonly usage: Usage; readonly modelStep?: number }
   | {
       readonly type: 'turn_ended';
       readonly turnId: TurnId;

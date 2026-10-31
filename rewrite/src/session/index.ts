@@ -133,3 +133,6 @@ export interface SessionStore {
   open(id: SessionId, expectedBinding?: SessionBinding): Promise<Session>;
   list(cursor?: string): Promise<{ readonly sessions: readonly SessionSummary[]; readonly nextCursor: string | null }>;
 }
+
+// New-path host contracts, deliberately distinct from the bridge Session above.
+export type { DirectAdmission, DirectBinding, DirectCancelTarget, DirectMessage, DirectOrigin, DirectSession, DirectSessionCapture, DirectSessionState, DirectSessionStore, DirectSessionUpdate, DirectSubmission, DirectToolDisplay } from './facade-types.js';

@@ -40,6 +40,25 @@ export type NestedRunRequest = {
 };
 export type NestedRunResult = { readonly items: readonly Item[]; readonly outcome: NestedRunOutcome };
 
+export type ExecutionId = string & { readonly __brand: 'ExecutionId' };
+export type InteractionRequestId = string & { readonly __brand: 'InteractionRequestId' };
+export type InteractionDecision = (
+  | { readonly kind: 'allow' }
+  | { readonly kind: 'deny'; readonly reason?: string }
+  | { readonly kind: 'answer'; readonly answer: string }
+) & { readonly stopAfterApprovalResolution?: boolean };
+export type ToolInteractionRequest = {
+  readonly kind: 'approval' | 'question';
+  readonly toolName: string;
+  readonly input: unknown;
+  readonly sourceCallId?: string;
+  readonly summary: string;
+  readonly detail?: string;
+  readonly risk?: Risk;
+  /** Serializable tool-specific approval/question presentation, never live callbacks. */
+  readonly presentation?: Readonly<Record<string, unknown>>;
+};
+
 export type ToolContext = {
   /** Runs a subagent. The engine injects it, so tools never import engine/. */
   runNested(request: NestedRunRequest): Promise<NestedRunResult>;
@@ -48,6 +67,13 @@ export type ToolContext = {
   readonly signal: AbortSignal;
   /** Streams partial output (e.g. shell lines) while the tool runs. */
   progress(chunk: string): void;
+  /** Engine-owned gate for one physical scripted leaf; preserves its raw return value. */
+  executeChild?<T>(
+    descriptor: { readonly toolName: string; readonly input: unknown; readonly sourceCallId: string },
+    operation: () => Promise<T>,
+  ): Promise<T>;
+  /** Live tool interaction routed through the engine stream and durable Session answer. */
+  interact?(request: ToolInteractionRequest): Promise<InteractionDecision>;
 };
 
 export type Risk = 'low' | 'medium' | 'high';
@@ -68,6 +94,7 @@ export type ToolResult = {
 
 export interface Tool<Input = unknown> {
   readonly spec: ToolSpec;
+  readonly parallelSafe?: boolean | ((input: Input, ctx: ToolContext) => boolean | Promise<boolean>);
   /** Throws on invalid input; the engine reports that to the model as a tool error. */
   parse(raw: unknown): Input;
   /** Decides before execution. Pure: no side effects. */

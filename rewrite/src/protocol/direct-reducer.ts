@@ -89,6 +89,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...(state.activeTurnId ? { status: awaiting ? 'awaiting_interaction' : 'running' } : {}),
       };
     }
+    case 'request_cost_recorded': return { ...state, requestCosts: [...(state.requestCosts ?? []).filter(cost => cost.record.requestId !== event.payload.record.requestId), event.payload] };
     case 'budget_opened': return { ...state,
       pendingBudgets: [...(state.pendingBudgets ?? []).filter(request => request.requestId !== event.payload.request.requestId), event.payload.request],
     };

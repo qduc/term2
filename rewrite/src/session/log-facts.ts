@@ -6,6 +6,24 @@ import {
   directContentSchema,
 } from './direct-queue-decode.js';
 import { isDirectContextFactType, parseDirectContextFact } from './direct-context.js';
+import { isDirectCommandFactType, parseDirectCommandFact } from './direct-command-receipts.js';
+import { isDirectNotificationFactType, parseDirectNotificationFact } from './direct-notifications.js';
+
+function validateRequestConfiguration(value: unknown, fail: (field: string) => never): void {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) fail('requestConfiguration');
+  const configuration = value as Record<string, unknown>;
+  const allowed = new Set(['provider', 'model', 'reasoningEffort', 'mode']);
+  if (Object.keys(configuration).some((key) => !allowed.has(key))) fail('requestConfiguration');
+  const text = (field: 'provider' | 'model' | 'mode'): void => {
+    if (typeof configuration[field] !== 'string' || configuration[field] === '') fail(`requestConfiguration.${field}`);
+  };
+  text('provider');
+  text('model');
+  text('mode');
+  const effort = configuration['reasoningEffort'];
+  if (effort !== null && (typeof effort !== 'string' || effort.length === 0))
+    fail('requestConfiguration.reasoningEffort');
+}
 
 const nativeTypes = new Set([
   'session_started',
@@ -36,18 +54,33 @@ const nativeTypes = new Set([
 
 /** Unknown vocabulary still fails instead of disappearing during replay. */
 export function isKnownDirectFactType(type: string): boolean {
-  return nativeTypes.has(type) || isDirectQueueFactType(type) || isDirectContextFactType(type);
+  return (
+    nativeTypes.has(type) ||
+    isDirectQueueFactType(type) ||
+    isDirectContextFactType(type) ||
+    isDirectCommandFactType(type) ||
+    isDirectNotificationFactType(type)
+  );
 }
 
 /** Validate additive direct facts without changing the v1 envelope or M1 payload rules. */
 export function validateFact(fact: Record<string, unknown>, where: string): void {
   const type = String(fact['type']);
   if (isDirectQueueFactType(type)) {
+    // The parser returns the original fact, so queue_settled.preservePendingSteers survives.
     parseDirectQueueFact(fact);
     return;
   }
   if (isDirectContextFactType(type)) {
     parseDirectContextFact(fact);
+    return;
+  }
+  if (isDirectCommandFactType(type)) {
+    parseDirectCommandFact(fact);
+    return;
+  }
+  if (isDirectNotificationFactType(type)) {
+    parseDirectNotificationFact(fact);
     return;
   }
   const fail = (field: string): never => {
@@ -118,6 +151,23 @@ export function validateFact(fact: Record<string, unknown>, where: string): void
       break;
     }
     case 'turn_started': {
+      if ('requestConfiguration' in fact) validateRequestConfiguration(fact['requestConfiguration'], fail);
+      const silent = 'silent' in fact;
+      if (silent && fact['silent'] !== true) fail('silent');
+      if ('retryContext' in fact) {
+        const retryContext = object(fact['retryContext'], 'retryContext');
+        const keys = Object.keys(retryContext);
+        if (keys.length !== 2 || !keys.includes('sourceTurnId') || !keys.includes('throughItemId'))
+          fail('retryContext');
+        text(retryContext['sourceTurnId'], 'retryContext.sourceTurnId');
+        text(retryContext['throughItemId'], 'retryContext.throughItemId');
+        if (silent) fail('silent');
+        if ('submission' in fact) fail('submission');
+        if (!Array.isArray(fact['input']) || fact['input'].length !== 0) fail('input');
+      } else if (silent) {
+        if ('submission' in fact) fail('submission');
+        if (!Array.isArray(fact['input']) || fact['input'].length === 0) fail('input');
+      }
       if (!('submission' in fact)) break;
       const submission = object(fact['submission'], 'submission');
       text(submission['clientRequestId'], 'submission.clientRequestId');

@@ -17,6 +17,13 @@ import { projectDirectBackground } from './direct-background-replay.js';
 import type { DirectBackgroundFact, DirectTaskState } from './direct-background-types.js';
 import type { DirectQueueState } from './direct-queue-types.js';
 import type { Fact, TurnOutcomeName, DirectTurnFact } from './facts.js';
+import { isDirectCommandFactType, reduceDirectCommandReceipts } from './direct-command-receipts.js';
+import type { DirectCommandReceipts } from './direct-command-types.js';
+import {
+  isDirectNotificationFactType,
+  reduceDirectNotifications,
+  type DirectNotificationState,
+} from './direct-notifications.js';
 
 export type ReplayOptions = {
   /** False for live history/root settlement; only explicit reopen recovers/pauses the queue. */
@@ -37,6 +44,10 @@ export type ReplayedConversation = NativeReplayedConversation & {
   readonly context: DirectContextState;
   /** Accepted audit state only; explicit task recovery uses a caller-supplied clock. */
   readonly background: readonly DirectTaskState[];
+  /** Accepted receipts only. Session's recoverDirectCommands is the sole pending-command writer. */
+  readonly commands: DirectCommandReceipts;
+  /** Accepted notices only. A drain admission is the sole delivery writer. */
+  readonly notifications: DirectNotificationState;
   readonly branches: readonly ReplayedBranch[];
   readonly compactionState?: {
     readonly rearmAtEstimatedTokens?: number;
@@ -104,6 +115,12 @@ function replayProjection(
   let context = initialDirectContextState();
   const backgroundFacts: DirectBackgroundFact[] = [];
   const branches = new Map<string, BranchStream>();
+  let commandReceipts: DirectCommandReceipts = [];
+  let notifications: DirectNotificationState = { notices: [], deliveries: [] };
+  const noticeDeliveries = new Set<TurnId>();
+  const silentTurns = new Set<TurnId>();
+  const startedTurns = new Set<TurnId>();
+  let lastRootTurnId: TurnId | undefined;
   // Accounting outlives transcript replacements/terminals. Only ownership is immutable;
   // a later physical receipt may correct or enrich the same request's record.
   const requestCosts = new Map<string, RequestCost>();
@@ -168,6 +185,19 @@ function replayProjection(
   };
 
   const consume = (fact: Fact): void => {
+    if (isDirectCommandFactType(fact.type)) {
+      // Receipts are not provider history and are not recovered here.
+      commandReceipts = reduceDirectCommandReceipts(commandReceipts, fact);
+      return;
+    }
+    if (isDirectNotificationFactType(fact.type)) {
+      if (fact.type === 'background_notices_delivered' && startedTurns.has(fact.turnId)) {
+        throw new Error('replay: background notice delivery does not own its turn');
+      }
+      notifications = reduceDirectNotifications(notifications, fact);
+      if (fact.type === 'background_notices_delivered') noticeDeliveries.add(fact.turnId);
+      return;
+    }
     if (isDirectQueueFactType(fact.type)) {
       for (const item of queue.accept(fact, active?.turnId ?? null)) appendHuman(item);
       if (fact.type === 'queue_steered') context = { ...context, goalReminders: [] };
@@ -209,16 +239,42 @@ function replayProjection(
         if (active !== null) {
           throw new Error(`replay: turn ${fact.turnId} started while turn ${active.turnId} has no turn_ended`);
         }
+        if (fact.silent && fact.retryContext) throw new Error('replay: a turn cannot be both silent and a retry');
+        if (noticeDeliveries.has(fact.turnId) && !fact.silent) {
+          throw new Error('replay: background notice delivery is not a silent turn');
+        }
         lastOutcome = null;
-        let lastHuman: Slot | undefined;
-        for (const item of fact.input) {
-          const slot = appendHuman(item);
-          if (item.type === 'user_message') lastHuman = slot;
+        if (fact.retryContext) {
+          // Continuation reuses the replacement history. Do not readmit its source input or memory.
+          if (fact.submission || fact.input.length !== 0) throw new Error('replay: retry is not a new admission');
+          if (lastRootTurnId === undefined || fact.retryContext.sourceTurnId !== lastRootTurnId) {
+            throw new Error('replay: retry source is not the prior root turn');
+          }
+          const endpoint = slots.at(-1)?.item;
+          if (!endpoint || endpoint.id !== fact.retryContext.throughItemId) {
+            throw new Error('replay: retry endpoint is not the retained history endpoint');
+          }
+        } else if (fact.silent) {
+          if (fact.submission || !noticeDeliveries.has(fact.turnId)) {
+            throw new Error('replay: silent turn is not a delivered background notice');
+          }
+          if (fact.input.length === 0) throw new Error('replay: silent turn has no planning input');
+          // Planning input is provider context, not a human admission, so it does not anchor memory.
+          for (const item of fact.input) slots.push({ item });
+          silentTurns.add(fact.turnId);
+        } else {
+          let lastHuman: Slot | undefined;
+          for (const item of fact.input) {
+            const slot = appendHuman(item);
+            if (item.type === 'user_message') lastHuman = slot;
+          }
+          if (lastHuman) {
+            humanSlots.set(fact.turnId, lastHuman);
+            attachPersonal(fact.turnId);
+          }
         }
-        if (lastHuman) {
-          humanSlots.set(fact.turnId, lastHuman);
-          attachPersonal(fact.turnId);
-        }
+        startedTurns.add(fact.turnId);
+        lastRootTurnId = fact.turnId;
         active = {
           turnId: fact.turnId,
           partials: new Map(),
@@ -417,6 +473,9 @@ function replayProjection(
   if (options.recoverQueue !== false) {
     recoveryFacts.push(...queue.reconcileTerminal(), ...queue.pausePending());
   }
+  for (const turnId of noticeDeliveries) {
+    if (!silentTurns.has(turnId)) throw new Error('replay: background notice delivery has no silent turn');
+  }
   const background = projectDirectBackground(backgroundFacts);
   if (sessionId && background.some((task) => task.sessionId !== sessionId))
     throw new Error('replay: task belongs to a different Session');
@@ -453,6 +512,8 @@ function replayProjection(
     queue: queue.state,
     context,
     background,
+    commands: commandReceipts,
+    notifications,
     branches: branchViews,
     ...(compactionState ? { compactionState } : {}),
   };

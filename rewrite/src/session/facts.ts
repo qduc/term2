@@ -151,10 +151,9 @@ export type DirectBranchFact =
   | {
       readonly type: 'branch_event';
       readonly branchId: string;
-      readonly fact: Exclude<
-        DirectTurnFact,
-        { readonly type: 'turn_started' | 'interaction_opened' | 'interaction_closed' }
-      >;
+      readonly fact:
+        | Exclude<DirectTurnFact, { readonly type: 'turn_started' | 'interaction_opened' | 'interaction_closed' }>
+        | (DirectHistoryFact & { readonly turnId: TurnId });
     };
 
 export type Fact =

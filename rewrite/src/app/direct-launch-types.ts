@@ -17,6 +17,13 @@ export type DirectLaunchBase = {
   readonly profileExplicit?: boolean;
 };
 
+/** Null port means none was given, so SSH config decides. An explicit 22 still wins over it. */
+export type DirectSshRequest = {
+  readonly target: string;
+  readonly remoteDir: string | null;
+  readonly port: number | null;
+};
+
 /** A headless run. Output modes live here because only the host client reads them. */
 export type DirectHeadlessRequest = RunRequest & {
   readonly output?: 'plain' | 'json';
@@ -24,6 +31,9 @@ export type DirectHeadlessRequest = RunRequest & {
   readonly showReasoning?: boolean;
   /** Drops non-error event lines from stderr. */
   readonly quiet?: boolean;
+  readonly ssh?: DirectSshRequest;
+  /** Lets `ssh` omit `remoteDir`. */
+  readonly lite?: boolean;
 };
 
 /** `context_paused` and `blocked` are the resumable stops that exit 2. */
@@ -46,6 +56,7 @@ export type DirectLaunchRequest =
       /** Selects the home-directory confirmation, as the current CLI does. */
       readonly lite: boolean;
       readonly controlSocket?: DirectControlSocketRequest;
+      readonly ssh?: DirectSshRequest;
     })
   | (DirectLaunchBase & { readonly kind: 'acp'; readonly args: AcpArgs })
   | (DirectLaunchBase & { readonly kind: 'serve'; readonly args: ServeArgs })

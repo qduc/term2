@@ -14,6 +14,7 @@ import type { DirectConnection } from '../host/in-process-direct-types.js';
 import type { BridgeStatus, TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
+import type { DirectSessionTarget } from './direct-application-target.js';
 import type { DirectControlBridge } from './direct-launch-control.js';
 import { prepareRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
 
@@ -23,6 +24,7 @@ export type DirectTuiCommandOptions = {
   readonly app: DirectApplication;
   readonly root: string;
   readonly bridge: DirectControlBridge;
+  readonly remote?: DirectSessionTarget['restart'];
   /** The current session as this client last folded it. */
   readonly latest: () => WireSnapshot;
   /** Shows this connection. Control has already moved or closed, so the two never disagree. */
@@ -51,7 +53,7 @@ function assistantTexts(snapshot: WireSnapshot): readonly string[] {
 }
 
 export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIntegration {
-  const { app, root, bridge, latest, publish, restart } = options;
+  const { app, root, bridge, remote, latest, publish, restart } = options;
   const { host, principal } = app;
 
   const settingsOf = (sessionId: string) => {
@@ -150,7 +152,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'restart':
           if (argument === 'stop') throw new Error('/restart stop needs direct task cancel, which is not available yet.');
           if (argument) throw new Error('Usage: /restart');
-          restart(await prepareRestart(latest, app, bridge));
+          restart(await prepareRestart(latest, app, bridge, remote));
           return { exit: true };
         default:
           throw new Error(`/${name} is not available in the direct executable yet.`);

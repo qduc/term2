@@ -18,7 +18,7 @@ import {
 import { Tui, type TuiIntegration } from '../clients/tui/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
-import { createLocalAuthority, localGrant } from './direct-application-workspaces.js';
+import { openDirectSessionTarget, type DirectSessionTarget } from './direct-application-target.js';
 import { createDirectControlBridge, type DirectControlBridge } from './direct-launch-control.js';
 import { createDirectTuiCommands } from './direct-launch-tui-commands.js';
 import { performRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
@@ -26,9 +26,9 @@ import type { DirectLaunchRequest } from './direct-launch-types.js';
 
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
 
-async function confirmHomeStart(lite: boolean): Promise<boolean> {
-  const needed = shouldWarnOnHomeDirectoryStart({ cwd: process.cwd(), homeDir: homedir(), isNonLiteStart: !lite });
-  if (!needed) return true;
+async function confirmHomeStart({ lite, resumeId, ssh }: InteractiveRequest): Promise<boolean> {
+  const isNonLiteStart = !lite && resumeId === undefined && !ssh;
+  if (!shouldWarnOnHomeDirectoryStart({ cwd: process.cwd(), homeDir: homedir(), isNonLiteStart })) return true;
   const readline = createInterface({ input: stdin, output: stdout });
   try {
     const confirmed = await confirmHomeDirectoryStart(() => readline.question(HOME_DIRECTORY_START_WARNING));
@@ -42,6 +42,7 @@ async function confirmHomeStart(lite: boolean): Promise<boolean> {
 function DirectTui({
   app,
   root,
+  remote,
   initial,
   bridge,
   restart,
@@ -49,6 +50,7 @@ function DirectTui({
 }: {
   readonly app: DirectApplication;
   readonly root: string;
+  readonly remote: DirectSessionTarget['restart'];
   readonly initial: DirectConnection;
   readonly bridge: DirectControlBridge;
   readonly restart: (plan: DirectRestartPlan) => void;
@@ -63,6 +65,7 @@ function DirectTui({
         app,
         root,
         bridge,
+        remote,
         restart,
         latest: () => latest.current,
         publish(next) {
@@ -70,7 +73,7 @@ function DirectTui({
           setConnection(next);
         },
       }),
-    [app, root, bridge, restart],
+    [app, root, remote, bridge, restart],
   );
   return (
     <Tui
@@ -84,22 +87,22 @@ function DirectTui({
   );
 }
 
-export async function launchTui(request: InteractiveRequest): Promise<number> {
-  if (!(await confirmHomeStart(request.lite))) return 1;
+type Restart = { plan?: DirectRestartPlan };
 
+async function runTui(request: InteractiveRequest, target: DirectSessionTarget, pending: Restart): Promise<number> {
   const { conversationsDir, selection, resumeId, profileExplicit, controlSocket } = request;
   const { settings } = selection;
-  const root = fs.realpathSync(process.cwd());
+  const { root } = target;
   const bridge = createDirectControlBridge(() => ({ app, root }));
   const app = await createDirectApplication({
     conversationsDir,
     selection,
     ...(profileExplicit !== undefined ? { profileExplicit } : {}),
-    surface: (sessionId) => ({ interactive: true, ...bridge.outbound(sessionId) }),
-    authority: createLocalAuthority((candidate) => candidate === root),
-    hooks: { root, mode: 'interactive' },
+    surface: (sessionId) => ({ interactive: true, ...bridge.outbound(sessionId), ...target.surface }),
+    authority: target.authority,
+    ...(target.binding ? { sessionBinding: target.binding } : {}),
+    hooks: { root: fs.realpathSync(process.cwd()), mode: 'interactive' },
   });
-  let restartPlan: DirectRestartPlan | null = null;
   let unmount: (() => void) | null = null;
   let exitCode = 0;
   // Ink leaves Ctrl+C to the composer, so an outside signal is the only other way out.
@@ -113,7 +116,7 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
   try {
     const initial =
       resumeId === undefined
-        ? await app.host.createSession(app.principal, localGrant(root))
+        ? await app.host.createSession(app.principal, target.grant)
         : await app.host.connect(app.principal, resumeId);
 
     // Ask before Ink takes stdin: the terminal's reply arrives as input.
@@ -130,10 +133,11 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
             <DirectTui
               app={app}
               root={root}
+              remote={target.restart}
               initial={initial}
               bridge={bridge}
               restart={(plan) => {
-                restartPlan = plan;
+                pending.plan = plan;
               }}
               onExit={() => instance.unmount()}
             />
@@ -150,6 +154,20 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
     process.removeListener('SIGTERM', onSignal);
     await bridge.close();
     await app.close();
-    if (restartPlan) performRestart(restartPlan);
   }
+}
+
+export async function launchTui(request: InteractiveRequest): Promise<number> {
+  if (!(await confirmHomeStart(request))) return 1;
+  // A signal during setup exits the process, so nothing outlives this signal.
+  const target = await openDirectSessionTarget(request.ssh, request.lite, new AbortController().signal);
+  const pending: Restart = {};
+  let exitCode: number;
+  try {
+    exitCode = await runTui(request, target, pending);
+  } finally {
+    await target.close();
+  }
+  if (pending.plan) performRestart(pending.plan);
+  return exitCode;
 }

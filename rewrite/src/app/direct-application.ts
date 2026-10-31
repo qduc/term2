@@ -92,16 +92,19 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     await runtimes.get(session.id)?.hooks?.observe(session);
     return session;
   };
+  const { sessionBinding } = options;
+  const sessions: DirectLocalStore = {
+    ...store,
+    create: async (workspace, model, binding = sessionBinding) =>
+      observed(await store.create(workspace, model, binding)),
+    open: async (id, binding = sessionBinding) => observed(await store.open(id, binding)),
+  };
   const host = createDirectInProcessHost({
-    sessions: {
-      ...store,
-      create: async (...request) => observed(await store.create(...request)),
-      open: async (...request) => observed(await store.open(...request)),
-    },
+    sessions,
     defaultModel: selection.settings.get('agent.modelSelection') as ModelRef,
     authorize: (principal, access) => authority.authorize(principal, access),
     resolveWorkspace: (principal, grant) => authority.resolveGrant(principal, grant),
-    capabilities: (session) => applicationCapabilities(store, session),
+    capabilities: (session) => applicationCapabilities(sessions, session),
   });
   return {
     host,

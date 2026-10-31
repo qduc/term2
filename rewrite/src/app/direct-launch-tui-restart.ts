@@ -25,7 +25,14 @@ function assertIdle(snapshot: WireSnapshot): void {
   }
 }
 
-function plan(snapshot: WireSnapshot, app: DirectApplication, bridge: DirectControlBridge): DirectRestartPlan {
+type RestartTarget = Parameters<typeof createRestartPlan>[0]['ssh'];
+
+function plan(
+  snapshot: WireSnapshot,
+  app: DirectApplication,
+  bridge: DirectControlBridge,
+  ssh: RestartTarget,
+): DirectRestartPlan {
   const { settings, profileId } = app.sessionDetails(snapshot.sessionId);
   if (!settings || !profileId) throw new Error('This session has no live runtime to restart.');
   const server = bridge.server;
@@ -37,6 +44,7 @@ function plan(snapshot: WireSnapshot, app: DirectApplication, bridge: DirectCont
     profile: profileId,
     approval: String(settings.get('shell.autoApproveMode')),
     sandbox: settings.get('sandbox.enabled') === true,
+    ...(ssh ? { ssh } : {}),
     ...(server ? { control: { name: server.name, discordInput: server.discordInputEnabled } } : {}),
   });
 }
@@ -50,6 +58,7 @@ export async function prepareRestart(
   latest: () => WireSnapshot,
   app: DirectApplication,
   bridge: DirectControlBridge,
+  ssh: RestartTarget,
 ): Promise<DirectRestartPlan> {
   assertSupported();
   assertIdle(latest());
@@ -57,7 +66,7 @@ export async function prepareRestart(
   try {
     await hold?.drained;
     assertIdle(latest());
-    return plan(latest(), app, bridge);
+    return plan(latest(), app, bridge, ssh);
   } catch (error) {
     hold?.release();
     throw error;

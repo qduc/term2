@@ -3,6 +3,7 @@ import { installationVersion } from '../../../source/providers/fetch/logging-mid
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import { createProviderRegistry } from '../model/provider.js';
+import type { DirectBinding } from '../session/facade-types.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
@@ -23,6 +24,8 @@ export type DirectRuntimeOptions = {
    * preference must not reach these sessions.
    */
   readonly approvalAlwaysAsks?: boolean;
+  /** Stamped on every session this application creates, and required of every one it opens. */
+  readonly sessionBinding?: DirectBinding;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
   readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
   /** After any resumed selection is restored, so this reports what actually runs. */
@@ -84,7 +87,8 @@ function verificationOperations(
   models: DirectConversationRuntime['deps']['models'],
   { model, workspace }: DirectRuntimeContext,
 ): DirectVerificationOperations | undefined {
-  if (settings.get('agent.completionVerification') === false) return undefined;
+  // The verifier reads local git state only. Without it the stop policy blocks visibly.
+  if (settings.get('agent.completionVerification') === false || workspace.target !== 'local') return undefined;
   const configured = settings.get('verifier.model');
   return createDirectVerificationOperations({
     models,
@@ -111,6 +115,10 @@ export function createDirectRuntimes(
       // rather than refusing it. Running it would act outside this mode's admission.
       if (context.metadata && !options.canRun(context.workspace)) {
         throw new Error('resume conversation belongs to a different workspace');
+      }
+      // The store checks a binding that was asked for. A plain local run asks for none, so this catches it.
+      if (context.binding?.client === 'ssh' && context.binding.id !== options.sessionBinding?.id) {
+        throw new Error('resume conversation belongs to a different SSH workspace');
       }
       const selection = { settings: sessionSettings(options, context), logger, sessionContext };
       const surface = loadSurface(selection, { ...options.surface(context.id), workspace: context.workspace });

@@ -26,6 +26,10 @@ export function localGrant(root: string): WorkspaceGrant {
   return { workspaceId: root, access: 'read_write' };
 }
 
+export function requireLocalCaller(principal: Principal): void {
+  if (principal.via !== 'local') throw new DirectProtocolError('forbidden', 'This host accepts local callers only.');
+}
+
 /** Local modes: the one local user, and only the roots the mode admits are writable. */
 export function createLocalAuthority(admits: (root: string) => boolean): DirectAuthority {
   const workspace = (root: string): Workspace => ({
@@ -33,13 +37,10 @@ export function createLocalAuthority(admits: (root: string) => boolean): DirectA
     target: 'local',
     access: admits(root) ? 'read_write' : 'read',
   });
-  const requireLocal = (principal: Principal): void => {
-    if (principal.via !== 'local') throw new DirectProtocolError('forbidden', 'This host accepts local callers only.');
-  };
   return {
-    authorize: requireLocal,
+    authorize: requireLocalCaller,
     resolveGrant(principal, grant) {
-      requireLocal(principal);
+      requireLocalCaller(principal);
       const root = fs.realpathSync(grant.workspaceId);
       const resolved = workspace(root);
       if (resolved.access !== grant.access) {

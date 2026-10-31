@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { TuiConnection } from './integration.js';
 import type { WireCommandResult, WireContent, WireDecision, WireSubmission } from '../../protocol/direct-wire.js';
 
+export class WireCommandFailure extends Error {
+  constructor(readonly code: string, message: string) { super(message); }
+}
 function requireAccepted(result: WireCommandResult): void {
-  if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+  if (!result.ok) throw new WireCommandFailure(result.code, result.message);
   if (result.kind !== 'accepted') throw new Error(`Unexpected command response: ${result.kind}`);
 }
 
@@ -40,7 +43,7 @@ export async function directSlashCommand(connection: TuiConnection, input: strin
 export async function queueAction(connection: TuiConnection, action: 'edit' | 'retract' | 'resume' | 'discard', messageId?: string, text?: string, attachments?: readonly WireContent[]): Promise<void> {
   switch (action) {
     case 'edit':
-      if (!messageId || !text?.trim()) throw new Error('A queued message and replacement text are required.');
+      if (!messageId || text === undefined) throw new Error('A queued message and replacement text are required.');
       requireAccepted(await connection.send({ type: 'queue_edit', messageId, text, ...(attachments !== undefined ? { attachments } : {}) })); return;
     case 'retract':
       if (!messageId) throw new Error('Select a queued message.');
@@ -48,4 +51,28 @@ export async function queueAction(connection: TuiConnection, action: 'edit' | 'r
     case 'resume': requireAccepted(await connection.send({ type: 'queue_resume' })); return;
     case 'discard': requireAccepted(await connection.send({ type: 'queue_discard' })); return;
   }
+}
+
+/** Query the real rewind targets; unavailable or malformed replies are errors. */
+export async function listRewindTargets(connection: TuiConnection) {
+  const result = await connection.send({ type: 'list_rewind_targets' });
+  if (!result.ok) throw new WireCommandFailure(result.code, result.message);
+  if (result.kind !== 'rewind_targets') throw new Error(`Unexpected rewind targets response: ${result.kind}`);
+  return result.targets;
+}
+
+/** Rewind to the chosen stable ID and return the Session-owned editable draft. */
+export async function rewindTo(connection: TuiConnection, targetId: string) {
+  const result = await connection.send({ type: 'rewind', targetId });
+  if (!result.ok) throw new WireCommandFailure(result.code, result.message);
+  if (result.kind !== 'rewound') throw new Error(`Unexpected rewind response: ${result.kind}`);
+  return result.draft;
+}
+
+/** Change direct session; the app must attach the returned ID. */
+export async function changeSession(connection: TuiConnection, type: 'reset' | 'rollover'): Promise<string> {
+  const result = await connection.send({ type });
+  if (!result.ok) throw new WireCommandFailure(result.code, result.message);
+  if (result.kind !== 'session_changed') throw new Error(`Unexpected session response: ${result.kind}`);
+  return result.sessionId;
 }

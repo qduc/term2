@@ -2,17 +2,19 @@ import React, { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiConnection } from './integration.js';
-import type { WireDecision, WireSnapshot, WireSubmission } from '../../protocol/direct-wire.js';
+import type { WireContent, WireDecision, WireRewindTarget, WireSnapshot, WireSubmission } from '../../protocol/direct-wire.js';
 import { useTheme } from '../../../../source/components/theme.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
 import type { TuiIntegration } from './integration.js';
 import { useClient } from './use-client.js';
 import { Activity } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
+import { RewindPicker } from './rewind-picker.js';
+import { restoreAttachments, wireAttachments, wireImages } from './draft.js';
 import { useEditor } from './editor.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
-import { answerInteraction, cancelForeground, directSlashCommand, queueAction, submitText } from './commands.js';
+import { answerInteraction, cancelForeground, changeSession, directSlashCommand, listRewindTargets, queueAction, rewindTo, submitText, WireCommandFailure } from './commands.js';
 
 export type { TuiIntegration } from './integration.js';
 export type { TuiState, ViewUpdate, Message, ToolView, InteractionView, QueueItem, TaskView } from './state.js';
@@ -47,7 +49,11 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [images, setImages] = useState<ImageRef[]>([]);
-  const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen);
+  const [otherParts, setOtherParts] = useState<readonly WireContent[]>([]);
+  const [originalParts, setOriginalParts] = useState<readonly WireContent[]>([]);
+  const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
+  const [editing, setEditing] = useState<{ id: string; restoreText: string; restoreImages: ImageRef[]; restoreOther: readonly WireContent[]; restoreOriginal: readonly WireContent[] } | null>(null);
+  const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen && !rewindTargets);
   const editor = useEditor(state.messages.filter(message => message.role === 'user').map(message => message.text));
   const { InputFrame, PromptMarker, Hints } = useSkin();
   const theme = useTheme();
@@ -58,8 +64,8 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const queueOwners = useRef<readonly string[] | null>(null);
   useInput((input, key) => {
     if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
-    if (key.meta && key.return && state.activeTurnId && !busy) void submit(editor.value, images, 'follow_up');
-  }, { isActive: !interactionOpen });
+    if (key.meta && key.return && state.activeTurnId && !busy && !editing) void submit(editor.value, images, 'follow_up');
+  }, { isActive: !interactionOpen && !rewindTargets });
 
   const changeInput = (value: string) => {
     if (/^\/answer(?:\s|$)/.test(value)) {
@@ -75,12 +81,47 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     editor.change(value);
   };
 
+  const restoreDraft = (draft: { readonly text: string; readonly attachments: readonly WireContent[] }) => {
+    const restored = restoreAttachments(draft.attachments);
+    editor.change(draft.text); setImages(restored.images); setOtherParts(restored.other); setOriginalParts(draft.attachments);
+  };
+  const executeRewind = async (targetId: string, disposition: 'edit' | 'resend') => {
+    if (pending.current) return;
+    pending.current = true; setBusy(true); setNotice(null); setRewindTargets(null);
+    try {
+      const draft = await rewindTo(connection, targetId);
+      if (!draft) { setNotice('Nothing to rewind.'); return; }
+      restoreDraft(draft);
+      if (disposition === 'resend') {
+        await submitText(connection, draft.text, draft.attachments, 'auto');
+        editor.change(''); setImages([]); setOtherParts([]); setOriginalParts([]);
+      }
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { pending.current = false; setBusy(false); }
+  };
+
   const submit = async (input: string, submittedImages: ImageRef[] = images, delivery: WireSubmission['delivery'] = state.activeTurnId ? 'steer' : 'auto'): Promise<void> => {
-    if ((!input.trim() && !submittedImages.length) || pending.current) return;
+    if ((!input.trim() && !submittedImages.length && !otherParts.length && !editing) || pending.current) return;
     pending.current = true;
     setBusy(true);
     setNotice(null);
     try {
+      if (editing) {
+        if (input.trim() === '/queue cancel') {
+          editor.change(editing.restoreText); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null); return;
+        }
+        try {
+          await queueAction(connection, 'edit', editing.id, input, submittedImages.length ? wireImages(submittedImages, originalParts) : undefined);
+          editor.change(editing.restoreText); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null);
+          setNotice('Queued message updated.'); return;
+        } catch (error) {
+          if (error instanceof WireCommandFailure && error.code === 'too_late') {
+            setEditing(null);
+            setNotice('Already sent. Your edited text is preserved; original queued attachments are unavailable here. Review before resubmitting.'); return;
+          }
+          throw error;
+        }
+      }
       if (input.startsWith('/') && !/^\/(steer|followup)\s/.test(input) && submittedImages.length) throw new Error('Remove attachments before running a command.');
       if (input.startsWith('/answer ')) {
         const match = /^\/answer\s+(\d+)\s+(\d+)(?:\s+([\s\S]*))?$/.exec(input.trim());
@@ -109,30 +150,70 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
       } else if (/^\/(steer|followup)(?:\s|$)/.test(input)) {
         const match = /^\/(steer|followup)\s+([\s\S]*)$/.exec(input);
         if (!match || (!match[2].trim() && !submittedImages.length)) throw new Error('Enter a message after /steer or /followup.');
-        await submitText(connection, match[2], submittedImages.map(image => ({ type: 'image' as const, mediaType: image.mimeType, data: image.data })), match[1] === 'steer' ? 'steer' : 'follow_up');
-        setImages([]);
+        await submitText(connection, match[2], wireAttachments(submittedImages, otherParts, originalParts), match[1] === 'steer' ? 'steer' : 'follow_up');
+        setImages([]); setOtherParts([]); setOriginalParts([]);
+      } else if (/^\/rewind(?:\s|$)/.test(input)) {
+        const match = /^\/rewind(?:\s+(last|\d+))?(?:\s+(edit|resend))?$/.exec(input.trim());
+        if (!match) throw new Error('Use /rewind [last|number] [edit|resend].');
+        const targets = await listRewindTargets(connection);
+        if (!targets.length) throw new Error('Nothing to rewind.');
+        if (!match[1]) { setRewindTargets(targets); }
+        else {
+          const target = match[1] === 'last' ? targets.at(-1) : targets[Number(match[1]) - 1];
+          if (!target) throw new Error('No turn at that number.');
+          pending.current = false; setBusy(false);
+          await executeRewind(target.id, match[2] === 'resend' ? 'resend' : 'edit'); return;
+        }
+      } else if (/^\/bridge(?:\s|$)/.test(input)) {
+        const tokens = input.trim().split(/\s+/).slice(1);
+        const action = tokens[0] ?? 'status';
+        if (!integration.bridge) throw new Error('Runtime session attachment is unavailable in this app.');
+        if (!['status', 'connect', 'disconnect'].includes(action) || tokens.length > (action === 'connect' ? 2 : 1)) throw new Error('Usage: /bridge [status|connect [name]|disconnect]');
+        const name = tokens[1] ?? 'coord';
+        if (action === 'connect' && !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('Invalid bridge socket name. Use 1–64 letters, digits, _ or -.');
+        const status = action === 'connect' ? await integration.bridge.connect(name) : action === 'disconnect' ? await integration.bridge.disconnect() : await integration.bridge.status();
+        setNotice(status.attachment
+          ? `Session attached: ${status.attachment.name}; local control socket ${status.attachment.socketPath}; Discord input ${status.attachment.discordInputEnabled ? 'enabled' : 'disabled'} (Discord connectivity not verified); session ${status.sessionId}${status.startup ? '; startup socket' : ''}.`
+          : `Session not attached; session ${status.sessionId}. To enable remote input, use /bridge connect [name].`);
+      } else if (input.trim() === '/clear' || input.trim() === '/rollover') {
+        if (!integration.switchSession) throw new Error('Session switching is unavailable in this app.');
+        const sessionId = await changeSession(connection, input.trim() === '/clear' ? 'reset' : 'rollover');
+        try { await integration.switchSession(sessionId); }
+        catch (error) { throw new Error(`Session ${sessionId} was created but could not be attached: ${error instanceof Error ? error.message : String(error)}`); }
       } else if (/^\/queue(?:\s|$)/.test(input)) {
-        const match = /^\/queue\s+(resume|discard|retract|edit)(?:\s+(\d+))?(?:\s+([\s\S]*))?$/.exec(input.trim());
-        if (!match) throw new Error('Use /queue resume|discard|retract <number>|edit <number> <text>.');
-        const action = match[1] as 'resume' | 'discard' | 'retract' | 'edit';
+        const match = /^\/queue\s+(resume|discard|retract|edit|clear-images)(?:\s+(\d+))?(?:\s+([\s\S]*))?$/.exec(input.trim());
+        if (!match) throw new Error('Use /queue resume|discard|retract <number>|edit <number> [text]|clear-images <number>.');
+        const action = match[1] as 'resume' | 'discard' | 'retract' | 'edit' | 'clear-images';
         const item = match[2] ? state.queue[Number(match[2]) - 1] : undefined;
-        if ((action === 'edit' || action === 'retract') && !item) throw new Error('No queued message at that number.');
+        if ((action === 'edit' || action === 'retract' || action === 'clear-images') && !item) throw new Error('No queued message at that number.');
         if (item && queueOwners.current && queueOwners.current[Number(match[2]) - 1] !== item.id) {
           throw new Error('The queue changed. Check the list and re-enter your command.');
         }
         if ((action === 'resume' || action === 'discard') && match[2]) throw new Error('This operation takes no message number.');
-        await queueAction(connection, action, item?.id, match[3]);
+        if (action === 'clear-images') {
+          if (!item || match[3] !== undefined) throw new Error('Use /queue clear-images <number>.');
+          await queueAction(connection, 'edit', item.id, item.text, []);
+        } else if (action === 'edit' && item && match[3] === undefined) {
+          setEditing({ id: item.id, restoreText: '', restoreImages: images, restoreOther: otherParts, restoreOriginal: originalParts });
+          editor.change(item.text); setImages([]); setOtherParts([]); setOriginalParts([]);
+          setNotice('Editing queued text. Existing attachments will be retained unless you paste replacements. /queue cancel restores your draft.'); return;
+        } else await queueAction(connection, action, item?.id, match[3]);
       } else if (input.trim() === '/cancel') {
         await cancelForeground(connection);
       } else if (input.startsWith('/')) {
         if (!await directSlashCommand(connection, input)) {
           const result = await integration.command(connection, input);
           if (result.message) setNotice(result.message);
+          if (result.draft) { restoreDraft(result.draft); return; }
+          if (result.sessionId) {
+            if (!integration.switchSession) throw new Error(`Session ${result.sessionId} needs an app session switch.`);
+            await integration.switchSession(result.sessionId);
+          }
           if (result.exit) onExit();
         }
       } else {
-        await submitText(connection, input, submittedImages.map(image => ({ type: 'image' as const, mediaType: image.mimeType, data: image.data })), delivery);
-        setImages([]);
+        await submitText(connection, input, wireAttachments(submittedImages, otherParts, originalParts), delivery);
+        setImages([]); setOtherParts([]); setOriginalParts([]);
       }
       // Do not add interaction answers to recallable input history.
       editor.accepted(input, !input.startsWith('/answer '));
@@ -151,6 +232,8 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     {viewport.total > 0 && (viewport.start > 0 || !viewport.live) ?
       <Text color={theme.textSubtle}>Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓</Text> : null}
     <Activity state={state} />
+    {rewindTargets ? <RewindPicker targets={rewindTargets} onClose={() => setRewindTargets(null)} onSelect={(id, disposition) => { void executeRewind(id, disposition); }} /> : null}
+    {editing ? <Text>Editing queued message · Enter saves · /queue cancel restores draft</Text> : null}
     {interactionOpen ? <InteractionPanel interactions={state.interactions} width={columns} onClose={() => setInteractionOpen(false)}
       onAnswer={(id, decision) => answerInteraction(connection, id, decision)} /> : null}
     {connectionError ? <Text color={theme.danger}>{connectionError}</Text> : null}
@@ -166,7 +249,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         onBoundaryArrow={editor.navigate}
         width={Math.max(1, columns - 4)}
         maxHeight={Math.max(1, rows - 8)}
-        isActive={!busy && !connectionError && !interactionOpen}
+        isActive={!busy && !connectionError && !interactionOpen && !rewindTargets}
         images={images}
         onImagesChange={setImages}
         enableImagePaste

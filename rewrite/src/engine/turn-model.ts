@@ -1,9 +1,9 @@
 /** The sole direct model boundary: preparation, recovery and accepted continuity. */
 import type { Item, ItemId, Model, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
-import type { TurnDeps, TurnSpec } from './direct-types.js';
+import type { DirectManualCompactionOutcome, TurnDeps, TurnSpec } from './direct-types.js';
 import { DirectRecovery, type DirectRecoveryDecision, type DirectRecoveryFailure } from './direct-recovery.js';
 import { DirectContinuity, selfContained } from './direct-recovery-continuity.js';
-import { compactDirectHistory } from './direct-recovery-compaction.js';
+import { compactDirectHistory, type DirectCompactionResult } from './direct-recovery-compaction.js';
 import { hasCompleteDirectToolPairs } from './direct-recovery-history.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
@@ -24,6 +24,7 @@ export class TurnModel {
   #lastInputTokens: number | undefined;
   #standardTier = false;
   #downgraded = false;
+  #auxiliaryRetry: Retry | undefined;
 
   constructor(
     readonly spec: TurnSpec,
@@ -91,6 +92,42 @@ export class TurnModel {
         // recovery envelope or inventing a shorter permitted retry delay.
         if (remaining !== undefined && retry.delayMs >= remaining) throw error;
         await delay(retry.delayMs, this.signal);
+      }
+    }
+  }
+
+  /** Run only the explicit compaction operation; summaries never become root assistant Items. */
+  async compact(history: Item[]): Promise<DirectManualCompactionOutcome> {
+    if (!this.deps.compaction) return { kind: 'blocked', reason: 'unavailable' };
+    while (true) {
+      try {
+        const surface = await this.#request(history, this.#step + 1);
+        const result = await this.#compact(surface.request, history, true);
+        if (result?.kind === 'compacted') return { kind: 'compacted' };
+        return { kind: 'blocked', reason: result?.kind === 'blocked' ? result.reason : result?.kind ?? 'unavailable' };
+      } catch (error) {
+        if (this.signal.aborted) throw cancelled();
+        if (error instanceof NativeBudgetExhausted) throw error;
+        // Auxiliary summary text is private proposal data, not committed root
+        // output or a tool effect. Retrying it cannot replay accepted tools.
+        const pairs = hasCompleteDirectToolPairs(history);
+        const decision = this.#recovery.recover({
+          failure: recoveryFailure(error),
+          cancelled: false,
+          fullHistoryAvailable: pairs,
+          freshStartAllowed: pairs,
+          hasCommittedOutput: false,
+          hasCurrentRequestOutput: false,
+          tools: { completed: 0, allCompleted: true, completedPairsInHistory: pairs },
+        });
+        if (decision.kind === 'stop') throw error;
+        this.#auxiliaryRetry = decision;
+        this.#standardTier ||= decision.useStandardServiceTier;
+        this.#downgraded ||= decision.downgradeTransport;
+        if (decision.downgradeTransport) this.#continuity.breakChaining();
+        const remaining = this.#recovery.budget.remainingMs();
+        if (remaining !== undefined && decision.delayMs >= remaining) throw error;
+        await delay(decision.delayMs, this.signal);
       }
     }
   }
@@ -182,7 +219,7 @@ export class TurnModel {
       throw new NativeBudgetExhausted('Native child model-call budget exhausted');
   }
 
-  async #compact(request: ModelRequest, history: Item[]): Promise<void> {
+  async #compact(request: ModelRequest, history: Item[], manual = false): Promise<DirectCompactionResult | undefined> {
     if (!this.deps.compaction) return;
     const sourceLength = history.length;
     const model = this.deps.models.resolve(request.model);
@@ -229,6 +266,7 @@ export class TurnModel {
         signal: this.signal,
         ...this.#compactionState,
         lastCompletedInputTokens: this.#lastInputTokens,
+        ...(manual ? { manual: true } : {}),
       });
     } catch (error) {
       // A child critical boundary needs a root tools-disabled final response,
@@ -236,7 +274,7 @@ export class TurnModel {
       if (error instanceof CompactionWrapUp) return;
       throw error;
     }
-    if (result.kind !== 'compacted') return;
+    if (result.kind !== 'compacted') return result;
     // Steering admitted during summaries is newer than the frozen compact input.
     const replacement = [...result.history, ...history.slice(sourceLength)];
     await this.events.publish({

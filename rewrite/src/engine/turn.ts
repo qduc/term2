@@ -11,6 +11,16 @@ export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from './direct-types
 
 /** Lazy, single-consumer model/tool/model run with per-event durable acceptance. */
 export function startTurn(spec: TurnSpec, deps: TurnDeps): TurnHandle {
+  return createTurn(spec, deps, 'conversation');
+}
+
+/** Compaction-only invocation through the same physical request, budget and acceptance boundary.
+ * No root assistant inference or tools are run; the accepted history replacement proves success. */
+export function startCompaction(spec: TurnSpec, deps: TurnDeps): TurnHandle {
+  return createTurn(spec, deps, 'compaction');
+}
+
+function createTurn(spec: TurnSpec, deps: TurnDeps, operation: 'conversation' | 'compaction'): TurnHandle {
   const controller = new AbortController();
   const channel = new TurnEvents();
   const budget = new TurnBudgetControl(spec, deps, channel, controller.signal);
@@ -25,9 +35,18 @@ export function startTurn(spec: TurnSpec, deps: TurnDeps): TurnHandle {
     budget.cancel();
   };
   const events = (async function* () {
-    const work = drive(spec, deps, controller, channel, tools, model, () => {
-      settled = true;
-    });
+    const work = drive(
+      spec,
+      deps,
+      controller,
+      channel,
+      tools,
+      model,
+      () => {
+        settled = true;
+      },
+      operation,
+    );
     try {
       yield* channel.events();
     } finally {
@@ -124,13 +143,15 @@ async function drive(
   tools: TurnTools,
   model: TurnModel,
   settled: () => void,
+  operation: 'conversation' | 'compaction',
 ): Promise<void> {
   const { signal } = controller;
   let result: TurnResult = { kind: 'completed' };
   const history = [...spec.history, ...spec.newItems];
   let reminderOrdinal = 0;
   try {
-    while (!signal.aborted && !tools.stopped) {
+    if (operation === 'compaction') result = { kind: 'completed', compaction: await model.compact(history) };
+    while (operation === 'conversation' && !signal.aborted && !tools.stopped) {
       const calls = await model.run(history);
       if (calls.length > 0) {
         await tools.run(calls, history);

@@ -72,6 +72,8 @@ export type DirectTurnFact =
   | { readonly type: 'budget_observed'; readonly turnId: TurnId; readonly evidence: RunBudgetEvent }
   | {
       readonly type: 'turn_started';
+      /** Actual command-owned auxiliary invocation, not a human or background-notice admission. */
+      readonly maintenance?: { readonly kind: 'compaction'; readonly commandId: string };
       readonly requestConfiguration?: import('./direct-preview.js').DirectPreviewConfiguration;
       /** Native background planning input is durable provider context, never a displayed human admission. */
       readonly silent?: true;

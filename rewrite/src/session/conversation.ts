@@ -4,7 +4,7 @@
  * contain no acceptance capability; answers likewise commit before release.
  * Cancellation/consumer return retains turn ownership through physical cleanup.
  */
-import { startTurn } from '../engine/index.js';
+import { startTurn, startCompaction } from '../engine/index.js';
 import type {
   AcceptedTurnEvent,
   InteractionDecision,
@@ -474,6 +474,7 @@ function conversation(
             if (
               admission?.type === 'turn_started' &&
               !admission.silent &&
+              !admission.maintenance &&
               !admission.retryContext &&
               isDirectHumanOrigin(admission.submission?.origin)
             ) {
@@ -586,6 +587,8 @@ function conversation(
       /** Command admission already committed replacement/start/receipt in one batch. */
       readonly accepted?: true;
       readonly silent?: true;
+      readonly compaction?: true;
+      readonly compactionState?: import('../engine/direct-types.js').TurnCompactionState;
       readonly history?: readonly Item[];
     },
   ): StartedConversationTurn => {
@@ -602,7 +605,9 @@ function conversation(
       throw new Error('submission must identify one admitted user item');
     }
     const turnId = planned?.turnId ?? (`turn-${nextTurnId++}` as TurnId);
-    const snapshot = planned?.accepted ? { history: planned.history!, compactionState: undefined } : liveReplay();
+    const snapshot = planned?.accepted
+      ? { history: planned.history!, compactionState: planned.compactionState }
+      : liveReplay();
     const isHuman = !planned?.accepted && !planned?.silent && isDirectHumanOrigin(request.submission?.origin);
     const human = isHuman
       ? capabilities!.humanPlan(request.submission?.messageId ?? turnId, request.input)
@@ -677,7 +682,7 @@ function conversation(
           outcome: { kind: result.result.kind === 'cancelled' ? 'cancelled' : 'interrupted' },
         };
       };
-      const handle = startTurn(
+      const handle = (planned?.compaction ? startCompaction : startTurn)(
         {
           ...settings,
           turnId,
@@ -849,7 +854,7 @@ function conversation(
       if (
         (request.operation.kind === 'configure' && !runtimeDeps.configure) ||
         (request.operation.kind === 'rollover' && !runtimeDeps.rollover) ||
-        request.operation.kind === 'compact'
+        (request.operation.kind === 'compact' && !runtimeDeps.compaction)
       )
         return Promise.resolve({
           result: finish({
@@ -987,6 +992,70 @@ function conversation(
             } finally {
               if (candidate && !installed) await candidate.dispose();
             }
+          }
+          if (operation.kind === 'compact') {
+            const snapshot = commandSnapshot();
+            if (!snapshot.executionsSettled)
+              return {
+                result: finish({ kind: 'rejected', code: 'busy', message: 'Foreground cleanup has not settled.' }),
+              };
+            const state = liveReplay();
+            const turnId = `turn-${nextTurnId++}` as TurnId;
+            const configuration = directPreviewConfiguration({ ...settings, input: [] });
+            if (
+              !commit([
+                {
+                  type: 'turn_started',
+                  turnId,
+                  input: [],
+                  maintenance: { kind: 'compaction', commandId: request.commandId },
+                  ...(configuration ? { requestConfiguration: configuration } : {}),
+                },
+              ])
+            )
+              throw new Error(logFailure!.message);
+            const started = start(
+              { ...settings, input: [] },
+              {
+                turnId,
+                accepted: true,
+                compaction: true,
+                facts: [],
+                history: state.history,
+                compactionState: state.compactionState,
+              },
+            );
+            const cancel = () => started.turn.cancel();
+            owner.abort.signal.addEventListener('abort', cancel, { once: true });
+            if (owner.abort.signal.aborted) cancel();
+            let terminal: TurnResult | undefined;
+            try {
+              // Same Session reader/acceptance path as a conversational root.
+              // Budget waits are published and answered through active.answerBudget.
+              for await (const event of started.turn.events) if (event.type === 'turn_ended') terminal = event.result;
+            } finally {
+              owner.abort.signal.removeEventListener('abort', cancel);
+              if (completionHeld === turnId) completionHeld = null;
+            }
+            if (terminal?.kind === 'completed' && terminal.compaction?.kind === 'compacted')
+              return { result: finish({ kind: 'compacted' }) };
+            return {
+              result: finish({
+                kind: 'rejected',
+                code:
+                  terminal?.kind === 'cancelled' || terminal?.kind === 'interrupted'
+                    ? 'cancelled'
+                    : terminal?.kind === 'completed'
+                    ? 'ineligible'
+                    : 'failed',
+                message:
+                  terminal?.kind === 'failed'
+                    ? terminal.error.message
+                    : terminal?.kind === 'completed' && terminal.compaction?.kind === 'blocked'
+                    ? `Compaction did not replace history: ${terminal.compaction.reason}.`
+                    : 'Compaction ended without an accepted history replacement.',
+              }),
+            };
           }
           const snapshot = commandSnapshot();
           if (operation.kind !== 'retry' && operation.kind !== 'rewind') throw new Error('Unsupported history command');

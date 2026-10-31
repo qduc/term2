@@ -207,6 +207,10 @@ function canonicalCandidate(
     case 'request_cost_recorded':
     case 'command_started':
     case 'command_finished':
+    case 'background_notice_enqueued':
+    case 'background_notices_delivered':
+    // Live argument counts are not tool execution, accepted argument text or a numeric-ID event.
+    case 'tool_call_streaming_delta':
     // The pinned event vocabulary has no automatic-memory notice envelope.
     case 'automatic_memory_notice':
       return null;
@@ -247,6 +251,12 @@ function nestedCandidate(
   context: CanonicalEventContext,
 ): Candidate | null {
   const { event: child, agentId } = event.payload;
+  if (
+    child.type === 'tool_call_streaming_delta' ||
+    child.type === 'background_notice_enqueued' ||
+    child.type === 'background_notices_delivered'
+  )
+    return null;
   // Current wire carries the actual parent separately. Older payloads may use accepted cut
   // context, but neither a child turnId nor rootTurnId is a substitute for the immediate parent.
   const task = context.task?.id === agentId ? context.task : undefined;

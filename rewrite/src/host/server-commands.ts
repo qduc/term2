@@ -27,14 +27,18 @@ export async function invokeServerCommand(input: ServerSessionRequest, body: Com
     default:
       return publicError(422, 'command_not_allowed', 'command is not allowed');
   }
-  // This reads the real Session receipt authority, including receipts accepted since attachment.
-  // A status miss is never permission to replay effects: command() still owns keyed admission.
-  let result = await connection.send({ type: 'command_status', commandId: body.clientRequestId });
-  if (!result.ok && result.code === 'not_found') {
+  // Status is read-only and helps avoid refusing an existing invocation while a later turn runs.
+  // It makes no replay claim. Always invoke the SAME keyed command for the native replayed flag;
+  // Session receipt inspection guarantees this cannot grant a second execution for an existing ID.
+  const lookup = await connection.send({ type: 'command_status', commandId: body.clientRequestId });
+  if (!lookup.ok && lookup.code === 'not_found') {
     if (connection.snapshot.status === 'running' || connection.snapshot.status === 'awaiting_interaction')
       return publicError(409, 'session_busy', 'session is busy');
-    result = await connection.send(command);
-  }
+  } else if ('receipt' in lookup) {
+    if (!matches(lookup.receipt, body))
+      return publicError(409, 'idempotency_conflict', 'request conflicts with an existing command');
+  } else return lookup.ok ? unavailable('durable command receipt') : commandFailure(lookup);
+  const result = await connection.send(command);
   if (!result.ok && result.code !== 'command_rejected' && result.code !== 'command_interrupted')
     return commandFailure(result);
   if (result.ok && result.kind !== 'command_pending' && result.kind !== 'command_finished')
@@ -44,9 +48,15 @@ export async function invokeServerCommand(input: ServerSessionRequest, body: Com
   const { receipt } = result;
   if (!matches(receipt, body))
     return publicError(409, 'idempotency_conflict', 'request conflicts with an existing command');
-  // Native has no authoritative first-invocation/replay flag. Do not invent one from a snapshot,
-  // a status read, or local memory, including for a simultaneous same-key request.
-  if (result.ok && result.kind === 'command_pending')
+  const response = projectReceipt(body, receipt, result.ok && result.kind === 'command_pending');
+  // Forward only native invocation provenance, including failed/interrupted receipts. Status,
+  // snapshot state and accepted command facts never establish first-vs-duplicate invocation.
+  return typeof result.replayed === 'boolean' && response.body && typeof response.body === 'object'
+    ? { ...response, body: { ...response.body, replayed: result.replayed } }
+    : response;
+}
+function projectReceipt(body: CommandBody, receipt: WireCommandReceipt, pending: boolean): ServerResult {
+  if (pending)
     return {
       status: 202,
       body: { commandId: body.commandId, clientRequestId: body.clientRequestId, outcome: 'pending' },

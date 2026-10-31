@@ -2,10 +2,44 @@
 import type { Item, ItemId } from '../model/index.js';
 import type { ExecutionId, TurnId } from '../engine/index.js';
 import type { ToolResult } from '../tools/index.js';
-import type { ReplayedConversation } from './direct-types.js';
-import type { Fact, TurnOutcomeName } from './facts.js';
+import type { ReplayedConversation as NativeReplayedConversation } from './direct-types.js';
+import { DirectQueueReplay } from './direct-queue-replay.js';
+import { isDirectQueueFactType } from './direct-queue-decode.js';
+import {
+  initialDirectContextState,
+  isDirectContextFactType,
+  parseDirectContextFact,
+  reduceDirectContext,
+  type DirectContextState,
+} from './direct-context.js';
+import { directPersonalMemoryItem, type DirectMemoryFact } from './direct-memory.js';
+import { projectDirectBackground } from './direct-background-replay.js';
+import type { DirectBackgroundFact, DirectTaskState } from './direct-background-types.js';
+import type { DirectQueueState } from './direct-queue-types.js';
+import type { Fact, TurnOutcomeName, DirectTurnFact } from './facts.js';
 
-export type { ReplayedConversation } from './direct-types.js';
+export type ReplayOptions = {
+  /** False for live history/root settlement; only explicit reopen recovers/pauses the queue. */
+  readonly recoverQueue?: boolean;
+};
+export type ReplayedBranch = {
+  readonly branchId: string;
+  readonly taskId: string;
+  readonly turnId: TurnId;
+  readonly history: readonly Item[];
+  readonly status: 'idle' | 'interrupted';
+};
+export type ReplayedConversation = NativeReplayedConversation & {
+  readonly queue: DirectQueueState;
+  readonly context: DirectContextState;
+  /** Accepted audit state only; explicit task recovery uses a caller-supplied clock. */
+  readonly background: readonly DirectTaskState[];
+  readonly branches: readonly ReplayedBranch[];
+  readonly compactionState?: {
+    readonly rearmAtEstimatedTokens?: number;
+    readonly checkpointReceipts?: readonly string[];
+  };
+};
 
 // Kept local to the direct path: importing the old ledger would load the legacy runtime.
 const OUTCOME_UNOBSERVED =
@@ -32,6 +66,9 @@ type ActiveTurn = {
   readonly executions: Map<ExecutionId, Execution>;
   readonly interactions: Map<string, Extract<Fact, { type: 'interaction_opened' }>>;
   readonly closedInteractions: Set<string>;
+  readonly responses: Set<number>;
+  readonly budgets: Map<string, Extract<Fact, { type: 'budget_opened' }>>;
+  readonly closedBudgets: Set<string>;
 };
 
 /**
@@ -40,11 +77,46 @@ type ActiveTurn = {
  * nested starts/finishes remain audit only. Recovery facts are returned, not written:
  * Session must append them before the next turn's start, in the supplied order.
  */
-export function replay(facts: readonly Fact[]): ReplayedConversation {
-  const slots: Slot[] = [];
+export function replay(facts: readonly Fact[], options: ReplayOptions = {}): ReplayedConversation {
+  return replayProjection(facts, options, true);
+}
+
+function replayProjection(
+  facts: readonly Fact[],
+  options: ReplayOptions,
+  repairActiveTurn: boolean,
+): ReplayedConversation {
+  let slots: Slot[] = [];
   const recoveryFacts: Fact[] = [];
   let active: ActiveTurn | null = null;
-  let turns = 0;
+  const queue = new DirectQueueReplay();
+  let context = initialDirectContextState();
+  const backgroundFacts: DirectBackgroundFact[] = [];
+  const branches = new Map<string, { taskId: string; turnId: TurnId; facts: DirectTurnFact[] }>();
+  let compactionState: ReplayedConversation['compactionState'];
+  const humanSlots = new Map<string, Slot>();
+  const personalSnapshots = new Map<string, Extract<DirectMemoryFact, { type: 'memory_personal_snapshot' }>>();
+  const deliveredSnapshots = new Set<string>();
+  let sessionId: string | undefined;
+
+  const attachPersonal = (admissionId: string): void => {
+    const fact = personalSnapshots.get(admissionId);
+    const anchor = humanSlots.get(admissionId);
+    if (!fact || !anchor || deliveredSnapshots.has(admissionId)) return;
+    const position = slots.indexOf(anchor);
+    if (position < 0) return; // An authoritative history replacement already removed this old admission.
+    slots.splice(position + 1, 0, { item: directPersonalMemoryItem(fact) });
+    deliveredSnapshots.add(admissionId);
+  };
+  const appendHuman = (item: Item): Slot => {
+    const slot = { item };
+    slots.push(slot);
+    if (item.type === 'user_message') {
+      humanSlots.set(item.id, slot);
+      attachPersonal(item.id);
+    }
+    return slot;
+  };
   let lastOutcome: TurnOutcomeName | null = null;
 
   const requireActive = (turnId: TurnId, type: string): ActiveTurn => {
@@ -81,17 +153,58 @@ export function replay(facts: readonly Fact[]): ReplayedConversation {
     }
   };
 
-  for (const fact of facts) {
+  const consume = (fact: Fact): void => {
+    if (isDirectQueueFactType(fact.type)) {
+      for (const item of queue.accept(fact, active?.turnId ?? null)) appendHuman(item);
+      if (fact.type === 'queue_steered') context = { ...context, goalReminders: [] };
+      return;
+    }
+    if (isDirectContextFactType(fact.type)) {
+      const accepted = parseDirectContextFact(fact);
+      context = reduceDirectContext(context, accepted);
+      if (accepted.type === 'memory_personal_snapshot') {
+        if (personalSnapshots.has(accepted.admissionId))
+          throw new Error('replay: duplicate personal snapshot admission');
+        personalSnapshots.set(accepted.admissionId, accepted);
+        attachPersonal(accepted.admissionId);
+      }
+      return;
+    }
+    if (
+      [
+        'task_started',
+        'task_backgrounded',
+        'task_stop_requested',
+        'task_finished',
+        'task_interaction_opened',
+        'task_interaction_closed',
+      ].includes(fact.type)
+    ) {
+      // The decoder recognizes exactly six task variants; projection rejects invalid transitions.
+      backgroundFacts.push(fact as DirectBackgroundFact);
+      return;
+    }
+    queue.accept(fact, active?.turnId ?? null);
+    context = reduceDirectContext(context, fact);
     switch (fact.type) {
       case 'session_started':
+        if (sessionId && sessionId !== fact.id) throw new Error('replay: conflicting Session identity');
+        sessionId = fact.id;
         break;
       case 'turn_started': {
         if (active !== null) {
           throw new Error(`replay: turn ${fact.turnId} started while turn ${active.turnId} has no turn_ended`);
         }
-        turns += 1;
         lastOutcome = null;
-        for (const item of fact.input) slots.push({ item });
+        let lastHuman: Slot | undefined;
+        for (const item of fact.input) {
+          const slot = appendHuman(item);
+          if (item.type === 'user_message') lastHuman = slot;
+        }
+        if (lastHuman) {
+          humanSlots.set(fact.turnId, lastHuman);
+          attachPersonal(fact.turnId);
+        }
         active = {
           turnId: fact.turnId,
           partials: new Map(),
@@ -99,6 +212,9 @@ export function replay(facts: readonly Fact[]): ReplayedConversation {
           executions: new Map(),
           interactions: new Map(),
           closedInteractions: new Set(),
+          responses: new Set(),
+          budgets: new Map(),
+          closedBudgets: new Set(),
         };
         break;
       }
@@ -148,14 +264,75 @@ export function replay(facts: readonly Fact[]): ReplayedConversation {
         turn.closedInteractions.add(fact.requestId);
         break;
       }
+      case 'budget_opened': {
+        const turn = requireActive(fact.turnId, fact.type);
+        if (turn.budgets.has(fact.requestId) || turn.closedBudgets.has(fact.requestId))
+          throw new Error(`replay: duplicate budget wait ${fact.requestId}`);
+        turn.budgets.set(fact.requestId, fact);
+        break;
+      }
+      case 'budget_closed': {
+        const turn = requireActive(fact.turnId, fact.type);
+        if (!turn.budgets.delete(fact.requestId))
+          throw new Error(`replay: closure without open budget wait ${fact.requestId}`);
+        turn.closedBudgets.add(fact.requestId);
+        break;
+      }
+      case 'budget_observed':
+        requireActive(fact.turnId, fact.type);
+        break;
       case 'usage':
         requireActive(fact.turnId, fact.type);
         break;
+      case 'history_replaced': {
+        if (fact.turnId !== undefined) {
+          const turn = requireActive(fact.turnId, fact.type);
+          if (hasUnsettledRoots(turn)) throw new Error('replay: history replacement has unsettled physical tool debt');
+          turn.partials.clear();
+        } else if (active) throw new Error('replay: session-wide history replacement during an active turn');
+        slots = fact.history.map((item) => ({ item }));
+        compactionState =
+          fact.reason === 'compaction'
+            ? {
+                ...(fact.rearmAtEstimatedTokens === undefined
+                  ? {}
+                  : { rearmAtEstimatedTokens: fact.rearmAtEstimatedTokens }),
+                ...(fact.checkpointReceipts === undefined ? {} : { checkpointReceipts: fact.checkpointReceipts }),
+              }
+            : undefined;
+        break;
+      }
+      case 'model_response_completed': {
+        const turn = requireActive(fact.turnId, fact.type);
+        if (turn.responses.has(fact.modelStep)) throw new Error('replay: duplicate model response receipt');
+        turn.responses.add(fact.modelStep);
+        break;
+      }
+      case 'branch_started':
+        if (branches.has(fact.branchId)) throw new Error('replay: duplicate branch ID');
+        if (
+          !backgroundFacts.some((item) => item.type === 'task_started' && item.task.taskId === fact.taskId) ||
+          backgroundFacts.some((item) => item.type === 'task_finished' && item.taskId === fact.taskId)
+        )
+          throw new Error('replay: branch has no live task owner');
+        branches.set(fact.branchId, {
+          taskId: fact.taskId,
+          turnId: fact.turnId,
+          facts: [{ type: 'turn_started', turnId: fact.turnId, input: fact.input }],
+        });
+        break;
+      case 'branch_event': {
+        const branch = branches.get(fact.branchId);
+        if (!branch || fact.fact.turnId !== branch.turnId)
+          throw new Error('replay: branch event has no matching branch turn');
+        branch.facts.push(fact.fact);
+        break;
+      }
       case 'turn_ended': {
         const turn = requireActive(fact.turnId, fact.type);
         // Repairs belong before the terminal, never appended behind a closed turn.
-        if (hasUnsettledRoots(turn) || turn.interactions.size !== 0) {
-          throw new Error(`replay: turn ${turn.turnId} ended with unsettled calls or interactions`);
+        if (hasUnsettledRoots(turn) || turn.interactions.size !== 0 || turn.budgets.size !== 0) {
+          throw new Error(`replay: turn ${turn.turnId} ended with unsettled calls, interactions or budget waits`);
         }
         finishText(turn);
         active = null;
@@ -167,31 +344,83 @@ export function replay(facts: readonly Fact[]): ReplayedConversation {
         throw new Error(`replay: unknown fact type ${JSON.stringify(String(type))}`);
       }
     }
-  }
+  };
 
-  if (active !== null) {
-    finishText(active);
-    const repairs = recoverRoots(active);
-    for (const fact of repairs) {
-      recoveryFacts.push(fact);
-      if (fact.type === 'item') slots.push({ item: fact.item });
+  for (const fact of facts) consume(fact);
+  if (options.recoverQueue !== false) {
+    const start = queue.missingStart();
+    if (start) {
+      recoveryFacts.push(start);
+      consume(start);
     }
-    for (const { request } of active.interactions.values()) {
-      recoveryFacts.push({
+  }
+  // A closure-mutated active turn is read through a function so TS does not
+  // mistake the initial null for a lifetime invariant.
+  const unfinished = (): ActiveTurn | null => active;
+  const turn = unfinished();
+  if (turn && repairActiveTurn) {
+    const repairs: Fact[] = [...recoverRoots(turn)];
+    for (const { request } of turn.interactions.values())
+      repairs.push({
         type: 'interaction_closed',
-        turnId: active.turnId,
+        turnId: turn.turnId,
         requestId: request.requestId,
         resolution: { kind: 'interrupted' },
       });
+    for (const { requestId } of turn.budgets.values())
+      repairs.push({
+        type: 'budget_closed',
+        turnId: turn.turnId,
+        requestId,
+        decision: { kind: 'stop' },
+        source: 'system',
+      });
+    repairs.push({ type: 'turn_ended', turnId: turn.turnId, outcome: 'interrupted' });
+    for (const fact of repairs) {
+      recoveryFacts.push(fact);
+      consume(fact);
     }
-    recoveryFacts.push({ type: 'turn_ended', turnId: active.turnId, outcome: 'interrupted' });
   }
-
+  if (turn && !repairActiveTurn) finishText(turn);
+  if (options.recoverQueue !== false) {
+    recoveryFacts.push(...queue.reconcileTerminal(), ...queue.pausePending());
+  }
+  const background = projectDirectBackground(backgroundFacts);
+  if (sessionId && background.some((task) => task.sessionId !== sessionId))
+    throw new Error('replay: task belongs to a different Session');
+  const branchViews: ReplayedBranch[] = [];
+  for (const [branchId, branch] of branches) {
+    // Foreground live settlement must never close a still-productive background branch.
+    const view = replayProjection(branch.facts, { recoverQueue: false }, options.recoverQueue !== false);
+    branchViews.push({
+      branchId,
+      taskId: branch.taskId,
+      turnId: branch.turnId,
+      history: view.history,
+      status: view.status,
+    });
+    if (
+      !branch.facts.some((fact) => fact.type === 'turn_ended') &&
+      background.some((task) => task.taskId === branch.taskId && task.result)
+    )
+      throw new Error('replay: task settled before its branch terminal');
+    for (const fact of view.recoveryFacts)
+      recoveryFacts.push({
+        type: 'branch_event',
+        branchId,
+        fact: fact as Exclude<DirectTurnFact, { type: 'turn_started' | 'interaction_opened' | 'interaction_closed' }>,
+      });
+  }
   return {
-    status: active !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
+    status: unfinished() !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
     history: slots.flatMap(({ item }) => (item === null ? [] : [item])),
-    nextTurn: turns + 1,
+    nextTurn: queue.nextTurn,
     recoveryFacts,
+    queue: queue.state,
+    context,
+    background,
+    branches: branchViews,
+    ...(compactionState ? { compactionState } : {}),
   };
 }
 
@@ -277,6 +506,7 @@ function hasUnsettledRoots(turn: ActiveTurn): boolean {
 /** Missing physical terminals are never invented; nested audit remains outcome-unknown. */
 function recoverRoots(turn: ActiveTurn): Fact[] {
   const facts: Fact[] = [];
+  const occurrences = [...turn.calls];
   // A root start contains enough evidence to restore its call if publication was interrupted.
   // Child starts deliberately do not: they must never become extra provider calls.
   for (const [executionId, execution] of turn.executions) {
@@ -289,10 +519,10 @@ function recoverRoots(turn: ActiveTurn): Fact[] {
       toolName: start.toolName,
       input: start.input,
     };
-    recordCall(turn, call, executionId);
+    occurrences.push({ call, key: `${executionId}:recovery`, executionId, settled: false });
     facts.push({ type: 'item', turnId: turn.turnId, executionId, item: call });
   }
-  for (const occurrence of turn.calls) {
+  for (const occurrence of occurrences) {
     if (occurrence.settled) continue;
     const { executionId, call } = occurrence;
     const known = executionId === undefined ? undefined : turn.executions.get(executionId)?.result;

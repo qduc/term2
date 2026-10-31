@@ -1,8 +1,8 @@
 # Direct ACP client boundary
 
 This subtree implements experimental ACP v2 against the published direct
-protocol through `3628ef322046211c122eb5612f4fefb1e9a59ba5` and its native
-Session checkpoint, staged together on candidate `1e78bb50`. Imports target
+protocol through `82d37ded91705090bc6b253301c7411ac5d5e389` (including
+`77bca90b`/`5451b43c`) and native keyed-command Session `f14c9baa`. Imports target
 `protocol/direct-wire.ts` and `host/in-process-direct-types.ts`, not bridge types.
 Shared owner commits were inspected read-only, not copied/cherry-picked into this
 worker's older base. This is implementation, not M6 acceptance.
@@ -78,6 +78,33 @@ unsandboxed permission grants, even if a wrongly composed Session advertises one
   and never turns auto-approval into a human grant. Session owns actual extension,
   closure and terminal behavior. Resolved/ended/detached requests cannot answer a
   different owner.
+
+## Keyed Session commands and additive wire data
+
+ACP currently sends only `submit`, `answer`, `answer_budget` and turn-targeted
+`cancel`. Session new/list/resume use Host methods; close detaches after observing
+known foreground cancellation. ACP has no retry/compact/configure/rewind/rollover,
+command-status or command-receipt endpoint. Prompt text (including slash text) is
+not converted into one of those operations. No new command key or private ACP
+extension is needed for the existing surface.
+
+Protocol `82d37ded` requires stable per-invocation `commandId` on those keyed
+operations and exposes typed pending/finished/refusal/interrupted replies,
+snapshot.commands and command_started/command_finished events. None of ACP's
+four outgoing command shapes changed. Those receipt events and snapshot fields
+are not ACP prompt outcomes and are intentionally not translated into success,
+idle, an execution retry or a synthetic transcript item. In particular, even a
+finished retry receipt is not the retried turn's terminal. ACP still settles only
+its observed real turn terminal; it does not execute/status-query someone else's
+receipt, fabricate a command-kind key or retry an outcome_unobserved operation.
+The typed receipt API remains protocol-owned, not exposed as a lossy ACP facade.
+
+Ancestor `77bca90b` adds accepted physical request-cost records; ACP does not
+synthesize an aggregate price or legacy cost stream from them. `5451b43c` adds
+legacyCommandMessages for actual source-formatted tool-finish display DTOs,
+which are distinct from keyed Session receipts. ACP retains public display in
+tool rawOutput and text/image tool content; it does not call that legacy helper
+or infer command IDs, status, blank success or legacy command-event parity.
 
 ## Display, terminals and replay
 

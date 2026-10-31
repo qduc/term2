@@ -189,6 +189,7 @@ export type Fact =
   | DirectBranchFact
   | DirectRequestCostFact
   | DirectCommandFact
+  | import('./direct-configuration.js').DirectConfigurationFact
   | DirectNotificationFact
   | DirectQueueFact
   | DirectBackgroundFact

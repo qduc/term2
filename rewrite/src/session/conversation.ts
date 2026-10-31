@@ -26,6 +26,7 @@ import {
   type DirectNotificationFact,
   type DirectNotificationState,
 } from './direct-notifications.js';
+import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './direct-configuration.js';
 import { captureDirectCommandHistory } from './direct-history-capture.js';
 import { listDirectRewindTargets, planDirectHistoryCommand } from './direct-command-history.js';
 import {
@@ -105,7 +106,9 @@ function conversation(
   newEntries: readonly FactLine[] = [],
 ): Conversation {
   let active: (Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> }) | null = null;
-  const continuity = deps.continuity
+  let runtimeDeps = deps;
+  let configuredRequest: Omit<TurnRequest, 'input' | 'submission'> | undefined;
+  let continuity = deps.continuity
     ? { ...deps.continuity, state: deps.continuity.state ?? new DirectContinuity() }
     : undefined;
   let commandReceipts: DirectCommandReceipts = [];
@@ -319,14 +322,14 @@ function conversation(
       return false;
     }
   };
-  const configured = deps.context?.({
+  let supplied = deps.context?.({
     sessionId: id,
     read: () => structuredClone(context),
     commit: (generation, next) => contextCommit(generation, next),
     tasks,
     configureTaskCheckIn,
   });
-  checkInSettings = configured?.backgroundCheckIns;
+  checkInSettings = supplied?.backgroundCheckIns;
   const checkInTimer = checkInSettings
     ? setInterval(() => {
         try {
@@ -344,7 +347,7 @@ function conversation(
     commit: contextCommit,
     validTurn: (turnId) => !!active && active.turnId === turnId && !active.cancelled && !closed && !logFailure,
     baseTools: deps.tools,
-    capabilities: configured,
+    capabilities: supplied,
   });
   for (const entry of newEntries) capabilities.accepted(entry);
   const environment = () => ({
@@ -619,16 +622,19 @@ function conversation(
     )
       throw new Error(logFailure!.message);
     const { input, notice, submission: _submission, previewMode: _previewMode, ...settings } = request;
+    // Old detached branches keep the exact generation that admitted their root.
+    const turnDeps = runtimeDeps;
+    const turnContinuity = continuity;
     try {
       const runNested: NonNullable<TurnDeps['runNested']> = async (nested, parent) => {
-        if (!deps.authorizeNested) throw new Error('App has not supplied direct nested authority');
+        if (!turnDeps.authorizeNested) throw new Error('App has not supplied direct nested authority');
         // Preserve the exact host-produced request for the surface's WeakMap authority lookup.
-        const authority = await deps.authorizeNested(nested, parent);
+        const authority = await turnDeps.authorizeNested(nested, parent);
         parent.signal.throwIfAborted();
         const driver = createDirectBranchDriver({
           createDeps: (branchTurnId) => ({
-            ...deps,
-            budget: runBudgets.open(branchTurnId, parent.turnId),
+            ...turnDeps,
+            budget: runBudgets.open(branchTurnId, parent.turnId, turnDeps.budget),
             runNested,
             subagents: subagentPort,
           }),
@@ -640,7 +646,7 @@ function conversation(
           },
           factFor,
           handles: branchHandles,
-          publish: deps.publishBranch,
+          publish: turnDeps.publishBranch,
         });
         const agents = new DirectSubagents({ tasks: tasks!, driver });
         const handle = agents.start({
@@ -678,9 +684,9 @@ function conversation(
           newItems: notice ? withNotice(human.modelInput, notice) : human.modelInput,
         },
         {
-          ...deps,
-          budget: runBudgets.open(turnId),
-          continuity,
+          ...turnDeps,
+          budget: runBudgets.open(turnId, undefined, turnDeps.budget),
+          continuity: turnContinuity,
           takeSteering: boundary,
           prepareRequest: capabilities!.prepareRequest,
           normalStop: capabilities!.normalStop,
@@ -763,6 +769,7 @@ function conversation(
     id,
     tasks,
     configureTaskCheckIn,
+    currentRequest: (fallback) => configuredRequest ?? fallback,
     drainBackgroundNotifications(clientRequestId, settings) {
       if (!clientRequestId.trim()) throw new Error('Background drain requires a nonempty invocation ID');
       if (closed || logFailure || !recover())
@@ -837,8 +844,8 @@ function conversation(
           result: finish({ kind: 'rejected', code: 'busy', message: 'Another Session command owns history mutation.' }),
         });
       if (
-        request.operation.kind === 'configure' ||
-        (request.operation.kind === 'rollover' && !deps.rollover) ||
+        (request.operation.kind === 'configure' && !runtimeDeps.configure) ||
+        (request.operation.kind === 'rollover' && !runtimeDeps.rollover) ||
         request.operation.kind === 'compact'
       )
         return Promise.resolve({
@@ -846,6 +853,14 @@ function conversation(
             kind: 'rejected',
             code: 'unavailable',
             message: `${request.operation.kind} lacks its actual native runtime authority.`,
+          }),
+        });
+      if (request.operation.kind === 'configure' && (active || completionHeld || queueState.active))
+        return Promise.resolve({
+          result: finish({
+            kind: 'rejected',
+            code: 'busy',
+            message: 'Stop the running turn before changing configuration.',
           }),
         });
       const owner = {
@@ -861,11 +876,13 @@ function conversation(
             // Do not drain/cancel first: the authority must see the real live
             // turn, questions, budgets, queue and task vetoes. New admission is
             // held for this entire await; its actual result is never retried.
-            return { result: finish(await deps.rollover!(request.operation.request)) };
+            return { result: finish(await runtimeDeps.rollover!(request.operation.request)) };
           }
-          active?.cancel();
-          await settleForeground();
-          if (active) await active.stop();
+          if (request.operation.kind !== 'configure') {
+            active?.cancel();
+            await settleForeground();
+            if (active) await active.stop();
+          }
           if (closed || logFailure || owner.abort.signal.aborted)
             return {
               result: finish({
@@ -874,8 +891,101 @@ function conversation(
                 message: 'Session command was cancelled before mutation.',
               }),
             };
-          const snapshot = commandSnapshot();
           const operation = request.operation;
+          if (operation.kind === 'configure') {
+            const expectedRevision = revision();
+            let candidate: DirectPreparedConfiguration | undefined;
+            let installed = false;
+            try {
+              candidate = await runtimeDeps.configure!(operation.configuration, owner.abort.signal);
+              if (
+                closed ||
+                logFailure ||
+                owner.abort.signal.aborted ||
+                commandOwner !== owner ||
+                revision() !== expectedRevision
+              )
+                return {
+                  result: finish({
+                    kind: 'rejected',
+                    code: owner.abort.signal.aborted || closed ? 'cancelled' : 'stale',
+                    message: 'Prepared configuration lost its Session reservation or revision.',
+                  }),
+                };
+              if (
+                candidate.capabilities.hooks !== supplied?.hooks ||
+                candidate.capabilities.automaticMemory !== supplied?.automaticMemory ||
+                candidate.capabilities.memory?.globalContext !== supplied?.memory?.globalContext ||
+                candidate.capabilities.memory?.facts !== supplied?.memory?.facts
+              )
+                throw new Error('Configure attempted to replace the Session hooks or memory lifetime');
+              const expectedWorkspace = deps.toolContext?.workspace;
+              const nextWorkspace = candidate.deps.toolContext?.workspace;
+              if (
+                expectedWorkspace &&
+                (!nextWorkspace ||
+                  nextWorkspace.root !== expectedWorkspace.root ||
+                  nextWorkspace.target !== expectedWorkspace.target ||
+                  nextWorkspace.access !== expectedWorkspace.access)
+              )
+                throw new Error('Configure cannot change Session workspace authority');
+              const configurationFact = parseDirectConfigurationFact({
+                type: 'configuration_changed',
+                configuration: candidate.configuration,
+                intent: candidate.intent,
+                profile: candidate.profile,
+              });
+              const nextRequest = { ...candidate.request, model: candidate.configuration.model };
+              const nextDeps: ConversationDeps = {
+                ...candidate.deps,
+                log: deps.log,
+                context: deps.context,
+                configure: candidate.deps.configure ?? runtimeDeps.configure,
+                rollover: candidate.deps.rollover ?? runtimeDeps.rollover,
+                publishTask: deps.publishTask,
+                publishBranch: deps.publishBranch,
+                publishNotice: deps.publishNotice,
+              };
+              // Never reuse an opaque provider checkpoint across a configuration revision.
+              const nextContinuity = nextDeps.continuity
+                ? { ...nextDeps.continuity, state: nextDeps.continuity.state ?? new DirectContinuity() }
+                : undefined;
+              const finished = planDirectCommandFinish(commandReceipts, request.commandId, {
+                kind: 'configured',
+                configuration: candidate.configuration,
+              });
+              if (!commit([configurationFact, finished])) throw new Error(logFailure!.message);
+              // Never discard a durably accepted generation, even if the app
+              // violates its no-throw installation contract.
+              installed = true;
+              try {
+                continuity?.state.clear();
+                runtimeDeps = nextDeps;
+                continuity = nextContinuity;
+                configuredRequest = nextRequest;
+                queueSettings = nextRequest;
+                supplied = candidate.capabilities;
+                capabilities!.replace(candidate.deps.tools, supplied);
+                checkInSettings = supplied.backgroundCheckIns;
+                candidate.install();
+              } catch (error) {
+                poison(error);
+                throw error;
+              }
+              return {
+                result: {
+                  kind: 'finished',
+                  replayed: false,
+                  receipt: structuredClone(
+                    commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+                  ),
+                },
+              };
+            } finally {
+              if (candidate && !installed) await candidate.dispose();
+            }
+          }
+          const snapshot = commandSnapshot();
           if (operation.kind !== 'retry' && operation.kind !== 'rewind') throw new Error('Unsupported history command');
           const plan = planDirectHistoryCommand(snapshot, operation);
           if (plan.kind === 'rejected')
@@ -1242,6 +1352,7 @@ function changesRootHistory(fact: Fact): boolean {
     'text_delta',
     'item',
     'history_replaced',
+    'configuration_changed',
     'queue_steered',
     'memory_personal_snapshot',
   ].includes(fact.type);

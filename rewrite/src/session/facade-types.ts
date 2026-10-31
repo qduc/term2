@@ -84,6 +84,7 @@ export type DirectSessionState = {
   readonly id: string;
   readonly workspace: Workspace;
   readonly model: ModelRef;
+  readonly configuration?: import('./direct-configuration.js').DirectConfigurationState;
   readonly status: 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';
   readonly activeTurnId: TurnId | null;
   readonly drafts: readonly DirectDraft[];

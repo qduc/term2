@@ -50,6 +50,8 @@ export type Conversation = {
     readonly result: import('./direct-command-types.js').DirectCommandResult;
     readonly started?: StartedConversationTurn;
   }>;
+  /** Installed future-root settings; fallback is used before the first configure. */
+  currentRequest(fallback: Omit<TurnRequest, 'input' | 'submission'>): Omit<TurnRequest, 'input' | 'submission'>;
   cancelCommand(): void;
   drainBackgroundNotifications(
     clientRequestId: string,
@@ -94,6 +96,11 @@ export type Conversation = {
 export type ConversationDeps = TurnDeps & {
   readonly log: ConversationLog;
   readonly context?: DirectContextFactory;
+  /** Prepare without installation/publication; Session drains and owns acceptance. */
+  readonly configure?: (
+    configuration: import('./direct-command-types.js').DirectCommandConfiguration,
+    signal: AbortSignal,
+  ) => Promise<import('./direct-configuration.js').DirectPreparedConfiguration>;
   /** Called once under the command reservation, before any foreground cancellation.
    * App owns veto/successor creation; Session alone persists its actual outcome. */
   readonly rollover?: (

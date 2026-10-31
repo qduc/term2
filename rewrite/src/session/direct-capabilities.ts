@@ -54,7 +54,8 @@ export function bindDirectCapabilities(options: {
   readonly baseTools?: ToolRegistry;
   readonly capabilities?: DirectContextCapabilities;
 }) {
-  const capabilities = options.capabilities ?? {};
+  let capabilities = options.capabilities ?? {};
+  let baseTools = options.baseTools;
   let hookWork = Promise.resolve();
   let ready: Promise<void> | undefined;
   const hook = (operation: () => Promise<void>): void => {
@@ -129,10 +130,9 @@ export function bindDirectCapabilities(options: {
     );
     const tools: ToolRegistry = {
       get: (name) =>
-        overrides.get(name) ??
-        (['goal_check', 'propose_goal'].includes(name) ? undefined : options.baseTools?.get(name)),
+        overrides.get(name) ?? (['goal_check', 'propose_goal'].includes(name) ? undefined : baseTools?.get(name)),
       available: (ctx) => [
-        ...(options.baseTools?.available(ctx) ?? []).filter(
+        ...(baseTools?.available(ctx) ?? []).filter(
           (tool) => !overrides.has(tool.spec.name) && !['goal_check', 'propose_goal'].includes(tool.spec.name),
         ),
         ...bound,
@@ -142,6 +142,11 @@ export function bindDirectCapabilities(options: {
   };
 
   return {
+    /** Swap model-bound tools/verifier only; retain the single hooks/memory lifetime. */
+    replace(nextTools: ToolRegistry | undefined, next: DirectContextCapabilities) {
+      baseTools = nextTools;
+      capabilities = next;
+    },
     previewRequest: (request: ModelRequest) => planRequest(request).request,
     async prepareRequest(request: ModelRequest, input: { turnId: TurnId; modelStep: number; signal: AbortSignal }) {
       await ensureStarted();

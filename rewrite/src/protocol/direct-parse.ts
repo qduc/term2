@@ -69,9 +69,22 @@ function content(raw: unknown): WireContent {
   return { type: 'image', mediaType, data,
     ...(value.detail !== undefined ? { detail: text(value.detail, 'detail') } : {}) };
 }
-function origin(raw: unknown): WireOrigin {
-  const value = object(raw); fields(value, ['kind', 'id']);
-  return { kind: choice(value.kind, ['cli', 'tui', 'acp', 'control', 'discord', 'api'], 'origin'),
+export function parseWireOrigin(raw: unknown): WireOrigin {
+  const value = object(raw);
+  if (value.kind === 'discord') {
+    fields(value, ['kind', 'source', 'sender', 'discordMessageId', 'relayedBy']);
+    return { kind: 'discord', source: choice(value.source, ['human', 'agent', 'reaction'], 'Discord source'), sender: id(value.sender, 'Discord sender'),
+      ...(value.discordMessageId !== undefined ? { discordMessageId: id(value.discordMessageId, 'Discord message id') } : {}),
+      ...(value.relayedBy !== undefined ? { relayedBy: id(value.relayedBy, 'Discord relay') } : {}),
+    };
+  }
+  if (value.kind === 'control') {
+    fields(value, ['kind', 'id', 'source']);
+    return { kind: 'control', ...(value.id !== undefined ? { id: id(value.id, 'origin id') } : {}),
+      ...(value.source !== undefined ? { source: choice(value.source, ['orchestrator'], 'control source') } : {}) };
+  }
+  fields(value, ['kind', 'id']);
+  return { kind: choice(value.kind, ['cli', 'tui', 'acp', 'api'], 'origin'),
     ...(value.id !== undefined ? { id: id(value.id, 'origin id') } : {}) };
 }
 function configuration(raw: unknown): WireConfiguration {
@@ -96,16 +109,17 @@ export function parseWireCommand(raw: unknown): WireCommand {
       if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');
       return { type: value.type, requestId: id(value.requestId, 'requestId'), text: text(value.text, 'text'),
         ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}),
-        ...(value.origin !== undefined ? { origin: origin(value.origin) } : {}),
+        ...(value.origin !== undefined ? { origin: parseWireOrigin(value.origin) } : {}),
         ...(value.delivery !== undefined ? { delivery: choice(value.delivery, ['auto', 'steer', 'follow_up', 'reject_if_busy'], 'delivery') } : {}) };
     }
     case 'answer': fields(value, ['type', 'requestId', 'decision']);
       return { type: 'answer', requestId: id(value.requestId, 'requestId'), decision: decision(value.decision) };
     case 'cancel': {
-      fields(value, ['type', 'target']);
-      if (value.target === undefined) return { type: 'cancel' };
+      fields(value, ['type', 'target', 'expectedTurnId']);
+      const expected = value.expectedTurnId !== undefined ? { expectedTurnId: id(value.expectedTurnId, 'expectedTurnId') } : {};
+      if (value.target === undefined) return { type: 'cancel', ...expected };
       const target = object(value.target);
-      if (target.kind === 'foreground') { fields(target, ['kind']); return { type: 'cancel', target: { kind: 'foreground' } }; }
+      if (target.kind === 'foreground') { fields(target, ['kind']); return { type: 'cancel', target: { kind: 'foreground' }, ...expected }; }
       fields(target, ['kind', 'id']);
       if (target.kind !== 'task') return invalid('Invalid cancellation target');
       return { type: 'cancel', target: { kind: 'task', id: id(target.id, 'task id') } };
@@ -119,7 +133,7 @@ export function parseWireCommand(raw: unknown): WireCommand {
       return { type: 'queue_edit', messageId: id(value.messageId, 'messageId'), text: text(value.text, 'text'), ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}) };
     case 'queue_retract': fields(value, ['type', 'messageId']); return { type: 'queue_retract', messageId: id(value.messageId, 'messageId') };
     case 'task_control': fields(value, ['type', 'taskId', 'action']);
-      return { type: 'task_control', taskId: id(value.taskId, 'taskId'), action: choice(value.action, ['cancel', 'check_in', 'foreground'], 'task action') };
+      return { type: 'task_control', taskId: id(value.taskId, 'taskId'), action: choice(value.action, ['cancel', 'check_in', 'foreground', 'background'], 'task action') };
     case 'rewind': fields(value, ['type', 'targetId']); return { type: 'rewind', targetId: id(value.targetId, 'targetId') };
     case 'preview': fields(value, ['type', 'text', 'attachments']);
       if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');

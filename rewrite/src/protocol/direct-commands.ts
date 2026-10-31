@@ -1,4 +1,6 @@
 /** The only inbound wire-to-domain translation. No engine/bridge execution or second writer. */
+import type { DirectTaskControlResult } from '../session/direct-background-types.js';
+import type { DirectQueueMutation } from '../session/direct-queue-types.js';
 import type { DirectSession, DirectSubmission } from '../session/facade-types.js';
 import type { InteractionRequestId } from '../tools/index.js';
 import type { DirectCommandCapabilities } from './direct-capabilities.js';
@@ -31,23 +33,31 @@ async function dispatch(session: DirectSession, command: WireCommand, operations
         content: [{ type: 'text', text: command.text }, ...(command.attachments ?? [])],
         ...(command.origin ? { origin: command.origin } : {}) };
       const delivery = command.delivery ?? 'auto';
-      const admission = delivery === 'auto' ? await session.submit(request)
-        : await requireOperation(operations.submitWithDelivery, `submit:${delivery}`).call(operations, request, delivery);
+      // Structured Discord authority must use the real queue/delivery admission path,
+      // whose immutable fingerprint includes every origin field (never M2 kind/id).
+      const admission = delivery === 'auto' && command.origin?.kind !== 'discord' ? await session.submit(request)
+        : await requireOperation(operations.submitWithDelivery, `submit:${delivery}`).call(operations, request, delivery === 'auto' ? 'follow_up' : delivery);
       return { ok: true, kind: 'admitted', admission };
     }
     case 'answer': {
       const answer = await answerInteraction(session, command.requestId, command.decision, operations);
       return answerResult(answer);
     }
-    case 'cancel': session.cancel(command.target); return accepted;
+    case 'cancel':
+      if (command.expectedTurnId !== undefined) {
+        const result = await requireOperation(operations.cancelForeground, 'atomic expected-turn cancel').call(operations, command.expectedTurnId);
+        return result.kind === 'accepted' ? accepted : { ok: false, code: 'rejected', message: 'Expected turn is no longer active.' };
+      }
+      if (command.target?.kind === 'task') return taskResult(await requireOperation(operations.controlTask, 'task cancel').call(operations, command.target.id, 'cancel'));
+      session.cancel(command.target); return accepted;
     case 'retry': await requireOperation(operations.retry, 'retry').call(operations, { target: command.target, ...(command.executionId ? { executionId: command.executionId } : {}) }); return accepted;
     case 'compact': await requireOperation(operations.compact, 'compact').call(operations); return accepted;
     case 'configure': await requireOperation(operations.configure, 'configure').call(operations, command.configuration); return accepted;
-    case 'queue_edit': await requireOperation(operations.editQueue, 'queue_edit').call(operations, command.messageId, { text: command.text, ...(command.attachments !== undefined ? { attachments: command.attachments } : {}) }); return accepted;
-    case 'queue_retract': await requireOperation(operations.retractQueue, 'queue_retract').call(operations, command.messageId); return accepted;
-    case 'queue_resume': await requireOperation(operations.resumeQueue, 'queue_resume').call(operations); return accepted;
-    case 'queue_discard': await requireOperation(operations.discardQueue, 'queue_discard').call(operations); return accepted;
-    case 'task_control': await requireOperation(operations.controlTask, 'task_control').call(operations, command.taskId, command.action); return accepted;
+    case 'queue_edit': return queueResult(await requireOperation(operations.editQueue, 'queue_edit').call(operations, command.messageId, { text: command.text, ...(command.attachments !== undefined ? { attachments: command.attachments } : {}) }));
+    case 'queue_retract': return queueResult(await requireOperation(operations.retractQueue, 'queue_retract').call(operations, command.messageId));
+    case 'queue_resume': return queueResult(await requireOperation(operations.resumeQueue, 'queue_resume').call(operations));
+    case 'queue_discard': return queueResult(await requireOperation(operations.discardQueue, 'queue_discard').call(operations));
+    case 'task_control': return taskResult(await requireOperation(operations.controlTask, 'task_control').call(operations, command.taskId, command.action));
     case 'list_rewind_targets': return { ok: true, kind: 'rewind_targets', targets: await requireOperation(operations.listRewindTargets, 'list_rewind_targets').call(operations) };
     case 'rewind': return { ok: true, kind: 'rewound', ...await requireOperation(operations.rewind, 'rewind').call(operations, command.targetId) };
     case 'reset': return { ok: true, kind: 'session_changed', ...await requireOperation(operations.reset, 'reset').call(operations) };
@@ -78,4 +88,16 @@ async function answerInteraction(session: DirectSession, requestId: string, deci
   if (decision.kind === 'decline') return session.answer(requestId as InteractionRequestId, { kind: 'answer', answer: 'User declined to answer.',
     ...(decision.stopAfterApprovalResolution !== undefined ? { stopAfterApprovalResolution: decision.stopAfterApprovalResolution } : {}) });
   return session.answer(requestId as InteractionRequestId, decision);
+}
+
+/** Planner outcomes are effects only after the owning Session has durably accepted them. */
+function queueResult(result: DirectQueueMutation): WireCommandResult {
+  if (result.kind === 'accepted' || result.kind === 'no_op') return accepted;
+  if (result.kind === 'too_late') return { ok: false, code: 'too_late', message: 'Queued input is no longer editable or retractable.' };
+  return { ok: false, code: 'invalid_command', message: 'Queue mutation was rejected.' };
+}
+
+function taskResult(result: DirectTaskControlResult | { readonly ok: true }): WireCommandResult {
+  if (result.ok) return accepted;
+  return { ok: false, code: result.code === 'not_found' ? 'not_found' : 'rejected', message: `Task control rejected: ${result.code}` };
 }

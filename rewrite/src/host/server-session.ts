@@ -1,11 +1,12 @@
 /** Session HTTP operations use only the attached direct connection and typed protocol commands. */
-import type { WireAdmission, WireCommand, WireConfiguration } from '../protocol/direct-wire.js';
+import type { WireAdmission, WireCommand } from '../protocol/direct-wire.js';
 import type { ServerHostDependencies, ServerResult, ServerSessionRequest } from './server-contracts.js';
 import type { PrivateRoute } from './server-routes.js';
 import { commandFailure, publicError, unavailable } from './server-errors.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { parseWireCommand } from '../protocol/direct-parse.js';
 import { projectServerSession } from './server-projection.js';
+import { invokeServerCommand } from './server-commands.js';
 import * as validate from './server-validation.js';
 
 /** Does not own Session lifetime; its caller closes every non-streaming attachment. */
@@ -135,17 +136,7 @@ export async function handleSessionRoute(
       return configureSession(input, dependencies);
     case 'command_invoke': {
       if (!validate.isCommandBody(body)) return invalid('command request is invalid');
-      if (busy(input)) return publicError(409, 'session_busy', 'session is busy');
-      if (!['compact', 'retry-tool', 'retry-turn'].includes(body.commandId))
-        return publicError(422, 'command_not_allowed', 'command is not allowed');
-      // Wire retry/compact has no clientRequestId or durable operation outcome. Executing it here
-      // would lose gateway idempotence across crash/reconnect. No in-memory/sidecar dedupe is allowed.
-      return publicError(
-        503,
-        'command_admission_unavailable',
-        'retry and compact require Session-owned durable command admission and outcome receipts',
-        true,
-      );
+      return invokeServerCommand(input, body);
     }
     case 'abort': {
       if (!validate.isTurnBody(body)) return invalid('abort request is invalid');
@@ -242,26 +233,16 @@ async function configureSession(
       'mode and default reasoning require direct Session configuration support',
       true,
     );
-  const configuration: { model?: WireConfiguration['model']; reasoning?: WireConfiguration['reasoning'] } = {};
-  if (body.modelSelection) {
-    if (body.modelSelection.provider !== connection.snapshot.model.provider)
-      return invalid('provider is bound to this session; create a new session to change it');
-    if (!dependencies.models) return publicError(503, 'settings_unavailable', 'model catalog unavailable', true);
-    const models = await dependencies.models();
-    if (
-      !models.some(
-        (model) => model.provider === body.modelSelection!.provider && model.id === body.modelSelection!.model,
-      )
-    )
-      return publicError(422, 'validation_error', 'model is unavailable');
-    configuration.model = body.modelSelection;
-  }
-  if (body.reasoningEffort !== undefined)
-    configuration.reasoning = body.reasoningEffort as WireConfiguration['reasoning'];
-  if (Object.keys(configuration).length) {
-    const result = await connection.send({ type: 'configure', configuration } satisfies WireCommand);
-    if (!result.ok) return commandFailure(result);
-  }
+  // Native keyed configure currently durably rejects unavailable. This HTTP contract has no
+  // stable mutation key or full mode/default/revision authority yet. Do not allocate a private
+  // command ID, send an obsolete unkeyed patch, or treat a receipt acknowledgement as installation.
+  if (body.modelSelection !== undefined || body.reasoningEffort !== undefined)
+    return publicError(
+      503,
+      'session_config_unavailable',
+      'session configuration requires native runtime installation and revision authority',
+      true,
+    );
   const fresh = await dependencies.host.connect(principal, connection.sessionId);
   try {
     return { status: 200, body: await dependencies.presentation!.configuration!(principal, fresh.snapshot) };

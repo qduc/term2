@@ -73,7 +73,8 @@ const SESSION_HELD = 'session goals need a Session goal API in the direct app (M
 const JSON_HELD =
   'the old NDJSON event schema needs a protocol-owned read model, which the direct protocol does not expose yet';
 const SSH_HELD = 'the tool surface cannot run a remote workspace yet (lead: ToolSurfaceOptions.remote and remoteContext)';
-const FORK_HELD = 'fork needs a Session operation; #65 assigns no milestone, so the coordinator must assign one';
+const FORK_HELD =
+  'the launch does not yet call forkDirectConversation with the store workspace resolver (app owner: fork field)';
 
 /** Builds one flag. `suffix` is its help placeholder: ' <x>' takes a value, '[=<x>]' takes only an inline one. */
 const opt = (names: string[], suffix: string, help: string, refusal?: string, value?: Flag['value']): Flag => {
@@ -191,7 +192,8 @@ type RawValue = string | true;
 
 function parseResumeId(value: string): string {
   if (value.startsWith('-')) throw new Error('--resume requires an exact conversation ID');
-  if (!/^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+  // Lowercase only: the direct store and the fork operation reject uppercase hex, and an uppercase id is not rewritten.
+  if (!/^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)) {
     throw new Error('--resume requires an exact direct conversation ID');
   }
   return value;

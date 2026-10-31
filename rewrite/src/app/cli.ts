@@ -338,6 +338,8 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     io,
     autoApprove: options.autoApprove,
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
+    // --fork is still refused in cli-args.ts until the launch calls the fork operation with the store's resolver.
+    ...(options.fork ? { fork: true } : {}),
     profileExplicit: options.profile !== null || options.lite,
     output: options.output.json ? 'json' : 'plain',
     showReasoning: options.output.showReasoning,
@@ -401,6 +403,8 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     ...(controlSocket === undefined ? {} : { controlSocket }),
     // Still refused in cli-args.ts until the tool surface can run a remote workspace.
     ...(options.ssh === null ? {} : { ssh: options.ssh }),
+    // --fork is still refused in cli-args.ts until the fork operation is on the candidate.
+    ...(options.fork ? { fork: true } : {}),
   };
   return launchDirect(request);
 }

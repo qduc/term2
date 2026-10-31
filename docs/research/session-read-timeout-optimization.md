@@ -82,4 +82,5 @@ Raw local evidence and reproduction scripts are retained under
 `.cjs.txt` to avoid linting diagnostic artifacts; run from the worktree with
 `node - < path/to/script.cjs.txt`. Do not add `--input-type=commonjs`: that flag is
 inherited by the eval worker and breaks its module bootstrap. Final verification
-commands and outcomes are recorded in `docs/test-results.json`.
+commands and outcomes are archived at `42724797:docs/test-results.json`; the
+causal findings and reproduction constraints above remain the useful reference.

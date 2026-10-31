@@ -188,8 +188,8 @@ recovery-policy boundaries.)
 
 Broader gates: `NODE_ENV=test pnpm test`, `pnpm typecheck`. A runtime-guard
 change additionally requires a written guard contract and red
-false-positive/true-positive matrix per `ROADMAP.md` Phase 3 Step 5, with the
-`guard-ledger.md` updated.
+false-positive/true-positive matrix per `ROADMAP.md` Phase 3 Step 5. Keep useful
+causal and rollback notes with the relevant owner; no routine registry update is required.
 
 ## 10. Known gaps and classification
 
@@ -234,8 +234,8 @@ false-positive/true-positive matrix per `ROADMAP.md` Phase 3 Step 5, with the
 2. **Ledger completeness limitation — non-gating.** The ledger itself states that keyword
    sweeps cannot find inline literal comparisons, so "every runtime guard" is
    bounded by the ledger's inventory, not by a proof of completeness
-   (`guard-ledger.md:666-686`). Any new guard must be added to the ledger with
-   its contract when introduced.
+   (see “Discovery caveats” in `guard-ledger.md`). Any new guard still needs a
+   source-backed contract with its owner, not an entry in a central registry.
 3. **Open design limitations — non-gating, uncharacterized hypotheses.** The
    background-shell watch budget remains unbounded
    (`background-shell-monitor/MAP.md:326-330`); there is no child-targeted

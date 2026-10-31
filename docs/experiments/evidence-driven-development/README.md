@@ -1,7 +1,13 @@
 # Evidence-driven development experiment
 
-**Status:** running since 2026-10-08. Ends at the later of 2026-11-05 or 30 completed tasks, then gets a
-decision (see [Ending the experiment](#ending-the-experiment)).
+**Testing policy remains active.** On 2026-10-31 the user retired routine task,
+defect and test-result bookkeeping: “remove the noise, keep what is useful for
+learning about past mistakes or help debugging only.” This is not a decision
+that the experiment succeeded, ended, or that its test gates should be removed.
+
+The original review milestone was the later of 2026-11-05 or 30 completed tasks.
+It is historical context, not a requirement to reconstruct task counts after
+bookkeeping retirement. The user still owns the testing-policy decision.
 
 ## Hypothesis
 
@@ -30,9 +36,7 @@ result is a decision about the next step, not proof that unit tests are unnecess
 7. Report unverified claims and remaining uncertainty explicitly. Never claim success that was not
    checked.
 8. High-risk changes need independent verification by a separate agent that did not implement them.
-9. Record every completed task in [tasks.jsonl](tasks.jsonl) and every defect found after completion in
-   [defects.jsonl](defects.jsonl).
-10. Do not weaken verification to improve the metrics.
+9. Do not weaken verification to improve apparent results.
 
 Writing a unit-style test inside an `*.integration.*` or `*.e2e.*` file to get around rule 1 is a review
 finding. An integration test must cross a real module boundary: process, filesystem, network fixture,
@@ -52,171 +56,38 @@ persisted session, or the built CLI.
   are now unused.
 - Many plan and contract docs still name unit test files as evidence. Those references point to the tag.
 
-## Metrics
+## Learning without routine accounting
 
-Recorded per task in `tasks.jsonl` and per defect in `defects.jsonl`. One JSON object per line.
+Report verification and its limits in the task handoff. Keep durable notes only
+when they help explain a past mistake, recurring failure, guard behavior, failed
+approach or recovery. Use the relevant existing area doc, skill or code comment;
+there is no replacement ledger, per-task schema or required successful-run entry.
+Runtime logs, conversation state and tool-execution records are unrelated and
+remain unchanged.
 
-| Metric | Source | Desired |
-|---|---|---|
-| Task completion time | `started_at` → `verified_at`, including rework | lower |
-| Verification cost | `verification.minutes`, `verification.tokens` if known, verifier cost included | lower |
-| Escaped defects | `defects.jsonl` rows linked to a task, per task and per 1000 changed lines | no meaningful increase |
-| Regression rate | escaped defects with `kind: "regression"` | no meaningful increase |
-| Human interventions | `human_interventions` count and notes | lower |
+The [interim assessment](interim-results-2026-10-24.md) retains the useful findings
+and measurement limits. The October 24 human decision was “Continue with
+measurement and verification improvements.” The October 31 direction retires
+the accounting part, not the verification improvements. In particular, independent
+failure-path acceptance and honest source/environment attribution still matter.
+[Targeted acceptance evidence](acceptance-verification-2026-10-24.md) and
+[profile-display findings](bare-profile-display-2026-10-24.md) retain their concrete
+reproductions and limitations.
 
-The most important are completion time (primary), escaped defects (the quality guardrail) and human
-interventions (autonomy). Normalize defects by task count and change size; a productive week must not
-look worse just because more shipped.
+Exhaustive former task, defect, test-run and frozen measurement records remain in
+git history before this cleanup (source snapshot `42724797`). They are historical
+evidence, not append targets. Do not treat a missing record as zero effort, zero
+defects or proof of acceptance.
 
-A defect counts whenever it is found, including after the experiment ends, as long as it traces to a task
-completed during it.
+## Reconsidering the testing policy
 
-### Accepted continuation, 2026-10-24
+The original rollback concerns still apply: two or more escaped regressions of
+the same kind that verification keeps missing; clear quality deterioration where
+comparable evidence exists; or rising human intervention because agents cannot
+verify independently. A lack of comparable measurements does not prove safety
+or deterioration. Do not weaken verification to make the experiment look better.
 
-Human decision on the [interim assessment](interim-results-2026-10-24.md):
-**"Continue with measurement and verification improvements."** The experiment remains running under
-the same ending rule, rollback triggers and no-permanent-unit-test constraint. Neither reduced total
-cost nor equivalent quality was established.
-
-[Continuation evidence and open acceptance work](continuation-2026-10-24.json) records the decision,
-source revisions, a worked measurement example and three targeted verification follow-ups. The interim
-report/data remain frozen at 2026-10-24 06:53:25 +07. Later evidence is recorded separately, not used to
-rewrite that cohort or silently close its acceptance gaps.
-
-### Task record
-
-```json
-{"id":"2026-10-09-rollover-dedupe","type":"bugfix","risk":"high","started_at":"2026-10-09T09:12Z","verified_at":"2026-10-09T11:40Z","commit":"abc1234","files_changed":6,"lines_changed":210,"agent":"term2/<model>","claims":["rollover keeps the goal","no duplicated tool calls"],"methods":["run-app","trace-inspection","temporary-test"],"verification":{"minutes":35,"tokens":null,"independent":true,"verifier":"claude","verdict":"accept","rework_rounds":1},"uncertain":["token savings measured on one session only"],"human_interventions":0,"notes":""}
-```
-
-`type` is one of `bugfix | feature | refactor | infra | docs`. `risk` is one of `low | medium | high`
-(defined in the `verification` skill). Use these `methods` values where they fit, and invent new ones
-when they don't (discovering methods is part of the experiment): `typecheck`, `lint`, `static-reading`,
-`temporary-test`, `temporary-script`, `integration-test`, `e2e-test`, `provider-black-box`, `run-app`,
-`non-interactive-run`, `trace-inspection`, `log-inspection`, `browser-automation`, `fault-injection`,
-`before-after-comparison`, `independent-review`.
-
-#### Measurement annotations for new records
-
-Keep the existing fields. Add this optional `measurement` object to new task records (or task-linked
-verification runs in `docs/test-results.json`); historical rows need no migration:
-
-```json
-{
-  "measurement": {
-    "activity": "delivery",
-    "sessions": [
-      {"id": null, "role": "author", "agent": null, "locator": null}
-    ],
-    "completion": {
-      "status": "verification-pending",
-      "author_completed_at": null,
-      "accepted_at": null,
-      "accepted_commit": null,
-      "evidence_run_ids": []
-    },
-    "effort": [
-      {"actor": "author", "phase": "implementation", "metric": "active_minutes", "value": null, "basis": "unknown", "source": null, "session_id": null}
-    ],
-    "observed_through": null,
-    "followup_source": null,
-    "related_task_ids": [],
-    "unknowns": ["Verifier, rework and human effort; tokens and monetary cost not recorded"]
-  }
-}
-```
-
-- Use a stable task `id`; link verification runs with `task_ids`. Record actual persisted session IDs
-  and their log/artifact locators, role and provider/model when available. A pane ID, hash mention or
-  whole-session token counter does not establish task attribution; otherwise leave the ID `null`.
-- `activity` distinguishes `delivery`, `study`, `verification` and `docs`. `completion.status` is
-  `author-complete`, `verification-pending`, `accepted` or `rejected`. Retain old `verified_at` values;
-  for new rows, do not use author completion as high-risk acceptance. An `accepted` high-risk record
-  still requires the existing independent-verification and failure-path evidence, exact revision and
-  evidence-run links. Unknown acceptance time stays `null`, not an invented timestamp.
-- Effort entries name an `actor` (`author`, `verifier`, `human`), `phase` (`implementation`,
-  `verification`, `rework`, `coordination`), `metric` (`active_minutes`, `wall_seconds`, `tokens`,
-  `cost_usd`), `value`, `basis` (`observed`, `estimate`, `unknown`) and source field/artifact.
-  Keep author verification separate from implementation; include independent verifier, failed
-  attempts, rework and human effort where observable. Link later repair tasks rather than charging
-  their usage twice. For estimates, state the estimation/pricing/cache assumptions in `source`.
-- `null`, an absent field or an empty observation list means **unavailable**, never zero. Use zero
-  only for a supported observation of none. List unobserved phases/metrics in `unknowns`; do not
-  infer cost from missing usage or classify a passing rerun as measured repair work.
-- Do not sum overlapping session/turn counters or add command wall time, active effort and the
-  `started_at` → `verified_at` span together. Keep legacy `verification.minutes/tokens` for
-  compatibility, with their scope in `notes`; the annotations are a breakdown, not additional spend.
-  Report known-only denominators, observation/estimate coverage and activity/risk mix in comparisons.
-- Record timestamps with timezone and flag inconsistent clocks. `observed_through` and
-  `followup_source` describe the last actual defect follow-up and its surveillance scope, not the
-  record-writing date or a guarantee of no defects. Unknown follow-up stays `null`, including for
-  tasks with no reported defects. For later acceptance/corrections, append a task-linked
-  resolving run to `docs/test-results.json` (use `comparison.resolves_run_ids` when known); preserve
-  old rows and verdicts. Do not duplicate an existing task as a new completed delivery.
-
-### Defect record
-
-```json
-{"id":"2026-10-15-goal-lost","found_at":"2026-10-15T08:00Z","found_by":"user","task":"2026-10-09-rollover-dedupe","kind":"regression","severity":"medium","summary":"goal text dropped after second rollover","missed_because":"verification only exercised one rollover","method_that_would_catch":"run-app with two rollovers"}
-```
-
-`found_by` is one of `user | agent | ci | verifier`. `kind` is `regression` (something that used to work
-broke) or `defect` (new behavior was wrong). Set `task` to `null` when the cause is unknown.
-
-For new defect records, also record `recorded_at`, `discovery_phase` (`before-acceptance`,
-`after-acceptance`, `unknown`), `repair_task` (or `null`), `evidence_run_ids`, and
-`attribution` (`confidence`, `reason`, `completion_evidence`, `observed_through`).
-`task` identifies the **introducing** task, not the repair; do not infer it merely from shared files.
-Distinguish product, fixture/environment and coverage findings in `attribution.reason`; preserve the
-existing `kind` rather than counting assertions as separate regressions. Completion/discovery evidence
-must support the phase; unknown origin, phase, reporting time or follow-up end stays `null`/`unknown`.
-Pre-acceptance findings belong in task-linked verification runs, not escaped-defect totals.
-Historical mixed-phase rows remain observations, not silently relabelled escapes. Append subsequent
-linkage corrections in a resolving verification record referencing the defect ID and original evidence.
-
-Optional fields to copy alongside the existing defect fields:
-
-```json
-{
-  "recorded_at": null,
-  "discovery_phase": "unknown",
-  "repair_task": null,
-  "evidence_run_ids": [],
-  "attribution": {
-    "confidence": "unknown",
-    "reason": null,
-    "completion_evidence": null,
-    "observed_through": null
-  }
-}
-```
-
-## Baseline
-
-Compare against the four weeks before the experiment (2026-09-10 to 2026-10-08). Main had 279 merge
-commits and 170 non-merge commits starting with `fix` in that window. These are rough proxies for tasks
-and defects, not a matched baseline. Before the mid-point review, build a better one: sample about 30
-merged tasks by type, take their duration from session logs (see the `debugging-logs` skill), and count the
-fix commits that trace back to each task.
-
-## Rollback triggers
-
-Reconsider the policy early, rather than defending it, if any of these hold:
-
-- Two or more escaped regressions of the same kind that the new process kept missing.
-- Escaped defects per task clearly above the baseline after at least 15 tasks.
-- Human interventions rising, because agents can no longer verify on their own.
-
-A rollback restores the suite from the tag in whole or in part. A partial restore, for example only the
-tests for the area that kept regressing, is also a result worth recording.
-
-## Ending the experiment
-
-At the end, write `results.md` beside this file covering:
-
-- the metrics against the baseline;
-- the verification methods agents used and how often each one found a defect;
-- what escaped and why;
-- a recommendation: keep, keep with changes, partial restore, or full restore.
-
-The user makes the decision.
+Any final assessment should state what was learned, what escaped and why, the
+limits of any cost/quality comparison, and a recommendation: keep, keep with
+changes, partial restore, or full restore. The user decides. A rollback can
+restore the suite from `unit-suite-baseline` in whole or in part.

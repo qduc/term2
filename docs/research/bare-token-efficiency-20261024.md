@@ -121,8 +121,8 @@ behavior afterward. No permanent unit tests or new static guards were added.
 
 ## Verification and stopping
 
-Full results, exact failures and the resolving run are appended to
-`docs/test-results.json`. On the tested source: full integration 226 pass/1 skip;
+Exhaustive former run records are archived at `42724797:docs/test-results.json`.
+The useful failure signature and comparison remain below. On the tested source: full integration 226 pass/1 skip;
 provider black-box 221 pass/1 skip; e2e 32 pass/4 skip; static guards 28 pass;
 typecheck and lint pass. The first full integration run had one 10-second generic
 model-listing timeout (225 pass/1 fail/1 skip); its focused test and unchanged full

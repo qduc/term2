@@ -79,7 +79,7 @@ your claims, and your evidence, but not your conclusion. The verifier:
   persisted session, or the built CLI;
 - returns `accept` or `reject` with reasons. On reject, rework and verify again.
 
-Verifier time counts as verification cost in the task record.
+Report independent acceptance separately from author checks; neither implies the other ran.
 
 ## What does not count
 
@@ -88,13 +88,22 @@ Verifier time counts as verification cost in the task record.
 - A passing typecheck offered as proof of behavior.
 - Evidence from a different commit than the one you are handing off.
 
-## Report and record
+## Report useful evidence
 
-End the task with the claims, the evidence for each claim (command plus result, or what you
-observed), and an **Uncertain** list. Then append one line to
-`docs/experiments/evidence-driven-development/tasks.jsonl` in the format in that
-directory's README. If you find a defect in work already marked complete, append it to
-`defects.jsonl` with the task it traces to.
+End the task with the claims, evidence for each claim (tested revision, command plus
+result, or observation), and an **Uncertain** list. Label dirty snapshots explicitly.
+Routine task/defect/test-result ledgers are retired; do not append or recreate them.
+When a failure teaches something reusable, keep the cause, diagnostic signature,
+failed approach or recovery advice in the relevant existing docs or code. A normal
+successful run belongs in the handoff, not a permanent accounting record.
+
+When an observation fails after an effect may have happened, inspect the actual
+state before retrying the effect. Local Discord cutover probes once missed a
+successful launch because of pane-marker timing, and missed a sent output by
+searching request IDs in the outbox instead of following `proactive.outputs` IDs.
+Neither warranted another launch or send. Likewise, integrated protocol tests
+are not live-runtime compatibility: retained definitions once rejected new reaction
+input/results that the candidate accepted. Check both endpoints before activation.
 
 ## After a bug fix
 

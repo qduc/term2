@@ -170,7 +170,8 @@ binaries:
 Logs, exact command argv, start times, observed command wall durations, source
 identity, hashes, stdout/stderr, final probe-source text and sequence artifacts:
 `/tmp/edd-acceptance-20261024/`. Machine-local evidence may expire; decisive
-signatures are retained above and in appended `docs/test-results.json` runs.
+signatures are retained above; exhaustive former run records are archived at
+`42724797:docs/test-results.json` (routine accounting was later retired).
 Final-source archives are text evidence; temporary executable probes and
 historical modules were removed from the checkout before commit.
 

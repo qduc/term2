@@ -217,7 +217,7 @@ part of this slice.
   script-facing declarations while preserving the merged receipt baseline.
   Do not couple rollback to Stage 2 or removal of evidence safeguards.
 - Ledger: no runtime guard changed in this draft. Review the full
-  `../approvals-and-sandbox/guard-ledger.md` and add the candidate row with source-backed ownership and
+  the relevant history in `../approvals-and-sandbox/guard-ledger.md` and document source-backed ownership and
   red evidence before implementation; no verified-safe status is claimed here.
 
 ## Evidence needed to make this implement-ready

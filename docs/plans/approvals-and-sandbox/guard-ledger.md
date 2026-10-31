@@ -1,4 +1,11 @@
-# Term2 Guard Ledger and Remediation Plan
+# Runtime guard incidents and contracts
+
+Historical reference for guard signals, false positives, settlement and rollback,
+not an append-only registry or per-change reporting requirement. Read the relevant
+incident and linked owner docs; dates and branch-local caveats matter, and current
+implementation establishes current behavior. Routine task and test-run accounting
+was retired on 2026-10-31; old ledger references below describe archived evidence,
+not instructions to recreate it.
 
 ## Personal memory prompt section (2026-10-30)
 
@@ -40,8 +47,8 @@ Red proof: personal-memory integration file on pre-change tree: 5 failures
 (`remove`, `app.activeProfileId`), not product failures. Permanent filesystem
 integration checks cover add/edit/delete/tag removal, role/scope/tool gates,
 whole-summary overflow, small budget, corruption/recovery and normal agent
-assembly. Verification results and independent disposition are in the task-linked
-`docs/test-results.json` entries; do not infer acceptance merely from this row.
+assembly. Historical verification results and independent disposition are archived
+at `1c00c1f4:docs/test-results.json`; do not infer acceptance merely from this entry.
 Bare follow-up red proof: two new filesystem integration checks fail against
 5d7666f3 (missing Bare resolver). They cover explicit local enable/disable,
 fail-closed parsing, no global/Standard additions and no subagent grant.
@@ -89,7 +96,7 @@ under `tasks/discord-durability/integration-evidence/` reaches real passive TUI
 admission and real built CLI POST, withholds acknowledgement, then stops launcher.
 Original 8s copy kills before REST deadline: no143 exit, owner retained, output
 `sending` (`grace-red.log`). Final direct checks and independent disposition are
-recorded in the task integration report/test-results ledger, not inferred here.
+recorded in the historical task integration report, not inferred here.
 The fixed source is copied from the independently accepted startup candidate;
 original artifacts are unmodified. Deployment/installation is not authorized by
 this ledger entry. Threshold tests target the real10s request boundary plus a
@@ -135,7 +142,7 @@ loss, partial-page disappearance, first-read skip, explicit alias refusal,
 SIGKILL/fresh-process stale-owner recovery, retained queued output, reverse REST
 pages, duplicate IDs and unauthorized/bot/webhook inputs. Existing tests retain
 inbox capacity, error/backoff, pinned-job and ambiguous POST controls. Verification
-results are recorded in `docs/test-results.json`; independent review is separate.
+results are archived in git history at `42724797` (`docs/test-results.json`); independent review is separate.
 Author boundary verification on source `70c9ba2a0a9b63210efd9e10b90ddd4295169a2f`
 (production repair `db72e3267f9215d35db5673d19389f381c4483fb`): the same
 five-case red selection passes; `pnpm test:integration` passes 384 tests with
@@ -191,7 +198,7 @@ Red proof on pre-fix product `c3289dd2`: focused Gateway/runner integration run
 with paused real loopback peers produced 5 failures (zombie, op7, op9, runner
 fallback, process exit). Fixed checks use those same tests. Runner coverage
 separately observes return and child exit, not merely owner-file cleanup.
-See task-linked lifecycle runs in `docs/test-results.json`; post-fix independent
+See archived lifecycle runs at `42724797:docs/test-results.json`; post-fix independent
 acceptance remains coordinator-owned.
 
 ## Prefix-preserving local compaction (2026-10-23)
@@ -273,7 +280,7 @@ by the system heuristic. Commands in that live advisory check were data only.
 The paired pilot remains paused; its earlier outcomes are unchanged.
 
 Status: repaired in `721795e1`; focused evidence passes. Broader gate outcomes and independent
-verification disposition are recorded in the experiment task ledger.
+verification disposition are archived at `42724797` in the former experiment task records.
 
 ## Agent model discovery pages (2026-10-19)
 
@@ -339,7 +346,7 @@ independently repeated by a separate verifier. Cases cover fractional hints,
 and SDK response headers. Sleep injection checks scheduling without a real
 minute-long wait. Cancellation/budget/partial-output safeguards were inspected,
 not newly fault-injected. Broader gate outcomes are recorded in the experiment
-task ledger.
+historical task report.
 
 Retro: preventable boundary-contract gap, origin unknown. Header-only delay
 extraction silently discarded the SDK's scheduling metadata. Timing assumptions
@@ -579,7 +586,7 @@ Budget judgment for turns, time, cost, and stall evidence is owned by
 Shell changes must preserve [`../background-work/background-shell-monitor/MAP.md`](../background-work/background-shell-monitor/MAP.md).
 Provider or run-loop changes require the provider black-box suite.
 
-## Resume here
+## Recovery and discovery lessons
 
 The September 6 invalid-chain incident supersedes the historical per-logical-
 turn retry envelope below: the shared budget now bounds consecutive recovery
@@ -613,34 +620,6 @@ Two consequences, both deliberate:
 2. **The reference table is not a work queue.** Roughly 25 guards were catalogued
    with no hypothesized failure mode. They are listed so the next reader does not
    re-derive them — not because each owes a characterization test.
-
-Open work, in order:
-
-- **Completed:** `agent.maxParallelToolCalls` repair approved, verified, and
-  merged (`f09b55ec`, merge `87b7224c`).
-- **Completed:** all five candidates characterized and merged (`b75e36db`,
-  merge `f12181e0`); results are recorded below.
-- **Completed:** the four repair dispositions below were approved on
-  2026-08-14. This approval changes no runtime or test behavior.
-- **Completed:** the subagent steering mailbox repair is implemented and
-  verified and merged (`74323696`, merge `fa328291`).
-- **Completed:** tool ownership lifecycle repair is implemented and merged
-  (`184db508`, merge `faa737c5`).
-- **Completed and merged (`8d0e7f7a`):** `GenerationGuard` reasoning-length
-  false positive. Verbose high-effort reasoning of ~100k characters on one
-  request was aborting the turn as `reasoning_characters` /
-  `unsafeToReplay`. The 100k cap is retained as a truncate bound; it no
-  longer fails the request. See the repair record below.
-- **Completed and merged (`dd80e755`; repair `d16bd5e3`):** destructive repetition
-  inference is removed from both execution owners while the typed
-  100,000-character aggregate visible-output cap remains. The InputSurgeGuard
-  capability repair remains a separate worktree and rollback boundary.
-- **Completed and merged (`43f3d978`, from `retry-recovery-contract`):** the
-  retry/recovery containment budget (`RetryRecoveryBudget`: 90s / 3 physical
-  attempts / 1 automatic replay) and its never-replay-after-committed-output
-  precondition. Four confirmed false-positive/settlement defects repaired
-  across seven commits (`a00a899f` `3d9dab32` `839d2781` `66abfcec`
-  `e353680f` `28a18aab` `a7e44292`); see the full entry below.
 
 ## Guard classes
 
@@ -3514,32 +3493,6 @@ rg -n 'unsafeToReplay|retryable|transient|transportFallback|cancelled|timed_out'
 rg -n 'Guard|Watchdog|action: .(block|reject)|\b(block|reject|drop|discard)\b' source
 ```
 
-## Verification
-
-Focused owner tests plus `pnpm typecheck` for each repair. Additionally:
-
-```bash
-pnpm exec prettier --check <changed-files>
-NODE_ENV=test pnpm test
-pnpm test:provider-black-box   # any provider, bridge, run-loop, registry, or non-interactive change
-```
-
-Report focused success separately from baseline, environment, or sandbox-only
-failures. Never call a guard safe solely because its termination test passes.
-
-## Done when
-
-1. The `maxParallelToolCalls` repair is approved and merged, or explicitly
-   declined and recorded here.
-2. Each of the five candidates is either repaired with a red-proof test and an
-   independently revertible commit, or downgraded with evidence.
-3. Every destructive repair preserves truthful partial-work settlement.
-4. Provider and run-loop changes pass the black-box gate.
-5. This document records the final dispositions and commit IDs, then moves to the
-   completed list in `AGENTS.md`.
-
-The reference tables above do not gate completion.
-
 ## September 5 tool-performance follow-up
 
 Evidence and implementation status: [tool-performance-followup.md](../tools/tool-performance-followup.md).
@@ -4207,7 +4160,7 @@ checks 128/129 pending admissions, exact 16 MiB/+one admission, 16,384/+1 text,
 514 settled sends plus restart, lost admission acknowledgement, ambiguous POST,
 actual SIGKILL during POST, stale endpoint recovery, journal write failure,
 identity change, pause, ambiguous discovery and unsafe runtime permissions.
-Commands and exact counts are appended to `docs/test-results.json`. Independent
+Commands and counts are archived at `42724797:docs/test-results.json`. Independent
 verification not performed; separate immutable-checkpoint execution review is
 pending. Rollback the tool/root wiring and outbound endpoint together, preserving
 private extended journals and their reconciliation evidence; no automatic
@@ -4246,7 +4199,7 @@ whole-config fingerprint; the legacy rejection case passed. The same real
 loopback Discord/Unix socket/conversation workflow checks paused and accepted old
 jobs, new-default/explicit routes, restart deduplication, replacement-session
 refusal and channel/human/path/hop-limit mismatch without journal rewrite.
-Commands and results are recorded in `docs/test-results.json`. Rollback of the
+Commands and results are archived at `42724797:docs/test-results.json`. Rollback of the
 binary alone cannot open the upgraded fingerprint; preserve a pre-upgrade backup
 and reconcile later effects rather than replaying it blindly.
 
@@ -4318,7 +4271,7 @@ Tests in `discord-bridge.integration.test.ts` cross loopback Gateway/REST, durab
 journal, Unix sockets and real conversation/provider paths: association, replay,
 fast POST race, pause/replacement, busy/approval, explicit run_code, emoji encoding,
 rate-limit/permission/missing target/transport/server/restart. Existing cap-boundary
-checks remain; focused commands/results are recorded in `docs/test-results.json`.
-No live activation. Rollback must retain extended state; older binaries can refuse
-new optional fields. Independent verification disposition belongs to the task
-ledger/report, not an assumed live-safety claim.
+checks remain; historical focused results are archived at
+`1c00c1f4:docs/test-results.json`. No live activation. Rollback must retain extended
+state; older binaries can refuse new optional fields. Independent verification
+disposition is historical evidence, not an assumed live-safety claim.

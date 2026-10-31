@@ -24,9 +24,10 @@ conflicting testing guidance: permanent unit tests are prohibited; integration,
 e2e, provider black-box tests, and existing static guards remain. Temporary tests
 are allowed. The user-authorized [generated verification pilot](docs/experiments/generated-verification/README.md)
 permits persistent bounded generated properties, not restored example-based unit tests.
-High-risk changes require an independent verifier. Completed tasks
-and escaped defects are recorded in the experiment's JSONL ledgers. The experiment
-README contains the full policy and decision criteria; historical unit-test
+High-risk changes require an independent verifier. Routine task, defect, and
+successful-test accounting was retired at the user's direction; keep concrete
+failure lessons and debugging evidence in the relevant existing docs instead.
+The experiment README contains the testing policy and decision criteria; historical unit-test
 references point to tag `unit-suite-baseline`.
 
 Several agents share the primary checkout. Bug fixes and features use worktrees
@@ -41,19 +42,13 @@ under `source/skins/<name>/`; component colour literals bypass this boundary.
 
 ## Evidence and institutional knowledge
 
-Check [recorded test results](docs/test-results.json) when a verification run fails.
-After a task's verification, append the tested commit/tree, command, environment,
-counts, exact failures and evidence to its `runs` array, following existing fields
-and using `null` for unknowns. Keep historical entries; append corrections or
-resolving runs. Label pre-commit/dirty snapshots explicitly; never present them as
-clean-commit runs. Record source commit hashes in a later documentation commit.
-Historical matches identify candidate
-pre-existing failures; compare the failure signature and environment before
-classifying them, and reproduce on the base when the evidence is insufficient.
-Check ancestry and intervening fixes; ancestry alone does not establish persistence.
-Retain concise diagnostic signatures even when linking machine-local logs that
-may expire. Do not record secrets or infer unrun tiers from focused checks.
-Query a revision with `jq --arg sha <full-hash> '.runs[] | select(.commit == $sha)' docs/test-results.json`.
+When verification fails, consult the recurring failure notes in the `testing`
+skill and relevant area docs. Historical matches are leads, not proof that a
+failure is pre-existing: compare the signature and environment, inspect intervening
+fixes, and reproduce on the base when necessary. Report the tested revision (label
+dirty snapshots), command, meaningful failures and verification limits in the task
+handoff. Retain a note in existing docs when it explains a cause, failed approach,
+recovery or recurring debugging trap; do not recreate routine result ledgers.
 
 Repository docs provide orientation and rationale; the relevant implementation
 establishes current behavior. Area-specific plans and service contracts are indexed

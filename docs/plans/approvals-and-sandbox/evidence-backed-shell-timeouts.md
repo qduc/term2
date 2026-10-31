@@ -25,7 +25,7 @@ stored settings), or the executor/logging commit alone (no default change).
 Owners and prior decisions:
 
 - [Guard ledger](guard-ledger.md): do not repeat broad keyword sweeps. Begin with
-  the incidents below; update the relevant ledger rows when implementing.
+  the incidents below and retain useful causal/rollback notes with the owner.
 - [Background shell monitor](../background-work/background-shell-monitor/MAP.md): preserve output
   watches, terminal notification ordering, bounded retention, and cancellation.
 - [Run budgets](../agent-runtime/run-budget-stall-escalation.md): separate run containment remains
@@ -221,8 +221,9 @@ the testing skill broader gate for the actual blast radius before handoff.
 
 Close with an evidence receipt: red proof where behavior changed, final check
 results, effective pilot values, workload outcomes, remaining uncertainties,
-rollback boundary, and merged commit references. Update the guard ledger with
-those receipts rather than promoting theoretical candidates to confirmed harm.
+rollback boundary, and merged commit references. Retain useful causal/rollback
+findings with the owner rather than requiring a central registry entry or
+promoting theoretical candidates to confirmed harm.
 
 ## Evidence receipt (2026-09-06, local UTC+7) — plan closed
 

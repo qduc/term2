@@ -17,9 +17,10 @@ reported false positive.
 
 Before changing a guard:
 
-1. Read `docs/plans/approvals-and-sandbox/guard-ledger.md` completely, including its **Resume here**
-   section, inventory, test contracts, dependencies, and excluded leads.
-2. Follow any owner plan linked from the relevant ledger row. In particular,
+1. Read the relevant incident/contract in `docs/plans/approvals-and-sandbox/guard-ledger.md`
+   and its recovery/rollback context. This is historical reference, not a mandatory
+   append-only registry or a requirement to read every unrelated incident.
+2. Follow the linked owner plan. In particular,
    turn, time, cost, token-budget, and identical-failure escalation remain owned
    by `docs/plans/agent-runtime/run-budget-stall-escalation.md` unless that plan authorizes
    implementation.
@@ -80,7 +81,6 @@ Retry, fallback, and provider-continuity semantics:
 Observability fields:
 Persisted-setting migration, if any:
 Rollback boundary:
-Ledger row:
 ```
 
 Trace configuration through defaults, environment, persisted settings, roles,
@@ -171,36 +171,24 @@ Run focused tests, `pnpm typecheck`, and formatting for changed files. Run
 registry, or non-interactive changes. Run the broader suite required by the
 `testing` skill for shared utilities or architecture.
 
-Update `docs/plans/approvals-and-sandbox/guard-ledger.md` in the same change with:
-
-- source-backed effective value and precedence;
-- signal, action, recovery path, class, status, and owner;
-- red-proof and final verification commands;
-- observability and rollback notes;
-- final disposition and commit ID when merged.
-
 Report focused success separately from baseline, environment, or sandbox
 failures. Never call a guard safe solely because its termination test passes.
+Keep new causal findings, effective-policy changes and rollback advice in the
+relevant existing owner doc or code; do not add a routine registry row or duplicate
+successful-run accounting. The contract and real enforcement must agree.
 
-Complete this step when the ledger and code agree, every mandatory command has a
-truthful result, and the final diff contains no unrelated guard changes.
+Complete this step when every mandatory command has a truthful result and the
+final diff contains no unrelated guard changes.
 
 ## Audit branch
 
-For a repository audit, execute the current mechanical searches in the ledger;
-do not copy their patterns here because the ledger is their single source of
-truth. Treat every match as a lead:
-
-1. deduplicate by enforcement owner rather than setting name;
-2. trace configuration through settlement and recovery;
-3. add or update the ledger row;
-4. classify it as `uncharacterized`, `candidate`, `confirmed defect`,
-   `verified safe`, or `dependency` using the ledger definitions;
-5. put true exclusions in the ledger appendix with caller evidence;
-6. move only red-proven defects into behavior-changing work.
-
-Complete an audit only when every mechanical lead is mapped or explicitly
-excluded and every confirmed defect has an approved disposition.
+Start from an observed incident or a concrete failure hypothesis, not a fresh
+repository-wide keyword inventory. The guard history's discovery caveats explain
+why its broad sweeps found little and cannot establish completeness. Trace the
+suspected owner's configuration, measurement, settlement and recovery; verify
+both the harmful case and legitimate work that resembles it. Treat search matches
+as leads, not defects or obligations to add rows. Move only demonstrated defects
+into behavior-changing work, and retain useful findings with the owner.
 
 ## Stop for approval
 

@@ -112,3 +112,14 @@ provider `429 Insufficient balance or no resource package`). The coordinator
 explicitly instructed the implementer to finish checks and commit, leaving
 independent verification pending for a separate Claude review. Do not treat the
 implementer's checks above as that independent review.
+
+## Historical saved-answer replay trap (2026-10-17)
+
+A saved internal approval initialization could answer a later retained decision
+in the same generation. Fresh-answer checks missed it because they changed the
+turn generation instead of replaying an old answer against a second wait. The
+repair matched the exact interruption identity **and** generation before consuming
+the wait; no public exploit was demonstrated. Exercise sequential same-generation
+waits, identical saved-answer replay, a cloned address and a successful fresh answer.
+The former record at `42724797` named a branch-local session-boundaries verification
+report absent from that source tree; the pointer alone is not executable evidence.

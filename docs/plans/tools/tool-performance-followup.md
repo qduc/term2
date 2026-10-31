@@ -52,8 +52,8 @@ temporary provider failures remain retryable by the existing path. Observability
 records model, failure detail, retry/recovery policy, and output
 artifact references without credentials or full prompts. Rollback boundaries:
 compaction policy, run_code rendering/guidance, rollover guidance independently.
-Ledger rows: new Codex boundary-compaction rejection entry and run_code output
-retention entry in `../approvals-and-sandbox/guard-ledger.md`.
+Historical contracts: Codex boundary-compaction rejection and run_code output
+retention in `../approvals-and-sandbox/guard-ledger.md`; no routine registry update is required.
 
 ## Acceptance
 

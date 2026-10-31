@@ -120,7 +120,8 @@ Observability: state kind, retained queue, pause reason; no new content logging.
 Persisted state: normalize an existing empty pause on load if included in repair;
 retain nonempty customized records and recovery diagnostics.
 Rollback: separate queue repair commit, generated checker independently retained.
-Ledger: append scoped empty-pause incident and red/green evidence to guard ledger.
+Historical reference: the scoped empty-pause incident and red/green evidence are
+in the guard history; routine registry updates were subsequently retired.
 
 ## Independent discovery outcome and next implementation
 
@@ -330,7 +331,8 @@ Final source/checker commits: queue repair `4de1cebf`; portable command and
 negative replay `db1c1f88`. All previously retained dirty green snapshots have
 matching source retained in the repair commit. Source unchanged during all-tier
 runs. Mandatory command results (including failures) are appended, not rewritten,
-in docs/test-results.json; committed-snapshot results will follow separately.
+in former run records archived at `42724797:docs/test-results.json`; this
+historical note predates bookkeeping retirement.
 
 
 ## Final-gate follow-ups
@@ -445,14 +447,11 @@ failure evidence, do not claim timeout root cause or whole integration green.
 Only run.mjs async metadata differs db1c..29d; package/source/deps identical.
 Final29d typecheck/static/script syntax and installed parent seed424242 pass.
 
-Recorded docs/test-results.json contains13 baseline/dirty/base-repro runs plus
-6 committed runs and interim lint failure. Still append provider follow-up,
-29d final static checks, final successful lint, generated/independent evidence
-and primary integration results as appropriate. Schema established in existing
-rows. Final task tasks.jsonl row NOT yet written: add when verified, use unknown
-(null) total author time/tokens rather than fabricated zero/cost improvement.
-Known independent usage/costs and default/multi-seed timings in prior sections.
-No escaped completed-task defect record needed for within-task checker fixes.
+Historical run accounting is archived at `42724797:docs/test-results.json`.
+Routine task/defect/result bookkeeping was retired on 2026-10-31; do not resume
+the former append checklist. Unknown total author time/tokens do not establish
+zero cost or a cost improvement. Independent evidence, default/multi-seed timings
+and within-task checker fixes remain in the prior sections.
 
 Initial final lint failed9 errors only in reviewer's temporary .mjs Node probes.
 Reviewer has now archived .mjs/.ts as .txt (no blanket ignore); find under checks

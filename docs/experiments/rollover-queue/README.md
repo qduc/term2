@@ -132,7 +132,8 @@ checks storage behavior; it does not claim a crash-atomic writer/sidecar commit.
   in `generated-queue.log`, not counted as passing coverage.
 - Typecheck passed; static guards: 28 passed; provider black-box: 222 passed,
   1 skipped. Full integration: 223 passed, 4 failed, 1 skipped; exact failures
-  and same-environment base comparison are recorded in `docs/test-results.json`.
+  and same-environment base comparison are archived at
+  `42724797:docs/test-results.json` (routine accounting was later retired).
   Full lint failed formatting only on immutable coordinator assignment/report
   JSON, not source errors. Base reproduction and focused changed-file checks are
   separate from that failed global result. The first base-lint attempt is invalid:

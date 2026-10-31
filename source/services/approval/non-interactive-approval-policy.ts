@@ -1,6 +1,6 @@
 import type { ApprovalDescriptor } from '../../contracts/conversation.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
-import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { classifyCommandDetailed } from '../../utils/shell/command-safety/index.js';
 import { TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
@@ -22,7 +22,7 @@ export type NonInteractiveApprovalDecision =
 
 export interface NonInteractiveApprovalPolicyDeps {
   settingsService?: ISettingsService;
-  agentClient?: ConversationAgentClient;
+  agentClient?: ShellAutoApprovalAgentClient;
   logger?: ILoggingService;
   sessionContextService: ISessionContextService;
   mcpAllowlist?: readonly string[];

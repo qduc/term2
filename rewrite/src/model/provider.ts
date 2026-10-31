@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   ContextCompactionSessionState,
   StreamedModelToolDefinition,
+  StreamedModelToolResultPart,
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnInput,
@@ -241,11 +242,31 @@ function itemToInput(item: Item): StreamedModelTurnInput {
       };
     case 'provider_input':
       return item.input as unknown as StreamedModelTurnInput;
-    case 'tool_call':
+    case 'tool_call': {
+      const unchanged = JSON.stringify(item.input) === JSON.stringify(item.argumentsSnapshot);
+      return {
+        type: 'tool_call',
+        id: item.callId,
+        name: item.toolName,
+        arguments:
+          item.rawArguments !== undefined && unchanged ? item.rawArguments : JSON.stringify(item.input ?? {}) ?? 'null',
+        ...(item.toolType ? { toolType: item.toolType } : {}),
+        ...(item.providerMetadata ? { providerMetadata: item.providerMetadata } : {}),
+      };
+    }
     case 'tool_result':
+      return {
+        type: 'tool_result',
+        id: item.callId,
+        // Tool adapters store provider-native parts; never coerce media to text
+        // or silently replace structured output during continuation/reopen.
+        output: item.providerOutput
+          ? (item.providerOutput as unknown as readonly StreamedModelToolResultPart[])
+          : item.output,
+        ...(item.toolType ? { toolType: item.toolType } : {}),
+      };
     case 'summary':
-      // M1 never persists these: a model tool call fails the turn before it is committed.
-      throw new Error(`Item '${item.type}' has no provider input at M1`);
+      return { type: 'message', role: 'user', content: [{ type: 'text', text: item.text }] };
   }
 }
 

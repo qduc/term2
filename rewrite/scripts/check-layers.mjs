@@ -13,7 +13,13 @@ const allowlistPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 's
 // The direct path outside adopted/ that may import source/. Its closure is walked
 // like an adopted file's. Which modules actually load is checked by the M1 bench,
 // because IMPORT below also matches type imports and import().
-const DIRECT_SOURCE_IMPORTERS = new Set(['app/agent-surface.ts', 'app/cli.ts', 'app/run.ts', 'model/provider.ts']);
+const DIRECT_SOURCE_IMPORTERS = new Set([
+  'tools/source-tools.ts',
+  'app/tool-surface.ts',
+  'app/cli.ts',
+  'app/run.ts',
+  'model/provider.ts',
+]);
 
 const LAYER_DEPENDENCIES = {
   config: [],

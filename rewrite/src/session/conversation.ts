@@ -69,7 +69,7 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
     } catch (error) {
       logFailure = {
         kind: 'provider',
-        message: `conversation log: ${error instanceof Error ? error.message : String(error)}`,
+        message: error instanceof Error ? error.message : String(error),
         retryable: false,
       };
       return false;

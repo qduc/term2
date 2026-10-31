@@ -13,6 +13,7 @@ import { LoggingService } from '../../../source/services/logging/logging-service
 import { resolveProfile } from '../../../source/services/profiles/resolver.js';
 import { BARE_PROFILE_ID, canonicalProfileId } from '../../../source/services/profiles/legacy-adapter.js';
 import { SessionContextService } from '../../../source/services/session/session-context-service.js';
+import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import {
   confirmHomeDirectoryStart,
   HOME_DIRECTORY_START_WARNING,
@@ -171,29 +172,16 @@ function exitCodeForSignal(signal: NodeJS.Signals): number {
 async function runWithSignals(
   request: Parameters<typeof run>[0],
 ): Promise<{ readonly kind: 'completed' | 'cancelled' | 'failed'; readonly signal?: NodeJS.Signals }> {
-  const handle = run(request);
-  let settled = false;
   // The handle has no started bit. Latch observed activity so later inactivity
-  // waits for its durable result; Task 5 must keep it active through settlement.
-  let turnHasStarted = handle.turnActive();
+  // waits for its durable result.
+  let turnHasStarted = false;
   let receivedSignal: NodeJS.Signals | undefined;
-  const resultPromise = handle.result.then(
-    (result) => {
-      settled = true;
-      return result;
-    },
-    (error: unknown) => {
-      settled = true;
-      throw error;
-    },
-  );
 
   const onSignal = (signal: NodeJS.Signals): void => {
     if (receivedSignal !== undefined) {
       process.exit(exitCodeForSignal(signal));
     }
     receivedSignal = signal;
-    if (settled) return;
     const active = handle.turnActive();
     if (active) turnHasStarted = true;
     if (!active) {
@@ -206,18 +194,15 @@ async function runWithSignals(
       // The run result is authoritative; signal handlers never write output.
     }
   };
-  const onSigint = () => onSignal('SIGINT');
-  const onSigterm = () => onSignal('SIGTERM');
-  process.on('SIGINT', onSigint);
-  process.on('SIGTERM', onSigterm);
+  // Installed first: `run` writes the turn start synchronously, and a signal
+  // handled here runs only after it returns, so that turn can still end durably.
+  process.on('SIGINT', () => onSignal('SIGINT'));
+  process.on('SIGTERM', () => onSignal('SIGTERM'));
 
-  try {
-    const result = await resultPromise;
-    return { kind: result.kind, ...(receivedSignal === undefined ? {} : { signal: receivedSignal }) };
-  } finally {
-    process.removeListener('SIGINT', onSigint);
-    process.removeListener('SIGTERM', onSigterm);
-  }
+  const handle = run(request);
+  turnHasStarted = handle.turnActive();
+  const result = await handle.result;
+  return { kind: result.kind, ...(receivedSignal === undefined ? {} : { signal: receivedSignal }) };
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -270,6 +255,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const sessionContext = new SessionContextService();
   const logger = new LoggingService({ sessionContextService: sessionContext });
   const { service: settings } = createAppSettings({
+    env: buildEnvOverrides(),
     disableFilePersistence: true,
     loggingService: logger,
   });
@@ -288,12 +274,12 @@ async function main(argv: readonly string[]): Promise<number> {
   return 1;
 }
 
+// Exit explicitly. Draining naturally would hand signals back to their default
+// action during shutdown, so a late signal could override a durable result.
 void main(process.argv.slice(2)).then(
-  (code) => {
-    process.exitCode = code;
-  },
+  (code) => process.exit(code),
   (error: unknown) => {
     stderr.write(`error ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
+    process.exit(1);
   },
 );

@@ -10,7 +10,7 @@ const rewriteSrc = path.join(repo, 'rewrite/src');
 const sourceRoot = path.join(repo, 'source');
 const allowlistPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'source-edge-allowlist.json');
 
-// Exact direct entry files through candidate 410f756f (app/config/subagent adapters).
+// Exact direct entry files through candidate 410f756f plus the concrete MCP adapters.
 // Type-only imports need admission too. Keep this a named list, not app/direct-*;
 // each admitted entry still has its complete source closure walked below.
 const DIRECT_SOURCE_IMPORTERS = new Set([
@@ -36,6 +36,9 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-launch-tui-settings.ts',
   'app/direct-launch-tui.tsx',
   'app/direct-launch-types.ts',
+  'app/direct-mcp-auth.ts',
+  'app/direct-mcp-source.ts',
+  'app/direct-mcp.ts',
   'app/direct-memory.ts',
   'app/direct-remote-config.ts',
   'app/direct-remote-context.ts',

@@ -111,8 +111,18 @@ function conversation(
   let commandReceipts: DirectCommandReceipts = [];
   let historyRevision = 0;
   let notifications: DirectNotificationState = { notices: [], deliveries: [] };
-  let commandOwner: { readonly commandId: string; readonly abort: AbortController; done?: Promise<unknown> } | null =
-    null;
+  let commandOwner: {
+    readonly commandId: string;
+    readonly kind: import('./direct-command-types.js').DirectCommandOperation['kind'];
+    readonly abort: AbortController;
+    done?: Promise<unknown>;
+  } | null = null;
+  const rolloverDestination = (): string | undefined => {
+    for (const receipt of commandReceipts) {
+      if (receipt.outcome?.kind === 'rolled_over') return receipt.outcome.sessionId;
+    }
+    return undefined;
+  };
   let context = initialDirectContextState();
   let queueState: DirectQueueState = createDirectQueueState();
   let taskStates: readonly DirectTaskState[] = [];
@@ -575,6 +585,7 @@ function conversation(
     },
   ): StartedConversationTurn => {
     if (closed) throw new Error(`conversation ${id} is closed`);
+    if (rolloverDestination()) throw new Error(`Session rolled over to ${rolloverDestination()}`);
     if (active) throw new Error(`conversation ${id} already has an active turn`);
     if (commandOwner && !planned?.accepted) throw new Error('Session history is reserved by a command');
     if (logFailure || !recover()) throw new Error(logFailure!.message);
@@ -761,6 +772,8 @@ function conversation(
         return {
           result: { kind: 'duplicate', turnId: previous.turnId, notificationIds: [...previous.notificationIds] },
         };
+      if (rolloverDestination())
+        return { result: { kind: 'not_admitting', reason: `Session rolled over to ${rolloverDestination()}` } };
       if (active || completionHeld || commandOwner || queueState.active || queueState.pending.length)
         return { result: { kind: 'busy' } };
       const notices = pendingDirectNotifications(notifications);
@@ -804,6 +817,10 @@ function conversation(
         return Promise.resolve({
           result: proposal.kind === 'conflict' ? proposal : { ...structuredClone(proposal), replayed: true },
         });
+      if (rolloverDestination())
+        return Promise.resolve({
+          result: { kind: 'not_admitting' as const, reason: `Session rolled over to ${rolloverDestination()}` },
+        });
       // Reserve synchronously, before cancellation or any async model operation.
       if (!commit([proposal.fact])) throw new Error(logFailure!.message);
       const finish = (outcome: DirectCommandOutcome): DirectCommandResult => {
@@ -821,7 +838,7 @@ function conversation(
         });
       if (
         request.operation.kind === 'configure' ||
-        request.operation.kind === 'rollover' ||
+        (request.operation.kind === 'rollover' && !deps.rollover) ||
         request.operation.kind === 'compact'
       )
         return Promise.resolve({
@@ -833,12 +850,19 @@ function conversation(
         });
       const owner = {
         commandId: request.commandId,
+        kind: request.operation.kind,
         abort: new AbortController(),
         done: undefined as Promise<unknown> | undefined,
       };
       commandOwner = owner;
       const work = async (): Promise<{ result: DirectCommandResult; started?: StartedConversationTurn }> => {
         try {
+          if (request.operation.kind === 'rollover') {
+            // Do not drain/cancel first: the authority must see the real live
+            // turn, questions, budgets, queue and task vetoes. New admission is
+            // held for this entire await; its actual result is never retried.
+            return { result: finish(await deps.rollover!(request.operation.request)) };
+          }
           active?.cancel();
           await settleForeground();
           if (active) await active.stop();
@@ -1012,6 +1036,16 @@ function conversation(
       }
     },
     submit(request, settings) {
+      if (commandOwner?.kind === 'rollover' || rolloverDestination())
+        return {
+          admission: {
+            kind: 'rejected',
+            clientRequestId: request.clientRequestId,
+            reason: rolloverDestination()
+              ? `Session rolled over to ${rolloverDestination()}`
+              : 'Session rollover is in progress',
+          },
+        };
       if (request.origin) {
         try {
           request = { ...request, origin: parseDirectOrigin(request.origin) };
@@ -1053,7 +1087,7 @@ function conversation(
     },
     advanceQueue(settings) {
       if (settings) queueSettings = settings;
-      if (active || commandOwner || closed || logFailure || !queueSettings) return undefined;
+      if (active || commandOwner || closed || logFailure || rolloverDestination() || !queueSettings) return undefined;
       const plan = planDirectQueue(queueState, { kind: 'dispatch' }, environment());
       if (plan.effect?.kind === 'start') return startEffect(plan.effect, plan.facts);
       if (!commit(plan.facts)) throw new Error(logFailure!.message);

@@ -34,6 +34,8 @@ export type SessionStartedFact = {
   /** Full authorized identity; legacy direct path-only records require a current local grant. */
   readonly workspaceIdentity?: import('../tools/index.js').Workspace;
   readonly forkedFrom?: string;
+  /** Source direct Session, retained on a newly created rollover successor. */
+  readonly rolloverFrom?: string;
   readonly model: ModelRef;
   readonly reasoning?: ReasoningEffort;
   readonly profile: { readonly id: string; readonly version: string; readonly digest: string };

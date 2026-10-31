@@ -61,6 +61,8 @@ type Flag = {
   readonly value?: 'required' | 'next-or-empty' | 'optional';
   /** Set while the app does not consume this option; the reason names its owner. */
   readonly refusal?: string;
+  /** The TUI ignores this option, as the current CLI does, so interactive mode accepts it without refusing. */
+  readonly interactiveNoOp?: boolean;
 };
 
 const SESSION_HELD = 'session goals need a Session goal API in the direct app (M4 context owner)';
@@ -68,12 +70,6 @@ const QUIET_HELD = 'the headless client has no quiet option yet (headless client
 const SSH_HELD =
   'SSH needs a tool-surface workspace option; #65 assigns no milestone, so the coordinator must assign one';
 const FORK_HELD = 'fork needs a Session operation; #65 assigns no milestone, so the coordinator must assign one';
-/** Options the interactive TUI does not consume yet. Headless consumes them. */
-const INTERACTIVE_HELD: Readonly<Record<string, string>> = {
-  '--json': 'the TUI has no JSON output mode',
-  '--show-reasoning': 'the TUI has no reasoning stream on stderr',
-  '--auto-approve': 'the TUI applies auto-approval only to the headless policy',
-};
 
 /** Builds one flag. `suffix` is its help placeholder: ' <x>' takes a value, '[=<x>]' takes only an inline one. */
 const opt = (names: string[], suffix: string, help: string, refusal?: string, value?: Flag['value']): Flag => {
@@ -96,7 +92,8 @@ const FLAGS: readonly Flag[] = [
   opt(['--profile'], ' <name>', 'Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)', undefined, 'required'),
   opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),
   opt(['--auto-approve'], '', 'Allow tool execution for a non-interactive prompt'),
-  opt(['-q', '--quiet'], '', 'Suppress non-error diagnostics on stderr in non-interactive mode', QUIET_HELD),
+  // Quiet only changes the non-interactive runner; the TUI ignores it, as the current CLI does.
+  { names: ['-q', '--quiet'], label: '-q, --quiet', help: 'Suppress non-error diagnostics on stderr in non-interactive mode', refusal: QUIET_HELD, interactiveNoOp: true },
   opt(['--show-reasoning'], '', 'Stream reasoning deltas to stderr in non-interactive mode'),
   opt(['--json'], '', 'Emit newline-delimited JSON (NDJSON) events in non-interactive mode'),
   opt(['--ssh'], ' <user@host>', 'Enable SSH mode for a remote host', SSH_HELD),
@@ -241,13 +238,9 @@ function buildSessionOptions(raw: ReadonlyMap<string, RawValue>): SessionOptions
 function refusalFor(raw: ReadonlyMap<string, RawValue>, mode: 'headless' | 'interactive'): Refusal | null {
   const resume = textOf(raw, '--resume');
   if (resume === '' || resume === 'ls' || resume === 'list') return { flag: '--resume', reason: OLD_CONVERSATIONS };
-  if (mode === 'interactive') {
-    for (const [name, reason] of Object.entries(INTERACTIVE_HELD)) {
-      if (isSet(raw, name)) return { flag: name, reason };
-    }
-  }
   for (const flag of FLAGS) {
-    if (flag.refusal && isSet(raw, longName(flag))) return { flag: longName(flag), reason: flag.refusal };
+    if (!flag.refusal || (mode === 'interactive' && flag.interactiveNoOp)) continue;
+    if (isSet(raw, longName(flag))) return { flag: longName(flag), reason: flag.refusal };
   }
   return null;
 }

@@ -95,3 +95,12 @@ export interface Projection {
   toWire(sessionId: string, update: SessionUpdate): WireEvent | null;
   snapshot(sessionId: string, state: SessionState): WireSnapshot;
 }
+
+// Direct runtime types: explicitly separate from the bridge vocabulary above.
+export { DIRECT_PROTOCOL_VERSION } from './direct-wire.js';
+export type {
+  WireCommand as DirectWireCommand, WireCommandResult as DirectWireCommandResult,
+  WireEvent as DirectWireEvent, WireSnapshot as DirectWireSnapshot,
+  WireMessage as DirectWireMessage, WireInteraction as DirectWireInteraction,
+} from './direct-wire.js';
+export type { DirectCommandCapabilities } from './direct-capabilities.js';

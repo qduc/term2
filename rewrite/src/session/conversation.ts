@@ -13,10 +13,12 @@ import type {
   TurnEvent,
   TurnHandle,
   TurnId,
+  TurnDeps,
   TurnResult,
 } from '../engine/index.js';
 import { parseDirectOrigin } from './direct-origin.js';
 import { DirectSubagents } from './direct-subagent.js';
+import { DirectRunBudgets } from './direct-run-budget.js';
 import { createDirectBranchDriver } from './direct-branches.js';
 import type { BudgetDecision } from '../engine/direct-types.js';
 import { randomUUID } from 'node:crypto';
@@ -104,6 +106,13 @@ function conversation(
   let recoveryMaterialized = false;
   let completionHeld: TurnId | null = null;
   const branchHandles = new Set<TurnHandle>();
+  const runBudgets = new DirectRunBudgets(
+    deps.budget,
+    (fact) => {
+      if (!commit([fact])) throw new Error(logFailure!.message);
+    },
+    facts,
+  );
   let tasks: BackgroundTasksType | undefined;
   let capabilities: ReturnType<typeof bindDirectCapabilities> | undefined;
   let hookStatus: 'idle' | 'working' | 'waiting_for_user' | 'waiting_for_approval' = 'idle';
@@ -493,6 +502,44 @@ function conversation(
       throw new Error(logFailure!.message);
     const { input, notice, submission: _submission, ...settings } = request;
     try {
+      const runNested: NonNullable<TurnDeps['runNested']> = async (nested, parent) => {
+        if (!deps.authorizeNested) throw new Error('App has not supplied direct nested authority');
+        const authority = await deps.authorizeNested(nested, parent);
+        parent.signal.throwIfAborted();
+        const driver = createDirectBranchDriver({
+          createDeps: (branchTurnId) => ({
+            ...deps,
+            budget: runBudgets.open(branchTurnId, parent.turnId),
+            runNested,
+          }),
+          parentTurnId: parent.turnId,
+          rootTurnId: turnId,
+          authority,
+          accept: (fact) => {
+            if (!commit([fact])) throw new Error(logFailure!.message);
+          },
+          factFor,
+          handles: branchHandles,
+        });
+        const agents = new DirectSubagents({ tasks: tasks!, driver });
+        const handle = agents.start({
+          role: authority.role,
+          task: authority.label,
+          run: authority.request,
+          workspace: authority.workspace,
+          mode: 'foreground',
+          parentSignal: parent.signal,
+          parentTurnId: parent.turnId,
+          parentExecutionId: parent.parentExecutionId,
+          ...(request.submission?.origin ? { origin: request.submission.origin } : {}),
+        });
+        const result = await agents.waitForForeground(handle);
+        if (result.kind === 'background') return { items: [], outcome: { kind: 'background', runId: result.taskId } };
+        if (result.result.value) return result.result.value;
+        if (result.result.kind === 'failed')
+          return { items: [], outcome: { kind: 'failed', error: result.result.error } };
+        return { items: [], outcome: { kind: result.result.kind === 'cancelled' ? 'cancelled' : 'interrupted' } };
+      };
       const handle = startTurn(
         {
           ...settings,
@@ -503,42 +550,11 @@ function conversation(
         },
         {
           ...deps,
+          budget: runBudgets.open(turnId),
           takeSteering: boundary,
           prepareRequest: capabilities!.prepareRequest,
           normalStop: capabilities!.normalStop,
-          runNested: async (nested, parent) => {
-            if (!deps.authorizeNested) throw new Error('App has not supplied direct nested authority');
-            const authority = await deps.authorizeNested(nested, parent);
-            parent.signal.throwIfAborted();
-            const driver = createDirectBranchDriver({
-              deps,
-              authority,
-              accept: (fact) => {
-                if (!commit([fact])) throw new Error(logFailure!.message);
-              },
-              factFor,
-              handles: branchHandles,
-            });
-            const agents = new DirectSubagents({ tasks: tasks!, driver });
-            const handle = agents.start({
-              role: authority.role,
-              task: authority.label,
-              run: authority.request,
-              workspace: authority.workspace,
-              mode: 'foreground',
-              parentSignal: parent.signal,
-              parentTurnId: parent.turnId,
-              parentExecutionId: parent.parentExecutionId,
-              ...(request.submission?.origin ? { origin: request.submission.origin } : {}),
-            });
-            const result = await agents.waitForForeground(handle);
-            if (result.kind === 'background')
-              return { items: [], outcome: { kind: 'background', runId: result.taskId } };
-            if (result.result.value) return result.result.value;
-            if (result.result.kind === 'failed')
-              return { items: [], outcome: { kind: 'failed', error: result.result.error } };
-            return { items: [], outcome: { kind: result.result.kind === 'cancelled' ? 'cancelled' : 'interrupted' } };
-          },
+          runNested,
         },
       );
       const turn = ownTurn(turnId, handle);

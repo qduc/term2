@@ -21,7 +21,9 @@ export type DirectNestedAuthorizer = (
 
 /** Reuses startNestedTurn/startTurn; this adapter accepts, never drives its own model loop. */
 export function createDirectBranchDriver(options: {
-  readonly deps: TurnDeps;
+  readonly createDeps: (turnId: TurnId) => TurnDeps;
+  readonly parentTurnId: TurnId;
+  readonly rootTurnId: TurnId;
   readonly authority: DirectNestedAuthority;
   readonly accept: (fact: DirectBranchFact) => void;
   readonly factFor: (
@@ -36,15 +38,22 @@ export function createDirectBranchDriver(options: {
       const turnId = `branch-${branchId}` as TurnId;
       context.signal.throwIfAborted();
       const local: Fact[] = [{ type: 'turn_started', turnId, input: request.items }];
-      options.accept({ type: 'branch_started', branchId, taskId: context.task.taskId, turnId, input: request.items });
+      options.accept({
+        type: 'branch_started',
+        branchId,
+        taskId: context.task.taskId,
+        turnId,
+        parentTurnId: options.parentTurnId,
+        rootTurnId: options.rootTurnId,
+        input: request.items,
+      });
+      const deps = options.createDeps(turnId);
       const handle = startNestedTurn(request, {
         turnId,
         deps: {
-          ...options.deps,
+          ...deps,
           tools: options.authority.tools,
-          toolContext: options.deps.toolContext
-            ? { ...options.deps.toolContext, workspace: options.authority.workspace }
-            : undefined,
+          toolContext: deps.toolContext ? { ...deps.toolContext, workspace: options.authority.workspace } : undefined,
           // Root context/steering/goal authority must not enter a nested request.
           takeSteering: undefined,
           prepareRequest: undefined,
@@ -107,9 +116,8 @@ export function createDirectBranchDriver(options: {
               turnId,
               outcome: event.result.kind,
               ...(event.result.kind === 'failed' ? { error: event.result.error } : {}),
-              ...(event.result.kind === 'interrupted'
-                ? { terminalCause: event.result.terminalCause, notice: event.result.notice }
-                : {}),
+              ...(event.result.kind === 'interrupted' ? { terminalCause: event.result.terminalCause } : {}),
+              ...('notice' in event.result && event.result.notice ? { notice: event.result.notice } : {}),
             };
             options.accept({ type: 'branch_event', branchId, fact });
             local.push(fact);

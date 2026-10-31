@@ -123,6 +123,8 @@ function replayProjection(
   const branches = new Map<string, BranchStream>();
   let commandReceipts: DirectCommandReceipts = [];
   const maintenanceCommands = new Set<string>();
+  const maintenanceTurns = new Set<TurnId>();
+  const rolloverTurns = new Set<TurnId>();
   let notifications: DirectNotificationState = { notices: [], deliveries: [] };
   const noticeDeliveries = new Set<TurnId>();
   const silentTurns = new Set<TurnId>();
@@ -220,6 +222,15 @@ function replayProjection(
     }
     if (isDirectContextFactType(fact.type)) {
       const accepted = parseDirectContextFact(fact);
+      if (accepted.type === 'rollover_requested') {
+        // Schema already required the strict request. This is audit, not a successor or a goal reset.
+        if (!active || active.turnId !== accepted.turnId || maintenanceTurns.has(accepted.turnId)) {
+          throw new Error('replay: rollover request is not the active non-maintenance root');
+        }
+        if (rolloverTurns.has(accepted.turnId)) throw new Error('replay: root already requested rollover');
+        rolloverTurns.add(accepted.turnId);
+        return;
+      }
       context = reduceDirectContext(context, accepted, queue.state.records);
       if (accepted.type === 'memory_personal_snapshot') {
         if (personalSnapshots.has(accepted.admissionId))
@@ -271,6 +282,7 @@ function replayProjection(
             throw new Error('replay: compaction maintenance has no pending compact command');
           }
           maintenanceCommands.add(commandId);
+          maintenanceTurns.add(fact.turnId);
         } else if (fact.retryContext) {
           // Continuation reuses the replacement history. Do not readmit its source input or memory.
           if (fact.submission || fact.input.length !== 0) throw new Error('replay: retry is not a new admission');

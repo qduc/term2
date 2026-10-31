@@ -10,11 +10,12 @@ import { useClient } from './use-client.js';
 import { Activity } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import { RewindPicker } from './rewind-picker.js';
+import { TaskManager } from './task-manager.js';
 import { restoreAttachments, wireAttachments, wireImages } from './draft.js';
 import { useEditor } from './editor.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
-import { answerInteraction, cancelForeground, changeSession, directSlashCommand, listRewindTargets, queueAction, rewindTo, submitText, WireCommandFailure } from './commands.js';
+import { answerInteraction, cancelForeground, changeSession, controlTask, directSlashCommand, listRewindTargets, queueAction, rewindTo, submitText, WireCommandFailure } from './commands.js';
 
 export type { TuiIntegration } from './integration.js';
 export type { TuiState, ViewUpdate, Message, ToolView, InteractionView, QueueItem, TaskView } from './state.js';
@@ -48,12 +49,13 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot);
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
+  const [taskOpen, setTaskOpen] = useState(false);
   const [images, setImages] = useState<ImageRef[]>([]);
   const [otherParts, setOtherParts] = useState<readonly WireContent[]>([]);
   const [originalParts, setOriginalParts] = useState<readonly WireContent[]>([]);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
   const [editing, setEditing] = useState<{ id: string; restoreText: string; restoreCursor: number; restoreImages: ImageRef[]; restoreOther: readonly WireContent[]; restoreOriginal: readonly WireContent[] } | null>(null);
-  const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen && !rewindTargets);
+  const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen && !taskOpen && !rewindTargets);
   const editor = useEditor(state.messages.filter(message => message.role === 'user').map(message => ({ text: message.historyText ?? message.text, attachments: message.attachments ?? [] })));
   const { InputFrame, PromptMarker, Hints } = useSkin();
   const theme = useTheme();
@@ -65,7 +67,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   useInput((input, key) => {
     if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
     if (key.meta && key.return && state.activeTurnId && !busy && !editing) void submit(editor.value, images, 'follow_up');
-  }, { isActive: !interactionOpen && !rewindTargets });
+  }, { isActive: !interactionOpen && !taskOpen && !rewindTargets });
 
   const changeInput = (value: string) => {
     if (/^\/answer(?:\s|$)/.test(value)) {
@@ -152,6 +154,8 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         if (!match || (!match[2].trim() && !submittedImages.length)) throw new Error('Enter a message after /steer or /followup.');
         await submitText(connection, match[2], wireAttachments(submittedImages, otherParts, originalParts), match[1] === 'steer' ? 'steer' : 'follow_up');
         setImages([]); setOtherParts([]); setOriginalParts([]);
+      } else if (input.trim() === '/tasks') {
+        setTaskOpen(true);
       } else if (/^\/rewind(?:\s|$)/.test(input)) {
         const match = /^\/rewind(?:\s+(last|\d+))?(?:\s+(edit|resend))?$/.exec(input.trim());
         if (!match) throw new Error('Use /rewind [last|number] [edit|resend].');
@@ -232,6 +236,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     {viewport.total > 0 && (viewport.start > 0 || !viewport.live) ?
       <Text color={theme.textSubtle}>Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓</Text> : null}
     <Activity state={state} />
+    {taskOpen ? <TaskManager tasks={state.tasks} onClose={() => setTaskOpen(false)} onAction={(id, action) => controlTask(connection, id, action)} /> : null}
     {rewindTargets ? <RewindPicker targets={rewindTargets} onClose={() => setRewindTargets(null)} onSelect={(id, disposition) => { void executeRewind(id, disposition); }} /> : null}
     {editing ? <Text>Editing queued message · Enter saves · /queue cancel restores draft</Text> : null}
     {interactionOpen ? <InteractionPanel interactions={state.interactions} width={columns} onClose={() => setInteractionOpen(false)}
@@ -254,7 +259,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         cursorOverride={editor.cursorOverride}
         width={Math.max(1, columns - 4)}
         maxHeight={Math.max(1, rows - 8)}
-        isActive={!busy && !connectionError && !interactionOpen && !rewindTargets}
+        isActive={!busy && !connectionError && !interactionOpen && !taskOpen && !rewindTargets}
         images={images}
         onImagesChange={setImages}
         enableImagePaste
@@ -262,6 +267,6 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         ignoreInput={(input, key) => key.pageUp || key.pageDown || (key.ctrl && (key.upArrow || key.downArrow || input === 'g')) || (Boolean(state.activeTurnId) && key.meta && key.return)}
       />
     </InputFrame>
-    <Hints hints={[["Enter", state.activeTurnId ? "steer" : "send"], ["Alt+Enter", "follow-up"], ["↑/↓", "history"], ["PgUp/PgDn", "scroll"], ["Ctrl+G", "approvals"], ["/", "commands"], ["/cancel", "stop"]]} />
+    <Hints hints={[["Enter", state.activeTurnId ? "steer" : "send"], ["Alt+Enter", "follow-up"], ["↑/↓", "history"], ["PgUp/PgDn", "scroll"], ["Ctrl+G", "approvals"], ["/tasks", "manage tasks"], ["/", "commands"], ["/cancel", "stop"]]} />
   </Box>;
 }

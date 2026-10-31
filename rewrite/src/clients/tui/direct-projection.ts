@@ -14,11 +14,15 @@ const toolView = (tool: WireTool): ToolView => ({
   id: tool.executionId,
   name: tool.toolName,
   status: tool.status === 'called' ? 'pending' : tool.status === 'started' ? 'running' : tool.isError || tool.status === 'unknown' ? 'failed' : 'completed',
-  detail: [tool.output ?? tool.progress, ...(tool.content ?? []).filter(part => part.type === 'image').map(part => `[image: ${part.mediaType}]`)].filter(Boolean).join('\n') || undefined,
+  detail: tool.output ?? tool.progress,
   parent: tool.parentExecutionId,
+  input: tool.input,
+  display: tool.display,
+  content: tool.content,
+  outcomeUnknown: tool.status === 'unknown',
 });
 const taskView = (task: WireSnapshot['tasks'][number]): TaskView => ({
-  id: task.id, label: task.role ?? task.agentId ?? task.id, status: task.status, detail: task.text,
+  id: task.id, label: task.role ?? task.agentId ?? task.id, status: task.status, detail: task.text, turnId: task.turnId, agentId: task.agentId, role: task.role,
 });
 
 function interactionView(interaction: WireInteraction): InteractionView {
@@ -51,6 +55,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     activeTurnId: snapshot.activeTurnId,
     model: modelText(snapshot.model),
     messages,
+    timeline: snapshot.timeline,
     drafts,
     reasoning: snapshot.reasoning ? { [snapshot.activeTurnId ?? 'snapshot']: snapshot.reasoning } : {},
     tools: snapshot.tools.map(toolView),

@@ -17,3 +17,14 @@ No testing, behavioral probes, typechecks, guards, builds, independent review or
 The TUI now offers a typed rewind target picker (or `/rewind [last|number] [edit|resend]`), restores the Session-returned draft with raw attachments and metadata, and explicitly resends only on request. `/clear` and `/rollover` send typed session-change operations only when the app supplies `switchSession`. The app callback must attach the successor and rebind any active control socket without leaving the two clients attached to different sessions. `/bridge` uses the app-owned `bridge.status/connect/disconnect` lifecycle, not a client-side control runtime.
 
 `/queue edit <number>` opens an editor; Enter issues an edit, omitting attachments to retain them unless replacement images were pasted, and `/queue cancel` restores the prior draft. `/queue clear-images <number>` sends an explicit empty attachment list. A typed `too_late` error leaves entered text in the composer instead of automatically resubmitting; current C4 types do not yet expose that error or queued attachment bodies. Until they do, the editor cannot fully restore old images after a late edit and warns the user rather than sending a partial message. The coordinator request is `tui-owner-requests.md`.
+
+Task/tool presentation uses the actual direct wire fields and selected skin. A
+`/tasks` picker sends task-ID-specific `task_control` operations; acknowledgements
+are shown as requests, not inferred completion. Task controls still require real
+Session capability and may return unavailable. Transcript entries are interleaved
+only when `snapshot.timeline` supplies order; otherwise tools are labeled as a
+separate unordered group. Skin-based task rows use only supplied IDs, status,
+role and text; elapsed time and execution outcome are not invented. The app
+owner's published `35d0482c` contains the `switchSession` and `bridge` callbacks;
+that code and its control dependencies still require candidate integration and
+post-M6 validation.

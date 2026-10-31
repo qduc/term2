@@ -34,8 +34,12 @@ handling with the final direct types. In particular:
 
 This is an early, deliberately incomplete surface: no adapter is supplied, so it
 cannot claim M5 parity or be launched yet. Full product slash command and modal
-behavior, editor history/images, markdown, transcript scrollback/windowing,
-keyboard accessibility and terminal resize behavior remain integration work.
+behavior, persistent/cross-session history, image attachments, terminal scrollback,
+line-level scrolling and complete keyboard accessibility remain integration work.
+The editor has session-local history seeded from the attached snapshot; Page Up/Down
+page through message blocks (not individual wrapped lines), and width/height follow
+the Ink output resize event. Markdown uses the product renderer and skin gutter.
+These additions have not been exercised in a real terminal.
 Tests, reviews, builds and real terminal checks are deferred until after M6 by
 user direction. The existing source input component is coupled to old settings,
 logging, history, interaction and runtime services and is not reused; skin and

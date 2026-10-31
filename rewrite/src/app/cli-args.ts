@@ -66,7 +66,8 @@ type Flag = {
 };
 
 const SESSION_HELD = 'session goals need a Session goal API in the direct app (M4 context owner)';
-const QUIET_HELD = 'the headless client has no quiet option yet (headless client owner)';
+const JSON_HELD =
+  'the old NDJSON event schema needs a protocol-owned read model, which the direct protocol does not expose yet';
 const SSH_HELD =
   'SSH needs a tool-surface workspace option; #65 assigns no milestone, so the coordinator must assign one';
 const FORK_HELD = 'fork needs a Session operation; #65 assigns no milestone, so the coordinator must assign one';
@@ -93,9 +94,16 @@ const FLAGS: readonly Flag[] = [
   opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),
   opt(['--auto-approve'], '', 'Allow tool execution for a non-interactive prompt'),
   // Quiet only changes the non-interactive runner; the TUI ignores it, as the current CLI does.
-  { names: ['-q', '--quiet'], label: '-q, --quiet', help: 'Suppress non-error diagnostics on stderr in non-interactive mode', refusal: QUIET_HELD, interactiveNoOp: true },
+  opt(['-q', '--quiet'], '', 'Suppress non-error diagnostics on stderr in non-interactive mode'),
   opt(['--show-reasoning'], '', 'Stream reasoning deltas to stderr in non-interactive mode'),
-  opt(['--json'], '', 'Emit newline-delimited JSON (NDJSON) events in non-interactive mode'),
+  // The TUI ignores --json (it only affects model-picker eligibility), as the current CLI does.
+  {
+    names: ['--json'],
+    label: '--json',
+    help: 'Emit newline-delimited JSON (NDJSON) events in non-interactive mode',
+    refusal: JSON_HELD,
+    interactiveNoOp: true,
+  },
   opt(['--ssh'], ' <user@host>', 'Enable SSH mode for a remote host', SSH_HELD),
   opt(['--discord-input'], '', 'Allow Discord input and explicit root notifications on this control socket'),
   opt(['--remote-dir'], ' <path>', 'Remote working directory (required for non-lite SSH sessions)'),

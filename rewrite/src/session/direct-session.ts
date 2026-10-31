@@ -266,7 +266,18 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       if (closingPromise) return closingPromise;
       closing = true;
       closingPromise = (async () => {
-        active?.turn.cancel();
+        // A budget check-in is a settled request boundary, not a parked run.
+        // Stop it durably and let the engine accept its interrupted terminal;
+        // cancellation here would instead mislabel the budget stop as cancelled.
+        const budgetWaits = publicState().pendingBudgets;
+        let stoppingBudget = false;
+        if (!fault && active) {
+          for (const wait of budgetWaits) {
+            const answer = conversation.answerBudget(wait.requestId, { kind: 'stop' }, { source: 'system' });
+            stoppingBudget ||= answer.kind === 'accepted';
+          }
+        }
+        if (!stoppingBudget) active?.turn.cancel();
         if (active) await active.done;
         try {
           await conversation.close();

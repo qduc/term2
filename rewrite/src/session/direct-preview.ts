@@ -70,16 +70,19 @@ export function directPreviewLifecycle(
   resumedAtSeq: number,
 ): Pick<DirectPreviewSnapshot, 'lastSuccessful' | 'resumed' | 'rewoundSinceSuccess'> {
   const configs = new Map<string, DirectPreviewConfiguration>();
+  const maintenance = new Set<string>();
   let lastSuccessful: DirectPreviewSnapshot['lastSuccessful'] = null;
   let rewoundSinceSuccess = false;
   const initial = lines.filter((line) => line.seq <= resumedAtSeq).at(-1);
   let resumed: DirectPreviewSnapshot['resumed'] = resumedAtSeq > 0 ? { updatedAtMs: timestamp(initial?.at) } : null;
   for (const line of lines) {
     const fact = line.fact;
-    if (fact.type === 'turn_started' && fact.requestConfiguration) configs.set(fact.turnId, fact.requestConfiguration);
+    if (fact.type === 'turn_started' && fact.maintenance) maintenance.add(fact.turnId);
+    if (fact.type === 'turn_started' && !fact.maintenance && fact.requestConfiguration)
+      configs.set(fact.turnId, fact.requestConfiguration);
     if (line.seq <= resumedAtSeq) continue;
     if (fact.type === 'history_replaced' && fact.reason === 'rewind') rewoundSinceSuccess = true;
-    if (fact.type !== 'model_response_completed') continue;
+    if (fact.type !== 'model_response_completed' || maintenance.has(fact.turnId)) continue;
     const configuration = configs.get(fact.turnId);
     const completedAt = timestamp(line.at);
     if (!configuration || completedAt === null) continue;

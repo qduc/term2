@@ -188,7 +188,7 @@ export function startsDirectHumanWindow(
   queueRecords: readonly DirectQueueRecord[] = [],
 ): boolean {
   if (fact.type === 'turn_started')
-    return !fact.retryContext && !fact.silent && isDirectHumanOrigin(fact.submission?.origin);
+    return !fact.maintenance && !fact.retryContext && !fact.silent && isDirectHumanOrigin(fact.submission?.origin);
   if (fact.type !== 'queue_steered') return false;
   return fact.messageIds.some((id) => {
     const record = queueRecords.find((record) => record.messageId === id);

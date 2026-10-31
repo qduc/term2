@@ -9,6 +9,7 @@ type Run = {
   readonly rootTurnId: TurnId;
   readonly parentTurnId?: TurnId;
   readonly policy: BudgetOptions['policy'];
+  readonly options: BudgetOptions;
   readonly state: RunClock;
 };
 
@@ -47,30 +48,31 @@ export class DirectRunBudgets {
     for (const fact of facts) if (fact.type === 'request_cost_recorded') this.#retain(fact);
   }
 
-  open(turnId: TurnId, parentTurnId?: TurnId): BudgetOptions | undefined {
-    if (!this.options) return undefined;
+  open(turnId: TurnId, parentTurnId?: TurnId, options = this.options): BudgetOptions | undefined {
+    if (!options) return undefined;
     if (this.#runs.has(turnId)) throw new Error('Run budget already exists for this turn');
     const parent = parentTurnId ? this.#runs.get(parentTurnId) : undefined;
     if (parentTurnId && !parent) throw new Error('Child run has no Session-owned parent budget');
     const policy = parent
-      ? clampRunBudgetPolicy(this.options.policy, this.#remaining(parentTurnId!, parent))
-      : this.options.policy;
+      ? clampRunBudgetPolicy(options.policy, this.#remaining(parentTurnId!, parent))
+      : options.policy;
     const run: Run = {
       rootTurnId: parent?.rootTurnId ?? turnId,
       ...(parentTurnId ? { parentTurnId } : {}),
       policy,
       state: new RunClock(policy),
+      options,
     };
     this.#runs.set(turnId, run);
     return {
-      ...this.options,
+      ...options,
       policy,
       state: run.state,
       ...(parent ? { wrapUpOnCritical: true } : {}),
       costRecords: (id) => this.records(id),
       onRequestCost: (record, context) => {
         if (context.turnId !== turnId) throw new Error('Physical request cost has the wrong run owner');
-        const shared = this.options?.costRecords?.(turnId).find((entry) => entry.requestId === record.requestId);
+        const shared = options.costRecords?.(turnId).find((entry) => entry.requestId === record.requestId);
         const fact: DirectRequestCostFact = {
           type: 'request_cost_recorded',
           turnId,
@@ -82,14 +84,15 @@ export class DirectRunBudgets {
         this.#assertOwnership(fact);
         this.accept(fact);
         this.#retain(fact);
-        this.options?.onRequestCost?.(record, context);
+        options.onRequestCost?.(record, context);
       },
     };
   }
 
   /** Descendant costs count once for each ancestor, never against an unrelated root. */
   records(turnId: TurnId): readonly ModelRequestCost[] {
-    const records = new Map(this.options?.costRecords?.(turnId).map((record) => [record.requestId, record]));
+    const source = this.#runs.get(turnId)?.options ?? this.options;
+    const records = new Map(source?.costRecords?.(turnId).map((record) => [record.requestId, record]));
     for (const fact of this.#costs.values()) {
       if (fact.turnId !== turnId && !this.#ancestor(fact.turnId, turnId, fact)) continue;
       records.set(fact.record.requestId, mergeCost(fact.record, records.get(fact.record.requestId)));

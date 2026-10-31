@@ -163,6 +163,10 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         ...state,
         requestCosts: [...state.requestCosts.filter((entry) => entry.record.requestId !== fact.record.requestId), fact],
       };
+    case 'configuration_changed': {
+      const { type: _type, ...configuration } = fact;
+      return { ...state, configuration: structuredClone(configuration), model: fact.configuration.model };
+    }
     case 'session_started':
       return { ...state, model: fact.model };
     case 'turn_started':

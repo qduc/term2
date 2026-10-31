@@ -144,6 +144,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   const conversation = options.attach(observedLog, (event) =>
     publish({ type: 'transient', position: ++position, event }),
   );
+  const requestSettings = () => conversation.currentRequest({ ...options.request, model: options.model });
 
   const recordFault = (error: unknown): void => {
     fault = { kind: 'provider', message: error instanceof Error ? error.message : String(error), retryable: false };
@@ -211,7 +212,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
 
   const advance = (): void => {
     if (active || closing || fault) return;
-    const started = conversation.advanceQueue({ ...options.request, model: options.model });
+    const started = conversation.advanceQueue(requestSettings());
     if (started) startDrain(started.turn, started.turnId);
   };
   const submit = async (request: import('./direct-queue-types.js').DirectQueueSubmission): Promise<DirectAdmission> => {
@@ -224,7 +225,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         reason: fault?.message ?? 'session is closed',
       };
     try {
-      const result = conversation.submit(structuredClone(request), { ...options.request, model: options.model });
+      const result = conversation.submit(structuredClone(request), requestSettings());
       if (result.started) startDrain(result.started.turn, result.started.turnId);
       publishState();
       return structuredClone(result.admission);
@@ -247,7 +248,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       const invalid = validateSubmission({ clientRequestId: 'preview', content });
       if (invalid) throw new Error(invalid);
       const draft: Item = { type: 'user_message', id: randomUUID() as ItemId, content };
-      const planned = conversation.snapshotInputPreview({ ...options.request, model: options.model, input: [draft] });
+      const planned = conversation.snapshotInputPreview({ ...requestSettings(), input: [draft] });
       return structuredClone({ ...planned, ...directPreviewLifecycle(durable, resumedAtSeq) });
     },
     configureTaskCheckIn: (target, policy) => conversation.configureTaskCheckIn(target, policy),
@@ -255,8 +256,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       if (closing || fault)
         return Promise.resolve({ kind: 'not_admitting' as const, reason: fault?.message ?? 'Session is closed' });
       const { result, started } = conversation.drainBackgroundNotifications(clientRequestId, {
-        ...options.request,
-        model: options.model,
+        ...requestSettings(),
       });
       if (started) startDrain(started.turn, started.turnId);
       return Promise.resolve(structuredClone(result));
@@ -268,7 +268,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       // Conversation acquires ownership synchronously, before this await. The
       // existing facade drain remains the only semantic-stream reader.
       const operation = conversation
-        .command(structuredClone(request), { ...options.request, model: options.model }, async () => {
+        .command(structuredClone(request), requestSettings(), async () => {
           if (active) await active.done;
         })
         .then(({ result, started }) => {

@@ -11,6 +11,7 @@ import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { createDirectSession, type DirectLiveSession } from './direct-session.js';
 import { createLog, openLog, readFacts, readFactLines, type ConversationLog } from './log.js';
 import { replay } from './replay.js';
+import { latestDirectConfiguration, type DirectConfigurationState } from './direct-configuration.js';
 
 export type DirectRuntimeContext = {
   readonly id: string;
@@ -20,6 +21,8 @@ export type DirectRuntimeContext = {
   readonly rolloverFrom?: string;
   /** Existing metadata must select the actual restored profile/settings on open. */
   readonly metadata?: SessionStartedFact;
+  /** Latest accepted effective selection AND raw intent, not launcher defaults. */
+  readonly configuration?: DirectConfigurationState;
 };
 export type DirectConversationRuntime = {
   readonly deps: Omit<ConversationDeps, 'log'>;
@@ -96,8 +99,10 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       }
       if (
         context.metadata &&
-        (!sameProfile(runtime.profile, context.metadata.profile) ||
-          runtime.request.reasoning !== context.metadata.reasoning)
+        (!sameProfile(runtime.profile, context.configuration?.profile ?? context.metadata.profile) ||
+          runtime.request.reasoning !==
+            (context.configuration ? context.configuration.configuration.reasoning : context.metadata.reasoning) ||
+          (context.configuration && runtime.request.temperature !== context.configuration.configuration.temperature))
       ) {
         throw new Error('direct runtime did not restore the stored profile/reasoning');
       }
@@ -207,6 +212,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       const entries = readFactLines(logPath(directory, id));
       const facts = entries.map((entry) => entry.fact);
       const metadata = sessionMetadata(id, facts);
+      const configuration = latestDirectConfiguration(facts);
       validateExpectedBinding(metadata.binding, binding);
       replay(facts); // validates actual direct history; never repairs on open
       assertOpen();
@@ -218,8 +224,9 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
           {
             id,
             workspace,
-            model: metadata.model,
+            model: configuration?.configuration.model ?? metadata.model,
             metadata,
+            ...(configuration ? { configuration } : {}),
             ...(metadata.binding ? { binding: metadata.binding } : {}),
           },
           entries,
@@ -234,7 +241,8 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       // No arbitrary page size/retention policy: return the complete remaining direct namespace.
       for (const id of ids) {
         if (cursor !== undefined && id <= cursor) continue;
-        const metadata = sessionMetadata(id, readFacts(logPath(directory, id)));
+        const facts = readFacts(logPath(directory, id));
+        const metadata = sessionMetadata(id, facts);
         let workspace: Workspace;
         try {
           // A shared directory is a catalogue, not a grant. Foreign workspaces
@@ -243,7 +251,11 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         } catch {
           continue;
         }
-        summaries.push({ id, workspace, model: metadata.model });
+        summaries.push({
+          id,
+          workspace,
+          model: latestDirectConfiguration(facts)?.configuration.model ?? metadata.model,
+        });
       }
       return { sessions: summaries };
     },

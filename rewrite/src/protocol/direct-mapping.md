@@ -3,7 +3,7 @@
 Scope: direct `direct-wire.ts`, `DirectProjection`, `reduceWireEvent` and
 `host/in-process-direct*`. The old unprefixed protocol/index exports still serve
 the isolated bridge. This document describes implementation, not runtime acceptance.
-Tests, probes, typechecks, guards, independent reviews and cold reads are deferred
+Tests, probes, typechecks, guards, builds, independent reviews and cold reads are deferred
 until after M6 by explicit user instruction.
 
 ## Accepted data, snapshots and reconnect
@@ -118,7 +118,7 @@ partial-question checkpoints or command receipts are already compatible.
 | text_delta | emitted text_delta |
 | reasoning_delta | emitted reasoning_delta; missing transient identity remains null |
 | tool_started | tool_called then physical tool_started; no fake first-token marker |
-| command_message | emitted tool_finished display/content; exact old command DTO needs accepted metadata |
+| command_message | accepted source-formatted tool_finished display supports exact DTO slice via legacyCommandMessages; absent/foreign display stays missing |
 | approval_required | emitted interaction_opened with exact request target |
 | usage_update | emitted usage; totals are public reducer state |
 | subagent_usage_update | NOT folded into root usage; real nested driver producer missing |
@@ -291,3 +291,27 @@ Native branch_started now supplies optional actual parent/root ownership; the
 subagent wrapper exposes it and keeps child turnId on the nested event. Outer
 turnId is the known parent (or null), never a child mislabeled as root. Older facts
 may omit rootTurnId; it remains absent, not guessed from the latest session turn.
+
+## Accepted source-formatted command slice and concrete cost dependencies
+
+`direct-json.ts#legacyCommandMessages` consumes only the accepted `tool_finished`
+public display. Native `tools/source-tools.ts#displayFor` and
+`tools/adopted/index.ts#displayFor` retain the actual source `formatCommandMessage`
+array, optionally wrapped with `messages`/`approvalPresentation`. The helper
+recognizes those existing `CommandMessage` DTOs and clones them to exact
+`command_message` records, retaining actual identity/sender/status/output and
+optional success/failure/rejection/automatic-approval/tool/call fields. It does not
+re-format physical output, infer rejection from an error, or turn missing display
+into blank successful commands. Unrecognized display entries emit no legacy
+record. This is not proof every native tool/denial has a source-formatted DTO.
+Consumers preserve event/branch ownership, array order and message-ID upsert;
+neither duplicate audit/provider finish nor reconnect is a new command identity.
+There is still no authoritative legacy final/ordered turnItems producer.
+
+Cost producer/state/shared types are published in lead
+`d00b10b1401fe343cf8594a881729fa871a56641`; cost decoder/replay is published
+separately in queue `018a6c93fa9cfcc0811e5af90636569ca48de43a` (after its existing
+`3bfe2947` decoder baseline). These are concrete integration dependencies, not a
+claim the combined candidate has compiled or run. Actual argumentCharCount and
+native keyed retry/compact API/receipts remain missing at inspected lead
+`bcbe501d`. The optional void protocol callbacks are not durable idempotence.

@@ -205,10 +205,12 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     async switchSession(sessionId) {
       const next = await host.connect(principal, sessionId);
       // The session has really changed by now, so the client follows it even if control cannot.
-      const control = bridge.rebind(sessionId);
-      await control.catch(() => undefined);
+      const failure = await bridge.rebind(sessionId).then(
+        () => undefined,
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
       publish(next);
-      await control;
+      return failure === undefined ? undefined : { message: failure };
     },
     bridge: {
       status: async () => bridgeStatus(),

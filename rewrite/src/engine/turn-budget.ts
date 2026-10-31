@@ -20,6 +20,7 @@ export class TurnBudgetControl {
   #turns = 0;
   #waiters = 0;
   #wrapUp = false;
+  #wrapUpDispatched = false;
 
   constructor(
     readonly spec: TurnSpec,
@@ -40,7 +41,13 @@ export class TurnBudgetControl {
   }
 
   /** Stable per-physical-request records survive failures and history compaction. */
-  record(input: { requestId: string; model: ModelRef; usage?: Usage; costUsd?: number | string; outcome: ModelRequestCost['outcome'] }): void {
+  record(input: {
+    requestId: string;
+    model: ModelRef;
+    usage?: Usage;
+    costUsd?: number | string;
+    outcome: ModelRequestCost['outcome'];
+  }): void {
     const usdMicros = parseUsdMicros(input.costUsd);
     this.#costs.set(input.requestId, {
       requestId: input.requestId,
@@ -48,19 +55,28 @@ export class TurnBudgetControl {
       model: input.model.model,
       serviceTier: 'unknown',
       outcome: input.outcome,
-      ...(input.usage ? { usage: {
-        prompt_tokens: input.usage.inputTokens,
-        completion_tokens: input.usage.outputTokens,
-        cached_tokens: input.usage.cachedInputTokens,
-        total_tokens: input.usage.inputTokens + input.usage.outputTokens,
-      } } : {}),
-      ...(usdMicros !== undefined ? { usdMicros, source: 'provider' as const } : { unpricedReason: input.usage ? 'unknown_model' as const : 'missing_usage' as const }),
+      ...(input.usage
+        ? {
+            usage: {
+              prompt_tokens: input.usage.inputTokens,
+              completion_tokens: input.usage.outputTokens,
+              cached_tokens: input.usage.cachedInputTokens,
+              total_tokens: input.usage.inputTokens + input.usage.outputTokens,
+            },
+          }
+        : {}),
+      ...(usdMicros !== undefined
+        ? { usdMicros, source: 'provider' as const }
+        : { unpricedReason: input.usage ? ('unknown_model' as const) : ('missing_usage' as const) }),
     });
   }
 
-  get wrappingUp(): boolean { return this.#wrapUp; }
+  get wrappingUp(): boolean {
+    return this.#wrapUpDispatched;
+  }
 
-  dispatched(): void {
+  dispatched(wrapUp = false): void {
+    if (wrapUp) this.#wrapUpDispatched = true;
     ++this.#turns;
   }
 
@@ -87,7 +103,7 @@ export class TurnBudgetControl {
   /** Only settled boundaries may ask, extend, or enter a final tools-disabled request. */
   async beforeRequest(history: Item[]): Promise<'run' | 'wrap_up' | 'stop'> {
     if (!this.state || !this.deps.budget) return 'run';
-    if (this.#wrapUp) return 'stop';
+    if (this.#wrapUp) return this.#wrapUpDispatched ? 'stop' : 'wrap_up';
     const costs = new Map(this.deps.budget.costRecords?.().map((cost) => [cost.requestId, cost]));
     for (const [id, cost] of this.#costs) costs.set(id, cost);
     const observations = [
@@ -95,34 +111,63 @@ export class TurnBudgetControl {
       ...this.state.evaluate({ turns: this.#turns, costRecords: [...costs.values()] }),
     ];
     const stall = this.state.takeStallEvidence();
-    if (stall && !observations.some((event) => event.type === 'tool_stall' && event.toolName === stall.toolName && event.argumentsText === stall.argumentsText)) observations.push(stall);
+    if (
+      stall &&
+      !observations.some(
+        (event) =>
+          event.type === 'tool_stall' &&
+          event.toolName === stall.toolName &&
+          event.argumentsText === stall.argumentsText,
+      )
+    )
+      observations.push(stall);
+    // A single measurement can cross several stages. Report all evidence, but
+    // ask only once at the strongest boundary; an extension retires that snapshot.
+    let selected: { evidence: RunBudgetEvent; action: 'pause' | 'wrap_up' } | undefined;
     for (const evidence of observations) {
-      const action = directBudgetAction({ policy: this.deps.budget.policy, event: evidence, wrapUpOnCritical: this.deps.budget.wrapUpOnCritical ?? false });
+      const action = directBudgetAction({
+        policy: this.deps.budget.policy,
+        event: evidence,
+        wrapUpOnCritical: this.deps.budget.wrapUpOnCritical ?? false,
+      });
       await this.events.publish({ type: 'budget_observed', evidence });
       await this.#notice(history, `Run budget evidence: ${JSON.stringify(evidence)}`);
-      if (action === 'wrap_up') {
-        this.#wrapUp = true;
-        await this.#notice(history, 'The child run budget is exhausted. Give a final truthful wrap-up with no further tools.');
-        return 'wrap_up';
+      if (
+        action !== 'observe' &&
+        (!selected || action === 'wrap_up' || (evidence.type === 'budget_stage' && evidence.stage === 'critical'))
+      )
+        selected = { evidence, action };
+    }
+    if (!selected) return 'run';
+    if (selected.action === 'wrap_up') {
+      this.#wrapUp = true;
+      await this.#notice(
+        history,
+        'The child run budget is exhausted. Give a final truthful wrap-up with no further tools.',
+      );
+      return 'wrap_up';
+    }
+    while (true) {
+      const decision = await this.humanWait(() => this.#checkIn(selected!.evidence));
+      if (decision.kind === 'stop') return 'stop';
+      if (decision.kind === 'steer') {
+        // Steering does not silently waive an exhausted finite envelope.
+        history.push(...decision.items);
+        continue;
       }
-      if (action !== 'pause') continue;
-      while (true) {
-        const decision = await this.humanWait(() => this.#checkIn(evidence));
-        if (decision.kind === 'stop') return 'stop';
-        if (decision.kind === 'steer') {
-          // Steering does not silently waive an exhausted finite envelope.
-          history.push(...decision.items);
-          continue;
-        }
-        if (!this.state.grantExtension(decision.grantedBy).granted) return 'stop';
-        break;
-      }
+      if (!this.state.grantExtension(decision.grantedBy).granted) return 'stop';
+      break;
     }
     return 'run';
   }
 
   async #notice(history: Item[], text: string): Promise<void> {
-    const item: Item = { type: 'summary', id: `${this.spec.turnId}:budget-notice:${++this.#ordinal}` as ItemId, text, replaces: [] };
+    const item: Item = {
+      type: 'summary',
+      id: `${this.spec.turnId}:budget-notice:${++this.#ordinal}` as ItemId,
+      text,
+      replaces: [],
+    };
     await this.events.publish({ type: 'item', item });
     history.push(item);
   }
@@ -135,13 +180,18 @@ export class TurnBudgetControl {
 
   async #checkIn(evidence: RunBudgetEvent): Promise<BudgetDecision> {
     const requestId = `${this.spec.turnId}:budget:${++this.#ordinal}` as InteractionRequestId;
-    const decision = new Promise<BudgetDecision>((resolve, reject) => this.#pending.set(requestId, { ready: false, resolve, reject }));
+    const decision = new Promise<BudgetDecision>((resolve, reject) =>
+      this.#pending.set(requestId, { ready: false, resolve, reject }),
+    );
     void decision.catch(() => {});
     try {
-      await this.events.publish({ type: 'budget_required', requestId, turnId: this.spec.turnId, evidence, snapshot: this.state!.snapshot() }, () => {
-        const pending = this.#pending.get(requestId);
-        if (pending) pending.ready = true;
-      });
+      await this.events.publish(
+        { type: 'budget_required', requestId, turnId: this.spec.turnId, evidence, snapshot: this.state!.snapshot() },
+        () => {
+          const pending = this.#pending.get(requestId);
+          if (pending) pending.ready = true;
+        },
+      );
       if (this.signal.aborted) throw cancelled();
       return await decision;
     } finally {

@@ -74,6 +74,9 @@ checkpoint stores the full turn input.
 
 ## How a message travels
 
+This section describes the adopted bridge path. The direct headless program is
+described under the layer guard below, and starts at `src/app/cli.ts`.
+
 1. A client turns the user's text into a `submit` `WireCommand` and sends it on
    its host `Connection`.
 2. `protocol/commands.ts` (`applyCommand`) turns that command into

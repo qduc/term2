@@ -177,6 +177,8 @@ async function runWithSignals(
   let turnHasStarted = false;
   let receivedSignal: NodeJS.Signals | undefined;
 
+  // Nothing awaits between the durable terminal and `process.exit`, so a handler
+  // never runs after the result. An await added there would let a second signal win.
   const onSignal = (signal: NodeJS.Signals): void => {
     if (receivedSignal !== undefined) {
       process.exit(exitCodeForSignal(signal));

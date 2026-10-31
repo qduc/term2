@@ -144,19 +144,19 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
       if (facts.length === 0) return;
 
       const fd = handle;
-      const lines = facts.map((fact) => {
-        const line: FactLine = {
-          v: LOG_FORMAT_VERSION,
-          seq: sequence,
-          at: new Date().toISOString(),
-          fact,
-        };
-        sequence += 1;
-        return `${JSON.stringify(line)}\n`;
-      });
-      const buffer = Buffer.from(lines.join(''), 'utf8');
 
       try {
+        const lines = facts.map((fact) => {
+          const line: FactLine = {
+            v: LOG_FORMAT_VERSION,
+            seq: sequence,
+            at: new Date().toISOString(),
+            fact,
+          };
+          sequence += 1;
+          return `${JSON.stringify(line)}\n`;
+        });
+        const buffer = Buffer.from(lines.join(''), 'utf8');
         if (pendingTruncate !== undefined) {
           ftruncateSync(fd, pendingTruncate);
           pendingTruncate = undefined;
@@ -204,6 +204,7 @@ export function createLog(dir: string, id: string): ConversationLog {
 export function openLog(path: string): ConversationLog {
   const data = readFileSync(path);
   const { lastSeq, complete } = parseLog(data, path);
+  // Append mode: after the truncate, writes land at the new end without a position.
   return createConversationLog(path, openSync(path, 'a'), lastSeq + 1, complete !== data.length ? complete : undefined);
 }
 

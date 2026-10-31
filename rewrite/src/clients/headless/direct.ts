@@ -226,12 +226,13 @@ export async function runDirectHeadless(
   };
 
   // The old --json schema is a ConversationEvent read model, not the wire event
-  // stream. Protocol now exposes accepted live argument, request-cost and source
-  // command slices, but an authoritative final/turn-item window is still absent.
-  // Do not present a partial stream as legacy parity.
+  // stream. Protocol exposes delta-only text/reasoning, live argument, request
+  // cost and source command slices, but its explicit final-window capability is
+  // false and an authoritative final/turn-item window is absent. Do not present
+  // a partial stream as legacy parity.
   if (output === 'json') {
     errorText(
-      '--json output requires an authoritative final/turn-item window; live argument-stream, cost and command slices alone are not the legacy schema.',
+      '--json output requires an authoritative final/turn-item window; the protocol final-window capability is explicitly unavailable, and delta/cost/command slices alone are not the legacy schema.',
     );
     return result('error', 1);
   }

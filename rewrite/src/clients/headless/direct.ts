@@ -38,11 +38,17 @@ const RECOVERABLE_ERROR_KINDS = new Set([
  * approval is denied, with the old reason sent to the model. With it, ordinary
  * tools and low/unknown-risk shell commands are allowed; medium/high-risk shell
  * commands are refused because this client cannot reproduce the old evaluator.
- * A question has no headless answerer, so it is explicitly declined, not guessed.
+ * A question has no headless answerer. The empty answer plus
+ * `stopAfterApprovalResolution` is a selected resolution (the source canonical
+ * "no answer" result), not a cancellation; it settles that question and
+ * suppresses later model work.
  */
 export function decideHeadlessApproval(interaction: WireInteraction, autoApprove: boolean): HeadlessDecision {
   if (interaction.kind === 'question') {
-    return { decision: { kind: 'decline' }, reportRejection: false };
+    return {
+      decision: { kind: 'answer', answer: '', stopAfterApprovalResolution: true },
+      reportRejection: false,
+    };
   }
   if (!autoApprove) {
     return { decision: { kind: 'deny', reason: NON_INTERACTIVE_REJECTION_REASON }, reportRejection: false };
@@ -91,6 +97,7 @@ export async function runDirectHeadless(
   const io = options.io ?? { stdout: process.stdout, stderr: process.stderr };
   const output = options.output ?? 'plain';
   const autoApprove = options.autoApprove ?? false;
+  const quiet = options.quiet ?? false;
   const sessionId = connection.sessionId;
   const requestId = options.requestId ?? `req_${randomUUID()}`;
   const reportedErrors = new Set<string>();
@@ -158,7 +165,7 @@ export async function runDirectHeadless(
     const answer = async (interaction: WireInteraction): Promise<DirectHeadlessResult | null> => {
       if (answered.has(interaction.requestId)) return null;
       answered.add(interaction.requestId);
-      if (output === 'plain') io.stderr.write(interactionLine(interaction));
+      if (output === 'plain' && !quiet) io.stderr.write(interactionLine(interaction));
       let decided: HeadlessDecision;
       try {
         decided = await decide(interaction);
@@ -176,21 +183,28 @@ export async function runDirectHeadless(
       }
       const answerFailure = await sendAnswer(interaction.requestId, decided.decision);
       if (answerFailure === null) return null;
+      // Cancellation closes pending interactions before the policy answer lands.
+      // That stale answer is expected: keep the ordered stream and let the real
+      // terminal (cancelled) decide, rather than reporting a failure.
+      if (options.signal?.aborted && answerFailure.code === 'stale_interaction') return null;
       void connection.send({ type: 'cancel' }).catch(() => undefined);
       return result('failed', 1);
     };
 
-    /** Null when the answer was accepted; otherwise the explicit failure message. */
-    const sendAnswer = async (requestId: string, decision: WireDecision): Promise<string | null> => {
+    /** Null when the answer was accepted; otherwise the protocol failure. */
+    const sendAnswer = async (
+      requestId: string,
+      decision: WireDecision,
+    ): Promise<{ readonly code: string; readonly message: string } | null> => {
       try {
         const sent = await connection.send({ type: 'answer', requestId, decision });
         if (sent.ok) return null;
         errorText(sent.message, sent.code);
-        return sent.message;
+        return { code: sent.code, message: sent.message };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errorText(message);
-        return message;
+        return { code: 'internal_error', message };
       }
     };
 
@@ -200,6 +214,7 @@ export async function runDirectHeadless(
       const failure = await answer(interaction);
       if (failure) return failure;
     }
+    if (options.signal?.aborted) return result('cancelled', 1);
 
     let submitted: WireCommandResult;
     try {
@@ -306,22 +321,22 @@ export async function runDirectHeadless(
           break;
         }
         case 'tool_started':
-          if (forTurn && output === 'plain') io.stderr.write(toolStartLine(event.payload.tool));
+          if (forTurn && output === 'plain' && !quiet) io.stderr.write(toolStartLine(event.payload.tool));
           break;
         case 'retrying':
-          if (forTurn && output === 'plain') {
+          if (forTurn && output === 'plain' && !quiet) {
             io.stderr.write(
               `[retry] attempt ${event.payload.attempt} in ${event.payload.delayMs}ms: ${event.payload.error.message}\n`,
             );
           }
           break;
         case 'notice':
-          if (forTurn && output === 'plain') {
+          if (forTurn && output === 'plain' && !quiet) {
             io.stderr.write(`[${event.payload.kind}] ${event.payload.message}\n`);
           }
           break;
         case 'subagent':
-          if (forTurn) renderNested(event.payload.role, event.payload.event, output, io, reportedErrors);
+          if (forTurn) renderNested(event.payload.role, event.payload.event, output, io, reportedErrors, quiet);
           break;
         case 'error':
           reportEventError(reportedErrors, io, event.payload.error.message, output);
@@ -404,7 +419,7 @@ function fail(
   } else {
     context.io.stderr.write(`error ${message}\n${recovery}\n`);
   }
-  return context.result('failed', 2);
+  return context.result('context_paused', 2);
 }
 
 /** Nested subagent lines keep the old stderr labels; everything else stays nested. */
@@ -414,8 +429,9 @@ function renderNested(
   output: 'plain' | 'json',
   io: HeadlessIo,
   reported: Set<string>,
+  quiet: boolean,
 ): void {
-  if (output === 'json') return;
+  if (output === 'json' || quiet) return;
   switch (event.type) {
     case 'tool_started':
       io.stderr.write(`[subagent: ${role}] ${toolStartLine(event.payload.tool).replace(/^\[tool\]\s*/, '')}`);

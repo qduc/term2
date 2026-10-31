@@ -45,6 +45,8 @@ export type DirectHeadlessOptions = {
   readonly autoApprove?: boolean;
   /** Old `showReasoning`: reasoning deltas go to stderr; never to stdout. */
   readonly showReasoning?: boolean;
+  /** Old `quiet`: suppress non-error stderr event lines; errors and verdicts still show. */
+  readonly quiet?: boolean;
   readonly io?: HeadlessIo;
   /** Defaults to `{kind:'cli'}` so Session can attribute the submission. */
   readonly origin?: WireOrigin;
@@ -70,7 +72,13 @@ export type DirectHeadlessOptions = {
   readonly closeConnection?: boolean;
 };
 
-export type DirectHeadlessOutcome = 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'error';
+export type DirectHeadlessOutcome =
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
+  | 'context_paused'
+  | 'error';
 
 export type DirectHeadlessResult = {
   /** 0 completed, 1 ordinary failure or cancellation, 2 a resumable context pause. */

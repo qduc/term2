@@ -133,14 +133,9 @@ export function captureDirectFinalWindow(
     if (!('turnId' in fact) || fact.turnId !== turnId) continue;
     if (fact.type === 'usage') {
       usage = {
-        input: (usage?.input ?? 0) + fact.usage.input,
-        output: (usage?.output ?? 0) + fact.usage.output,
-        ...(usage?.reasoning !== undefined || fact.usage.reasoning !== undefined
-          ? { reasoning: (usage?.reasoning ?? 0) + (fact.usage.reasoning ?? 0) }
-          : {}),
-        ...(usage?.cacheRead !== undefined || fact.usage.cacheRead !== undefined
-          ? { cacheRead: (usage?.cacheRead ?? 0) + (fact.usage.cacheRead ?? 0) }
-          : {}),
+        inputTokens: (usage?.inputTokens ?? 0) + fact.usage.inputTokens,
+        outputTokens: (usage?.outputTokens ?? 0) + fact.usage.outputTokens,
+        cachedInputTokens: (usage?.cachedInputTokens ?? 0) + fact.usage.cachedInputTokens,
       };
     }
     if (fact.type === 'tool_started') executions.set(fact.executionId, fact.toolName);
@@ -202,11 +197,10 @@ export function captureDirectFinalWindow(
       ...(usage
         ? {
             usage: {
-              prompt_tokens: usage.input,
-              completion_tokens: usage.output,
-              total_tokens: usage.input + usage.output,
-              ...(usage.reasoning !== undefined ? { reasoning_tokens: usage.reasoning } : {}),
-              ...(usage.cacheRead !== undefined ? { cache_read_tokens: usage.cacheRead } : {}),
+              prompt_tokens: usage.inputTokens,
+              completion_tokens: usage.outputTokens,
+              total_tokens: usage.inputTokens + usage.outputTokens,
+              cache_read_tokens: usage.cachedInputTokens,
             },
           }
         : {}),

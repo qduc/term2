@@ -28,6 +28,8 @@ import type {
 } from './types.js';
 
 const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
+const DEFAULT_BACKGROUND_WAIT_MS = 60 * 60 * 1000;
+const MAX_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
 /** The old headless CLI's resumable context failures exit 2 rather than 1. */
 /** Old non-interactive exit 2 terminal causes that are not context pauses. */
 const BLOCKED_TERMINAL_CAUSES = new Set(['goal_check_unresolved', 'completion_verification_blocked']);
@@ -104,16 +106,19 @@ export async function runDirectHeadless(
   const autoApprove = options.autoApprove ?? false;
   const quiet = options.quiet ?? false;
   const sessionId = connection.sessionId;
+  const requestedBackgroundWait = options.backgroundWaitTimeoutMs;
   const backgroundWaitTimeoutMs =
-    options.backgroundWaitTimeoutMs !== undefined &&
-    Number.isFinite(options.backgroundWaitTimeoutMs) &&
-    options.backgroundWaitTimeoutMs >= 0
-      ? options.backgroundWaitTimeoutMs
-      : 3_600_000;
+    requestedBackgroundWait === undefined || !Number.isFinite(requestedBackgroundWait)
+      ? DEFAULT_BACKGROUND_WAIT_MS
+      : Math.min(MAX_BACKGROUND_WAIT_MS, Math.max(1, Math.floor(requestedBackgroundWait)));
   const tasks = new Map<string, WireTask>();
   for (const task of connection.snapshot.tasks) tasks.set(task.id, task);
   const notices = new Map<string, WireBackgroundNotice>();
   const delivered = new Set<string>();
+  /** A background task fact and its completion notice are one accepted batch; do
+   * not finish between the two events if the task frame is observed first.
+   */
+  const expectedCompletion = new Set<string>();
   for (const notice of connection.snapshot.notifications?.notices ?? []) notices.set(notice.id, notice);
   for (const delivery of connection.snapshot.notifications?.deliveries ?? []) {
     for (const id of delivery.notificationIds) delivered.add(id);
@@ -125,6 +130,10 @@ export async function runDirectHeadless(
     );
   const pendingNotices = (): WireBackgroundNotice[] =>
     [...notices.values()].filter((notice) => !delivered.has(notice.id));
+  const completionNoticeFor = (taskId: string): boolean =>
+    [...notices.values()].some((notice) => notice.kind === 'completion' && notice.taskIds.includes(taskId));
+  const terminalTask = (status: WireTask['status']): boolean =>
+    status === 'completed' || status === 'cancelled' || status === 'failed' || status === 'interrupted';
   const requestId = options.requestId ?? `req_${randomUUID()}`;
   const reportedErrors = new Set<string>();
   const answered = new Set<string>();
@@ -407,7 +416,7 @@ export async function runDirectHeadless(
       const now = Date.now();
       const pending = pendingNotices();
       const active = activeTasks();
-      if (pending.length === 0 && active.length === 0) return finish();
+      if (pending.length === 0 && active.length === 0 && expectedCompletion.size === 0) return finish();
       if (now >= phase.deadline) {
         return failBackground(
           `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
@@ -451,6 +460,9 @@ export async function runDirectHeadless(
 
     let ready: IteratorResult<WireEvent> | null = null;
     for (;;) {
+      if (background !== null && (abortedInBackground || options.signal?.aborted)) {
+        return failBackground('Background work interrupted; unfinished work was cancelled.');
+      }
       if (background !== null && targetTurnId === null) {
         const driven = await driveBackground();
         if (driven !== null) {
@@ -498,7 +510,8 @@ export async function runDirectHeadless(
           return failBackground('Background work interrupted; unfinished work was cancelled.');
         }
         if (background !== null) {
-          if (pendingNotices().length === 0 && activeTasks().length === 0) return finish();
+          if (pendingNotices().length === 0 && activeTasks().length === 0 && expectedCompletion.size === 0)
+            return finish();
           return failBackground('Connection ended before background work settled.');
         }
         if (abortedBeforeStart || options.signal?.aborted) return result('cancelled', 1);
@@ -510,7 +523,11 @@ export async function runDirectHeadless(
       if (output === 'json') json(event);
 
       if (event.type === 'background_notice_enqueued') {
-        notices.set(event.payload.notice.id, event.payload.notice);
+        const notice = event.payload.notice;
+        notices.set(notice.id, notice);
+        if (notice.kind === 'completion') {
+          for (const taskId of notice.taskIds) expectedCompletion.delete(taskId);
+        }
         continue;
       }
       if (event.type === 'background_notices_delivered') {
@@ -523,7 +540,17 @@ export async function runDirectHeadless(
         continue;
       }
       if (event.type === 'task_changed') {
-        tasks.set(event.payload.task.id, event.payload.task);
+        const task = event.payload.task;
+        const previous = tasks.get(task.id);
+        tasks.set(task.id, task);
+        if (
+          task.mode === 'background' &&
+          terminalTask(task.status) &&
+          previous?.status !== task.status &&
+          !completionNoticeFor(task.id)
+        ) {
+          expectedCompletion.add(task.id);
+        }
         continue;
       }
       if (event.type === 'budget_opened') {

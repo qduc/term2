@@ -220,10 +220,9 @@ export function buildInstructions(
   const modelPrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
   const worktreeHygiene = resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md'));
   const toolGuidance = buildAvailableToolGuidance(toolDefinitions, searchViaShell);
-  const memoryCapability = new MemoryCapabilityBuilder(settings).build(
-    { kind: 'subagent', role: definition.role },
-    { projectPath: cwd },
-  );
+  const memoryCapability = executionContext?.isRemote()
+    ? undefined
+    : new MemoryCapabilityBuilder(settings).build({ kind: 'subagent', role: definition.role }, { projectPath: cwd });
 
   const sandboxEnabled = settings.get('sandbox.enabled') ?? true;
   const inlineSections: string[] = [];

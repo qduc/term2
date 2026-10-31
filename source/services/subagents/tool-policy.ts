@@ -904,7 +904,7 @@ export class SubagentToolPolicy {
       execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const filePath = extractPath(params);
         if (filePath) {
-          const safe = await isPathInScopeSafe(filePath, scopePatterns);
+          const safe = await isPathInScopeSafe(filePath, scopePatterns, this.#executionContext?.getCwd());
           if (!safe) {
             return `Error: Path "${filePath}" is outside the allowed filesystem read scope.`;
           }
@@ -935,7 +935,7 @@ export class SubagentToolPolicy {
       execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const paths = extractPaths(params);
         for (const filePath of paths) {
-          const safe = await isPathInScopeSafe(filePath, scopePatterns);
+          const safe = await isPathInScopeSafe(filePath, scopePatterns, this.#executionContext?.getCwd());
           if (!safe) {
             return `Error: Path "${filePath}" is outside the allowed filesystem write scope.`;
           }

@@ -73,9 +73,8 @@ export function getWorkspaceRoot(): string {
  *
  * Returns the normalized absolute path, or null if the path is unsafe.
  */
-export function normalizeToolPath(rawPath: string): string | null {
+export function normalizeToolPath(rawPath: string, root = getWorkspaceRoot()): string | null {
   if (!rawPath || rawPath.includes('\0')) return null;
-  const root = getWorkspaceRoot();
   const resolved = path.resolve(root, rawPath);
 
   // Reject if the resolved path escapes the workspace root
@@ -99,9 +98,8 @@ export function normalizeToolPath(rawPath: string): string | null {
  * - A symlink points outside the workspace
  * - The composed path (for nonexistent targets) would escape
  */
-export async function resolveRealToolPath(rawPath: string): Promise<string | null> {
+export async function resolveRealToolPath(rawPath: string, root = getWorkspaceRoot()): Promise<string | null> {
   if (!rawPath || rawPath.includes('\0')) return null;
-  const root = getWorkspaceRoot();
 
   // First, normalize the raw path to an absolute path
   const nominal = path.resolve(root, rawPath);
@@ -174,13 +172,17 @@ async function resolveNonexistentTarget(target: string, root: string): Promise<s
  * Resolves the actual filesystem path (following symlinks) and
  * checks it against the scope patterns.
  */
-export async function isPathInScopeSafe(rawPath: string, scopePatterns: string[]): Promise<boolean> {
+/** Optional explicit root keeps concurrent pinned child policies off ambient workspace state. */
+export async function isPathInScopeSafe(
+  rawPath: string,
+  scopePatterns: string[],
+  root = getWorkspaceRoot(),
+): Promise<boolean> {
   if (scopePatterns.length === 0) return true;
 
-  const real = await resolveRealToolPath(rawPath);
+  const real = await resolveRealToolPath(rawPath, root);
   if (!real) return false;
 
-  const root = getWorkspaceRoot();
   const relative = path.relative(root, real);
   if (relative.startsWith('..')) return false;
 

@@ -1,5 +1,5 @@
 {
-  "maxSourceEdges": 526,
+  "maxSourceEdges": 522,
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/session/adopted/foreground.ts": {
@@ -19,8 +19,8 @@
       "reason": "Not yet reviewed for a job seam."
     },
     "rewrite/src/session/adopted/conversation-log.ts": {
-      "lines": 627,
-      "reason": "Not yet reviewed for a job seam."
+      "lines": 631,
+      "reason": "Prettier expands the existing SessionFact union by four lines after reconciliation; no behavior or new job added. Keep the fact union with its decoder rather than extract a formatting-only seam."
     }
   },
   "messagePath": {

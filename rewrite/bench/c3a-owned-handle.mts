@@ -87,22 +87,34 @@ let graphs = 0;
 let graphOwnership: ToolOwnershipRegistry;
 let graphContext: SessionContextService;
 const store = new LocalSessionStore({
-  root: path.join(root, 'sessions'), logger, defaultWorkspace: workspaceConfig, defaultModel: modelRef,
-  driverFactory: () => { throw new Error('combined handle expected'); },
+  root: path.join(root, 'sessions'),
+  logger,
+  defaultWorkspace: workspaceConfig,
+  defaultModel: modelRef,
+  driverFactory: () => {
+    throw new Error('combined handle expected');
+  },
   adoptedHandleFactory: createAppAdoptedSessionHandleFactory({
     engine: () => {
-      const ownership = graphOwnership = new ToolOwnershipRegistry();
-      const sessionContext = graphContext = new SessionContextService();
+      const ownership = (graphOwnership = new ToolOwnershipRegistry());
+      const sessionContext = (graphContext = new SessionContextService());
       const execution = new ExecutionContext();
       execution.enterWorkspace(workspace);
       graphs++;
-      return { models, settings: pair.settings, clientOptions: {
-        selection: { provider: 'openai', model: 'fixture' }, toolOwnership: ownership,
-        deps: { settings: pair.service, logger, sessionContextService: sessionContext, executionContext: execution },
-      } };
+      return {
+        models,
+        settings: pair.settings,
+        clientOptions: {
+          selection: { provider: 'openai', model: 'fixture' },
+          toolOwnership: ownership,
+          deps: { settings: pair.service, logger, sessionContextService: sessionContext, executionContext: execution },
+        },
+      };
     },
-    runtime: () => ({ toolOwnership: graphOwnership,
-      deps: { logger, settingsService: pair.service, sessionContextService: graphContext } }),
+    runtime: () => ({
+      toolOwnership: graphOwnership,
+      deps: { logger, settingsService: pair.service, sessionContextService: graphContext },
+    }),
   }),
 });
 const { session, submission } = await store.createAdopted(workspaceConfig, modelRef);
@@ -140,7 +152,11 @@ assert.equal(graphs, 2);
 assert.ok(JSON.stringify(reopened.state().providerHistory).includes('Hello from adopted session'));
 assert.ok(JSON.stringify(reopened.state().providerHistory).includes('aGVsbG8='));
 assert.ok(JSON.stringify(reopened.state().messages).includes('SKILL-BODY'));
-const followupDone = new Promise<void>((resolve) => { reopened.subscribe(reopened.state().lastSeq, (event) => { if (event.kind === 'fact' && event.entry.fact.type === 'session_admission_settled') resolve(); }); });
+const followupDone = new Promise<void>((resolve) => {
+  reopened.subscribe(reopened.state().lastSeq, (event) => {
+    if (event.kind === 'fact' && event.entry.fact.type === 'session_admission_settled') resolve();
+  });
+});
 await reopenedHandle.submission.submit({ requestId: 'request2' as any, input: { text: 'Follow up' } });
 await followupDone;
 assert.equal(requests.length, 2);

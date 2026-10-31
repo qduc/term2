@@ -18,7 +18,8 @@ const home = path.join(root, 'home');
 const workspace = path.join(root, 'workspace');
 const conversations = path.join(root, 'conversations');
 const barrier = path.join(root, 'pending.ready');
-for (const dir of [home, workspace, path.join(root, 'runtime'), path.join(root, 'tmp')]) fs.mkdirSync(dir, { recursive: true });
+for (const dir of [home, workspace, path.join(root, 'runtime'), path.join(root, 'tmp')])
+  fs.mkdirSync(dir, { recursive: true });
 let providerCalls = 0;
 const server = http.createServer((request, response) => {
   if (request.method === 'GET') {
@@ -42,12 +43,19 @@ const server = http.createServer((request, response) => {
         }),
       },
     };
-    const frames = providerCalls === 1
-      ? [
-          { id: 'chatcmpl-1', choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [toolCall] } }] },
-          { id: 'chatcmpl-1', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] },
-        ]
-      : [{ id: `chatcmpl-${providerCalls}`, choices: [{ index: 0, delta: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }];
+    const frames =
+      providerCalls === 1
+        ? [
+            { id: 'chatcmpl-1', choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [toolCall] } }] },
+            { id: 'chatcmpl-1', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] },
+          ]
+        : [
+            {
+              id: `chatcmpl-${providerCalls}`,
+              choices: [{ index: 0, delta: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            },
+          ];
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     response.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`), 'data: [DONE]\n\n'].join(''));
   });
@@ -59,11 +67,21 @@ try {
   if (!address || typeof address === 'string') throw new Error('fake provider did not bind');
   const settingsDir = path.join(home, '.local/state/term2-nodejs');
   fs.mkdirSync(settingsDir, { recursive: true });
-  fs.writeFileSync(path.join(settingsDir, 'settings.json'), JSON.stringify({
-    agent: { retryAttempts: 0, modelSelection: { provider: 'mockprov', model: 'mock-alpha' } },
-    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: `http://127.0.0.1:${address.port}/v1`, apiKey: 'test-key' }],
-    sandbox: { enabled: false },
-  }));
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { provider: 'mockprov', model: 'mock-alpha' } },
+      providers: [
+        {
+          name: 'mockprov',
+          type: 'openai-compatible',
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+          apiKey: 'test-key',
+        },
+      ],
+      sandbox: { enabled: false },
+    }),
+  );
   const env = {
     ...process.env,
     HOME: home,
@@ -92,14 +110,23 @@ try {
   child.kill('SIGKILL');
   if (child.exitCode === null) await new Promise((resolve) => child.once('close', resolve));
 
-  const logId = fs.readdirSync(conversations).find((name) => name.endsWith('.jsonl'))?.slice(0, -6);
+  const logId = fs
+    .readdirSync(conversations)
+    .find((name) => name.endsWith('.jsonl'))
+    ?.slice(0, -6);
   if (!logId) throw new Error('killed process did not create its canonical log');
   const { LocalSessionStore } = await import(`file://${storeModule}`);
   const driverFactory = () => ({
-    submit: async () => { throw new Error('recovery proof must not submit'); },
-    decide: async () => { throw new Error('recovered interactions must not be actionable'); },
+    submit: async () => {
+      throw new Error('recovery proof must not submit');
+    },
+    decide: async () => {
+      throw new Error('recovered interactions must not be actionable');
+    },
     cancel: async () => {},
-    retry: async () => { throw new Error('recovery proof must not retry'); },
+    retry: async () => {
+      throw new Error('recovery proof must not retry');
+    },
     compact: async () => {},
     setModel: async () => {},
     subscribe: () => () => {},
@@ -114,23 +141,54 @@ try {
   const recovered = await store.open(logId);
   const state1 = recovered.state();
   const seq1 = state1.lastSeq;
-  if (state1.status !== 'interrupted' || state1.pendingInteraction !== null) throw new Error('recovered prompt remained actionable');
+  if (state1.status !== 'interrupted' || state1.pendingInteraction !== null)
+    throw new Error('recovered prompt remained actionable');
   await recovered.close();
   const reopened = await store.open(logId);
   const state2 = reopened.state();
-  if (state2.lastSeq !== seq1 || state2.status !== 'interrupted' || state2.pendingInteraction !== null) throw new Error('reconciliation was not idempotent');
+  if (state2.lastSeq !== seq1 || state2.status !== 'interrupted' || state2.pendingInteraction !== null)
+    throw new Error('reconciliation was not idempotent');
   await reopened.close();
   if (providerCalls !== 1) throw new Error('session open called the provider after restart');
-  if (fs.existsSync(path.join(workspace, 'effect.txt'))) throw new Error('session open executed the tool after restart');
+  if (fs.existsSync(path.join(workspace, 'effect.txt')))
+    throw new Error('session open executed the tool after restart');
 
-  const envelopes = fs.readFileSync(path.join(conversations, `${logId}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
-  const facts = envelopes.flatMap((envelope) => envelope.event?.type === 'session_fact_batch' ? envelope.event.entries.map((entry) => entry.event) : [envelope.event]);
+  const envelopes = fs
+    .readFileSync(path.join(conversations, `${logId}.jsonl`), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const facts = envelopes.flatMap((envelope) =>
+    envelope.event?.type === 'session_fact_batch'
+      ? envelope.event.entries.map((entry) => entry.event)
+      : [envelope.event],
+  );
   const count = (type) => facts.filter((fact) => fact.type === type).length;
-  if (count('session_interaction_pending') !== 1 || count('session_interaction_recovered') !== 1 || count('session_interaction_resolved') !== 1 || count('session_interrupted') !== 1) {
+  if (
+    count('session_interaction_pending') !== 1 ||
+    count('session_interaction_recovered') !== 1 ||
+    count('session_interaction_resolved') !== 1 ||
+    count('session_interrupted') !== 1
+  ) {
     throw new Error('pending/recovery audit facts are missing or duplicated');
   }
-  if (count('tool_result') !== 0 || count('assistant_turn') !== 0) throw new Error('approval kill unexpectedly completed the tool turn');
-  console.log(JSON.stringify({ logId, providerCalls, status: state2.status, pendingInteraction: state2.pendingInteraction, lastSeq: state2.lastSeq, pending: count('session_interaction_pending'), recovered: count('session_interaction_recovered'), resolved: count('session_interaction_resolved'), interrupted: count('session_interrupted'), noEffect: true, repeatOpenIdempotent: true }));
+  if (count('tool_result') !== 0 || count('assistant_turn') !== 0)
+    throw new Error('approval kill unexpectedly completed the tool turn');
+  console.log(
+    JSON.stringify({
+      logId,
+      providerCalls,
+      status: state2.status,
+      pendingInteraction: state2.pendingInteraction,
+      lastSeq: state2.lastSeq,
+      pending: count('session_interaction_pending'),
+      recovered: count('session_interaction_recovered'),
+      resolved: count('session_interaction_resolved'),
+      interrupted: count('session_interrupted'),
+      noEffect: true,
+      repeatOpenIdempotent: true,
+    }),
+  );
 } finally {
   await new Promise((resolve) => server.close(resolve));
   fs.rmSync(root, { recursive: true, force: true });

@@ -555,6 +555,13 @@
       "parity": [],
       "consumedByNewCode": true
     },
+    "log-event:personal_memory_context": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true,
+      "note": "Local human-admission snapshots are retained by the adopted source log/replay; direct M1 remains text-only and does not port personal-memory injection."
+    },
     "log-event:session_cleared": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",

@@ -28,6 +28,14 @@ const LAYER_DEPENDENCIES = {
 };
 
 const SOURCE_LAYERS = [
+  // These source helpers are pure data transformations/schemas, not session or client owners.
+  ['shared', 'services/conversation/conversation-time-gap.ts'],
+  ['shared', 'services/conversation/personal-memory-context.ts'],
+  ['shared', 'services/discord/discord-reactions.ts'],
+  ['shared', 'services/profiles/legacy-adapter.ts'],
+  // This filesystem integration exercises root-agent assembly, not a memory tool implementation.
+  ['app', 'services/memory/personal-memory.integration.test.ts'],
+  ['config', 'env-setup.ts'],
   ['session', 'services/command-message-streaming.ts'],
   ['session', 'services/generation-guard.ts'],
   ['session', 'services/input-surge-approval.ts'],
@@ -41,7 +49,10 @@ const SOURCE_LAYERS = [
   ['session', 'lib/tool-interceptor-registry.ts'],
   ['engine', 'services/agent-stream.ts'],
   ['engine', 'services/completion-verification/verifier.ts'],
-  ...['contracts', 'gate', 'goal-stop-policy', 'orchestrator', 'root-boundary', 'store', 'workspace'].map((name) => ['engine', `services/completion-verification/${name}.ts`]),
+  ...['contracts', 'gate', 'goal-stop-policy', 'orchestrator', 'root-boundary', 'store', 'workspace'].map((name) => [
+    'engine',
+    `services/completion-verification/${name}.ts`,
+  ]),
   ['engine', 'services/decision-shadow/decision-client.ts'],
   ['engine', 'services/decision-shadow/decision-shadow-observer.ts'],
   ['engine', 'services/decision-shadow/failure-observation.ts'],
@@ -74,11 +85,17 @@ const SOURCE_LAYERS = [
   ['model', 'services/models/'],
   ['shared', 'tools/agent/ask-user-constants.ts'],
   ['tools', 'tools/'],
-  ...['shell', 'mcp', 'sandboxed-code-host', 'memory', 'skills', 'workspace', 'subagents'].map((name) => ['tools', `services/${name}/`]),
+  ...['shell', 'mcp', 'sandboxed-code-host', 'memory', 'skills', 'workspace', 'subagents'].map((name) => [
+    'tools',
+    `services/${name}/`,
+  ]),
   ['engine', 'services/agent-runtime/'],
   ['engine', 'services/retry/'],
   ['engine', 'lib/agent-client.ts'],
-  ...['conversation', 'session', 'logging', 'queue', 'hooks', 'approval'].map((name) => ['session', `services/${name}/`]),
+  ...['conversation', 'session', 'logging', 'queue', 'hooks', 'approval'].map((name) => [
+    'session',
+    `services/${name}/`,
+  ]),
   ['session', 'prompts/'],
   ['shared', 'gateway/interaction-protocol.ts'],
   ['host', 'gateway/'],
@@ -107,12 +124,23 @@ function* files(dir) {
 
 function resolveImport(importer, specifier) {
   const isRelative = specifier.startsWith('.') || specifier.startsWith('/');
-  if (!isRelative && !(specifier === 'source' || specifier.startsWith('source/') || specifier === 'rewrite' || specifier.startsWith('rewrite/'))) return null;
+  if (
+    !isRelative &&
+    !(
+      specifier === 'source' ||
+      specifier.startsWith('source/') ||
+      specifier === 'rewrite' ||
+      specifier.startsWith('rewrite/')
+    )
+  )
+    return null;
   const unresolved = isRelative ? path.resolve(path.dirname(importer), specifier) : path.join(repo, specifier);
   const candidates = [unresolved];
-  if (/\.m?js$/.test(unresolved)) candidates.push(unresolved.replace(/\.m?js$/, '.ts'), unresolved.replace(/\.m?js$/, '.tsx'));
+  if (/\.m?js$/.test(unresolved))
+    candidates.push(unresolved.replace(/\.m?js$/, '.ts'), unresolved.replace(/\.m?js$/, '.tsx'));
   if (/\.jsx$/.test(unresolved)) candidates.push(unresolved.replace(/\.jsx$/, '.tsx'));
-  if (!path.extname(unresolved)) candidates.push(...['.ts', '.tsx', '.js', '.jsx', '.json'].map((ext) => unresolved + ext));
+  if (!path.extname(unresolved))
+    candidates.push(...['.ts', '.tsx', '.js', '.jsx', '.json'].map((ext) => unresolved + ext));
   for (const candidate of candidates) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
     for (const ext of ['.ts', '.tsx', '.js', '.jsx']) {
@@ -129,9 +157,11 @@ function sourceRelative(file) {
 
 function sourceLayer(file) {
   const relative = sourceRelative(file);
-  return SOURCE_LAYERS.find(([, prefix]) =>
-    prefix.endsWith('/') ? relative.startsWith(prefix) : relative === prefix,
-  )?.[0] ?? null;
+  return (
+    SOURCE_LAYERS.find(([, prefix]) =>
+      prefix.endsWith('/') ? relative.startsWith(prefix) : relative === prefix,
+    )?.[0] ?? null
+  );
 }
 
 function sourceEdge(importer, target, fromLayer, toLayer) {
@@ -173,7 +203,12 @@ for (const importer of sourceFiles) {
     const toLayer = sourceLayer(target);
     if (!fromLayer || !toLayer) continue;
     actualEdges.add(sourceEdge(importer, target, fromLayer, toLayer));
-    if (fromLayer !== 'shared' && toLayer !== 'shared' && fromLayer !== toLayer && !LAYER_DEPENDENCIES[fromLayer]?.includes(toLayer)) {
+    if (
+      fromLayer !== 'shared' &&
+      toLayer !== 'shared' &&
+      fromLayer !== toLayer &&
+      !LAYER_DEPENDENCIES[fromLayer]?.includes(toLayer)
+    ) {
       legacyEdges.add(sourceEdge(importer, target, fromLayer, toLayer));
     }
   }
@@ -192,25 +227,38 @@ for (const edge of allowedLegacyEdges) if (!actualEdges.has(edge)) console.log(`
 // source/ must not reach back into rewrite/, including indirect imports.
 for (const importer of sourceFiles) {
   for (const { target } of imports(importer)) {
-    if (target && target.startsWith(rewriteRoot + path.sep)) problems.add(`source/${sourceRelative(importer)} imports rewrite/${path.relative(rewriteRoot, target).split(path.sep).join('/')}`);
+    if (target && target.startsWith(rewriteRoot + path.sep))
+      problems.add(
+        `source/${sourceRelative(importer)} imports rewrite/${path
+          .relative(rewriteRoot, target)
+          .split(path.sep)
+          .join('/')}`,
+      );
   }
 }
 
 // An adopted file may import source/ directly. Follow every source edge reachable from it.
 for (const entry of files(rewriteSrc)) {
   const relative = path.relative(rewriteSrc, entry).split(path.sep).join('/');
-  const adoptedLayer = relative.match(/^([^/]+)\/adopted\//)?.[1] ?? (DIRECT_SOURCE_IMPORTERS.has(relative) ? relative.split('/')[0] : null);
+  const adoptedLayer =
+    relative.match(/^([^/]+)\/adopted\//)?.[1] ??
+    (DIRECT_SOURCE_IMPORTERS.has(relative) ? relative.split('/')[0] : null);
   const visited = new Set();
   const queue = [];
   for (const { target } of imports(entry)) {
     if (!target || !target.startsWith(sourceRoot + path.sep)) continue;
-    if (!adoptedLayer) problems.add(`${path.relative(repo, entry)} imports source/${sourceRelative(target)} outside adopted/`);
+    if (!adoptedLayer)
+      problems.add(`${path.relative(repo, entry)} imports source/${sourceRelative(target)} outside adopted/`);
     else {
       const layer = sourceLayer(target);
       if (!layer) reachedUnknown.add(sourceRelative(target));
       const allowed = layer === 'shared' || layer === adoptedLayer || LAYER_DEPENDENCIES[adoptedLayer]?.includes(layer);
       if (layer && !allowed) {
-        problems.add(`${path.relative(repo, entry)} (${adoptedLayer}/) directly imports source/${sourceRelative(target)} (${layer}/)`);
+        problems.add(
+          `${path.relative(repo, entry)} (${adoptedLayer}/) directly imports source/${sourceRelative(
+            target,
+          )} (${layer}/)`,
+        );
       }
       if (!layer || allowed) queue.push({ file: target, context: layer && layer !== 'shared' ? layer : adoptedLayer });
     }
@@ -234,16 +282,33 @@ for (const entry of files(rewriteSrc)) {
         // Shared and unmapped files retain the caller's restrictions; a mapped
         // layer takes responsibility for its own outgoing edges.
         const effectiveLayer = fromLayer && fromLayer !== 'shared' ? fromLayer : context;
-        if (targetLayer && targetLayer !== 'shared' && targetLayer !== effectiveLayer && !LAYER_DEPENDENCIES[effectiveLayer]?.includes(targetLayer)) {
+        if (
+          targetLayer &&
+          targetLayer !== 'shared' &&
+          targetLayer !== effectiveLayer &&
+          !LAYER_DEPENDENCIES[effectiveLayer]?.includes(targetLayer)
+        ) {
           const edge = fromLayer ? sourceEdge(current, target, fromLayer, targetLayer) : null;
           if (!edge || !allowedLegacyEdges.has(edge)) {
-            problems.add(`${path.relative(repo, entry)} (${adoptedLayer}/) reaches source/${sourceRelative(target)} (${targetLayer}/) through ${edge ?? `unmapped source/${sourceRelative(current)}`} [context ${effectiveLayer}]`);
+            problems.add(
+              `${path.relative(repo, entry)} (${adoptedLayer}/) reaches source/${sourceRelative(
+                target,
+              )} (${targetLayer}/) through ${
+                edge ?? `unmapped source/${sourceRelative(current)}`
+              } [context ${effectiveLayer}]`,
+            );
             continue;
           }
         }
         queue.push({ file: target, context: targetLayer && targetLayer !== 'shared' ? targetLayer : effectiveLayer });
       }
-      if (target && target.startsWith(rewriteRoot + path.sep)) problems.add(`source/${sourceRelative(current)} imports rewrite/${path.relative(rewriteRoot, target).split(path.sep).join('/')}`);
+      if (target && target.startsWith(rewriteRoot + path.sep))
+        problems.add(
+          `source/${sourceRelative(current)} imports rewrite/${path
+            .relative(rewriteRoot, target)
+            .split(path.sep)
+            .join('/')}`,
+        );
     }
   }
 }

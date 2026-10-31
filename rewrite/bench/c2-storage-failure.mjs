@@ -16,7 +16,8 @@ for (const failure of ['write', 'fsync']) {
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'workspace');
   const conversations = path.join(root, 'conversations');
-  for (const dir of [home, workspace, path.join(root, 'runtime'), path.join(root, 'tmp')]) fs.mkdirSync(dir, { recursive: true });
+  for (const dir of [home, workspace, path.join(root, 'runtime'), path.join(root, 'tmp')])
+    fs.mkdirSync(dir, { recursive: true });
   let providerCalls = 0;
   const server = http.createServer((request, response) => {
     if (request.method === 'GET') {
@@ -34,11 +35,21 @@ for (const failure of ['write', 'fsync']) {
     if (!address || typeof address === 'string') throw new Error('fake provider did not bind');
     const settingsDir = path.join(home, '.local/state/term2-nodejs');
     fs.mkdirSync(settingsDir, { recursive: true });
-    fs.writeFileSync(path.join(settingsDir, 'settings.json'), JSON.stringify({
-      agent: { retryAttempts: 0, modelSelection: { provider: 'mockprov', model: 'mock-alpha' } },
-      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: `http://127.0.0.1:${address.port}/v1`, apiKey: 'test-key' }],
-      sandbox: { enabled: false },
-    }));
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { provider: 'mockprov', model: 'mock-alpha' } },
+        providers: [
+          {
+            name: 'mockprov',
+            type: 'openai-compatible',
+            baseUrl: `http://127.0.0.1:${address.port}/v1`,
+            apiKey: 'test-key',
+          },
+        ],
+        sandbox: { enabled: false },
+      }),
+    );
     const env = {
       ...process.env,
       HOME: home,
@@ -57,23 +68,49 @@ for (const failure of ['write', 'fsync']) {
       TERM: 'dumb',
     };
     const result = await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [proofCli, 'do not continue after storage failure'], { env, cwd: workspace, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(process.execPath, [proofCli, 'do not continue after storage failure'], {
+        env,
+        cwd: workspace,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
       let stderr = '';
-      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
       child.on('error', reject);
       child.on('close', (code, signal) => resolve({ code, signal, stderr }));
     });
-    if (result.code === 0 || result.signal) throw new Error(`${failure} failure was reported as success or signal: ${JSON.stringify(result)}`);
+    if (result.code === 0 || result.signal)
+      throw new Error(`${failure} failure was reported as success or signal: ${JSON.stringify(result)}`);
     if (providerCalls !== 0) throw new Error(`${failure} failure allowed ${providerCalls} provider calls`);
     const log = fs.readdirSync(conversations).find((name) => name.endsWith('.jsonl'));
     if (!log) throw new Error(`${failure} failure did not leave the initial canonical session`);
     const logText = fs.readFileSync(path.join(conversations, log), 'utf8');
-    const envelopes = logText.split('\n').filter(Boolean).map((line) => JSON.parse(line));
-    const facts = envelopes.flatMap((envelope) => envelope.event?.type === 'session_fact_batch' ? envelope.event.entries.map((entry) => entry.event) : [envelope.event]);
-    if (facts.some((fact) => fact.type === 'assistant_turn' || fact.type === 'tool_started' || fact.type === 'tool_result')) {
+    const envelopes = logText
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    const facts = envelopes.flatMap((envelope) =>
+      envelope.event?.type === 'session_fact_batch'
+        ? envelope.event.entries.map((entry) => entry.event)
+        : [envelope.event],
+    );
+    if (
+      facts.some(
+        (fact) => fact.type === 'assistant_turn' || fact.type === 'tool_started' || fact.type === 'tool_result',
+      )
+    ) {
       throw new Error(`${failure} failure published successful execution facts`);
     }
-    console.log(JSON.stringify({ failure, exitCode: result.code, providerCalls, noToolEffect: !fs.existsSync(path.join(workspace, 'effect.txt')), logFacts: facts.map((fact) => fact.type) }));
+    console.log(
+      JSON.stringify({
+        failure,
+        exitCode: result.code,
+        providerCalls,
+        noToolEffect: !fs.existsSync(path.join(workspace, 'effect.txt')),
+        logFacts: facts.map((fact) => fact.type),
+      }),
+    );
   } finally {
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(root, { recursive: true, force: true });

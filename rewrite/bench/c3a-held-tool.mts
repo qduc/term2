@@ -228,7 +228,10 @@ try {
   assert.equal(successorDone, false);
   assert.equal(fs.readFileSync(target, 'utf8'), 'one physical effect');
   assert.equal(requests.length, 1);
-  assert.equal(facts().some((f) => f.type === 'tool_result'), false);
+  assert.equal(
+    facts().some((f) => f.type === 'tool_result'),
+    false,
+  );
   assert.equal(
     facts().some((f) => f.type === 'session_admitted' && f.clientRequestId === 'two'),
     false,

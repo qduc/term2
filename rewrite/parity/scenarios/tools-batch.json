@@ -1,9 +1,14 @@
 {
   "id": "tools-batch",
-  "description": "One headless turn reads, searches, runs an auto-approved shell command, and edits a file.",
+  "description": "One headless turn reads, searches, runs an auto-approved shell command, and edits a file. Uses Pair explicitly: Bare intentionally delegates file search and edits to shell, not dedicated grep/search_replace tools.",
   "runs": [
     {
-      "args": ["--auto-approve", "read notes.txt, search for needle, create shell.txt, and edit notes.txt"]
+      "args": [
+        "--profile",
+        "pair",
+        "--auto-approve",
+        "read notes.txt, search for needle, create shell.txt, and edit notes.txt"
+      ]
     }
   ],
   "seed": {

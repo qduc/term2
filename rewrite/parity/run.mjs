@@ -196,17 +196,31 @@ function assertC2ProofRun(root, conversationsDir, id) {
   if (!id) throw new Error('C2 proof CLI did not create or resume a canonical conversation');
   const file = path.join(conversationsDir, `${id}.jsonl`);
   if (!fs.existsSync(file)) throw new Error(`C2 proof session log is missing: ${id}`);
-  const envelopes = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const envelopes = fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
   const batches = envelopes.filter((envelope) => envelope.event?.type === 'session_fact_batch');
   const nested = batches.flatMap((batch) => batch.event.entries.map((entry) => entry.event));
-  if (!nested.some((event) => event.type === 'session_admitted') || !nested.some((event) => event.type === 'session_turn_started')) {
+  if (
+    !nested.some((event) => event.type === 'session_admitted') ||
+    !nested.some((event) => event.type === 'session_turn_started')
+  ) {
     throw new Error('C2 proof resumed append did not persist admission/start lifecycle batches');
   }
-  if (!nested.some((event) => event.type === 'assistant_turn') || !nested.some((event) => event.type === 'session_turn_ended')) {
+  if (
+    !nested.some((event) => event.type === 'assistant_turn') ||
+    !nested.some((event) => event.type === 'session_turn_ended')
+  ) {
     throw new Error('C2 proof resumed append did not persist the source terminal transcript and lifecycle fact');
   }
   const files = Object.keys(readTree(root));
-  if (files.some((name) => /(?:gateway.*(?:db|journal|checkpoint)|(?:admission|interaction-checkpoint).*(?:db|journal|jsonl))/i.test(name))) {
+  if (
+    files.some((name) =>
+      /(?:gateway.*(?:db|journal|checkpoint)|(?:admission|interaction-checkpoint).*(?:db|journal|jsonl))/i.test(name),
+    )
+  ) {
     throw new Error('C2 proof created a gateway journal, checkpoint or admission database');
   }
 }
@@ -341,7 +355,9 @@ function differences(expected, actual, at = '$', out = []) {
 async function main() {
   const [mode, ...rest] = process.argv.slice(2);
   if (mode !== 'record' && mode !== 'check') {
-    console.error('usage: run.mjs record|check [--cli <path>] [--first-cli <path>] [--resumed-cli <path>] [scenario-id...]');
+    console.error(
+      'usage: run.mjs record|check [--cli <path>] [--first-cli <path>] [--resumed-cli <path>] [scenario-id...]',
+    );
     process.exit(2);
   }
   const cliIndex = rest.indexOf('--cli');

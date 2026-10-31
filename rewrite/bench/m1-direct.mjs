@@ -352,9 +352,11 @@ row('R2', 'follow-up after success (Pair): prior user is raw, notice only on the
     assert.equal(r.stdout, 'Hello there.\n');
     assert.equal(r.stderr, 'Profile: pair\n');
     const wire = lastUserText(s.requests[0]);
-    assert.ok(wire.endsWith('say hello') && wire !== 'say hello', 'first request carries the notice');
-    assert.match(wire, /Pair Mode is ON/);
-    const notice = wire.slice(0, wire.length - 'say hello'.length);
+    const prompt = 'say hello';
+    assert.match(wire, /Pair Mode is ON/, 'first request carries the notice');
+    // The conversation adds the separator itself, so the notice handed to it excludes the wire's separator.
+    assert.equal(wire.slice(-(prompt.length + 2)), `\n\n${prompt}`, 'the wire separator before the prompt');
+    const notice = wire.slice(0, -(prompt.length + 2));
     const file = onlyFile(s.convDir);
     const facts = readFacts(file);
     assert.equal(textOf(facts.find((fact) => fact.type === 'turn_started').input[0]), 'say hello');
@@ -367,7 +369,7 @@ row('R2', 'follow-up after success (Pair): prior user is raw, notice only on the
     assert.deepEqual(rolesOf(input), ['user_message', 'assistant_message', 'user_message']);
     assert.equal(textOf(input[0]), 'say hello', 'prior user message has no notice');
     assert.equal(textOf(input[1]), 'Hello there.');
-    assert.equal(textOf(input[2]), `${notice}say again`, 'the new live message carries the notice');
+    assert.equal(textOf(input[2]), `${notice}\n\nsay again`, 'the new live message carries the notice');
     assert.equal(s.requests.length, 1);
   } finally {
     await s.close();
@@ -543,13 +545,22 @@ row('R7', 'torn final line: reads ignore it, next append truncates it, interior 
     const withTorn = fs.readFileSync(file);
     assert.equal(readFacts(file).length, facts.length, 'reads tolerate an unterminated final line');
     assert.deepEqual(fs.readFileSync(file), withTorn, 'a read writes nothing');
+    // D6: opening a torn log changes no bytes, with or without an empty append. The next
+    // nonempty append truncates the torn tail first.
+    for (let i = 0; i < 2; i++) openLog(file).close();
+    assert.deepEqual(fs.readFileSync(file), withTorn, 'reopening a torn log twice without appending changes no bytes');
+    const idle = openLog(file);
+    idle.append([]);
+    idle.close();
+    assert.deepEqual(fs.readFileSync(file), withTorn, 'an empty append changes no bytes');
     const log = openLog(file);
     log.append([
       { type: 'usage', turnId: facts[1].turnId, usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 } },
     ]);
     log.close();
     const after = fs.readFileSync(file, 'utf8');
-    assert.equal(after.includes('2026-10'), false, 'torn bytes removed by the next append');
+    // Match the torn record itself: a date prefix would also match real timestamps from this month.
+    assert.equal(after.includes('"seq":99'), false, 'torn bytes removed by the next nonempty append');
     assert.ok(after.startsWith(clean.toString('utf8')), 'earlier lines intact');
     checkFormat(file);
     assert.equal(readFacts(file).length, facts.length + 1);

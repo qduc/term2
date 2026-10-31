@@ -121,7 +121,10 @@ function exitCodeForSignal(signal: NodeJS.Signals): number {
 
 async function runWithSignals(
   request: DirectHeadlessRequest,
-): Promise<{ readonly kind: 'completed' | 'cancelled' | 'failed'; readonly signal?: NodeJS.Signals }> {
+): Promise<{
+  readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused';
+  readonly signal?: NodeJS.Signals;
+}> {
   // The handle has no started bit. Latch observed activity so later inactivity
   // waits for its durable result.
   let turnHasStarted = false;
@@ -303,8 +306,11 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     profileExplicit: options.profile !== null || options.lite,
     output: options.output.json ? 'json' : 'plain',
     showReasoning: options.output.showReasoning,
+    quiet: options.output.quiet,
   });
   if (result.kind === 'completed') return 0;
+  // A resumable context pause exits 2, as the current CLI does; the recovery text was already printed.
+  if (result.kind === 'context_paused') return 2;
   if (result.kind === 'cancelled') return result.signal ? exitCodeForSignal(result.signal) : 1;
   return 1;
 }

@@ -140,8 +140,8 @@ async function withSession(
 ): Promise<ServerResult> {
   let fromSeq: number | undefined;
   if (route.purpose === 'events_connect') {
-    // The pinned gateway requires agent-wire envelopes (durable id + occurredAt). Direct wire
-    // currently lacks that metadata. Never return a successful incompatible stream to its BFF.
+    // Durable cursors/timestamps now exist, but canonical task/compaction and aggregate queue
+    // lifecycle data are still missing. Do not advertise an incomplete pinned stream to the BFF.
     const format = input.url.searchParams.get('format');
     if (format !== null && format !== 'direct') return publicError(400, 'validation_error', 'event format is invalid');
     const query = input.url.searchParams.get('after');
@@ -158,7 +158,7 @@ async function withSession(
       return publicError(
         503,
         'event_envelope_unavailable',
-        'gateway-compatible event envelopes require accepted event timestamps and legacy admission/start facts',
+        'gateway-compatible event envelopes require accepted task, compaction and queue lifecycle data',
         true,
         { reloadRequired: true },
       );

@@ -39,6 +39,8 @@ export function commandFailure(result: Extract<WireCommandResult, { ok: false }>
       return publicError(409, 'stale_interaction', 'interaction is stale');
     case 'request_conflict':
       return publicError(409, 'idempotency_conflict', 'request conflicts with an existing admission');
+    case 'too_late':
+      return publicError(409, 'too_late', 'operation is too late for this turn');
     case 'not_found':
     case 'forbidden':
       return publicError(404, 'not_found', 'session not found');

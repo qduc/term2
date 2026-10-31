@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type {
   WireAdmission,
+  WireBudgetEvidence,
   WireCommandResult,
   WireDecision,
   WireEvent,
@@ -134,6 +135,23 @@ export async function runDirectHeadless(
     turnId: targetTurnId,
   });
 
+  /** Old headless never answers a run-budget check-in; it parks and exits 2. */
+  const reportBudgetPause = (evidence?: WireBudgetEvidence): DirectHeadlessResult => {
+    const recovery = `Work and completed results are retained. Resume with --resume ${sessionId} interactively to review the budget before continuing; --auto-approve only approves tools.`;
+    if (output === 'json') {
+      json({
+        type: 'run_budget_paused',
+        code: 'run_budget_paused',
+        sessionId,
+        ...(evidence === undefined ? {} : { evidence }),
+        recovery,
+      });
+    } else {
+      io.stderr.write(`${recovery}\n`);
+    }
+    return result('budget_paused', 2);
+  };
+
   // The old --json schema is a ConversationEvent read model, not the wire event
   // stream. Until protocol publishes that mapping, fail explicitly instead of
   // presenting wire events as parity. Remove this gate with the read model.
@@ -158,6 +176,9 @@ export async function runDirectHeadless(
   if (options.expectedSessionId !== undefined && options.expectedSessionId !== sessionId) {
     errorText(`Connection is for session ${sessionId}, not the requested ${options.expectedSessionId}.`, 'not_found');
     return result('error', 1);
+  }
+  if (connection.snapshot.pendingBudgets !== undefined && connection.snapshot.pendingBudgets.length > 0) {
+    return reportBudgetPause(connection.snapshot.pendingBudgets[0]?.evidence);
   }
   if (options.signal?.aborted) return result('cancelled', 1);
   options.signal?.addEventListener('abort', onAbort, { once: true });
@@ -280,6 +301,12 @@ export async function runDirectHeadless(
       if (event.type === 'interaction_opened') {
         const failure = await answer(event.payload.interaction);
         if (failure) return failure;
+        continue;
+      }
+      if (event.type === 'budget_opened') {
+        if (targetTurnId === null || event.payload.request.turnId === targetTurnId) {
+          return reportBudgetPause(event.payload.request.evidence);
+        }
         continue;
       }
 

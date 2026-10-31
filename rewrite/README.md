@@ -74,6 +74,9 @@ checkpoint stores the full turn input.
 
 ## How a message travels
 
+This section describes the adopted bridge path. The direct headless program is
+described under the layer guard below, and starts at `src/app/cli.ts`.
+
 1. A client turns the user's text into a `submit` `WireCommand` and sends it on
    its host `Connection`.
 2. `protocol/commands.ts` (`applyCommand`) turns that command into
@@ -142,8 +145,15 @@ checks every reached source layer against the table above. Existing dependency
 edges within `source/` that cross those rules are recorded one edge per line in
 `scripts/source-edge-allowlist.json`; the guard rejects newly added edges and
 prints stale entries for cleanup. It also reports reached source files missing
-from the map. Only adopted adapters may import `source/`, and `source/` cannot
-import from `rewrite/`.
+from the map. Adopted adapters and the direct path's short named list in
+`check-layers.mjs` may import `source/`, and `source/` cannot import from
+`rewrite/`.
+
+The direct headless path is a separate program,
+`node rewrite/dist/rewrite/src/app/cli.js "<prompt>"`, with no fallback to the
+old engine. It stores native conversation logs in its own directory and does
+not read old conversations. M1 is text-only: a model tool call fails the turn.
+`rewrite/bench/m1-direct.mjs` covers it.
 
 ```sh
 node rewrite/parity/inventory.mjs

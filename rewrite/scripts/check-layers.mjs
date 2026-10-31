@@ -10,6 +10,11 @@ const rewriteSrc = path.join(repo, 'rewrite/src');
 const sourceRoot = path.join(repo, 'source');
 const allowlistPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'source-edge-allowlist.json');
 
+// The direct path outside adopted/ that may import source/. Its closure is walked
+// like an adopted file's. Which modules actually load is checked by the M1 bench,
+// because IMPORT below also matches type imports and import().
+const DIRECT_SOURCE_IMPORTERS = new Set(['app/agent-surface.ts', 'app/cli.ts', 'app/run.ts', 'model/provider.ts']);
+
 const LAYER_DEPENDENCIES = {
   config: [],
   model: [],
@@ -194,7 +199,7 @@ for (const importer of sourceFiles) {
 // An adopted file may import source/ directly. Follow every source edge reachable from it.
 for (const entry of files(rewriteSrc)) {
   const relative = path.relative(rewriteSrc, entry).split(path.sep).join('/');
-  const adoptedLayer = relative.match(/^([^/]+)\/adopted\//)?.[1] ?? null;
+  const adoptedLayer = relative.match(/^([^/]+)\/adopted\//)?.[1] ?? (DIRECT_SOURCE_IMPORTERS.has(relative) ? relative.split('/')[0] : null);
   const visited = new Set();
   const queue = [];
   for (const { target } of imports(entry)) {

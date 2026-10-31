@@ -1,5 +1,26 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Direct headless path generation limits (2026-10-31)
+
+Owner: `withGenerationGuard` in `rewrite/src/app/run.ts`, reusing the existing
+`GenerationGuard` and `GenerationStreamDeadlines` unchanged. Recovery owner: the
+user, through the failed turn and a later follow-up. Scope: requests on the M1
+direct executable only; the old run loop keeps its own instance. Class: inactivity
+watchdog plus containment budget. Harm prevented: a silent provider blocking the
+headless CLI forever, measured as a hang until an external kill, and unbounded
+text. Signal: no streamed event for the idle window, which is direct evidence at
+the stream boundary, and observed text characters, a proxy. Legitimate quiet or
+long work uses the same 600s and 100,000-character values as the old loop. Config:
+`agent.maxModelStreamIdleMs`, `agent.maxModelRequestDurationMs` and
+`agent.maxStreamOutputChars` from settings, no new default or migration. Action:
+abort the request and end the turn `failed`, exit 1, with the old message. Partial
+text stays in the log and reaches a follow-up. Above the provider, so a trip is
+not retried, matching the old CLI. Not ported: tool-argument limits and the Luna
+runaway guard (no tools at M1), and `observeCompletion`, so a large non-streamed
+completion is bounded only by the request's output limit. Red proof: before this
+change a stalled stream ran until a 12s external SIGKILL, against exit 1 in about
+1s on the old CLI. Bench rows R15 and R16 cover it. Rollback: remove the wrapper.
+
 ## Coordinator launcher bridge-stop grace (2026-10-28)
 
 Owner: `stop_bridge` in `deployment/coord-startup/startup.py`; recovery owner:

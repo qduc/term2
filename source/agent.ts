@@ -21,7 +21,6 @@ import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
 import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
 import { createRunSubagentToolDefinition, type ForegroundRunSubagentParams } from './tools/agent/run-subagent.js';
 import { createListModelsToolDefinition } from './tools/agent/list-models.js';
-import { SessionIndexService } from './services/conversation/session-index/session-index-service.js';
 import {
   createGetSubagentResultToolDefinition,
   createGetSubagentStatusToolDefinition,
@@ -562,6 +561,9 @@ export const getAgentDefinition = (
         getHistory:
           hasCapability('sessions') && !executionContext?.isRemote()
             ? async () => {
+                const { SessionIndexService } = await import(
+                  './services/conversation/session-index/session-index-service.js'
+                );
                 const index = new SessionIndexService();
                 try {
                   return await index.list({ projectPath: executionContext?.getCwd() ?? process.cwd() });

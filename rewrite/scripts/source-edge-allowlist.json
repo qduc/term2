@@ -457,7 +457,6 @@
   "services/subagents/tool-policy.ts -> services/session/nested-tool-compatibility-state.ts (tools -> session)",
   "services/subagents/types.ts -> services/agent-runtime/execution-budget.ts (tools -> engine)",
   "services/subagents/types.ts -> services/agent-runtime/types.ts (tools -> engine)",
-  "services/subagents/utils.ts -> services/agent-runtime/application-run-loop.ts (tools -> engine)",
   "skins/testing/scenes.tsx -> services/settings/settings-service.mock.ts (clients -> config)",
   "tools/agent/goal-check.ts -> services/conversation/durable-goal-stop-check.ts (tools -> session)",
   "tools/agent/goal-check.ts -> services/logging/conversation-log-events.ts (tools -> session)",

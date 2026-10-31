@@ -137,3 +137,8 @@ export interface Compactor {
   compact(history: readonly Item[], model: ModelRef, signal: AbortSignal): Promise<readonly Item[]>;
   shouldCompact(history: readonly Item[], model: ModelRef): boolean;
 }
+
+// Everything above serves the bridge and goes when it does. The turn surface
+// below is the direct path, and its types stand alone for that reason.
+export type { TurnEvent, TurnHandle, TurnResult, TurnSpec } from './turn.js';
+export { startTurn } from './turn.js';

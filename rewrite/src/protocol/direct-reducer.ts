@@ -2,7 +2,7 @@
  * Local UI scroll/menu/composer state belongs to the client, not this projection.
  */
 import { completedFinalText } from './direct-turn-results.js';
-import type { WireEvent, WireMessage, WireSnapshot } from './direct-wire.js';
+import type { WireCommandReceipt, WireEvent, WireMessage, WireSnapshot } from './direct-wire.js';
 
 function timeline(state: WireSnapshot, entries: NonNullable<WireSnapshot['timeline']>, replacesDraftId?: string): WireSnapshot['timeline'] {
   if (state.timeline === null) return null;
@@ -18,6 +18,12 @@ type Identified = { readonly id: string };
 function replace<T extends Identified>(items: readonly T[], next: T): readonly T[] {
   return items.some(item => item.id === next.id)
     ? items.map(item => item.id === next.id ? next : item) : [...items, next];
+}
+/** Receipt updates keep their original acceptance slot, just like native state. */
+function commandReceipts(items: readonly WireCommandReceipt[], next: WireCommandReceipt): readonly WireCommandReceipt[] {
+  const id = next.request.commandId;
+  return items.some(item => item.request.commandId === id)
+    ? items.map(item => item.request.commandId === id ? next : item) : [...items, next];
 }
 function message(items: readonly WireMessage[], next: WireMessage, draftId?: string): readonly WireMessage[] {
   const index = items.findIndex(item => item.id === next.id || item.id === draftId);
@@ -89,6 +95,8 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...(state.activeTurnId ? { status: awaiting ? 'awaiting_interaction' : 'running' } : {}),
       };
     }
+    case 'command_started':
+    case 'command_finished': return { ...state, commands: commandReceipts(state.commands ?? [], event.payload.receipt) };
     case 'request_cost_recorded': return { ...state, requestCosts: [...(state.requestCosts ?? []).filter(cost => cost.record.requestId !== event.payload.record.requestId), event.payload] };
     case 'budget_opened': return { ...state,
       pendingBudgets: [...(state.pendingBudgets ?? []).filter(request => request.requestId !== event.payload.request.requestId), event.payload.request],

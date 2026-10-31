@@ -113,6 +113,7 @@ function budgetDecision(raw: unknown): WireBudgetDecision {
 }
 function configuration(raw: unknown): WireConfiguration {
   const value = object(raw); fields(value, ['model', 'reasoning', 'temperature']);
+  if (value.model === undefined && value.reasoning === undefined && value.temperature === undefined) invalid('Empty configuration patch');
   let model: WireConfiguration['model'];
   if (value.model !== undefined) {
     const ref = object(value.model); fields(ref, ['provider', 'model']);
@@ -152,21 +153,24 @@ export function parseWireCommand(raw: unknown): WireCommand {
       if (value.expectedTurnId !== undefined) return invalid('Expected turn cannot target a task');
       return { type: 'cancel', target: { kind: 'task', id: id(target.id, 'task id') } };
     }
-    case 'retry': fields(value, ['type', 'target', 'executionId']);
-      return { type: 'retry', target: choice(value.target, ['turn', 'tool'], 'retry target'),
+    case 'retry': fields(value, ['type', 'commandId', 'target', 'executionId']);
+      if (value.target === 'turn' && value.executionId !== undefined) invalid('Turn retry cannot target a tool execution');
+      return { type: 'retry', commandId: id(value.commandId, 'commandId'), target: choice(value.target, ['turn', 'tool'], 'retry target'),
         ...(value.executionId !== undefined ? { executionId: id(value.executionId, 'executionId') } : {}) };
-    case 'configure': fields(value, ['type', 'configuration']); return { type: 'configure', configuration: configuration(value.configuration) };
+    case 'configure': fields(value, ['type', 'commandId', 'configuration']); return { type: 'configure', commandId: id(value.commandId, 'commandId'), configuration: configuration(value.configuration) };
     case 'queue_edit': fields(value, ['type', 'messageId', 'text', 'attachments']);
       if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');
       return { type: 'queue_edit', messageId: id(value.messageId, 'messageId'), text: text(value.text, 'text'), ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}) };
     case 'queue_retract': fields(value, ['type', 'messageId']); return { type: 'queue_retract', messageId: id(value.messageId, 'messageId') };
     case 'task_control': fields(value, ['type', 'taskId', 'action']);
       return { type: 'task_control', taskId: id(value.taskId, 'taskId'), action: choice(value.action, ['cancel', 'check_in', 'foreground', 'background'], 'task action') };
-    case 'rewind': fields(value, ['type', 'targetId']); return { type: 'rewind', targetId: id(value.targetId, 'targetId') };
+    case 'rewind': fields(value, ['type', 'commandId', 'targetId']); return { type: 'rewind', commandId: id(value.commandId, 'commandId'), targetId: id(value.targetId, 'targetId') };
     case 'preview': fields(value, ['type', 'text', 'attachments']);
       if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');
       return { type: 'preview', text: text(value.text, 'text'), ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}) };
-    case 'compact': case 'queue_resume': case 'queue_discard': case 'list_rewind_targets': case 'reset': case 'rollover':
+    case 'compact': case 'rollover': case 'command_status':
+      fields(value, ['type', 'commandId']); return { type: value.type, commandId: id(value.commandId, 'commandId') };
+    case 'queue_resume': case 'queue_discard': case 'list_rewind_targets': case 'reset':
       fields(value, ['type']); return { type: value.type };
     default: return invalid('Unknown direct command type');
   }

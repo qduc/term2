@@ -1,4 +1,5 @@
 /** The only inbound wire-to-domain translation. No engine/bridge execution or second writer. */
+import { commandStatus, nativeCommandRequest, publicCommandResult } from './direct-command-receipts.js';
 import type { DirectTaskControlResult } from '../session/direct-background-types.js';
 import type { DirectQueueMutation } from '../session/direct-queue-types.js';
 import type { DirectSession, DirectSubmission } from '../session/facade-types.js';
@@ -16,10 +17,12 @@ import { parseWireCommand } from './direct-parse.js';
 export async function applyDirectCommand(
   session: DirectSession, input: unknown, capabilities: DirectCommandCapabilities = {},
 ): Promise<WireCommandResult> {
-  try { return await dispatch(session, parseWireCommand(input), capabilities); }
+  let command: WireCommand | undefined;
+  try { command = parseWireCommand(input); return await dispatch(session, command, capabilities); }
   catch (error) {
-    if (error instanceof DirectProtocolError) return { ok: false, code: error.code, message: error.message };
-    return { ok: false, code: 'internal_error', message: 'Session command failed.' };
+    const identity = command && 'commandId' in command ? { commandId: command.commandId } : {};
+    if (error instanceof DirectProtocolError) return { ok: false, code: error.code, message: error.message, ...identity };
+    return { ok: false, code: 'internal_error', message: 'Session command failed.', ...identity };
   }
 }
 const accepted = { ok: true, kind: 'accepted' } as const;
@@ -49,18 +52,16 @@ async function dispatch(session: DirectSession, command: WireCommand, operations
       }
       if (command.target?.kind === 'task') return taskResult(await requireOperation(operations.controlTask, 'task cancel').call(operations, command.target.id, 'cancel'));
       session.cancel(command.target); return accepted;
-    case 'retry': await requireOperation(operations.retry, 'retry').call(operations, { target: command.target, ...(command.executionId ? { executionId: command.executionId } : {}) }); return accepted;
-    case 'compact': await requireOperation(operations.compact, 'compact').call(operations); return accepted;
-    case 'configure': await requireOperation(operations.configure, 'configure').call(operations, command.configuration); return accepted;
+    case 'retry': case 'compact': case 'configure': case 'rewind': case 'rollover':
+      return publicCommandResult(command.commandId, await session.command(nativeCommandRequest(command)));
+    case 'command_status': return commandStatus(session, command.commandId);
     case 'queue_edit': return queueResult(await session.editQueue(command.messageId, { text: command.text, ...(command.attachments !== undefined ? { attachments: command.attachments } : {}) }));
     case 'queue_retract': return queueResult(await session.retractQueue(command.messageId));
     case 'queue_resume': return queueResult(await session.resumeQueue());
     case 'queue_discard': return queueResult(await session.discardQueue());
     case 'task_control': return taskResult(await requireOperation(operations.controlTask, 'task_control').call(operations, command.taskId, command.action));
-    case 'list_rewind_targets': return { ok: true, kind: 'rewind_targets', targets: await requireOperation(operations.listRewindTargets, 'list_rewind_targets').call(operations) };
-    case 'rewind': return { ok: true, kind: 'rewound', ...await requireOperation(operations.rewind, 'rewind').call(operations, command.targetId) };
+    case 'list_rewind_targets': return { ok: true, kind: 'rewind_targets', targets: session.rewindTargets().map(({ id, label }) => ({ id, label })) };
     case 'reset': return { ok: true, kind: 'session_changed', ...await requireOperation(operations.reset, 'reset').call(operations) };
-    case 'rollover': return { ok: true, kind: 'session_changed', ...await requireOperation(operations.rollover, 'rollover').call(operations) };
     case 'preview': return { ok: true, kind: 'preview', ...await requireOperation(operations.preview, 'preview').call(operations, { text: command.text, ...(command.attachments !== undefined ? { attachments: command.attachments } : {}) }) };
   }
 }

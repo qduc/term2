@@ -130,11 +130,11 @@ partial-question checkpoints or command receipts are already compatible.
 | context_compaction_started, context_compaction_completed, context_compaction_failed | compacted/notice DTO presentation only; no current Session producer |
 | final, error | actual message + turn_ended/error; error is not an inferred successful answer |
 
-Required server seams remain: expectedTurnId cancellation under Session ownership,
-durable retry/compact receipt/outcome facts, actual configuration/direct metadata,
+Native expectedTurnId cancellation and keyed command receipt/outcome mapping are
+implemented below. Remaining server seams include actual configuration/direct metadata,
 canonical one-cursor SSE encoding, authority-backed global operations. Protocol
-supplies expected-turn command validation/callback but NEVER capture-then-cancel.
-A missing callback is unavailable, not M6 completion.
+uses native atomic expected-turn abort, NEVER capture-then-cancel. Unsupported
+native commands return their actual unavailable receipts, not M6 completion.
 
 ## Source ACP event map
 
@@ -183,7 +183,7 @@ Local editor/navigation/reset actions are intentionally not wire commands.
 | max_turns/declined | owning budget stop/interaction needed; do not fake cancel |
 | usage/updated | accepted usage + shared reducer |
 | usage/cleared | local reset/session replacement |
-| cost/updated | cost DTO; settled request/pricing producer missing |
+| cost/updated | actual request_cost_recorded with complete native ModelRequestCost; no locally invented prices |
 | run_budget/noticed | missing authoritative typed budget/recovery event, not generic success |
 | rate_limit/updated | provider rate-limit producer missing; not inferred from token usage |
 | rate_limit/cleared | local reset / future authoritative update |
@@ -313,5 +313,53 @@ Cost producer/state/shared types are published in lead
 separately in queue `018a6c93fa9cfcc0811e5af90636569ca48de43a` (after its existing
 `3bfe2947` decoder baseline). These are concrete integration dependencies, not a
 claim the combined candidate has compiled or run. Actual argumentCharCount and
-native keyed retry/compact API/receipts remain missing at inspected lead
-`bcbe501d`. The optional void protocol callbacks are not durable idempotence.
+native keyed commands were still missing at lead `bcbe501d`; this dependency is
+now superseded by the committed `f14c9baa` integration described below. Old optional
+void callbacks were not durable idempotence and have been removed.
+
+
+## Keyed native commands (f14c9baa contract)
+
+`Session.command(DirectCommandRequest):Promise<DirectCommandResult>` and
+`Session.rewindTargets()` are native committed APIs in lead `f14c9baa`, after
+command leaves `a9ce4b1d`. Wire retry/compact/configure/rewind/rollover now REQUIRE a
+caller-supplied `commandId` and forward the unchanged identity and exact operation
+body. Unkeyed input is invalid, not silently allocated another operation. Removed
+optional void/rewind/rollover callbacks are not fallback authority. Reset and
+preview remain separate app-owned capabilities; they are not newly durable keyed
+native operations. This mapping adds no fingerprint, writer, receipt cache or
+physical effect, and never re-executes a tool to implement retry.
+
+`publicCommandResult` maps pending to `ok:true,kind:command_pending`, actual success
+to `ok:true,kind:command_finished`, rejected/interrupted to `ok:false` with exact
+original receipt (`command_rejected`/`command_interrupted`), conflict to
+`request_conflict`, and refusal to `not_admitting`. A pending receipt is not effect
+success; a retried turnId is admission, not execution completion. Rewound draft
+retains native `content`, not a guessed text/attachment split. Missing final
+outcome or original start context is an internal inconsistency, never success.
+Exceptions return a generic public error with the supplied commandId when parsed;
+a lost response is not evidence the effect did not occur. Query/retry the original
+ID/body according to native receipt semantics, never make up a new retry ID.
+
+Snapshots expose actual `commands` receipts, independent of root transcript,
+usage/cost/terminal state. Each native command_started/command_finished maps one
+session-scoped wire frame carrying its correlated full receipt, original seq/at,
+turnId:null. The actual retried turn stays inside its outcome. Full-prefix replay
+reconstructs start context before projecting a tail finish; shared public fold
+upserts by request.commandId only. It is not another acceptance/deduplication policy.
+`command_status` captures the actual Session receipt window atomically, detaches,
+and returns the same typed response or not_found; it never calls command().
+`list_rewind_targets` maps native revision-scoped IDs/labels, not a UI index guess.
+
+Server legacy command selector `commandId:compact|retry-tool|retry-turn` is NOT the
+wire invocation ID. Map its stable `clientRequestId` verbatim to wire commandId,
+selector to wire type/target. Session owns same-key replay before new ownership/
+busy refusal. Native f14c9baa result does not distinguish first call vs duplicate;
+protocol does NOT claim `replayed:true` from snapshots/timing or process memory.
+Server's pinned replayed flag needs an actual native result extension. Native
+ineligible does not prove nothing_to_retry; compacted alone does not provide
+legacy token counts/not_reduced. Manual compact/configure/rollover currently
+return durable unavailable failures until their real native authority lands.
+Decoder/replay registration of command facts and retryContext/requestConfiguration
+metadata remains a separate native owner integration dependency. No checks or
+runtime acceptance evidence is claimed before M6.

@@ -29,7 +29,7 @@
       "consumedByNewCode": true
     },
     "behaviour:headless-prompt-run": {
-      "status": "todo",
+      "status": "in_progress",
       "manual": true,
       "parity": [
         "headless-plain-answer",
@@ -70,7 +70,7 @@
       "consumedByNewCode": true
     },
     "behaviour:profile-tool-surface": {
-      "status": "todo",
+      "status": "in_progress",
       "manual": true,
       "parity": [
         "headless-plain-answer",

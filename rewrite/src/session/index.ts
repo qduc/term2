@@ -135,4 +135,19 @@ export interface SessionStore {
 }
 
 // New-path host contracts, deliberately distinct from the bridge Session above.
-export type { DirectAdmission, DirectBinding, DirectCancelTarget, DirectMessage, DirectOrigin, DirectSession, DirectSessionCapture, DirectSessionState, DirectSessionStore, DirectSessionUpdate, DirectSubmission, DirectToolDisplay } from './facade-types.js';
+export type {
+  DirectAdmission,
+  DirectBinding,
+  DirectDraft,
+  DirectCancelTarget,
+  DirectMessage,
+  DirectOrigin,
+  DirectSession,
+  DirectSessionCapture,
+  DirectSessionReplayCapture,
+  DirectSessionState,
+  DirectSessionStore,
+  DirectSessionUpdate,
+  DirectSubmission,
+  DirectToolDisplay,
+} from './facade-types.js';

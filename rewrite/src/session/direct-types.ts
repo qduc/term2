@@ -1,10 +1,13 @@
 /** Direct Session boundary; no engine acceptance tokens reach callers. */
 import type { InteractionDecision, InteractionRequestId, TurnDeps, TurnEvent, TurnSpec } from '../engine/index.js';
 import type { ModelError } from '../model/index.js';
-import type { Fact } from './facts.js';
+import type { Fact, SubmissionMetadata } from './facts.js';
 import type { ConversationLog } from './log.js';
 
-export type AnswerResult = { readonly kind: 'accepted' } | { readonly kind: 'stale' } | { readonly kind: 'failed'; readonly error: ModelError };
+export type AnswerResult =
+  | { readonly kind: 'accepted' }
+  | { readonly kind: 'stale' }
+  | { readonly kind: 'failed'; readonly error: ModelError };
 export type Turn = {
   readonly events: AsyncIterable<TurnEvent>;
   cancel(): void;
@@ -13,11 +16,14 @@ export type Turn = {
 export type TurnRequest = Omit<TurnSpec, 'turnId' | 'history' | 'newItems'> & {
   readonly input: TurnSpec['newItems'];
   readonly notice?: string;
+  /** Optional durable facade correlation; committed atomically with turn_started. */
+  readonly submission?: SubmissionMetadata;
 };
 export type Conversation = {
   readonly id: string;
   run(request: TurnRequest): Turn;
-  close(): void;
+  /** Cancels/drains any live turn before releasing the log writer. */
+  close(): Promise<void>;
 };
 export type ConversationDeps = TurnDeps & { readonly log: ConversationLog };
 export type ReplayedConversation = {

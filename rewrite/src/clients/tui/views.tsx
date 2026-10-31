@@ -30,7 +30,11 @@ export function Transcript({ state, messages, columns, live }: { readonly state:
 export function Activity({ state }: { readonly state: TuiState }): React.ReactElement {
   const theme = useTheme();
   return <Box flexDirection="column">
-    <Text color={theme.textSubtle}>{state.model} · {state.status}{state.usage ? ` · ${state.usage}` : ''}</Text>
+    <Text color={theme.textSubtle}>{state.model} · {state.status}{state.usage ? ` · ${state.usage}` : ''}{state.cost ? ` · ${state.cost}` : ''}</Text>
+    {state.queueState !== 'idle' ? <Text>Queue: {state.queueState}</Text> : null}
+    {state.goal ? <Text>Goal: {state.goal}</Text> : null}
+    {state.verification ? <Text>Verification: {state.verification}</Text> : null}
+    {state.lastError ? <Text color={theme.danger}>Error: {state.lastError}</Text> : null}
     {state.tasks.map(task => <Text key={task.id}>Task {task.label}: {task.status}{task.detail ? ` — ${task.detail}` : ''}</Text>)}
     {state.queue.map(item => <Text key={item.id}>Queued ({item.delivery}): {item.text}</Text>)}
     {state.interactions.map((interaction, index) => <Box key={interaction.id} flexDirection="column">

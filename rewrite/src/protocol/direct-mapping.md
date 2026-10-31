@@ -57,6 +57,7 @@ public transcript messages. Known text/image tool-result parts are normalized.
 | budget_opened / budget_closed / budget_observed | one matching typed budget frame per accepted fact; no tool interaction or settled cost invented |
 | history_replaced | public reason only, no private provider history |
 | model_response_completed | actual response modelStep/stopReason and optional supplied costUsd, not aggregate pricing |
+| request_cost_recorded | one request_cost_recorded event with actual turn/root/parent ownership and full settled ModelRequestCost record |
 | branch_started / branch_event | one subagent wrapper with real task/branch identity and a scoped child event; child seq null, outer seq authoritative |
 | transient reasoning_delta | reasoning_delta; unknown step/message identity stays null |
 | transient tool_progress | tool_progress |
@@ -264,3 +265,29 @@ the native `DirectSessionUpdate`, not an extra helper union. Native accepted
 updates/replay retain original `at`; host passes the original replay entry.
 The new native automatic_memory_notice transient maps its public success/command/
 output to a null-seq notice event; no private snapshot/receipt is serialized. No compile/runtime/acceptance evidence was collected.
+
+## Accepted physical request costs / bounded legacy JSON projection
+
+The native `DirectRequestCostFact` is copied into `WireRequestCost` with exact
+`turnId`, `rootTurnId`, optional `parentTurnId` and the complete actual `record`.
+`WireSnapshot.requestCosts` is the accepted retained request window. Native same-ID
+corrections replace by record.requestId; the public fold does the same. Cost facts
+never update root usage, active turn, terminal or response identity; late child/
+summary/failed records do not become a new main response. Transcript replacement
+or root terminal does not erase accounting. No prices/tiers/usage fields are
+manufactured from raw costUsd or current cumulative tokens. The narrow portable
+cost type is reused rather than maintaining a second schema/pricing calculation.
+
+`direct-json.ts#legacyRequestCostUpdate` maps this real wire cost event to exact
+old `{type:'cost_update',record}` and preserves all optional price/normalized-usage
+fields. It is a **bounded cost projection, not a complete legacy --json gate**.
+Headless selects actual owning root/tree via event.payload ancestry before writing
+that record; it must not infer a root from whichever turn is currently active.
+Old --json stays unavailable until real argument-stream, public command/ordered
+turn-item/final/approval and other required producer contracts exist. Raw wire
+JSON is not legacy parity and no complete conversation_event producer is claimed.
+
+Native branch_started now supplies optional actual parent/root ownership; the
+subagent wrapper exposes it and keeps child turnId on the nested event. Outer
+turnId is the known parent (or null), never a child mislabeled as root. Older facts
+may omit rootTurnId; it remains absent, not guessed from the latest session turn.

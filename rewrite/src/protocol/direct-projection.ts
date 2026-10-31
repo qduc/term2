@@ -6,6 +6,7 @@ import { directDraftId, initialDirectState } from '../session/direct-state.js';
 import { contextFactEvent } from './direct-context.js';
 import type { DirectQueueState } from '../session/direct-queue-types.js';
 import { createDirectQueueState, directQueueSteeredInput, reduceDirectQueue } from '../session/direct-queue-state.js';
+import { publicRequestCost } from './direct-costs.js';
 import { budgetFactEvent } from './direct-budget.js';
 import { completedFinalText } from './direct-turn-results.js';
 import { publicQueue } from './direct-queue.js';
@@ -23,7 +24,7 @@ export class DirectProjection {
   #state: WireSnapshot;
   #queue: DirectQueueState;
   #workspace: DirectSessionState['workspace'];
-  #branches = new Map<string, { readonly projection: DirectProjection; readonly taskId: string; readonly role?: string }>();
+  #branches = new Map<string, { readonly projection: DirectProjection; readonly taskId: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string }>();
   constructor(state: DirectSessionState & { readonly queue?: DirectQueueState }, seq: number | null = null) {
     this.#state = { ...snapshotDirectState(state), seq };
     this.#workspace = state.workspace;
@@ -124,6 +125,7 @@ export class DirectProjection {
       case 'task_finished':
       case 'task_interaction_opened':
       case 'task_interaction_closed': return [taskFactEvent(fact, this.#state, seq)];
+      case 'request_cost_recorded': return [this.#event('request_cost_recorded', publicRequestCost(fact), seq, fact.turnId)];
       case 'budget_opened':
       case 'budget_closed':
       case 'budget_observed': return [budgetFactEvent(fact, this.#state.sessionId, seq)];
@@ -134,7 +136,12 @@ export class DirectProjection {
       case 'branch_started': {
         const task = this.#state.tasks.find(task => task.id === fact.taskId);
         const projection = DirectProjection.forReplay(initialDirectState(this.#state.sessionId, this.#workspace, task?.model ?? this.#state.model));
-        this.#branches.set(fact.branchId, { projection, taskId: fact.taskId, ...(task?.role ? { role: task.role } : {}) });
+        const parentTurnId = fact.parentTurnId ?? task?.turnId;
+        this.#branches.set(fact.branchId, { projection, taskId: fact.taskId,
+          ...(parentTurnId !== undefined ? { parentTurnId } : {}),
+          ...(fact.rootTurnId !== undefined ? { rootTurnId: fact.rootTurnId } : {}),
+          ...(task?.role ? { role: task.role } : {}),
+        });
         return this.#branch(fact.branchId, { type: 'turn_started', turnId: fact.turnId, input: fact.input }, seq, at);
       }
       case 'branch_event': return this.#branch(fact.branchId, fact.fact, seq, at);
@@ -176,7 +183,10 @@ export class DirectProjection {
     const branch = this.#branches.get(branchId);
     if (!branch) throw new Error('Branch event has no accepted branch identity');
     return branch.projection.update({ type: 'fact', position: 0, seq, at, fact }).map(event =>
-      this.#event('subagent', { agentId: branch.taskId, branchId, ...(branch.role ? { role: branch.role } : {}), event: { ...event, seq: null } }, seq, event.turnId));
+      this.#event('subagent', { agentId: branch.taskId, branchId,
+        ...(branch.parentTurnId !== undefined ? { parentTurnId: branch.parentTurnId } : {}),
+        ...(branch.rootTurnId !== undefined ? { rootTurnId: branch.rootTurnId } : {}),
+        ...(branch.role ? { role: branch.role } : {}), event: { ...event, seq: null } }, seq, branch.parentTurnId ?? null));
   }
   #item(fact: Extract<Fact, { type: 'item' }>, seq: number): readonly WireEvent[] {
     const { item, executionId, turnId } = fact;

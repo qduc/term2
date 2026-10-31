@@ -1,6 +1,8 @@
 /** Direct public protocol. No engine tokens, provider history or live callbacks cross this boundary.
  * The unprefixed exports in index.ts still serve the isolated bridge, not this runtime.
  */
+import type { ModelRequestCost } from '../engine/direct-recovery-budget.js';
+
 export const DIRECT_PROTOCOL_VERSION = 1 as const;
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 export type WireModel = { readonly provider: string; readonly model: string };
@@ -102,6 +104,15 @@ export type WireBudgetDecision =
   | { readonly kind: 'steer'; readonly items: readonly { readonly type: 'user_message'; readonly id: string; readonly content: readonly WireContent[] }[] };
 export type WireBudgetResolution = Exclude<WireBudgetDecision, { readonly kind: 'steer' }> | { readonly kind: 'steer'; readonly messages: readonly WireMessage[] };
 export type WireTurnResult = { readonly turnId: string; readonly messages: readonly WireMessage[] } & WireTerminal;
+/** Physical request accounting retains the actual producing turn and immutable tree ownership.
+ * A late child/summary/failure charge is not another root model response or terminal.
+ */
+export type WireRequestCost = {
+  readonly turnId: string;
+  readonly rootTurnId: string;
+  readonly parentTurnId?: string;
+  readonly record: Readonly<ModelRequestCost>;
+};
 export type WireTaskResult = { readonly kind: 'completed' | 'cancelled' | 'failed' | 'interrupted'; readonly output?: string; readonly error?: WireError; readonly reason?: string };
 export type WireTask = {
   readonly id: string;
@@ -157,6 +168,7 @@ export type WireSnapshot = {
   readonly pendingInteractions: readonly WireInteraction[];
   readonly pendingBudgets?: readonly WireBudgetRequest[];
   readonly turnResults?: readonly WireTurnResult[];
+  readonly requestCosts?: readonly WireRequestCost[];
   readonly budgetObservations?: readonly { readonly turnId: string | null; readonly evidence: WireBudgetEvidence }[];
   readonly admissions: readonly WireAdmission[];
   readonly submissions?: readonly WireSubmissionRecord[];
@@ -197,6 +209,7 @@ export type WireEventPayloads = {
   budget_closed: { readonly requestId: string; readonly decision: WireBudgetResolution; readonly source: 'user' | 'parent' | 'system' };
   budget_observed: { readonly evidence: WireBudgetEvidence };
   history_replaced: { readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind' };
+  request_cost_recorded: WireRequestCost;
   model_response_completed: { readonly modelStep: number; readonly stopReason: string; readonly costUsd?: number | string };
   admission: { readonly admission: WireAdmission };
   usage: { readonly usage: WireUsage };
@@ -208,7 +221,7 @@ export type WireEventPayloads = {
   queue_changed: { readonly entries: readonly WireQueueEntry[]; readonly state: WireSnapshot['queueState']; readonly pauseReason?: WireSnapshot['queuePauseReason']; readonly admission?: WireAdmission; readonly messages?: readonly WireMessage[]; readonly submissions?: readonly WireSubmissionRecord[] };
   task_changed: { readonly task: WireTask };
   task_progress: { readonly taskId: string; readonly at: number; readonly kind: 'text' | 'tool_progress' | 'activity'; readonly chunk: string; readonly executionId?: string };
-  subagent: { readonly agentId: string; readonly branchId?: string; readonly role?: string; readonly event: WireEvent };
+  subagent: { readonly agentId: string; readonly branchId?: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string; readonly event: WireEvent };
   compacted: { readonly replaced: number; readonly summaryId: string };
   cost: { readonly totalUsd: number; readonly currency: 'USD' };
   notice: WireNotice;

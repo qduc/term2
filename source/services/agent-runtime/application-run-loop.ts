@@ -1578,6 +1578,9 @@ export class ApplicationRunLoop {
           state.history.splice(historyLengthBefore);
           state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
           rollbackProvisionalAttempt();
+          // same_chain keeps previousResponseId: a pre-acceptance rate limit
+          // did not consume the anchor. chain_recovery is the path that must
+          // rebuild full history instead of resending a delta alone.
           if (decision.kind === 'chain_recovery') {
             state.disableChainingForAttempt = true;
             state.responseId = undefined;

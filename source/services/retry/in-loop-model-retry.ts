@@ -4,7 +4,7 @@ import {
   isRecoverableIncompleteStreamClose,
   isWebSocketConnectionLimitReachedError,
 } from './retry-error-classification.js';
-import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
+import { classifyUpstreamRetryableError, isPreAcceptanceRateLimit } from './upstream-retry-policy.js';
 import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { findReauthenticationRequiredError } from '../../providers/common/provider-errors.js';
 import { findWebSocketClosedEarly } from '../../providers/websocket-close-evidence.js';
@@ -25,7 +25,7 @@ const RETRYABLE_WEBSOCKET_CLOSE_CODES = new Set([
 export type InLoopRetryDecision =
   | {
       readonly retryable: true;
-      readonly kind: 'chain_recovery';
+      readonly kind: 'chain_recovery' | 'same_chain';
       readonly delayMs: number;
     }
   | {
@@ -128,6 +128,19 @@ export function classifyInLoopModelRetry(
 
   if (isRecoverableIncompleteStreamClose(error)) {
     return recoverChain();
+  }
+
+  // A tokens-per-minute rejection is decided before the provider accepts
+  // the request, so the previous response is still the anchor. Resend that
+  // same chained request after the advertised delay. Dropping the anchor
+  // would rebuild full history and spend the same token budget again.
+  // Contract C2.7 still holds: this retry keeps previous_response_id.
+  if (requestUsedCallerChain(request) && isPreAcceptanceRateLimit(error, upstream)) {
+    return {
+      retryable: true,
+      kind: 'same_chain',
+      delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
+    };
   }
 
   // Mid-turn tool-continuation failures (e.g. an OpenRouter stream that ends

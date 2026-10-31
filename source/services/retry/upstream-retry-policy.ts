@@ -85,10 +85,9 @@ const getHeaderValue = (source: unknown, name: string): string | undefined => {
 };
 
 export const getRetryAfterMs = (source: unknown): number | undefined => {
-  const retryAfter = getHeaderValue(source, 'retry-after');
-  const headerDelay = parseSeconds(retryAfter);
+  const headerDelay = readHeaderRetryAfterMs(source);
   if (headerDelay !== undefined) return headerDelay;
-  if (!source || typeof source !== 'object') return undefined;
+  if (!source || typeof source !== 'object') return messageRetryAfterMs(getMessage(source));
 
   // AI SDK retains Google's raw error body; its validated error data omits
   // google.rpc.RetryInfo. Read that structured hint before the message fallback.
@@ -96,6 +95,8 @@ export const getRetryAfterMs = (source: unknown): number | undefined => {
   if (typeof responseBody === 'string') {
     try {
       const body = JSON.parse(responseBody);
+      const fromBody = readHeaderRetryAfterMs(body) ?? readHeaderRetryAfterMs(body?.error);
+      if (fromBody !== undefined) return fromBody;
       const details: unknown = body?.error?.details;
       if (Array.isArray(details)) {
         for (const detail of details) {
@@ -109,12 +110,55 @@ export const getRetryAfterMs = (source: unknown): number | undefined => {
       // Malformed error bodies must not hide the original provider error.
     }
   }
-  const message = getMessage(source);
+  // Responses websocket errors nest the rate-limit object under `error.error`
+  // and also stringify the whole frame into `message`. Walk a few levels, then
+  // the sentence OpenAI puts in that frame ("Please try again in 879ms").
+  const nested = readNestedRetryAfterMs(source, 0);
+  if (nested !== undefined) return nested;
+  return messageRetryAfterMs(getMessage(source));
+};
+
+function readHeaderRetryAfterMs(source: unknown): number | undefined {
+  const retryAfterMs = getHeaderValue(source, 'retry-after-ms');
+  if (retryAfterMs !== undefined) {
+    const milliseconds = Math.ceil(Number(retryAfterMs));
+    if (Number.isSafeInteger(milliseconds) && milliseconds >= 0) return milliseconds;
+  }
+  return parseSeconds(getHeaderValue(source, 'retry-after'));
+}
+
+function readNestedRetryAfterMs(source: unknown, depth: number): number | undefined {
+  if (!source || typeof source !== 'object' || depth > 3) return undefined;
+  const record = source as { error?: unknown; message?: unknown };
+  if (record.error && record.error !== source) {
+    const fromError = readHeaderRetryAfterMs(record.error) ?? readNestedRetryAfterMs(record.error, depth + 1);
+    if (fromError !== undefined) return fromError;
+  }
+  if (typeof record.message === 'string' && record.message.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(record.message) as unknown;
+      if (parsed && parsed !== source) {
+        const fromMessage = readHeaderRetryAfterMs(parsed) ?? readNestedRetryAfterMs(parsed, depth + 1);
+        if (fromMessage !== undefined) return fromMessage;
+      }
+    } catch {
+      // The message is prose, not a provider frame.
+    }
+  }
+  return undefined;
+}
+
+function messageRetryAfterMs(message: string): number | undefined {
   if (message.includes('https://ai.google.dev/')) {
     return parseSeconds(/Please retry in (\d+(?:\.\d+)?)s\./.exec(message)?.[1]);
   }
-  return undefined;
-};
+  const openAI = /please try again in\s+(\d+(?:\.\d+)?)\s*(ms|s)\b/i.exec(message);
+  if (!openAI) return undefined;
+  const amount = Number(openAI[1]);
+  if (!Number.isFinite(amount) || amount < 0) return undefined;
+  const milliseconds = Math.ceil(openAI[2]!.toLowerCase() === 'ms' ? amount : amount * 1000);
+  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+}
 
 function parseSeconds(value: unknown, duration = false): number | undefined {
   if (typeof value !== 'string') return undefined;
@@ -126,10 +170,28 @@ function parseSeconds(value: unknown, duration = false): number | undefined {
 
 export function classifyUpstreamRetryableError(error: unknown): UpstreamRetryClassification {
   const classification = classifyUpstreamError(error);
-  if (classification.status === 429 && (classification.retryAfterMs ?? 0) > 60_000) {
+  const rateLimited =
+    classification.status === 429 ||
+    classification.reason === 'rate-limit-code' ||
+    classification.reason === 'rate-limit-message';
+  if (rateLimited && (classification.retryAfterMs ?? 0) > 60_000) {
     return { ...classification, retryable: false, reason: 'long-retry-delay' };
   }
   return classification;
+}
+
+/** A rate limit refused before the provider accepted the request. */
+export function isPreAcceptanceRateLimit(
+  error: unknown,
+  classification = classifyUpstreamRetryableError(error),
+): boolean {
+  if (!classification.retryable) return false;
+  return (
+    classification.status === 429 ||
+    classification.reason === 'rate-limit-code' ||
+    classification.reason === 'rate-limit-message' ||
+    error instanceof RateLimitError
+  );
 }
 
 function classifyUpstreamError(error: unknown): UpstreamRetryClassification {

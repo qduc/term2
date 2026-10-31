@@ -10,6 +10,9 @@ export type ToolSurfaceOptions = {
   /** Already-authorized workspace. Defaults only to the existing local CLI cwd.
    * Unsupported targets fail; assembly must never promote read access to write. */
   readonly workspace?: Workspace;
+  readonly allowUnsandboxed?: boolean;
+  readonly discordSend?: import('../../../source/services/discord/discord-outbound.js').DiscordSend;
+  readonly isDiscordInputEnabled?: () => boolean;
 };
 export type AgentSurface = {
   readonly profileName: string;

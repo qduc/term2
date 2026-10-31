@@ -89,7 +89,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     executeScriptedTool: executeSourceChild,
     allowBackgroundShell: false,
     allowAskUser: options.interactive === true,
-    allowUnsandboxed: !readOnly,
+    allowUnsandboxed: options.allowUnsandboxed !== false && !readOnly,
+    discordSend: options.discordSend,
+    isDiscordInputEnabled: options.isDiscordInputEnabled,
     // Keep the tool declaration, but do not create an old agent/runtime for it.
     getAgentRuntime: () => ({
       agent: () => {
@@ -152,6 +154,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       },
     },
     async decideInteraction(request, history) {
+      if (request.presentation?.requiresExplicitUser === true)
+        return { kind: 'deny', reason: 'This decision requires an explicit user answer' };
       if (request.kind === 'question') {
         // This policy has no user to answer. Resolve the exact question with
         // the stop marker, not an approval denial (which Session must reject).

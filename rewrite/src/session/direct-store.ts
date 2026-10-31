@@ -7,9 +7,9 @@ import type { Workspace } from '../tools/index.js';
 import { createConversation, openConversation } from './conversation.js';
 import type { ConversationDeps, TurnRequest } from './direct-types.js';
 import type { DirectBinding, DirectSessionStore } from './facade-types.js';
-import type { Fact, SessionStartedFact } from './facts.js';
+import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { createDirectSession, type DirectLiveSession } from './direct-session.js';
-import { createLog, openLog, readFacts, type ConversationLog } from './log.js';
+import { createLog, openLog, readFacts, readFactLines, type ConversationLog } from './log.js';
 import { replay } from './replay.js';
 
 export type DirectRuntimeContext = {
@@ -74,7 +74,8 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
     });
     return pending;
   };
-  const construct = async (context: DirectRuntimeContext, initial: readonly Fact[]): Promise<DirectLiveSession> => {
+  const construct = async (context: DirectRuntimeContext, entries: readonly FactLine[]): Promise<DirectLiveSession> => {
+    const initial = entries.map((entry) => entry.fact);
     let runtime: DirectConversationRuntime | undefined;
     let log: ConversationLog | undefined;
     try {
@@ -99,12 +100,23 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         workspace: context.workspace,
         model: context.model,
         log: ownedLog,
-        facts: initial,
+        entries,
         request: ownedRuntime.request,
-        attach(observedLog) {
-          if (context.metadata) return openConversation({ ...ownedRuntime.deps, log: observedLog, facts: initial });
-          return createConversation({
+        attach(observedLog, publish) {
+          const liveDeps = {
             ...ownedRuntime.deps,
+            publishTask: (event: import('./direct-background-types.js').DirectBackgroundProgress) => {
+              ownedRuntime.deps.publishTask?.(event);
+              publish(event);
+            },
+            publishNotice: (notice: import('./direct-memory.js').DirectAutomaticMemoryNotice) => {
+              ownedRuntime.deps.publishNotice?.(notice);
+              publish({ type: 'automatic_memory_notice', notice });
+            },
+          };
+          if (context.metadata) return openConversation({ ...liveDeps, log: observedLog, facts: initial });
+          return createConversation({
+            ...liveDeps,
             log: observedLog,
             meta: {
               id: context.id,
@@ -172,7 +184,8 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       validateBinding(binding);
       requireDirectId(id);
       await directNames(directory);
-      const facts = readFacts(logPath(directory, id));
+      const entries = readFactLines(logPath(directory, id));
+      const facts = entries.map((entry) => entry.fact);
       const metadata = sessionMetadata(id, facts);
       validateExpectedBinding(metadata.binding, binding);
       replay(facts); // validates actual direct history; never repairs on open
@@ -189,7 +202,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
             metadata,
             ...(metadata.binding ? { binding: metadata.binding } : {}),
           },
-          facts,
+          entries,
         );
       });
     },

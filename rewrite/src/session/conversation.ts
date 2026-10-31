@@ -15,9 +15,38 @@ import type {
   TurnId,
   TurnResult,
 } from '../engine/index.js';
+import { parseDirectOrigin } from './direct-origin.js';
+import { DirectSubagents } from './direct-subagent.js';
+import { createDirectBranchDriver } from './direct-branches.js';
+import type { BudgetDecision } from '../engine/direct-types.js';
+import { randomUUID } from 'node:crypto';
+import type {
+  DirectQueueState,
+  DirectQueuePlan,
+  DirectQueueEffect,
+  DirectQueueCommand,
+  DirectQueueSubmission,
+} from './direct-queue-types.js';
+import type { DirectBackgroundTasks as BackgroundTasksType } from './direct-background.js';
+import { DirectBackgroundTasks } from './direct-background.js';
+import { recoverDirectBackground, reduceDirectBackground } from './direct-background-replay.js';
+import type { DirectTaskState } from './direct-background-types.js';
+import { createDirectQueueState, reduceDirectQueue, submitDirectQueue, planDirectQueue } from './direct-queue.js';
+import { initialDirectContextState, reduceDirectContext, type DirectContextFact } from './direct-context.js';
+import { bindDirectCapabilities } from './direct-capabilities.js';
+import { isDirectTaskFact, isDirectQueueFact } from './facts.js';
+import type { DirectOrigin } from './facade-types.js';
 import type { Item, ModelError } from '../model/index.js';
-import type { AnswerResult, Conversation, ConversationDeps, Turn } from './direct-types.js';
-import type { Fact, SessionStartedFact } from './facts.js';
+import type {
+  AnswerResult,
+  AnswerProvenance,
+  Conversation,
+  ConversationDeps,
+  Turn,
+  TurnRequest,
+  StartedConversationTurn,
+} from './direct-types.js';
+import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { replay } from './replay.js';
 
 export type { AnswerResult, Conversation, ConversationDeps, Turn, TurnRequest } from './direct-types.js';
@@ -27,8 +56,8 @@ export function createConversation(
   deps: ConversationDeps & { readonly meta: Omit<SessionStartedFact, 'type'> },
 ): Conversation {
   const started: Fact = { type: 'session_started', ...deps.meta };
-  deps.log.append([started]);
-  return conversation(deps, deps.meta.id, [started]);
+  const entries = deps.log.append([started]);
+  return conversation(deps, deps.meta.id, [started], entries);
 }
 
 /** Opening is read-only; recovery is materialized with the next turn's input. */
@@ -40,27 +69,193 @@ export function openConversation(deps: ConversationDeps & { readonly facts: read
   return conversation(deps, started.id, [...deps.facts]);
 }
 
-function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conversation {
-  let active: { stop(): Promise<void> } | null = null;
+function conversation(
+  deps: ConversationDeps,
+  id: string,
+  facts: Fact[],
+  newEntries: readonly FactLine[] = [],
+): Conversation {
+  let active: (Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> }) | null = null;
+  let context = initialDirectContextState();
+  let queueState: DirectQueueState = createDirectQueueState();
+  let taskStates: readonly DirectTaskState[] = [];
+  const requestIds = new Set<InteractionRequestId>();
+  for (const fact of facts) {
+    context = reduceDirectContext(context, fact);
+    if (isDirectQueueFact(fact)) queueState = reduceDirectQueue(queueState, fact);
+    if (isDirectTaskFact(fact)) taskStates = reduceDirectBackground(taskStates, fact);
+    if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened')
+      requestIds.add(fact.request.requestId);
+  }
+  let nextTurnId = Math.max(
+    1,
+    ...facts.flatMap((fact) => {
+      const candidates = [
+        'turnId' in fact ? fact.turnId : undefined,
+        fact.type === 'queue_submitted' ? fact.record.admission.turnId : undefined,
+      ];
+      return candidates.flatMap((value) => {
+        const match = value?.match(/^turn-(\d+)$/);
+        return match ? [Number(match[1]) + 1] : [];
+      });
+    }),
+  );
+  let queueSettings: Omit<TurnRequest, 'input' | 'submission'> | undefined;
+  let recoveryMaterialized = false;
+  let completionHeld: TurnId | null = null;
+  const branchHandles = new Set<TurnHandle>();
+  let tasks: BackgroundTasksType | undefined;
+  let capabilities: ReturnType<typeof bindDirectCapabilities> | undefined;
+  let hookStatus: 'idle' | 'working' | 'waiting_for_user' | 'waiting_for_approval' = 'idle';
   let closed = false;
   let logFailure: ModelError | null = null;
 
-  // A short write may leave a torn line. A poisoned writer is never retried.
+  const poison = (error: unknown): void => {
+    if (logFailure) return;
+    logFailure = modelError(error);
+    tasks?.poison(logFailure);
+    active?.cancel();
+    for (const handle of branchHandles) handle.cancel();
+  };
+  // Projection validation is synchronous and precedes disk mutation. Nothing
+  // awaits/reenters between generation CAS, candidate reduction and append.
   const commit = (next: readonly Fact[]): boolean => {
     if (logFailure) return false;
     if (next.length === 0) return true;
+    let projectedContext = context;
+    let projectedQueue = queueState;
+    let projectedTasks = taskStates;
+    const reserved = new Set(requestIds);
+    for (const fact of next) {
+      projectedContext = reduceDirectContext(projectedContext, fact);
+      if (isDirectQueueFact(fact)) projectedQueue = reduceDirectQueue(projectedQueue, fact);
+      if (isDirectTaskFact(fact)) projectedTasks = reduceDirectBackground(projectedTasks, fact);
+      if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened') {
+        if (reserved.has(fact.request.requestId)) throw new Error('Duplicate Session interaction request ID');
+        reserved.add(fact.request.requestId);
+      }
+    }
+    let lines: readonly FactLine[];
     try {
-      deps.log.append(next);
-      facts.push(...next);
-      return true;
+      lines = deps.log.append(next);
     } catch (error) {
-      logFailure = modelError(error);
+      poison(error);
+      return false;
+    }
+    context = projectedContext;
+    queueState = projectedQueue;
+    taskStates = projectedTasks;
+    for (const requestId of reserved) requestIds.add(requestId);
+    facts.push(...next);
+    for (const line of lines) capabilities?.accepted(line);
+    let root: TurnId | undefined;
+    const waits = new Map<string, 'approval' | 'question' | 'budget'>();
+    for (const fact of facts) {
+      if (fact.type === 'turn_started') {
+        root = fact.turnId;
+        waits.clear();
+      }
+      if (fact.type === 'interaction_opened' && fact.turnId === root)
+        waits.set(fact.request.requestId, fact.request.kind);
+      if (fact.type === 'budget_opened' && fact.turnId === root) waits.set(fact.requestId, 'budget');
+      if (fact.type === 'interaction_closed' || fact.type === 'budget_closed') waits.delete(fact.requestId);
+      if (fact.type === 'turn_ended' && fact.turnId === root) {
+        root = undefined;
+        waits.clear();
+      }
+    }
+    const current = waits.size
+      ? [...waits.values()].some((kind) => kind === 'approval')
+        ? 'waiting_for_approval'
+        : 'waiting_for_user'
+      : root
+      ? 'working'
+      : 'idle';
+    if (current !== hookStatus) {
+      capabilities?.status(
+        hookStatus,
+        current,
+        current === 'idle' ? 'turn_finished' : waits.size ? 'approval_requested' : 'turn_started',
+        root,
+      );
+      hookStatus = current;
+    }
+
+    return true;
+  };
+  const liveReplay = () => replay(facts, { recoverQueue: false });
+  const recover = (): boolean => {
+    if (recoveryMaterialized) return !logFailure;
+    const recovered = replay(facts);
+    const taskRecovery = recoverDirectBackground(facts.filter(isDirectTaskFact), Date.now());
+    if (!commit([...recovered.recoveryFacts, ...taskRecovery])) return false;
+    recoveryMaterialized = true;
+    return true;
+  };
+  tasks = new DirectBackgroundTasks({
+    sessionId: id,
+    sink: {
+      accept(fact) {
+        if (
+          (closed && (fact.type === 'task_started' || fact.type === 'task_interaction_opened')) ||
+          !recover() ||
+          !commit([fact])
+        )
+          throw new Error(logFailure?.message ?? 'Session is closed');
+      },
+      publish: (event) => deps.publishTask?.(event),
+      failed: poison,
+    },
+  });
+  const contextCommit = (generation: number, next: readonly DirectContextFact[], turnId?: TurnId): boolean => {
+    if (
+      closed ||
+      logFailure ||
+      context.goal.generation !== generation ||
+      (turnId !== undefined && (!active || active.turnId !== turnId || active.cancelled))
+    )
+      return false;
+    try {
+      return commit(next);
+    } catch {
       return false;
     }
   };
+  const configured = deps.context?.({
+    sessionId: id,
+    read: () => structuredClone(context),
+    commit: (generation, next) => contextCommit(generation, next),
+    tasks,
+  });
+  capabilities = bindDirectCapabilities({
+    sessionId: id,
+    read: () => context,
+    facts: () => facts,
+    commit: contextCommit,
+    validTurn: (turnId) => !!active && active.turnId === turnId && !active.cancelled && !closed && !logFailure,
+    baseTools: deps.tools,
+    capabilities: configured,
+  });
+  for (const entry of newEntries) capabilities.accepted(entry);
+  const environment = () => ({
+    newMessageId: randomUUID,
+    newTurnId: () => `turn-${nextTurnId++}` as TurnId,
+    now: () => new Date().toISOString(),
+    dispatchHeld: !!active || !!completionHeld || closed || !!logFailure,
+  });
+  const boundary = (turnId: TurnId): readonly Item[] => {
+    if (!active || active.turnId !== turnId || active.cancelled || closed || logFailure) return [];
+    const plan = planDirectQueue(queueState, { kind: 'boundary', turnId }, environment());
+    if (!commit(plan.facts)) throw new Error(logFailure!.message);
+    return plan.effect?.kind === 'steer' ? plan.effect.modelInput : [];
+  };
 
-  function ownTurn(turnId: TurnId, handle: TurnHandle): Turn & { stop(): Promise<void> } {
+  function ownTurn(
+    turnId: TurnId,
+    handle: TurnHandle,
+  ): Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> } {
     const requests = new Map<InteractionRequestId, InteractionRequest>();
+    const budgets = new Map<InteractionRequestId, Extract<TurnEvent, { type: 'budget_required' }>>();
     const engine = handle.events[Symbol.asyncIterator]();
     let cancelled = false;
     let started = false;
@@ -77,6 +272,9 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
         resolution: { kind: 'cancelled' },
       }));
       requests.clear();
+      for (const requestId of budgets.keys())
+        closures.push({ type: 'budget_closed', turnId, requestId, decision: { kind: 'stop' }, source: 'system' });
+      budgets.clear();
       commit(closures);
     };
     const cancel = (): void => {
@@ -96,7 +294,7 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
       if (!logFailure) {
         // The same deterministic repair used on reopen supplies missing root
         // results. Its interrupted terminal is replaced by the actual outcome.
-        const repairs = replay(facts).recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
+        const repairs = liveReplay().recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
         commit([...repairs, terminalFact(turnId, outcome)]);
       }
       terminal = logFailure ? { kind: 'failed', error: logFailure } : outcome;
@@ -119,6 +317,7 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
         cancel();
         return null;
       }
+      if (event.type === 'budget_required') budgets.set(event.requestId, event);
       if (event.type === 'interaction_required') requests.set(event.request.requestId, event.request);
       handle.accept(token);
       return cancelled || draining ? null : event;
@@ -155,9 +354,23 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
         if (!done) cancel();
         try {
           await drain();
+          if (!cancelled && !logFailure && capabilities?.finalizeHuman) {
+            const admission = facts.find((fact) => fact.type === 'turn_started' && fact.turnId === turnId);
+            if (admission?.type === 'turn_started' && humanOrigin(admission.submission?.origin)) {
+              const content = admission.input.flatMap((item) =>
+                item.type === 'user_message' ? [...item.content] : [],
+              );
+              const notice = await capabilities.finalizeHuman({
+                admissionId: admission.submission?.messageId ?? turnId,
+                text: content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n'),
+                images: content.filter((part) => part.type === 'image'),
+              });
+              if (notice) deps.publishNotice?.(notice);
+            }
+          }
         } finally {
           released = true;
-          active = null;
+          if (active?.turnId === turnId) active = null;
         }
       }
       yield { type: 'turn_ended', result: terminal! };
@@ -183,14 +396,55 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
           };
         },
       },
+      turnId,
+      get cancelled() {
+        return cancelled;
+      },
       cancel,
       stop,
-      answer(requestId, decision): AnswerResult {
+      answerBudget(requestId, decision, provenance = { source: 'system' }): AnswerResult {
+        if (released || cancelled || terminal || !budgets.has(requestId)) return { kind: 'stale' };
+        if (decision.kind === 'extend' && (decision.grantedBy !== 'human' || provenance.source !== 'user'))
+          return { kind: 'failed', error: modelError('Budget extension requires an explicit human answer') };
+        if (decision.kind === 'steer')
+          return { kind: 'failed', error: modelError('Use durable queued steering before resuming a budget wait') };
+        if (
+          !commit([
+            {
+              type: 'budget_closed',
+              turnId,
+              requestId,
+              decision,
+              source: provenance.source === 'user' ? 'user' : 'system',
+            },
+          ])
+        ) {
+          cancel();
+          return { kind: 'failed', error: logFailure! };
+        }
+        budgets.delete(requestId);
+        handle.answerBudget(requestId, decision);
+        return { kind: 'accepted' };
+      },
+      answer(requestId, decision, provenance: AnswerProvenance = { source: 'system' }): AnswerResult {
         const request = requests.get(requestId);
         if (released || cancelled || terminal || !request) return { kind: 'stale' };
         if (!validDecision(request, decision))
           return { kind: 'failed', error: modelError('invalid interaction decision') };
-        if (!commit([{ type: 'interaction_closed', turnId, requestId, resolution: decision }])) {
+        if (
+          !commit([
+            {
+              type: 'interaction_closed',
+              turnId,
+              requestId,
+              resolution: decision,
+              resolutionSource: provenance.source,
+              ...(provenance.automaticApproval !== undefined
+                ? { automaticApproval: provenance.automaticApproval }
+                : {}),
+            },
+          ])
+        ) {
           cancel();
           return { kind: 'failed', error: logFailure! };
         }
@@ -204,54 +458,209 @@ function conversation(deps: ConversationDeps, id: string, facts: Fact[]): Conver
     };
   }
 
+  const start = (
+    request: TurnRequest,
+    planned?: { readonly turnId: TurnId; readonly facts: readonly Fact[] },
+  ): StartedConversationTurn => {
+    if (closed) throw new Error(`conversation ${id} is closed`);
+    if (active) throw new Error(`conversation ${id} already has an active turn`);
+    if (logFailure || !recover()) throw new Error(logFailure!.message);
+    if (
+      request.submission &&
+      (!request.submission.clientRequestId ||
+        !request.input.some((item) => item.type === 'user_message' && item.id === request.submission!.messageId))
+    ) {
+      throw new Error('submission must identify one admitted user item');
+    }
+    const turnId = planned?.turnId ?? (`turn-${nextTurnId++}` as TurnId);
+    const snapshot = liveReplay();
+    const isHuman = humanOrigin(request.submission?.origin);
+    const human = isHuman
+      ? capabilities!.humanPlan(request.submission?.messageId ?? turnId, request.input)
+      : { facts: capabilities!.memoryFacts(), modelInput: request.input };
+    if (
+      !commit([
+        ...(planned?.facts ?? []),
+        ...human.facts,
+        {
+          type: 'turn_started',
+          turnId,
+          input: request.input,
+          ...(request.submission ? { submission: request.submission } : {}),
+        },
+      ])
+    )
+      throw new Error(logFailure!.message);
+    const { input, notice, submission: _submission, ...settings } = request;
+    try {
+      const handle = startTurn(
+        {
+          ...settings,
+          turnId,
+          history: snapshot.history,
+          ...(snapshot.compactionState ? { compactionState: snapshot.compactionState } : {}),
+          newItems: notice ? withNotice(human.modelInput, notice) : human.modelInput,
+        },
+        {
+          ...deps,
+          takeSteering: boundary,
+          prepareRequest: capabilities!.prepareRequest,
+          normalStop: capabilities!.normalStop,
+          runNested: async (nested, parent) => {
+            if (!deps.authorizeNested) throw new Error('App has not supplied direct nested authority');
+            const authority = await deps.authorizeNested(nested, parent);
+            parent.signal.throwIfAborted();
+            const driver = createDirectBranchDriver({
+              deps,
+              authority,
+              accept: (fact) => {
+                if (!commit([fact])) throw new Error(logFailure!.message);
+              },
+              factFor,
+              handles: branchHandles,
+            });
+            const agents = new DirectSubagents({ tasks: tasks!, driver });
+            const handle = agents.start({
+              role: authority.role,
+              task: authority.label,
+              run: authority.request,
+              workspace: authority.workspace,
+              mode: 'foreground',
+              parentSignal: parent.signal,
+              parentTurnId: parent.turnId,
+              parentExecutionId: parent.parentExecutionId,
+              ...(request.submission?.origin ? { origin: request.submission.origin } : {}),
+            });
+            const result = await agents.waitForForeground(handle);
+            if (result.kind === 'background')
+              return { items: [], outcome: { kind: 'background', runId: result.taskId } };
+            if (result.result.value) return result.result.value;
+            if (result.result.kind === 'failed')
+              return { items: [], outcome: { kind: 'failed', error: result.result.error } };
+            return { items: [], outcome: { kind: result.result.kind === 'cancelled' ? 'cancelled' : 'interrupted' } };
+          },
+        },
+      );
+      const turn = ownTurn(turnId, handle);
+      active = turn;
+      if (planned) completionHeld = turnId;
+      return { turnId, turn };
+    } catch (error) {
+      const failure = modelError(error);
+      commit([terminalFact(turnId, { kind: 'failed', error: failure })]);
+      return { turnId, turn: failedTurn(logFailure ?? failure) };
+    }
+  };
+  const startEffect = (
+    effect: Extract<DirectQueueEffect, { kind: 'start' }>,
+    next: readonly Fact[],
+  ): StartedConversationTurn => {
+    if (!queueSettings) throw new Error('Queue dispatch lacks admitted request settings');
+    return start(
+      {
+        ...queueSettings,
+        input: effect.input,
+        submission: {
+          clientRequestId: effect.record.request.clientRequestId,
+          messageId: effect.record.messageId,
+          ...(effect.record.request.origin ? { origin: effect.record.request.origin } : {}),
+        },
+      },
+      { turnId: effect.turnId, facts: next },
+    );
+  };
   return {
     id,
+    tasks,
+    abort(expectedTurnId, discardQueue = true) {
+      if (closed || logFailure) return { kind: 'not_admitting', reason: logFailure?.message ?? 'session is closed' };
+      const target = active?.turnId ?? completionHeld;
+      if (target !== expectedTurnId || active?.cancelled) return { kind: 'no_op' };
+      const cancelPlan = planDirectQueue(queueState, { kind: 'cancel', turnId: expectedTurnId }, environment());
+      const discardPlan = discardQueue
+        ? planDirectQueue(cancelPlan.state, { kind: 'discard' }, environment())
+        : undefined;
+      const discardedMessageIds =
+        discardPlan?.facts.flatMap((fact) => (fact.type === 'queue_discarded' ? [...fact.messageIds] : [])) ?? [];
+      if (!commit([...cancelPlan.facts, ...(discardPlan?.facts ?? [])]))
+        return { kind: 'not_admitting', reason: logFailure!.message };
+      active?.cancel();
+      return { kind: 'aborted', turnId: expectedTurnId, discardedMessageIds };
+    },
+    context: () => structuredClone(context),
+    setGoal(generation, goal, source = 'user') {
+      if (closed || logFailure || !recover()) return false;
+      return contextCommit(generation, [{ type: 'goal_changed', ...(goal ? { goal } : {}), source }]);
+    },
     run(request) {
-      if (closed) throw new Error(`conversation ${id} is closed`);
-      if (active) throw new Error(`conversation ${id} already has an active turn`);
-      if (logFailure) return failedTurn(logFailure);
-      if (
-        request.submission &&
-        (!request.submission.clientRequestId ||
-          !request.input.some((item) => item.type === 'user_message' && item.id === request.submission!.messageId))
-      ) {
-        throw new Error('submission must identify a nonempty request ID and one admitted user item');
-      }
-      const { history, nextTurn, recoveryFacts } = replay(facts);
-      const turnId = `turn-${nextTurn}` as TurnId;
-      if (
-        !commit([
-          ...recoveryFacts,
-          {
-            type: 'turn_started',
-            turnId,
-            input: request.input,
-            ...(request.submission ? { submission: request.submission } : {}),
-          },
-        ])
-      )
-        return failedTurn(logFailure!);
-      const { input, notice, submission: _submission, ...settings } = request;
       try {
-        const handle = startTurn(
-          { ...settings, turnId, history, newItems: notice ? withNotice(input, notice) : input },
-          deps,
-        );
-        const turn = ownTurn(turnId, handle);
-        active = turn;
-        return turn;
+        return start(request).turn;
       } catch (error) {
-        const failure = modelError(error);
-        commit([terminalFact(turnId, { kind: 'failed', error: failure })]);
-        return failedTurn(logFailure ?? failure);
+        if (logFailure) return failedTurn(logFailure);
+        throw error;
       }
+    },
+    submit(request, settings) {
+      if (request.origin) {
+        try {
+          request = { ...request, origin: parseDirectOrigin(request.origin) };
+        } catch {
+          return {
+            admission: { kind: 'rejected', clientRequestId: request.clientRequestId, reason: 'invalid origin' },
+          };
+        }
+      }
+      if (closed || logFailure || !recover())
+        return {
+          admission: {
+            kind: 'rejected',
+            clientRequestId: request.clientRequestId,
+            reason: logFailure?.message ?? 'session is closed',
+          },
+        };
+      const plan = submitDirectQueue(queueState, request, environment());
+      queueSettings = settings;
+      if (plan.effect?.kind === 'start') {
+        const started = startEffect(plan.effect, plan.facts);
+        return { admission: plan.result, started };
+      }
+      if (!commit(plan.facts))
+        return {
+          admission: { kind: 'rejected', clientRequestId: request.clientRequestId, reason: logFailure!.message },
+        };
+      return { admission: plan.result };
+    },
+    queue(command) {
+      if (closed || logFailure || !recover()) return { kind: 'rejected', reason: 'invalid' };
+      const plan = planDirectQueue(queueState, command, environment());
+      if (plan.effect?.kind === 'start') throw new Error('Use advanceQueue for dispatch');
+      if (!commit(plan.facts)) return { kind: 'rejected', reason: 'invalid' };
+      if (command.kind === 'settled' && command.turnId === completionHeld) completionHeld = null;
+      if (plan.effect?.kind === 'cancel') active?.cancel();
+      return plan.result;
+    },
+    advanceQueue(settings) {
+      if (settings) queueSettings = settings;
+      if (active || closed || logFailure || !queueSettings) return undefined;
+      const plan = planDirectQueue(queueState, { kind: 'dispatch' }, environment());
+      if (plan.effect?.kind === 'start') return startEffect(plan.effect, plan.facts);
+      if (!commit(plan.facts)) throw new Error(logFailure!.message);
+      return undefined;
+    },
+    answerBudget(requestId, decision, provenance) {
+      return active?.answerBudget(requestId, decision, provenance) ?? { kind: 'stale' };
+    },
+    answer(requestId, decision, provenance) {
+      if (closed || logFailure) return logFailure ? { kind: 'failed', error: logFailure } : { kind: 'stale' };
+      const root = active?.answer(requestId, decision, provenance);
+      if (root && root.kind !== 'stale') return root;
+      return tasks!.answer(requestId, decision);
     },
     async close() {
       closed = true;
-      // Closing a client is not this operation: only the runtime owner closes
-      // the conversation, and it waits for cleanup before releasing the writer.
       try {
-        await active?.stop();
+        await Promise.all([active?.stop(), tasks!.close()]);
+        await capabilities!.close(!!logFailure);
       } finally {
         deps.log.close();
       }
@@ -286,6 +695,7 @@ function failedTurn(error: ModelError): Turn {
     })(),
     cancel() {},
     answer: () => ({ kind: 'stale' }),
+    answerBudget: () => ({ kind: 'stale' }),
   };
 }
 
@@ -307,6 +717,14 @@ function factFor(turnId: TurnId, event: Exclude<TurnEvent, { type: 'turn_ended' 
         ...(event.executionId !== undefined ? { executionId: event.executionId } : {}),
         ...(event.modelStep !== undefined ? { modelStep: event.modelStep } : {}),
       };
+    case 'budget_required':
+      return { ...event, type: 'budget_opened' };
+    case 'budget_observed':
+      return { ...event, turnId };
+    case 'model_response_completed':
+      return { ...event, turnId };
+    case 'history_replaced':
+      return { ...event, turnId };
     case 'usage':
       return {
         type: 'usage',
@@ -339,6 +757,8 @@ function terminalFact(turnId: TurnId, result: TurnResult): Fact {
     turnId,
     outcome: result.kind,
     ...(result.kind === 'failed' ? { error: result.error } : {}),
+    ...('terminalCause' in result && result.terminalCause ? { terminalCause: result.terminalCause } : {}),
+    ...('notice' in result && result.notice ? { notice: result.notice } : {}),
   };
 }
 
@@ -355,4 +775,9 @@ function withNotice(input: readonly Item[], notice: string): readonly Item[] {
     content[textIndex] = { ...part, text: `${notice}\n\n${part.text}` };
     return { ...item, content };
   });
+}
+
+/** Automatic/relayed agent input is not a human context/admission grant. */
+function humanOrigin(origin?: DirectOrigin): boolean {
+  return !origin || (origin.kind === 'discord' ? origin.source === 'human' : origin.kind !== 'control');
 }

@@ -78,10 +78,11 @@ export type DirectHeadlessOutcome =
   | 'cancelled'
   | 'interrupted'
   | 'context_paused'
+  | 'blocked'
   | 'error';
 
 export type DirectHeadlessResult = {
-  /** 0 completed, 1 ordinary failure or cancellation, 2 a resumable context pause. */
+  /** 0 completed, 1 ordinary failure or cancellation, 2 a resumable context/goal stop. */
   readonly exitCode: number;
   readonly outcome: DirectHeadlessOutcome;
   /** Answer text as the old headless final text; empty when the turn produced none. */

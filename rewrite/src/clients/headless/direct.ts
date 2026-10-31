@@ -15,7 +15,7 @@ import type {
   WireEvent,
   WireInteraction,
 } from '../../protocol/direct-wire.js';
-import { interactionLine, rejectionLine, toolStartLine } from './format.js';
+import { interactionLine, rejectionLine, retryLine, toolStartLine } from './format.js';
 import type {
   DirectHeadlessOptions,
   DirectHeadlessOutcome,
@@ -26,6 +26,8 @@ import type {
 
 const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
 /** The old headless CLI's resumable context failures exit 2 rather than 1. */
+/** Old non-interactive exit 2 terminal causes that are not context pauses. */
+const BLOCKED_TERMINAL_CAUSES = new Set(['goal_check_unresolved', 'completion_verification_blocked']);
 const RECOVERABLE_ERROR_KINDS = new Set([
   'request_input_limit',
   'context_compaction_hard_fit',
@@ -332,11 +334,7 @@ export async function runDirectHeadless(
           if (forTurn && output === 'plain' && !quiet) io.stderr.write(toolStartLine(event.payload.tool));
           break;
         case 'retrying':
-          if (forTurn && output === 'plain' && !quiet) {
-            io.stderr.write(
-              `[retry] attempt ${event.payload.attempt} in ${event.payload.delayMs}ms: ${event.payload.error.message}\n`,
-            );
-          }
+          if (forTurn && output === 'plain' && !quiet) io.stderr.write(retryLine(event.payload));
           break;
         case 'notice':
           if (forTurn && output === 'plain' && !quiet) {
@@ -344,7 +342,9 @@ export async function runDirectHeadless(
           }
           break;
         case 'subagent':
-          if (forTurn) renderNested(event.payload.role, event.payload.event, output, io, reportedErrors, quiet);
+          if (forTurn) {
+            renderNested(event.payload.agentId, event.payload.role, event.payload.event, output, io, reportedErrors, quiet);
+          }
           break;
         case 'error':
           reportEventError(reportedErrors, io, event.payload.error.message, output);
@@ -352,6 +352,11 @@ export async function runDirectHeadless(
         case 'turn_ended': {
           if (!forTurn) break;
           const outcome = event.payload.outcome;
+          const terminalCause = event.payload.terminalCause;
+          if (outcome !== 'cancelled' && terminalCause !== undefined && BLOCKED_TERMINAL_CAUSES.has(terminalCause)) {
+            if (event.payload.notice !== undefined) io.stderr.write(`${event.payload.notice}\n`);
+            return result('blocked', 2);
+          }
           if (outcome === 'completed') {
             const final = finalText || streamedText;
             if (output === 'plain') io.stdout.write('\n');
@@ -432,6 +437,7 @@ function fail(
 
 /** Nested subagent lines keep the old stderr labels; everything else stays nested. */
 function renderNested(
+  agentId: string,
   role: string,
   event: WireEvent,
   output: 'plain' | 'json',
@@ -445,9 +451,7 @@ function renderNested(
       io.stderr.write(`[subagent: ${role}] ${toolStartLine(event.payload.tool).replace(/^\[tool\]\s*/, '')}`);
       break;
     case 'retrying':
-      io.stderr.write(
-        `[subagent ${role} retry] attempt ${event.payload.attempt} in ${event.payload.delayMs}ms: ${event.payload.error.message}\n`,
-      );
+      io.stderr.write(retryLine(event.payload, agentId));
       break;
     case 'error':
       reportEventError(reported, io, event.payload.error.message, output);

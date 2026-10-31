@@ -22,8 +22,9 @@ conversation storage.
    `--show-reasoning`, `output` (`plain` or `json`), and the CLI's abort
    signal. The app keeps ownership of the signal-to-exit-code mapping: a
    `cancelled` result under SIGINT is 130 (SIGTERM 143); without a signal it
-   is 1. A `context_paused` result is exit 2 and needs a matching app
-   `RunResult` kind. `attachments` are passed through as raw padded base64
+   is 1. `context_paused` and `blocked` are exit 2; the app/CLI currently maps
+   `context_paused` but must also map `blocked`. `attachments` are passed
+   through as raw padded base64
    image parts; `delivery` is omitted by default, and an explicit non-`auto`
    mode needs the real `submitWithDelivery` capability or is reported
    unavailable.
@@ -55,7 +56,10 @@ conversation storage.
 - Plain stderr matches the old headless wording where the wire carries it:
   `[tool] name: preview` on tool start, `[approval required] tool`,
   `[question] tool summary`, `[retry] ...`, `Approval Rejected: reason`, and
-  `error message`. Reasoning goes to stderr only with `showReasoning`.
+  `error message`. Retry lines use the newly supplied `toolName`,
+  `maxRetries`, `retryType` and nested `agentId` when present, with the old
+  `service_tier` form; otherwise the explicit fallback includes attempt/delay.
+  Reasoning goes to stderr only with `showReasoning`.
 - `quiet` suppresses plain non-error diagnostics (`[tool]`, `[approval
   required]`, `[question]`, retry and notice lines); errors, `Approval
   Rejected` verdicts and reasoning (when enabled) remain. JSON mode is
@@ -72,7 +76,9 @@ conversation storage.
 - Exit codes: completed 0; failed, interrupted, cancelled or a command/stream
   error 1; resumable context failures (`request_input_limit`,
   `context_compaction_hard_fit`, `provider_context_overflow`, `context_paused`)
-  2.
+  and the accepted terminal causes `goal_check_unresolved` /
+  `completion_verification_blocked` return 2 (`context_paused` / `blocked`).
+  The app must map `blocked` to exit 2 as well.
 - An abort before the turn starts detaches without cancelling another turn;
   the app's host disposal owns a queued admission. An abort after it starts
   sends one `cancel` and still waits for `turn_ended`.
@@ -112,13 +118,11 @@ conversation storage.
   default declines. Old ask_user parity still needs the app to choose answers,
   and grants need a real scope-validating capability before any non-empty
   `supportedGrants` appears.
-- **Background work:** `task_changed`/`subagent` exist, but the old headless
-  wait for outstanding background work, notification turns and interrupted
-  background failures needs M4 Session/app policy; the client currently ends
-  at the submitted turn's terminal.
-- **Retry text:** the wire `retrying` payload has no tool name or max retry
-  count, so the old `[retry] tool (attempt/max)` line cannot be reproduced
-  exactly.
+- **Background work:** task state/progress is arriving in protocol, but the
+  Session-owned silent notification turn, outstanding-wait/timeout contract
+  and interrupted/timeout records are still missing. The client ends at the
+  submitted turn's terminal until that flow is concrete; it does not synthesize
+  notifications, completion or timeout behavior.
 - **Generation guards:** the old app wrapped provider streams in
   `GenerationGuard`; deadline/idle caps remain app/model policy, not client
   state.

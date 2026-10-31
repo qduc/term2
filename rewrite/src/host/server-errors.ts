@@ -62,6 +62,30 @@ export function mapServerError(error: unknown): ServerResult {
     return publicError(error.status, error.code, error.message, error.retryable, error.details);
   // Host errors are structured by the direct host; don't leak their message.
   const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+  const name = error instanceof Error ? error.name : undefined;
+  const surface = error && typeof error === 'object' && 'surface' in error ? error.surface : undefined;
+  // Host/config errors are translated structurally: host transport must not import app composition.
+  if (name === 'DirectHostConfigError') {
+    if (code === 'validation_error' || code === 'oauth_invalid')
+      return publicError(400, 'validation_error', 'request is invalid');
+    if (code === 'invalid_cursor') return publicError(400, 'invalid_cursor', 'workspace cursor is invalid');
+    if (code === 'settings_forbidden')
+      return publicError(403, 'settings_forbidden', 'local owner authorization is required');
+    if (code === 'model_catalog_unavailable')
+      return publicError(503, 'model_catalog_unavailable', 'model catalog unavailable', true);
+    if (code === 'model_unavailable') return publicError(422, 'validation_error', 'model is unavailable');
+    if (code === 'workspace_grant_not_persisted' || code === 'configuration_invalid') return unavailable('gateway');
+    if (
+      surface === 'candidate' &&
+      code !== 'candidate_not_found' &&
+      code !== 'candidate_expired' &&
+      code !== 'candidate_registry_full'
+    )
+      return code === 'workspace_owner_mismatch' || code === 'workspace_path_escape'
+        ? publicError(403, 'workspace_forbidden', 'workspace access denied')
+        : publicError(422, 'validation_error', 'workspace candidate is unavailable');
+    if (surface === 'authority') return publicError(403, 'workspace_forbidden', 'workspace access denied');
+  }
   if (code === 'settings_conflict') {
     const details = error && typeof error === 'object' && 'details' in error ? error.details : undefined;
     return publicError(
@@ -82,7 +106,6 @@ export function mapServerError(error: unknown): ServerResult {
     return publicError(503, 'settings_unavailable', 'settings unavailable', true);
   if (code === 'candidate_not_found' || code === 'candidate_expired')
     return publicError(404, 'not_found', 'workspace candidate not found');
-  const name = error instanceof Error ? error.name : undefined;
   if (name === 'WorkspaceAdmissionError') {
     if (code === 'workspace_session_exists')
       return publicError(409, 'session_busy', 'a session is already active for this workspace');

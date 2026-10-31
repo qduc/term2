@@ -342,6 +342,9 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     output: options.output.json ? 'json' : 'plain',
     showReasoning: options.output.showReasoning,
     quiet: options.output.quiet,
+    lite: options.lite,
+    // --ssh is still refused in cli-args.ts; this forwards the parsed target once the tool surface can run it.
+    ...(options.ssh === null ? {} : { ssh: options.ssh }),
   });
   if (result.kind === 'completed') return 0;
   // A resumable context pause exits 2, as the current CLI does; the recovery text was already printed.
@@ -396,6 +399,8 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     lite: options.lite,
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
     ...(controlSocket === undefined ? {} : { controlSocket }),
+    // Still refused in cli-args.ts until the tool surface can run a remote workspace.
+    ...(options.ssh === null ? {} : { ssh: options.ssh }),
   };
   return launchDirect(request);
 }

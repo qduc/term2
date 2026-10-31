@@ -72,8 +72,7 @@ type Flag = {
 const SESSION_HELD = 'session goals need a Session goal API in the direct app (M4 context owner)';
 const JSON_HELD =
   'the old NDJSON event schema needs a protocol-owned read model, which the direct protocol does not expose yet';
-const SSH_HELD =
-  'SSH needs a tool-surface workspace option; #65 assigns no milestone, so the coordinator must assign one';
+const SSH_HELD = 'the tool surface cannot run a remote workspace yet (lead: ToolSurfaceOptions.remote and remoteContext)';
 const FORK_HELD = 'fork needs a Session operation; #65 assigns no milestone, so the coordinator must assign one';
 
 /** Builds one flag. `suffix` is its help placeholder: ' <x>' takes a value, '[=<x>]' takes only an inline one. */

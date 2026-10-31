@@ -2,18 +2,16 @@
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
-import { AutomaticMemoryCanary } from '../../../source/services/memory/automatic-memory-canary.js';
-import { MemoryCapabilityBuilder } from '../../../source/services/memory/memory-capabilities.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectBackgroundTasks } from '../session/direct-background.js';
 import type { DirectContextFactory } from '../session/direct-capabilities.js';
 import type { DirectBinding } from '../session/facade-types.js';
-import { createDirectAutomaticMemory } from '../session/direct-memory.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
 import type { DirectHookRuntime } from './direct-application-hooks.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
+import { createDirectSessionMemory } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './run.js';
@@ -98,23 +96,6 @@ function verificationOperations(
   });
 }
 
-/** The opt-in canary, on the same terms as today. It never runs over SSH. */
-function automaticMemory(
-  settings: ProfileSelection['settings'],
-  { id, workspace }: DirectRuntimeContext,
-  port: Parameters<DirectContextFactory>[0],
-): ReturnType<DirectContextFactory>['automaticMemory'] {
-  if (process.env.TERM2_AUTOMATIC_MEMORY_CANARY !== '1' || workspace.target !== 'local') return undefined;
-  if (!settings.get('memory.enabled')) return undefined;
-  return createDirectAutomaticMemory({
-    sessionId: id,
-    canary: new AutomaticMemoryCanary(new MemoryCapabilityBuilder(settings).projectStore(workspace.root)),
-    allowed: () => settings.get('memory.enabled') === true,
-    readState: () => port.read().memory,
-    commit: (facts) => port.commit(port.read().goal.generation, facts),
-  });
-}
-
 export function createDirectRuntimes(
   options: DirectRuntimeOptions,
   hookRuntime: DirectHookRuntime | null,
@@ -140,7 +121,8 @@ export function createDirectRuntimes(
       }
       const selection = { settings: sessionSettings(options, context), logger, sessionContext };
       const surfaceOptions = options.surface(context.id);
-      const surface = loadSurface(selection, { ...surfaceOptions, workspace: context.workspace });
+      // The Session owns memory, so the surface must not offer it a second time.
+      const surface = loadSurface(selection, { ...surfaceOptions, includeMemory: false, workspace: context.workspace });
       const scope = scopeFor(context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(selection.settings.get('app.activeProfileId')));
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
@@ -159,11 +141,19 @@ export function createDirectRuntimes(
       const contextFactory: DirectContextFactory = (port) => {
         tasks = port.tasks;
         const hooks = hookRuntime?.session(context, selection.settings);
-        const memoryNotices = automaticMemory(selection.settings, context, port);
         return {
+          ...createDirectSessionMemory(
+            {
+              settings: selection.settings,
+              workspace: context.workspace,
+              subject: { kind: 'main' },
+              adaptTool: runtime.adaptTool,
+              onWarning: (message) => logger.warn(message),
+            },
+            port,
+          ),
           ...(hooks ? { hooks } : {}),
           ...(verification ? { verification: { operations: verification } } : {}),
-          ...(memoryNotices ? { automaticMemory: memoryNotices } : {}),
           verificationEnabled: () => selection.settings.get('agent.completionVerification') !== false,
           // Only a client with a person behind it can answer these.
           unattended: !interactive,

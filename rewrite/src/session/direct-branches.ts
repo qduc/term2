@@ -180,7 +180,10 @@ export function createDirectBranchDriver(options: {
           : terminal.kind === 'interrupted'
           ? { kind: 'interrupted', terminalCause: terminal.terminalCause }
           : terminal;
-      return { items: produced, outcome };
+      // Accepted physical starts, including scripted leaves, are execution
+      // evidence. Provider call names and offered declarations are not usage.
+      const toolsUsed = [...new Set(local.flatMap((fact) => (fact.type === 'tool_started' ? [fact.toolName] : [])))];
+      return { items: produced, outcome, toolsUsed };
     },
   };
 }

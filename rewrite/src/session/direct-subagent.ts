@@ -63,6 +63,7 @@ export class DirectSubagents {
         kind: 'subagent',
         role,
         label: request.task,
+        ...(run.input !== undefined ? { input: run.input } : {}),
         name: request.name,
         model: run.model,
         workspace,

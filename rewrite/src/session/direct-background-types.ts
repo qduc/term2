@@ -23,6 +23,8 @@ export type DirectTaskDescriptor = {
   readonly sessionId: string;
   readonly kind: 'shell' | 'subagent';
   readonly label: string;
+  /** Original task input, supplied by its launcher; unknown when not supplied. */
+  readonly input?: string;
   readonly name?: string;
   readonly role?: string;
   readonly model?: ModelRef;

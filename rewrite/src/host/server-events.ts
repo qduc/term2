@@ -3,7 +3,7 @@
  * when a direct payload does not itself carry the immutable data needed by the pinned DTO.
  */
 import type { AgentEventEnvelope, AgentEventType } from '@qduc/agent-wire';
-import type { WireAdmission, WireEvent, WireTask } from '../protocol/direct-wire.js';
+import type { WireAdmission, WireEvent, WireTask, WireTaskOwner } from '../protocol/direct-wire.js';
 import { legacyCommandMessages } from '../protocol/direct-json.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { ServerHttpError } from './server-errors.js';
@@ -48,7 +48,7 @@ function canonicalCandidate(
     case 'admission':
       return admissionCandidate(event.payload.admission);
     case 'queue_changed':
-      return event.payload.admission ? admissionCandidate(event.payload.admission) : null;
+      return queueCandidate(event);
     case 'turn_started':
       return event.payload.foreground ? { type: 'assistant_started', payload: { turnId: requiredTurn(event) } } : null;
     case 'text_delta':
@@ -102,11 +102,12 @@ function canonicalCandidate(
     }
     case 'interaction_opened': {
       // Task-scoped interactions need the true nested owner/role, not a root relabeling.
-      if (event.payload.interaction.taskId) {
+      const taskId = event.payload.interaction.taskId ?? event.payload.interaction.taskOwner?.id;
+      if (taskId) {
         return {
           type: 'subagent_approval_required',
           payload: {
-            ...taskIdentity(event.payload.interaction.taskId, context),
+            ...taskIdentity(taskId, context, undefined, event.payload.interaction.taskOwner),
             childTurnId: event.payload.interaction.turnId,
             interaction: interactions.project(event.sessionId, event.payload.interaction),
           },
@@ -122,13 +123,14 @@ function canonicalCandidate(
     }
     case 'interaction_resolved': {
       const resolution = event.payload.resolution;
+      const taskId = event.payload.taskId ?? event.payload.taskOwner?.id;
       return {
         type: 'interaction_resolved',
         payload: {
           turnId: requiredTurn(event),
           interactionId: event.payload.requestId,
           // Task closures already carry the parent turnId. Do not relabel it as a child turn.
-          ...(event.payload.taskId ? taskIdentity(event.payload.taskId, context) : {}),
+          ...(taskId ? taskIdentity(taskId, context, undefined, event.payload.taskOwner) : {}),
           outcome:
             resolution.kind === 'cancelled' || resolution.kind === 'interrupted'
               ? 'cancelled'
@@ -217,8 +219,7 @@ function canonicalCandidate(
     case 'subagent':
       return nestedCandidate(event, interactions, context);
     case 'task_changed':
-      if (event.payload.task.kind === 'shell') return null;
-      return missing('canonical task lifecycle requires accepted nested terminal and descriptor data');
+      return taskCandidate(event, context);
     case 'compacted':
       return missing('canonical compaction requires accepted provider, strategy and timing evidence');
     // These change the public read model but have no equivalent pinned root event. In particular,
@@ -355,11 +356,73 @@ function nestedCandidate(
       return missing('canonical child lifecycle requires its accepted task-owned projection');
   }
 }
+/** Use the accepted change kind, never a running snapshot, as lifecycle evidence. Numeric task
+ * time is not an envelope timestamp: encodeCanonicalEvent keeps the original FactLine occurredAt.
+ */
+function taskCandidate(
+  event: Extract<WireEvent, { type: 'task_changed' }>,
+  context: CanonicalEventContext,
+): Candidate | null {
+  const { change, task } = event.payload;
+  if (task.kind === 'shell') return null;
+  if (task.kind !== 'subagent') return missing('canonical task lifecycle requires its accepted task kind');
+  switch (change) {
+    case 'task_backgrounded':
+    case 'task_stop_requested':
+      // The frozen vocabulary has no equivalent. Neither change means started or physically done.
+      return null;
+    case 'task_started':
+      // The current wire has no original input field. Never substitute a label or result text.
+      return missing('canonical task start requires its accepted original input projection');
+    case 'task_finished': {
+      const identity = taskIdentity(task.id, context, undefined, task);
+      const result = task.result;
+      if (!result) return missing('canonical task settlement requires its accepted result');
+      if (result.kind === 'interrupted') {
+        if (result.output === undefined) return missing('canonical task interruption requires actual final output');
+        return {
+          type: 'subagent_interrupted',
+          payload: { ...identity, finalText: text(result.output, 16_384) },
+        };
+      }
+      // Distinct tool names are not pinned per-tool counts, and missing output is not blank success.
+      return missing('canonical task completion requires actual final output and accepted tool-use counts');
+    }
+  }
+}
+/** Preserve one accepted queue boundary. Aggregate native discard/cancel IDs cannot become
+ * several distinct numeric-ID rejection frames without real pinned aggregate consumer support.
+ */
+function queueCandidate(event: Extract<WireEvent, { type: 'queue_changed' }>): Candidate | null {
+  const { change } = event.payload;
+  switch (change.type) {
+    case 'queue_submitted':
+      return admissionCandidate(change.record.admission);
+    case 'queue_retracted':
+      return missing('canonical queue retraction requires a supported pinned rejection policy');
+    case 'queue_discarded':
+      return change.messageIds.length
+        ? missing('canonical aggregate queue discard requires a supported pinned rejection policy')
+        : null;
+    case 'queue_cancelling':
+      return change.cancelledMessageIds.length
+        ? missing('canonical aggregate queue cancellation requires a supported pinned rejection policy')
+        : null;
+    case 'queue_edited':
+    case 'queue_started':
+    case 'queue_steered':
+    case 'queue_settled':
+    case 'queue_resumed':
+    case 'queue_recovered':
+      // Root starts/terminals come from their actual separate accepted facts, not queue state.
+      return null;
+  }
+}
 /** Accept only the task's original parent identity. A nested branch's outer turnId is its child,
  * and a task interaction closure's outer turnId is already its parent; neither can be copied blindly.
  */
-function taskIdentity(taskId: string, context: CanonicalEventContext, role?: string) {
-  const task = context.task;
+function taskIdentity(taskId: string, context: CanonicalEventContext, role?: string, owner?: WireTaskOwner) {
+  const task = owner ?? context.task;
   if (!task || task.id !== taskId || !task.turnId)
     return missing('canonical nested events require their accepted parent task identity');
   const acceptedRole = role ?? task.role;

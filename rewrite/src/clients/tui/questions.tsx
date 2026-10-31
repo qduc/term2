@@ -23,7 +23,7 @@ export function Questions({ questions, width, onBack, onAnswer }: {
   const choices = [
     ...question.options.map(option => option.label),
     ...(question.allowCustom ? ['Something else…'] : []),
-    ...(question.multiple ? ['Continue'] : []),
+    ...(question.multiple ? ['Continue', 'Clear selections'] : []),
     'Decline to answer', 'Stop after resolving',
   ];
   const send = async (decision: WireDecision) => {
@@ -54,7 +54,8 @@ export function Questions({ questions, width, onBack, onAnswer }: {
         if (!Array.isArray(value) || value.length === 0) { setError('Choose at least one answer.'); return; }
         advance(answers); return;
       }
-      next--;
+      if (next === 1) { setAnswers({ ...answers, [question.id]: [] }); return; }
+      next -= 2;
     }
     if (next === 0) void send({ kind: 'decline' });
     else void send({ kind: 'answer', answer: '', stopAfterApprovalResolution: true });
@@ -66,6 +67,7 @@ export function Questions({ questions, width, onBack, onAnswer }: {
     if (key.upArrow) { setSelected(current => Math.max(0, current - 1)); return; }
     if (key.downArrow) { setSelected(current => Math.min(choices.length - 1, current + 1)); return; }
     if (key.leftArrow && index > 0) { setIndex(index - 1); setSelected(0); return; }
+    if (key.rightArrow && index + 1 < questions.length && value !== undefined && (!Array.isArray(value) || value.length)) { setIndex(index + 1); setSelected(0); return; }
     const number = /^[1-9]$/.test(input) ? Number(input) - 1 : -1;
     if (key.return || number >= 0) { const position = number < 0 ? selected : number; if (position < choices.length) choose(position); }
   });
@@ -76,6 +78,7 @@ export function Questions({ questions, width, onBack, onAnswer }: {
       const description = question.options[position]?.description;
       return <Text key={`${position}:${choice}`}>{selected === position ? '❯' : ' '} {position + 1}. {chosen ? '[x] ' : ''}{choice}{description ? ` — ${description}` : ''}</Text>;
     })}
+    {question.multiple && Array.isArray(value) && value.length ? <Text>Selected: {value.join(', ')}</Text> : null}
     {entry ? <MultilineInput value={text} onChange={setText} width={Math.max(1, width - 6)} isActive={!busy}
       ignoreInput={(_input, key) => key.escape}
       onSubmit={input => {

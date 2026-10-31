@@ -30,6 +30,12 @@ export function createAppAdoptedEngine(options: {
     clientOptions: options.clientOptions,
     bindSessionClient: options.bindSessionClient,
     assembleAgent,
+    refreshPreparedInput(input, agent) {
+      // Codex getApplicationAgent returns a new object with transformed
+      // modelSettings, so identity with agentBuild.agent never holds there.
+      // Refresh the private copy from the agent about to be validated.
+      return { ...input, instructions: turnPrompt(agent).instructions };
+    },
     validateTurnInput(input, agent, providerId) {
       if (
         input.model.provider !== providerId ||

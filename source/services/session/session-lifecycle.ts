@@ -149,6 +149,7 @@ export class SessionLifecycle {
     previousResponseId: string | null;
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
+    coveredToolOccurrences?: Iterable<string>;
   }): void {
     const { validated: validatedState, projected } = this.#record.importState(state);
     this.#terminateActiveTurn?.();
@@ -285,7 +286,10 @@ export class SessionLifecycle {
     const provider = providerFn
       ? providerFn.call(this.#agentClient)
       : this.#settingsService?.get('agent.modelSelection').provider;
-    const model = this.#settingsService?.get('agent.modelSelection').model;
+    const modelFn = getMethod<[], string>(this.#agentClient, 'getModel');
+    const model =
+      this.#settingsService?.get('agent.modelSelection').model ??
+      (modelFn ? modelFn.call(this.#agentClient) : undefined);
     return this.#record.snapshot({
       previousResponseId: this.#providerContinuity.previousResponseId,
       ...(model ? { model } : {}),
@@ -314,6 +318,7 @@ export class SessionLifecycle {
     previousResponseId: string | null;
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
+    coveredToolOccurrences?: Iterable<string>;
   }): void {
     this.importPersistedState(state);
   }

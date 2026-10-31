@@ -30,6 +30,7 @@ export const CONVERSATION_FSYNC_EVENTS = new Set<LogEvent['type']>([
   'goal_changed',
   'events_retracted',
   'context_checkpoint_created',
+  'context_compaction_recorded',
 ]);
 const MAX_EVENT_BYTES = 256 * 1024;
 
@@ -314,8 +315,25 @@ export function sanitizeSubagentResult(value: unknown): unknown {
   return value;
 }
 
+const scrubHistoryItem = (item: unknown): unknown =>
+  isToolResultHistoryItem(item) ? sanitizeSubagentResult(item) : item;
+
+function sanitizeStateSnapshot<
+  T extends { history: unknown[]; toolLedger: { output?: unknown; historyItems?: unknown[] }[] },
+>(snapshot: T): T {
+  return {
+    ...snapshot,
+    history: snapshot.history.map(scrubHistoryItem) as T['history'],
+    toolLedger: snapshot.toolLedger.map((entry) => ({
+      ...entry,
+      ...('output' in entry ? { output: sanitizeSubagentResult(entry.output) } : {}),
+      ...(entry.historyItems ? { historyItems: entry.historyItems.map(scrubHistoryItem) } : {}),
+    })) as T['toolLedger'],
+  };
+}
+
 /** Preserve new input facts exactly except for source-classified tool outputs. */
-function sanitizeLogFact<T extends { readonly type: string }>(fact: T): T {
+export function sanitizeLogFact<T extends { readonly type: string }>(fact: T): T {
   if (fact.type === 'user_message') {
     const event = fact as unknown as Extract<LogEvent, { type: 'user_message' }>;
     if (event.message.submittedTurn) {
@@ -332,14 +350,43 @@ function sanitizeLogFact<T extends { readonly type: string }>(fact: T): T {
       LogEvent,
       { type: 'user_input_accepted' | 'tool_output_rewound' | 'user_turn_retried' }
     >;
-    const scrubItem = (item: unknown) => (isToolResultHistoryItem(item) ? sanitizeSubagentResult(item) : item);
-    event.snapshot.history = event.snapshot.history.map(scrubItem) as typeof event.snapshot.history;
-    event.snapshot.toolLedger = event.snapshot.toolLedger.map((entry) => ({
-      ...entry,
-      ...('output' in entry ? { output: sanitizeSubagentResult(entry.output) } : {}),
-      ...(entry.historyItems ? { historyItems: entry.historyItems.map(scrubItem) } : {}),
-    }));
+    event.snapshot = sanitizeStateSnapshot(event.snapshot);
     return event as unknown as T;
+  }
+  if (fact.type === 'context_compaction_recorded') {
+    const event = structuredClone(fact) as unknown as Extract<LogEvent, { type: 'context_compaction_recorded' }>;
+    if (event.result.kind === 'compacted') {
+      event.result.snapshot = sanitizeStateSnapshot(event.result.snapshot);
+    }
+    return event as unknown as T;
+  }
+  if (fact.type === 'context_checkpoint_created') {
+    return structuredClone(fact);
+  }
+  if (fact.type === 'assistant_journal_item') {
+    const event = fact as unknown as Extract<LogEvent, { type: 'assistant_journal_item' }>;
+    if (event.item?.type === 'provider_opaque') {
+      return structuredClone(fact);
+    }
+  }
+  if (fact.type === 'assistant_turn') {
+    const original = fact as unknown as Extract<LogEvent, { type: 'assistant_turn' }>;
+    const sanitized = sanitizeSubagentResult(fact) as unknown as Extract<LogEvent, { type: 'assistant_turn' }>;
+    if (Array.isArray(original.turn?.items) && Array.isArray(sanitized.turn?.items)) {
+      sanitized.turn.items = sanitized.turn.items.map((item, index) => {
+        const sourceItem = original.turn.items[index];
+        return sourceItem?.type === 'provider_opaque' ? structuredClone(sourceItem) : item;
+      });
+    }
+    if (original.providerHistory) {
+      sanitized.providerHistory = structuredClone(original.providerHistory).map(
+        scrubHistoryItem,
+      ) as typeof sanitized.providerHistory;
+    }
+    if (original.snapshot) {
+      sanitized.snapshot = sanitizeStateSnapshot(structuredClone(original.snapshot));
+    }
+    return sanitized as unknown as T;
   }
   return sanitizeSubagentResult(fact) as T;
 }

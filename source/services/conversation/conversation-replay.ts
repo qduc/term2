@@ -18,7 +18,7 @@ import type {
 } from '../logging/conversation-log-events.js';
 import { isTruncatedLogEvent } from '../logging/conversation-log-events.js';
 import { formatMemoryReceipt } from './conversation-events.js';
-import type { PersistedLogEnvelope } from './conversation-decoder.js';
+import { validateCompactionSequence, type PersistedLogEnvelope } from './conversation-decoder.js';
 import type { BotMessage, CommandMessage, SubagentActivityMessage } from '../../types/message.js';
 import type {
   SavedAppMode,
@@ -67,7 +67,22 @@ export interface RestoredState {
   forkedFrom?: string;
   rolloverFrom?: string;
   goal?: import('../logging/conversation-log-events.js').DurableGoal;
+  coveredToolOccurrences?: string[];
+  retryEligibility?: { readonly turn: boolean; readonly tool: boolean };
 }
+
+const countNativeUsers = (history: readonly ProviderInputItem[]): number =>
+  history.filter((item) => {
+    const message = projectConversationMessage(item);
+    return message?.role === 'user' && !message.isSynthetic;
+  }).length;
+
+const lastToolResultIndexOf = (history: readonly ProviderInputItem[]): number => {
+  for (let index = history.length - 1; index >= 0; index--) {
+    if (isToolResultHistoryItem(history[index])) return index;
+  }
+  return -1;
+};
 
 const isRetrySourceUser = (message: { sender: string; text?: string; consumedForAbort?: boolean }): boolean =>
   message.sender === 'user' &&
@@ -212,6 +227,9 @@ interface ReplayState {
   backgroundShellJobs: Map<string, ReplayedBackgroundShellJob>;
   /** Index in state.messages where the current/in-flight turn began. */
   activeTurnStartIndex: number;
+  coveredToolOccurrences: Set<string>;
+  unassociatedNativeUsers: number;
+  unassociatedNativeHistoryLength: number;
 }
 
 /**
@@ -583,8 +601,36 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       state.history = snap.history;
       state.previousResponseId = snap.previousResponseId;
       state.toolLedger = snap.toolLedger;
+      const remainingKeys = new Set(normalizeToolLedgerOccurrences(state.toolLedger).map(toolOccurrenceKey));
+      for (const key of [...state.coveredToolOccurrences]) {
+        if (!remainingKeys.has(key)) state.coveredToolOccurrences.delete(key);
+      }
+      if (state.history.length < state.unassociatedNativeHistoryLength) {
+        state.unassociatedNativeHistoryLength = state.history.length;
+      }
+      state.unassociatedNativeUsers = Math.min(state.unassociatedNativeUsers, countNativeUsers(state.history));
       state.snapshotModel = snap.model ?? state.snapshotModel;
       state.snapshotProvider = snap.provider ?? state.snapshotProvider;
+      return;
+    }
+    case 'context_compaction_recorded': {
+      if (event.result.kind !== 'compacted') return;
+      const snap = cloneSnapshot(event.result.snapshot);
+      state.history = snap.history;
+      state.previousResponseId = snap.previousResponseId;
+      state.toolLedger = snap.toolLedger;
+      state.coveredToolOccurrences = new Set(normalizeToolLedgerOccurrences(state.toolLedger).map(toolOccurrenceKey));
+      if (event.strategy === 'native') {
+        state.unassociatedNativeUsers = countNativeUsers(state.history);
+        state.unassociatedNativeHistoryLength = state.history.length;
+      } else {
+        state.unassociatedNativeUsers = Math.min(state.unassociatedNativeUsers, countNativeUsers(state.history));
+        state.unassociatedNativeHistoryLength = Math.min(state.unassociatedNativeHistoryLength, state.history.length);
+      }
+      state.snapshotModel = snap.model ?? state.snapshotModel;
+      state.snapshotProvider = snap.provider ?? state.snapshotProvider;
+      state.trailingUserMessage = false;
+      state.inFlightToolCalls.clear();
       return;
     }
     case 'assistant_journal_delta': {
@@ -897,7 +943,11 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       } else {
         mergeAssistantTurnIntoLedger(state, turn, ts, authoritativeTurnId);
       }
-      state.history = projectProviderHistory({ history: state.history, toolLedger: state.toolLedger }).history;
+      state.history = projectProviderHistory({
+        history: state.history,
+        toolLedger: state.toolLedger,
+        coveredToolOccurrences: state.coveredToolOccurrences,
+      }).history;
       state.previousResponseId = compactState.previousResponseId;
       state.snapshotModel = compactState.model ?? state.snapshotModel;
       state.snapshotProvider = compactState.provider ?? state.snapshotProvider;
@@ -936,6 +986,14 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       state.history = snap.history;
       state.previousResponseId = snap.previousResponseId;
       state.toolLedger = snap.toolLedger;
+      const remainingKeys = new Set(normalizeToolLedgerOccurrences(state.toolLedger).map(toolOccurrenceKey));
+      for (const key of [...state.coveredToolOccurrences]) {
+        if (!remainingKeys.has(key)) state.coveredToolOccurrences.delete(key);
+      }
+      if (state.history.length < state.unassociatedNativeHistoryLength) {
+        state.unassociatedNativeHistoryLength = state.history.length;
+      }
+      state.unassociatedNativeUsers = Math.min(state.unassociatedNativeUsers, countNativeUsers(state.history));
       state.snapshotModel = snap.model ?? state.snapshotModel;
       state.snapshotProvider = snap.provider ?? state.snapshotProvider;
       state.trailingUserMessage = false;
@@ -943,6 +1001,9 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       return;
     }
     case 'session_cleared': {
+      state.coveredToolOccurrences.clear();
+      state.unassociatedNativeUsers = 0;
+      state.unassociatedNativeHistoryLength = 0;
       return;
     }
     default:
@@ -1378,6 +1439,7 @@ function replayWithRetryCache(
   ]);
   const cached = cache.get(cacheKey);
   if (cached) return cached;
+  validateCompactionSequence(envelopes.map((envelope) => envelope.event));
   const usage = createUsageAccumulator();
   const subagentUsage = createUsageAccumulator();
   const allCostRecords: ModelRequestCost[] = [];
@@ -1396,6 +1458,9 @@ function replayWithRetryCache(
     pendingCommandMessages: [],
     backgroundShellJobs: new Map(),
     activeTurnStartIndex: 0,
+    coveredToolOccurrences: new Set(),
+    unassociatedNativeUsers: 0,
+    unassociatedNativeHistoryLength: 0,
     lastEventTs: undefined,
   };
 
@@ -1469,6 +1534,14 @@ function replayWithRetryCache(
       userStack.length = 0;
       currentUser = null;
       activeTurn = null;
+    } else if (
+      event.type === 'context_compaction_recorded' &&
+      event.result.kind === 'compacted' &&
+      event.strategy === 'native'
+    ) {
+      userStack.length = 0;
+      currentUser = null;
+      activeTurn = null;
     } else if ((event.type as string) === 'session_turn_started') {
       const turnId = (event as unknown as { turnId?: unknown }).turnId;
       activeTurn = typeof turnId === 'string' ? turnId : null;
@@ -1505,7 +1578,13 @@ function replayWithRetryCache(
               historicalEligibility,
             );
           } else rebuilt.splice(Math.max(0, rebuilt.length - Math.max(previous.removedUserTurns, 1)));
-        } else if (previous.type === 'session_cleared') rebuilt.length = 0;
+        } else if (
+          previous.type === 'session_cleared' ||
+          (previous.type === 'context_compaction_recorded' &&
+            previous.result.kind === 'compacted' &&
+            previous.strategy === 'native')
+        )
+          rebuilt.length = 0;
         else if (previous.type === 'tool_output_rewound') {
           const index = envelopes.indexOf(prior);
           const prefix = envelopes.slice(0, index);
@@ -1550,7 +1629,13 @@ function replayWithRetryCache(
           );
         } else
           activeUserStack.splice(Math.max(0, activeUserStack.length - Math.max(envelope.event.removedUserTurns, 1)));
-      } else if (envelope.event.type === 'session_cleared') activeUserStack.length = 0;
+      } else if (
+        envelope.event.type === 'session_cleared' ||
+        (envelope.event.type === 'context_compaction_recorded' &&
+          envelope.event.result.kind === 'compacted' &&
+          envelope.event.strategy === 'native')
+      )
+        activeUserStack.length = 0;
       else if (envelope.event.type === 'tool_output_rewound') {
         applyInterruptedTurnJournals(state, finalization);
         const removed = rewindRemovedUserCount(state.history, envelope.event.snapshot.history);
@@ -1566,17 +1651,19 @@ function replayWithRetryCache(
       const history = envelope.event.snapshot.history;
       let lastResult = history.length - 1;
       while (lastResult >= 0 && !isToolResultHistoryItem(history[lastResult])) lastResult--;
-      if (lastResult < 0) throw new Error('Tool rewind has no retained result');
+      if (lastResult < 0 || lastResult < state.unassociatedNativeHistoryLength)
+        throw new Error('Tool rewind has no retained result');
       let nativeUser = lastResult;
       while (nativeUser >= 0) {
         const message = projectConversationMessage(history[nativeUser]);
         if (message?.role === 'user' && !message.isSynthetic) break;
         nativeUser--;
       }
+      const activeUserSet = new Set(activeUserStack);
       const retainedUsers = activeUserStack.filter((key) => !retracted.has(key) && activeEligibility.get(key)).length;
       const userIndexes = state.messages.flatMap((message, index) => {
         const ref = messageRefs.get(message);
-        return ref && !retracted.has(ref) && activeEligibility.get(ref) ? [index] : [];
+        return ref && activeUserSet.has(ref) && !retracted.has(ref) && activeEligibility.get(ref) ? [index] : [];
       });
       const lastUser = userIndexes[retainedUsers - 1] ?? -1;
       const items = normalizeRunItems(history.slice(nativeUser + 1, lastResult + 1));
@@ -1585,7 +1672,13 @@ function replayWithRetryCache(
         ...replayAssistantTurn({ items }, `rewind-${envelope.seq}`, undefined, undefined, true),
       ];
     }
-    if (envelope.event.type === 'tool_output_rewound' || envelope.event.type === 'user_turn_retried') {
+    if (
+      envelope.event.type === 'tool_output_rewound' ||
+      envelope.event.type === 'user_turn_retried' ||
+      (!isTruncatedLogEvent(envelope.event) &&
+        envelope.event.type === 'context_compaction_recorded' &&
+        envelope.event.result.kind === 'compacted')
+    ) {
       state.pendingJournals.clear();
       state.pendingCommandMessages = [];
       state.inFlightToolCalls.clear();
@@ -1624,6 +1717,15 @@ function replayWithRetryCache(
     if (envelope.event.type === 'subagent_completed' && envelope.event.costRecords) {
       allCostRecords.push(...envelope.event.costRecords);
     }
+    if (envelope.event.type === 'context_compaction_recorded' && envelope.event.usage) {
+      usage.add(envelope.event.usage);
+      if (!envelope.event.costRecords || envelope.event.costRecords.length === 0) {
+        sawUsageWithoutCostRecords = true;
+      }
+    }
+    if (envelope.event.type === 'context_compaction_recorded' && envelope.event.costRecords) {
+      allCostRecords.push(...envelope.event.costRecords);
+    }
     applyEvent(state, envelope.event, envelope.ts);
     if ((envelope.event.type as string) === 'session_interrupted') {
       // A prior open already imported restart settlement. Materialize that
@@ -1638,7 +1740,11 @@ function replayWithRetryCache(
           !retrySnapshotBoundary &&
           state.toolLedger.some((entry) => entry.status !== 'started' && entry.status !== 'approval_required')
         )
-          state.history = projectProviderHistory({ history: state.history, toolLedger: state.toolLedger }).history;
+          state.history = projectProviderHistory({
+            history: state.history,
+            toolLedger: state.toolLedger,
+            coveredToolOccurrences: state.coveredToolOccurrences,
+          }).history;
         if (state.trailingUserMessage) {
           state.warnings.push('Previous turn was interrupted.');
           state.messages.push({
@@ -1707,7 +1813,11 @@ function replayWithRetryCache(
       !retrySnapshotBoundary &&
       state.toolLedger.some((entry) => entry.status !== 'started' && entry.status !== 'approval_required')
     ) {
-      state.history = projectProviderHistory({ history: state.history, toolLedger: state.toolLedger }).history;
+      state.history = projectProviderHistory({
+        history: state.history,
+        toolLedger: state.toolLedger,
+        coveredToolOccurrences: state.coveredToolOccurrences,
+      }).history;
     }
     if (state.trailingUserMessage) {
       state.warnings.push('Previous turn was interrupted.');
@@ -1726,7 +1836,11 @@ function replayWithRetryCache(
   // Defensive idempotent final repair pass
   if (!retrySnapshotBoundary) {
     state.toolLedger = normalizeToolLedgerOccurrences(state.toolLedger);
-    state.history = alignHistoryToolOccurrences(state.history, state.toolLedger) as ProviderInputItem[];
+    state.history = alignHistoryToolOccurrences(
+      state.history,
+      state.toolLedger,
+      state.coveredToolOccurrences,
+    ) as ProviderInputItem[];
   }
   const repair = retrySnapshotBoundary
     ? { repaired: false, removedItems: 0, history: state.history }
@@ -1796,6 +1910,18 @@ function replayWithRetryCache(
             : {}),
         }
       : null;
+  const nativeUsers = countNativeUsers(state.history);
+  const lastToolResultIndex = lastToolResultIndexOf(state.history);
+  const nativeCompactionRetryEligibility =
+    state.unassociatedNativeHistoryLength > 0 || state.unassociatedNativeUsers > 0
+      ? {
+          turn: nativeUsers > state.unassociatedNativeUsers && retryTarget !== null,
+          tool:
+            lastToolResultIndex >= state.unassociatedNativeHistoryLength &&
+            countNativeUsers(state.history.slice(0, lastToolResultIndex + 1)) > state.unassociatedNativeUsers &&
+            retryTarget !== null,
+        }
+      : undefined;
   const result: ReplayWithRetryTarget = {
     retryTarget,
     conversation: {
@@ -1820,6 +1946,8 @@ function replayWithRetryCache(
       forkedFrom: state.forkedFrom,
       rolloverFrom: state.rolloverFrom,
       goal: state.goal,
+      ...(state.coveredToolOccurrences.size > 0 ? { coveredToolOccurrences: [...state.coveredToolOccurrences] } : {}),
+      ...(nativeCompactionRetryEligibility ? { retryEligibility: nativeCompactionRetryEligibility } : {}),
     },
   };
   cache.set(cacheKey, result);

@@ -127,6 +127,7 @@ function factEvent(sessionId: string, entry: LogEntry): WireEvent | null {
     case 'goal_changed':
     case 'events_retracted':
     case 'context_checkpoint_created':
+    case 'context_compaction_recorded':
     case 'command_message':
     case 'approval_required':
     case 'approval_resolved':

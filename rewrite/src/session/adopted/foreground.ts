@@ -17,6 +17,7 @@ import { FatalPersistenceError, isFatalPersistenceError } from '../../engine/ado
 import type { TurnInput } from '../../engine/index.js';
 import type { SessionDriver } from '../local-store.js';
 import type { Admission, SessionFact, SessionUpdate } from '../index.js';
+import { createCompactCommand } from './compact-command.js';
 import { createHistoryCommands } from './history-command.js';
 import { createInterruptCommand } from './interrupt-command.js';
 import { createRetryCommand } from './retry-command.js';
@@ -33,12 +34,7 @@ import {
 import { createTurnControl } from './turn-control.js';
 import { createTurnInteraction } from './turn-interaction.js';
 
-/**
- * Installs the source collaborators on the exact engine which owns their client.
- * This first foreground capability rejects tools and interactive commands until
- * their durable interaction owner is installed. It must not be selected as a
- * general-purpose client driver.
- */
+/** Installs the source collaborators on the exact engine which owns their client. */
 export function createAdoptedForeground(options: {
   context: AdoptedAdmissionContext;
   engine: AdoptedEngine;
@@ -48,6 +44,7 @@ export function createAdoptedForeground(options: {
     history: unknown[];
     previousResponseId: string | null;
     toolLedger?: Parameters<SessionRuntimeInternals['state']['importState']>[0]['toolLedger'];
+    coveredToolOccurrences?: Iterable<string>;
   };
   onSourceEvent?: (update: {
     requestId?: string;
@@ -59,6 +56,7 @@ export function createAdoptedForeground(options: {
   makeInput: (turnId: TurnInput['turnId']) => TurnInput;
   /** Request cancellation of this handle's source-owned background work. */
   cancelBackground?: () => void;
+  reserveNetworkForCompaction?: () => (() => void) | null;
   runtimeSettings?: AdoptedRuntimeSettings;
   /** Human grant on the exact client owning this foreground. */
   grantHumanRunBudgetExtension?: () => { granted: boolean; extensionsGranted: number };
@@ -131,7 +129,9 @@ export function createAdoptedForeground(options: {
     submit: unsupported,
     decide: unsupported,
     retry: unsupported,
-    compact: unsupported,
+    compact: async () => {
+      await compact.compact();
+    },
     setModel: unsupported,
     async cancel() {
       turn.stop();
@@ -486,6 +486,11 @@ export function createAdoptedForeground(options: {
   });
   const settings = createSettingsCommand(commandDeps, options.runtimeSettings);
   const retry = createRetryCommand(commandDeps, launch);
+  const compact = createCompactCommand(commandDeps, {
+    isSubmissionPending: () => pending.size > 0,
+    reserveNetworkForCompaction: options.reserveNetworkForCompaction,
+    emitSourceEvent: options.onSourceEvent,
+  });
   return {
     driver,
     /** The ordered canonical writer; it flushes buffered source facts before the given ones. */
@@ -495,6 +500,7 @@ export function createAdoptedForeground(options: {
       ...interrupt,
       ...settings,
       ...retry,
+      ...compact,
       decide(command: AdoptedInteractionCommand): Promise<void> {
         try {
           context.assertHealthy();
@@ -535,7 +541,7 @@ export function createAdoptedForeground(options: {
         }
         if (turn.poisoned !== undefined) return Promise.reject(turn.poisoned);
         if (turn.closing) return Promise.resolve({ kind: 'rejected', reason: 'closed' });
-        if (turn.interrupting || turn.settingMutation)
+        if (turn.interrupting || turn.settingMutation || turn.compacting)
           return Promise.reject(new Error('Session mutation is in progress'));
         const captured = captureAdoptedInput(value.input);
         if (context.state().status === 'closed') return Promise.resolve({ kind: 'rejected', reason: 'closed' });

@@ -141,10 +141,14 @@ export const projectLifecycle: Project = (state, entry: LogEntry) => {
 
 export function withTranscript(
   state: SessionState,
-  transcript: { readonly history: readonly unknown[]; readonly messages: readonly unknown[] },
+  transcript: {
+    readonly history: readonly unknown[];
+    readonly messages: readonly unknown[];
+    readonly retryEligibility?: { readonly turn: boolean; readonly tool: boolean };
+  },
   compatibilityItems: readonly Item[],
 ): SessionState {
-  const retryEligibility = projectRetryEligibility(transcript.history);
+  const retryEligibility = transcript.retryEligibility ?? projectRetryEligibility(transcript.history);
   const available = state.status === 'closed' ? { turn: false, tool: false } : retryEligibility;
   return {
     ...state,

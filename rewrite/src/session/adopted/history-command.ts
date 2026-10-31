@@ -21,7 +21,7 @@ export function createHistoryCommands(deps: AdoptedCommandDeps) {
       if (turn.poisoned !== undefined) return Promise.reject(turn.poisoned);
       if (turn.closing || context.state().status === 'closed')
         return Promise.reject(new Error('Session handle is closed'));
-      if (turn.interrupting) return Promise.reject(new Error('User interrupt is in progress'));
+      if (turn.interrupting || turn.compacting) return Promise.reject(new Error('User interrupt is in progress'));
       const owned = structuredClone(command);
       if (!owned || typeof owned !== 'object' || !['undo_last', 'undo_count', 'rewind'].includes(owned.kind))
         return Promise.reject(new Error('Invalid history command'));

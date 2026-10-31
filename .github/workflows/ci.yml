@@ -116,6 +116,7 @@ jobs:
           for mode in set fsync achieve propose-approve propose-race propose-reject; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-goal.mts; done
           for mode in human refusal fault; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-budget.mts; done
           for mode in basic held fsync; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-history-commands.mts; done
+          for mode in local accounting native interleaving; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-compaction.mts; done
           for mode in plain image skill disabled error retry approval failure cancel; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-memory.mts; done
           pnpm exec tsx rewrite/bench/c3a-owned-handle.mts
           pnpm exec tsx rewrite/bench/c3a-network.mts

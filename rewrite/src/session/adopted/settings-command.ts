@@ -42,7 +42,7 @@ export function createSettingsCommand(deps: AdoptedCommandDeps, runtimeSettings:
       if (existing) return existing;
       if (!runtimeSettings || !runtimeSettings.supports(command))
         return Promise.resolve({ kind: 'unsupported' as const });
-      if (turn.closing || turn.interrupting || context.state().status === 'closed')
+      if (turn.closing || turn.interrupting || turn.compacting || context.state().status === 'closed')
         return Promise.reject(new Error('Session is unavailable'));
       if (turn.poisoned !== undefined) return Promise.reject(turn.poisoned);
       if (!turn.settingMutation) {

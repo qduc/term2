@@ -7,8 +7,14 @@ import type { decideInteraction } from '../../../../source/gateway/interaction-p
 import type { UserMessage } from '../../../../source/types/message.js';
 import type { InputSurgeApproval } from '../../../../source/services/input-surge-approval.js';
 import { normalizeUserTurn, type UserTurn } from '../../../../source/types/user-turn.js';
+import type {
+  ConversationCompactionFailureReason,
+  ConversationCompactionOutcome,
+} from '../../../../source/services/session/manual-compaction.js';
 import { normalizedBodyHash } from './conversation-log.js';
 import type { SessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
+
+export type { ConversationCompactionFailureReason, ConversationCompactionOutcome };
 import type { TurnId } from '../../engine/index.js';
 import type { ToolCallId } from '../../model/index.js';
 import type {
@@ -72,6 +78,7 @@ export interface AdoptedSubmissionPort {
   submit(input: AdoptedSubmissionInput, options?: AdoptedSubmissionOptions): Promise<Admission>;
   decide(command: AdoptedInteractionCommand): Promise<void>;
   retry(target: AdoptedRetryTarget): Promise<AdoptedRetryResult>;
+  compact(): Promise<ConversationCompactionOutcome>;
   interruptFromUser(): Promise<void>;
   setRuntimeSettings(
     command: RuntimeSettingMutation,

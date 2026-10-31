@@ -3,7 +3,6 @@ import '../../../source/env-setup.js';
 
 import { readdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
-import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -14,46 +13,208 @@ import { resolveProfile } from '../../../source/services/profiles/resolver.js';
 import { BARE_PROFILE_ID, canonicalProfileId } from '../../../source/services/profiles/legacy-adapter.js';
 import { SessionContextService } from '../../../source/services/session/session-context-service.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
-import {
-  confirmHomeDirectoryStart,
-  HOME_DIRECTORY_START_WARNING,
-  shouldWarnOnHomeDirectoryStart,
-} from '../../../source/utils/home-directory-start-guard.js';
+import { shouldWarnOnHomeDirectoryStart } from '../../../source/utils/home-directory-start-guard.js';
+import { parseServeArgs, type ServeArgs } from '../../../source/gateway/serve-args.js';
+import { parseAcpArgs, type AcpArgs } from '../../../source/acp-v2/serve-args.js';
 import { createAppSettings } from './settings.js';
 import { run } from './run.js';
 import type { HeadlessIo } from '../clients/headless/index.js';
 
-const HELP = `Usage: term2 [options] [prompt...]
-
-Options:
-  --auto-approve    Allow automatic tool approval in a non-interactive run.
-  -R, --resume <id> Resume an exact direct conversation ID with a follow-up prompt.
-  --help            Show this help.
-  --version         Show the installed version.
-  --profile <name>  Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare).
-  --lite            Start in the Bare profile (alias kept from Lite).
-
-The direct CLI supports one prompt per invocation. Resume requires an exact direct conversation ID and a follow-up prompt.
-`;
-
-const REJECTED_SUBCOMMANDS = new Set(['acp', 'control', 'discord', 'serve']);
-const HOME_DIRECTORY_REFUSAL =
-  'Headless startup refused from the home or root directory. Start in a project directory.';
-const NO_PROMPT_MESSAGE = 'term2 needs an interactive terminal; for one-shot use: term2 "<prompt>"';
-
-type CliOptions = {
-  readonly prompt: string | null;
-  readonly autoApprove: boolean;
-  readonly lite: boolean;
-  readonly profile: string | null;
-  readonly resumeId: string | null;
-  readonly help: boolean;
-  readonly version: boolean;
+/**
+ * One flag as the direct executable parses it. `pending` marks a flag that
+ * parses but cannot run yet; using it fails before any side effect and never
+ * starts the current CLI. Its phrase says where the flag lands.
+ */
+type Flag = {
+  readonly names: readonly string[];
+  readonly label: string;
+  readonly help: string;
+  /** 'required' takes the next token or `--x=value`; 'optional' takes only `--x=value`. */
+  readonly value?: 'required' | 'optional';
+  readonly pending?: string;
 };
 
-function parseArgs(argv: readonly string[]): CliOptions {
+const TBD = 'no milestone yet';
+
+/** Builds one flag. `suffix` is its help placeholder: ' <x>' takes a required value, '[=<x>]' an optional one. */
+const opt = (names: string[], suffix: string, help: string, pending?: string): Flag => {
+  const value: Flag['value'] = suffix.startsWith(' <') ? 'required' : suffix.startsWith('[=') ? 'optional' : undefined;
+  return { names, label: names.join(', ') + suffix, help, value, pending };
+};
+
+// Order and wording follow the current CLI's Options section (source/cli.tsx).
+const FLAGS: readonly Flag[] = [
+  opt(['-m', '--model'], ' <model>', 'Model pattern or ID, supports provider/id and optional :<thinking>', TBD),
+  opt(['-p', '--provider'], ' <provider>', 'Override the configured provider (e.g. openai, openrouter)', TBD),
+  opt(
+    ['-r', '--reasoning'],
+    ' <effort>',
+    'Set reasoning effort (default, none, minimal, low, medium, high, xhigh)',
+    TBD,
+  ),
+  opt(['--goal'], ' <text>', 'Persist a user-authored session outcome (max 2,000 characters)', 'lands in M4'),
+  opt(
+    ['--goal-criteria'],
+    ' <text>',
+    'Optional success criteria (max 2,000 characters; requires --goal)',
+    'lands in M4',
+  ),
+  opt(['--profile'], ' <name>', 'Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)'),
+  opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),
+  opt(['--auto-approve'], '', 'Allow tool execution for a non-interactive prompt'),
+  opt(['-q', '--quiet'], '', 'Suppress non-error diagnostics on stderr in non-interactive mode', 'lands in M4'),
+  opt(['--show-reasoning'], '', 'Stream reasoning deltas to stderr in non-interactive mode', 'lands in M4'),
+  opt(['--json'], '', 'Emit newline-delimited JSON (NDJSON) events in non-interactive mode', 'lands in M4'),
+  opt(['--ssh'], ' <user@host>', 'Enable SSH mode for a remote host', TBD),
+  opt(
+    ['--discord-input'],
+    '',
+    'Allow Discord input and explicit root notifications on this control socket',
+    'lands in M6',
+  ),
+  opt(['--remote-dir'], ' <path>', 'Remote working directory (required for non-lite SSH sessions)', TBD),
+  opt(['--ssh-port'], ' <port>', 'SSH port (default: 22)', TBD),
+  opt(['--control-socket'], '[=<name>]', 'Enable a local socket for the interactive TUI', 'lands in M6'),
+  opt(['--grok-login'], '', 'Log in to Grok in a browser (OAuth) and exit', TBD),
+  opt(['--codex-login'], '', 'Log in to Codex/ChatGPT in a browser (OAuth) and exit', TBD),
+  opt(
+    ['--list-models'],
+    ' [search]',
+    'Print available models grouped by provider, filtered by an optional search term',
+    TBD,
+  ),
+  opt(['--refresh'], '', 'With --list-models, bypass the model catalog cache and re-fetch before listing', TBD),
+  opt(['-R', '--resume'], ' <id>', 'Resume an exact direct conversation ID with a follow-up prompt.'),
+  opt(['--fork'], '', 'Fork the resumed conversation into a new session (requires --resume)', TBD),
+  opt(['-h', '--help'], '', 'Show help'),
+  opt(['-v', '--version'], '', 'Show version'),
+];
+
+const FLAG_BY_NAME = new Map(FLAGS.flatMap((flag) => flag.names.map((name) => [name, flag] as const)));
+
+const SUBCOMMANDS = new Set(['serve', 'acp', 'control', 'discord']);
+const CONTROL_COMMANDS = new Set(['list', 'status', 'get', 'submit', 'steer', 'interrupt', 'wait-turn']);
+const CONTROL_USAGE =
+  'Usage: term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] | submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>\n';
+
+// Copied from source/services/discord/discord-command.ts, whose module pulls in the old bridge runtime.
+const DISCORD_HELP = `Discord bridge (candidate) — attach existing opted-in terminal sessions.
+
+Usage:
+  term2 discord [ /absolute/path/discord.json ]
+  term2 discord --save-token [ /absolute/path/discord.json ]
+  term2 discord --help
+
+Default config: $XDG_CONFIG_HOME/term2/discord.json, otherwise ~/.config/term2/discord.json.
+Create JSON with channelId, humanUserId, coordinator, stateDir and optional maxHops.
+Keep the token out of JSON. --save-token enrolls it with hidden input on a TTY,
+stores discord.token beside the config, then exits without starting the bridge.
+The config directory must be user-owned/private (0700); token file private (0600).
+TERM2_DISCORD_BOT_TOKEN on the bridge process overrides the stored token.
+
+Finish term2 provider setup first and keep an interactive term2 session running.
+In that session, opt in locally with /bridge connect [name] (default: coord).
+This attaches a local session; it does not verify the standalone bridge can reach Discord.
+Only explicit discord_send calls post to Discord; ordinary final answers do not.
+Ask: "Reply in Discord using discord_send." Status, approvals and questions stay local.
+
+First-run checklist and reference: docs/reference/discord-bridge.md
+https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md
+Candidate: live Discord/mobile validation is still outstanding.
+`;
+
+const optionLines = FLAGS.map((flag) => `  ${flag.label.padEnd(38)}${flag.help}${flag.pending ? ' *' : ''}`).join('\n');
+
+const HELP = `Usage: term2 [options] [prompt...]
+       term2 <serve|acp|control|discord> [arguments]
+
+Options:
+${optionLines}
+
+Subcommands:
+  term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>] *
+      [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
+      [--pairing] [--bff-key <kid>=<pem path>]... [--workspace-root <dir>]...
+      [--issuer <iss>] [--audience <aud>] [--allow-write]
+        Run the local web gateway until SIGINT/SIGTERM.
+  term2 acp [--provider <provider>] [--model <model>] [--effort <effort>] *
+        Serve the Agent Client Protocol v2 over stdio. Stdout carries protocol traffic only.
+  term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] | *
+      submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>
+        Talk to a live control socket.
+  term2 discord [config.json] | --save-token [config.json] | --help *
+        Run the Discord bridge. --help prints its reference.
+
+The direct CLI supports one prompt per invocation. Resume requires an exact direct conversation ID and a follow-up prompt.
+* Not available in the direct executable yet. These fail with an error; they never start the current CLI.
+`;
+
+const NO_PROMPT_MESSAGE = 'term2 needs an interactive terminal; for one-shot use: term2 "<prompt>"';
+const HOME_DIRECTORY_REFUSAL =
+  'Headless startup refused from the home or root directory. Start in a project directory.';
+
+/**
+ * What the executable was asked to do. `headless` is the only mode that runs
+ * today. `serve`, `acp`, `control`, `discord` and interactive TUI carry their
+ * parsed arguments so the app owner can wire dispatch without re-parsing; until
+ * then `main` refuses them. Adding a mode means adding its kind here.
+ */
+type Command =
+  | { readonly kind: 'help' }
+  | { readonly kind: 'version' }
+  | { readonly kind: 'discord-help' }
+  | { readonly kind: 'pending'; readonly name: string; readonly pending: string }
+  | {
+      readonly kind: 'headless';
+      readonly prompt: string;
+      readonly autoApprove: boolean;
+      readonly lite: boolean;
+      readonly profile: string | null;
+      readonly resumeId: string | null;
+    }
+  | { readonly kind: 'interactive' }
+  | { readonly kind: 'serve'; readonly args: ServeArgs }
+  | { readonly kind: 'acp'; readonly args: AcpArgs }
+  | { readonly kind: 'control'; readonly valid: boolean; readonly argv: readonly string[] }
+  | { readonly kind: 'discord'; readonly argv: readonly string[] };
+
+function notAvailable(what: string, pending: string): Error {
+  return new Error(`${what} is not available in the direct executable (${pending}).`);
+}
+
+function longName(flag: Flag): string {
+  return flag.names.find((name) => name.startsWith('--')) ?? flag.names[0]!;
+}
+
+function parseResumeId(value: string): string {
+  if (value.startsWith('-')) throw new Error('--resume requires an exact conversation ID');
+  if (!/^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    throw new Error('--resume requires an exact direct conversation ID');
+  }
+  return value;
+}
+
+function parseSubcommand(name: string, rest: readonly string[], globalFlagsSeen: boolean): Command {
+  if (globalFlagsSeen) throw new Error(`term2 ${name} must be the first argument`);
+  if (name === 'serve') {
+    const parsed = parseServeArgs(rest);
+    if (!parsed.ok) throw new Error(`term2 serve: ${parsed.error}`);
+    return { kind: 'serve', args: parsed.args };
+  }
+  if (name === 'acp') {
+    const parsed = parseAcpArgs(rest);
+    if (!parsed.ok) throw new Error(`term2 acp: ${parsed.error}`);
+    return { kind: 'acp', args: parsed.args };
+  }
+  if (name === 'control') return { kind: 'control', valid: CONTROL_COMMANDS.has(rest[0] ?? ''), argv: rest };
+  if (rest.length === 1 && (rest[0] === '--help' || rest[0] === '-h')) return { kind: 'discord-help' };
+  return { kind: 'discord', argv: rest };
+}
+
+/** Pure: parses argv into one command. Throws on usage errors, with the messages the current CLI uses where they apply. */
+function parseCommandLine(argv: readonly string[]): Command {
   const positional: string[] = [];
-  const unknownFlags: string[] = [];
+  const seen: Flag[] = [];
   let autoApprove = false;
   let lite = false;
   let profile: string | null = null;
@@ -68,48 +229,62 @@ function parseArgs(argv: readonly string[]): CliOptions {
       endOfOptions = true;
       continue;
     }
-    if (!endOfOptions && token === '--auto-approve') {
-      autoApprove = true;
-    } else if (!endOfOptions && token === '--lite') {
-      lite = true;
-    } else if (!endOfOptions && (token === '--resume' || token === '-R')) {
-      if (resumeId !== null) throw new Error('--resume may only be specified once');
-      const value = argv[++index];
-      if (value === undefined || value.startsWith('-')) throw new Error('--resume requires an exact conversation ID');
-      if (!/^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-        throw new Error('--resume requires an exact direct conversation ID');
+    if (!endOfOptions && token.startsWith('-') && token !== '-') {
+      const equals = token.startsWith('--') ? token.indexOf('=') : -1;
+      const name = equals > 0 ? token.slice(0, equals) : token;
+      const flag = FLAG_BY_NAME.get(name);
+      if (!flag) throw new Error(`Unknown option: ${token}`);
+      const inlineValue = equals > 0 ? token.slice(equals + 1) : undefined;
+      if (flag.value === undefined && inlineValue !== undefined) throw new Error(`${name} does not take a value`);
+      let value: string | undefined;
+      if (flag.value === 'required') {
+        value = inlineValue ?? argv[++index];
+        if (value === undefined || value === '' || (inlineValue === undefined && value.startsWith('--'))) {
+          throw new Error(`${name} requires a value`);
+        }
       }
-      resumeId = value;
-    } else if (!endOfOptions && token === '--help') {
-      help = true;
-    } else if (!endOfOptions && token === '--version') {
-      version = true;
-    } else if (!endOfOptions && (token === '--profile' || token.startsWith('--profile='))) {
-      const value = token === '--profile' ? argv[++index] : token.slice('--profile='.length);
-      if (value === undefined || value.length === 0 || value.startsWith('--')) {
-        throw new Error('--profile requires a value');
+      seen.push(flag);
+      switch (longName(flag)) {
+        case '--auto-approve':
+          autoApprove = true;
+          break;
+        case '--lite':
+          lite = true;
+          break;
+        case '--profile':
+          profile = value!;
+          break;
+        case '--resume':
+          if (resumeId !== null) throw new Error('--resume may only be specified once');
+          resumeId = parseResumeId(value!);
+          break;
+        case '--help':
+          help = true;
+          break;
+        case '--version':
+          version = true;
+          break;
       }
-      profile = value;
-    } else if (!endOfOptions && token.startsWith('-')) {
-      unknownFlags.push(token);
-    } else {
-      positional.push(token);
+      continue;
     }
+    if (positional.length === 0 && !endOfOptions && SUBCOMMANDS.has(token)) {
+      return parseSubcommand(token, argv.slice(index + 1), seen.length > 0);
+    }
+    positional.push(token);
   }
 
-  const unsupportedCommand = positional[0] && REJECTED_SUBCOMMANDS.has(positional[0]) ? positional[0] : undefined;
-  if (unsupportedCommand) throw new Error(`Unsupported subcommand: ${unsupportedCommand}`);
-  if (unknownFlags.length > 0) throw new Error(`Unknown option: ${unknownFlags[0]}`);
+  if (help) return { kind: 'help' };
+  if (version) return { kind: 'version' };
+  const pendingFlag = seen.find((flag) => flag.pending !== undefined);
+  if (pendingFlag) return { kind: 'pending', name: longName(pendingFlag), pending: pendingFlag.pending! };
 
-  return {
-    prompt: positional.length > 0 ? positional.join(' ').trim() : null,
-    autoApprove,
-    lite,
-    profile,
-    resumeId,
-    help,
-    version,
-  };
+  const prompt = positional.length > 0 ? positional.join(' ').trim() : null;
+  if (prompt === '') return { kind: 'help' };
+  if (prompt === null) {
+    if (resumeId !== null) throw new Error('--resume requires a follow-up prompt');
+    return { kind: 'interactive' };
+  }
+  return { kind: 'headless', prompt, autoApprove, lite, profile, resumeId };
 }
 
 function packageVersion(): string {
@@ -156,7 +331,10 @@ async function checkConversationsDirectory(directory: string): Promise<void> {
   }
 }
 
-function chooseProfile(options: CliOptions, settings: ReturnType<typeof createAppSettings>['service']): string {
+function chooseProfile(
+  options: { readonly profile: string | null; readonly lite: boolean },
+  settings: ReturnType<typeof createAppSettings>['service'],
+): string {
   const currentProfile = String(settings.get('app.activeProfileId'));
   let profileId: string;
   if (options.profile !== null) {
@@ -216,48 +394,11 @@ async function runWithSignals(
   return { kind: result.kind, ...(receivedSignal === undefined ? {} : { signal: receivedSignal }) };
 }
 
-async function main(argv: readonly string[]): Promise<number> {
-  const options = parseArgs(argv);
-  if (options.help || options.prompt === '') {
-    stdout.write(HELP);
-    return 0;
-  }
-  if (options.version) {
-    stdout.write(`${packageVersion()}\n`);
-    return 0;
-  }
-
+async function runHeadless(command: Extract<Command, { kind: 'headless' }>): Promise<number> {
   const cwd = path.resolve(process.cwd());
   const home = path.resolve(homedir());
-  const refusedAtHome = shouldWarnOnHomeDirectoryStart({
-    cwd,
-    homeDir: home,
-    isNonLiteStart: !options.lite && (options.prompt === null || options.autoApprove),
-  });
-  if (refusedAtHome) {
-    if (options.prompt !== null) {
-      stderr.write(`${HOME_DIRECTORY_REFUSAL}\n`);
-      return 1;
-    }
-    if (!stdin.isTTY || !stdout.isTTY) {
-      stderr.write(`${HOME_DIRECTORY_START_WARNING.trimEnd()}\nCancelled.\n`);
-      return 1;
-    }
-    const readline = createInterface({ input: stdin, output: stdout });
-    try {
-      const confirmed = await confirmHomeDirectoryStart(() => readline.question(HOME_DIRECTORY_START_WARNING));
-      if (!confirmed) {
-        stderr.write('Cancelled.\n');
-        return 1;
-      }
-    } finally {
-      readline.close();
-    }
-  }
-
-  if (options.prompt === null) {
-    if (options.resumeId !== null) throw new Error('--resume requires a follow-up prompt');
-    stderr.write(`${NO_PROMPT_MESSAGE}\n`);
+  if (shouldWarnOnHomeDirectoryStart({ cwd, homeDir: home, isNonLiteStart: !command.lite && command.autoApprove })) {
+    stderr.write(`${HOME_DIRECTORY_REFUSAL}\n`);
     return 1;
   }
 
@@ -271,22 +412,57 @@ async function main(argv: readonly string[]): Promise<number> {
     disableFilePersistence: true,
     loggingService: logger,
   });
-  const profileId = chooseProfile(options, settings);
-  stderr.write(`Profile: ${profileId === 'builtin:standard' ? 'full' : profileId.replace(/^builtin:/, '')}\n`);
+  // The profile is announced by the app after a resumed selection is restored; announcing here would show the pre-restore value.
+  chooseProfile(command, settings);
 
   const io: HeadlessIo = { stdout, stderr };
   const result = await runWithSignals({
-    prompt: options.prompt,
+    prompt: command.prompt,
     conversationsDir: directory,
     selection: { settings, logger, sessionContext },
     io,
-    autoApprove: options.autoApprove,
-    ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
-    profileExplicit: options.profile !== null || options.lite,
+    autoApprove: command.autoApprove,
+    ...(command.resumeId === null ? {} : { resumeId: command.resumeId }),
+    profileExplicit: command.profile !== null || command.lite,
   });
   if (result.kind === 'completed') return 0;
   if (result.kind === 'cancelled') return result.signal ? exitCodeForSignal(result.signal) : 1;
   return 1;
+}
+
+async function main(argv: readonly string[]): Promise<number> {
+  const command = parseCommandLine(argv);
+  switch (command.kind) {
+    case 'help':
+      stdout.write(HELP);
+      return 0;
+    case 'version':
+      stdout.write(`${packageVersion()}\n`);
+      return 0;
+    case 'discord-help':
+      stdout.write(DISCORD_HELP);
+      return 0;
+    case 'pending':
+      throw notAvailable(command.name, command.pending);
+    case 'interactive':
+      if (stdin.isTTY && stdout.isTTY) throw notAvailable('The interactive terminal UI', 'lands in M5');
+      stderr.write(`${NO_PROMPT_MESSAGE}\n`);
+      return 1;
+    case 'serve':
+      throw notAvailable('term2 serve', 'lands in M6');
+    case 'acp':
+      throw notAvailable('term2 acp', 'lands in M6');
+    case 'control':
+      if (!command.valid) {
+        stderr.write(CONTROL_USAGE);
+        return 1;
+      }
+      throw notAvailable('term2 control', 'lands in M6');
+    case 'discord':
+      throw notAvailable('term2 discord', 'lands in M6');
+    case 'headless':
+      return runHeadless(command);
+  }
 }
 
 // Exit explicitly. Draining naturally would hand signals back to their default

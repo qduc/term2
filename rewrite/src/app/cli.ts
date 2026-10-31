@@ -17,6 +17,8 @@ import { SessionContextService } from '../../../source/services/session/session-
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import { shouldWarnOnHomeDirectoryStart } from '../../../source/utils/home-directory-start-guard.js';
 import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
+import type { ServeArgs } from '../../../source/gateway/serve-args.js';
+import type { DirectLaunchBase } from './direct-launch-types.js';
 import type { InteractivePickerRequest } from '../../../source/services/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
 import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
@@ -43,10 +45,6 @@ const HOME_DIRECTORY_REFUSAL =
   'Headless startup refused from the home or root directory. Start in a project directory.';
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-function notAvailable(what: string, milestone: string): Error {
-  return new Error(`${what} is not available in the direct executable yet (${milestone}).`);
-}
 
 function refused(refusal: Refusal): Error {
   return new Error(`${refusal.flag} is not available in the direct executable yet: ${refusal.reason}.`);
@@ -124,7 +122,7 @@ function exitCodeForSignal(signal: NodeJS.Signals): number {
 async function runWithSignals(
   request: DirectHeadlessRequest,
 ): Promise<{
-  readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused';
+  readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked';
   readonly signal?: NodeJS.Signals;
 }> {
   // The handle has no started bit. Latch observed activity so later inactivity
@@ -348,6 +346,8 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
   if (result.kind === 'completed') return 0;
   // A resumable context pause exits 2, as the current CLI does; the recovery text was already printed.
   if (result.kind === 'context_paused') return 2;
+  // A blocked turn (goal check unresolved, completion verification blocked, run budget paused) exits 2 with the notice already printed.
+  if (result.kind === 'blocked') return 2;
   if (result.kind === 'cancelled') return result.signal ? exitCodeForSignal(result.signal) : 1;
   return 1;
 }
@@ -400,7 +400,8 @@ async function runInteractive(options: SessionOptions): Promise<number> {
   return launchDirect(request);
 }
 
-async function runAcp(args: AcpArgs): Promise<number> {
+/** The conversations directory and a non-persisting settings selection, shared by the launcher modes that take no CLI overrides. */
+async function launcherBase(): Promise<Pick<DirectLaunchBase, 'conversationsDir' | 'selection'>> {
   const directory = conversationsDirectory();
   await checkConversationsDirectory(directory);
 
@@ -411,13 +412,17 @@ async function runAcp(args: AcpArgs): Promise<number> {
     disableFilePersistence: true,
     loggingService: logger,
   });
+  return { conversationsDir: directory, selection: { settings, logger, sessionContext } };
+}
+
+async function runAcp(args: AcpArgs): Promise<number> {
   // The launcher resolves --provider, --model and --effort itself, so no overrides are applied here.
-  return launchDirect({
-    kind: 'acp',
-    conversationsDir: directory,
-    selection: { settings, logger, sessionContext },
-    args,
-  });
+  return launchDirect({ kind: 'acp', ...(await launcherBase()), args });
+}
+
+async function runServe(args: ServeArgs): Promise<number> {
+  // The serve launcher runs until SIGINT/SIGTERM and owns those signals; this does not install handlers.
+  return launchDirect({ kind: 'serve', ...(await launcherBase()), args });
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -448,8 +453,7 @@ async function main(argv: readonly string[]): Promise<number> {
       if (command.refused) throw refused(command.refused);
       return runHeadless(command.prompt, command.options);
     case 'serve':
-      // Waits for the host config the direct serve launcher needs; never falls back to the current CLI.
-      throw notAvailable('term2 serve', 'waits for host config (M6)');
+      return runServe(command.args);
     case 'acp':
       return runAcp(command.args);
     case 'control':

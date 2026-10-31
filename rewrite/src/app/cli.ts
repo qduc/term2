@@ -154,11 +154,8 @@ function chooseProfile(options: CliOptions, settings: ReturnType<typeof createAp
   } else if (options.lite) {
     profileId = BARE_PROFILE_ID;
   } else {
-    const implicitLite = Boolean(options.prompt && !options.autoApprove);
-    profileId =
-      implicitLite && !['builtin:orchestrator', 'builtin:mentor'].includes(currentProfile)
-        ? BARE_PROFILE_ID
-        : currentProfile;
+    // Auto-approval does not select a workflow; honor the saved profile.
+    profileId = currentProfile;
   }
 
   settings.set('app.activeProfileId', profileId, { persist: false });

@@ -78,7 +78,7 @@ async function respond(res, step) {
   res.end();
 }
 
-async function scenario(script, agent = {}) {
+async function scenario(script, agent = {}, app = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'm1-bench-')));
   const s = {
     root,
@@ -112,6 +112,7 @@ async function scenario(script, agent = {}) {
     path.join(stateDir, 'settings.json'),
     JSON.stringify({
       agent: { retryAttempts: 0, modelSelection: { model: MODEL.model, provider: MODEL.provider }, ...agent },
+      app,
       providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
       sandbox: { enabled: false },
     }),
@@ -986,6 +987,65 @@ row('R18', 'environment overrides reach the request', async () => {
     await s.close();
   }
 });
+
+// Saved workflow policy must survive positional prompts independently of auto-approval.
+// Exercise the executable boundary: settings -> surface/provider request -> durable profile.
+for (const [index, { configured, args, expected }] of [
+  { configured: 'pair', args: [], expected: 'pair' },
+  { configured: 'plan', args: [], expected: 'plan' },
+  { configured: 'mentor', args: [], expected: 'mentor' },
+  { configured: 'orchestrator', args: [], expected: 'orchestrator' },
+  { configured: undefined, args: [], expected: 'bare' },
+  { configured: undefined, args: ['--auto-approve'], expected: 'bare' },
+  { configured: 'pair', args: ['--auto-approve'], expected: 'pair' },
+  { configured: 'plan', args: ['--auto-approve'], expected: 'plan' },
+  { configured: 'pair', args: ['--lite'], expected: 'bare' },
+  { configured: 'plan', args: ['--lite', '--auto-approve'], expected: 'bare' },
+  { configured: 'plan', args: ['--profile', 'pair'], expected: 'pair' },
+  { configured: 'pair', args: ['--profile', 'plan'], expected: 'plan' },
+  { configured: 'pair', args: ['--profile', 'bare'], expected: 'bare' },
+  { configured: 'plan', args: ['--lite', '--profile', 'pair'], expected: 'pair' },
+  { configured: 'pair', args: ['--profile', 'full'], expected: 'bare' },
+].entries()) {
+  row(`R19.${index + 1}`, `saved ${configured ?? 'default'} ${args.join(' ')} selects ${expected}`, async () => {
+    const s = await scenario(
+      okScript('Profile selected.'),
+      {},
+      configured ? { activeProfileId: `builtin:${configured}` } : {},
+    );
+    try {
+      fs.writeFileSync(path.join(s.workspace, 'AGENTS.md'), 'M1_PROFILE_CONTEXT_MARKER\n');
+      const settingsFile = path.join(s.home, '.local', 'state', 'term2-nodejs', 'settings.json');
+      const savedSettings = fs.readFileSync(settingsFile);
+      const r = await runCli(s, [...args, 'select the configured profile']);
+      assert.equal(r.code, 0, r.stderr);
+      assert.equal(r.stdout, 'Profile selected.\n');
+      assert.equal(r.stderr, `Profile: ${expected}\n`);
+      assert.equal(s.requests.length, 1);
+      const wire = JSON.stringify(s.requests[0]);
+      assert.ok(wire.includes('M1_PROFILE_CONTEXT_MARKER'), 'project context reaches the provider');
+      const bareIdentity = "You are a coding assistant working in the user's checkout.";
+      assert.equal(wire.includes(bareIdentity), expected === 'bare', 'selected instruction identity');
+      for (const profile of ['Pair', 'Plan']) {
+        assert.equal(
+          lastUserText(s.requests[0]).includes(`${profile} Mode is ON`),
+          expected === profile.toLowerCase(),
+          'selected workflow notice',
+        );
+      }
+      const facts = readFacts(onlyFile(s.convDir));
+      assert.equal(facts[0].type, 'session_started');
+      assert.equal(facts[0].profile.id, `builtin:${expected}`);
+      assert.ok(facts[0].profile.version);
+      assert.ok(facts[0].profile.digest);
+      assert.equal(textOf(facts[1].input[0]), 'select the configured profile', 'notice is not stored as human input');
+      assert.equal(facts.at(-1).outcome, 'completed');
+      assert.deepEqual(fs.readFileSync(settingsFile), savedSettings, 'session overrides do not rewrite saved settings');
+    } finally {
+      await s.close();
+    }
+  });
+}
 
 // ---------- Runner ----------
 

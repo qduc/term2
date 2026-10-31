@@ -28329,6 +28329,43 @@
         "/home/qduc/coord/term2/tasks/direct-engine-rewrite/final-evidence/live-codex.log"
       ],
       "notes": "Each provider: answer exit 0; follow-up through the public session API recalled 7Q4X from replayed history; mid-stream SIGINT exit 130 with all stdout in the log; follow-up after cancel completed (Grok answered 7, Codex 300, model behaviour). Reused for bd5b3201: its runtime change only moves line building inside the append try block, and the bench and probes rerun there cover that path."
+    },
+    {
+      "id": "2026-10-31-m1-direct-path-hops",
+      "timestamp": "2026-10-31T11:21:15Z",
+      "commit": "9e2f2c30f5fbcde9dc8dd99489b220f75c7faa31",
+      "tree": "9f68ddac9410b125e430cebab3426079815e8b30",
+      "revision_kind": "clean commit",
+      "base_commit": "6a192b81335cb1772bad76f5ae5e2a72b6761073",
+      "task_ids": ["2026-10-31-m1-direct-path"],
+      "suite": "One-off direct-path hops measure (spec section 7), not a gate",
+      "command": "node --import tsx hops-evidence/direct-hops.mts run; node --import tsx hops-evidence/direct-hops.mts cli; node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Local fixture provider, no network. Each of the three commands ran three times with identical output. The bridge baseline used an empty HOME with XDG variables unset."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/hops-report.md",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/hops-evidence/direct-hops.mts",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/hops-evidence/segment-analysis.txt",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/hops-evidence/run-1.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/hops-evidence/cli-1.log",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/hops-evidence/bridge-1.log"
+      ],
+      "notes": "A measurement, not a pass/fail gate. hops.mts metric: run() to provider 24 hops through 6 files, cli.ts to provider 27 through 7, bridge submit to provider 29 through 7. The direct figures count one 8-hop synchronous descent three times, because three promises from the lazy turnModel() chain carry the same stack; one pass is 8 hops from run() and 9 from cli.ts, against 23 for the bridge on the same dedupe."
     }
   ]
 }

@@ -162,8 +162,8 @@ export function launchControl(argv: readonly string[]): Promise<number> {
   return runControlCommand([...argv], stdout, stderr);
 }
 
-/** The bridge owns and awaits its own signal lifecycle, so this installs none. */
+/** The bridge owns its signal lifecycle and reports a signal stop (130/143) through `process.exitCode`. */
 export async function launchDiscord(argv: readonly string[]): Promise<number> {
   await runDiscordBridge([...argv]);
-  return 0;
+  return Number(process.exitCode ?? 0);
 }

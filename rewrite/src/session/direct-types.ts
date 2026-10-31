@@ -105,11 +105,10 @@ export type ConversationDeps = TurnDeps & {
     configuration: import('./direct-command-types.js').DirectCommandConfiguration,
     signal: AbortSignal,
   ) => Promise<import('./direct-configuration.js').DirectPreparedConfiguration>;
-  /** Called once under the command reservation, before any foreground cancellation.
-   * App owns veto/successor creation; Session alone persists its actual outcome. */
-  readonly rollover?: (
-    request?: import('./direct-command-types.js').DirectRolloverRequest,
-  ) => Promise<import('./direct-command-types.js').DirectCommandOutcome>;
+  /** Prepare only under the command reservation; native owns rotation and admission. */
+  readonly rollover?: import('./direct-session-rotation.js').DirectRolloverPreparer;
+  /** Store-owned physical boundary, never supplied by app as write authority. */
+  readonly rotationBoundary?: () => import('./direct-rolling-log.js').DirectLogBoundary;
   readonly authorizeNested?: import('./direct-branches.js').DirectNestedAuthorizer;
   readonly publishNotice?: (notice: import('./direct-memory.js').DirectAutomaticMemoryNotice) => void;
   readonly publishBranch?: (event: import('./facade-types.js').DirectBranchTransient) => void;

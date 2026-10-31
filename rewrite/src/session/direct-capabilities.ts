@@ -20,6 +20,8 @@ import type { DirectBackgroundTasks } from './direct-background.js';
 
 export type DirectContextPort = {
   readonly sessionId: string;
+  /** Live read-only physical identity; sessionId remains the original logical owner. */
+  readonly backingSessionId: string;
   read(): DirectContextState;
   /** Generation CAS and candidate reduction occur before the sole writer append. */
   commit(expectedGeneration: number, facts: readonly DirectContextFact[]): boolean;

@@ -115,7 +115,9 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   };
   const publishState = (): void => publish({ type: 'state', position: ++position, state: publicState() });
   const observedLog: ConversationLog = {
-    path: options.log.path,
+    get path() {
+      return options.log.path;
+    },
     append(facts) {
       const accepted = JSON.parse(JSON.stringify(facts)) as Fact[];
       // Invalid projections fail before disk mutation; install/publication happen

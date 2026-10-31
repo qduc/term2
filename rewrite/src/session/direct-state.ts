@@ -34,6 +34,7 @@ export type DirectPublicState = Omit<DirectSessionState, 'tools'> & {
 export function initialDirectState(id: string, workspace: Workspace, model: ModelRef): DirectPublicState {
   return {
     id,
+    backingSessionId: id,
     workspace,
     model,
     status: 'idle',
@@ -137,6 +138,25 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
     };
   }
   switch (fact.type) {
+    case 'session_rotated':
+      return {
+        ...state,
+        backingSessionId: fact.sessionId,
+        model: fact.configuration.model,
+        configuration: { configuration: fact.configuration, intent: fact.intent, profile: fact.profile },
+        status: 'idle',
+        activeTurnId: null,
+        messages: [],
+        tools: [],
+        drafts: [],
+        reasoning: '',
+        usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
+        terminal: null,
+        runtimeError: null,
+        timeline: [],
+        turnResults: [],
+        // Task/queue/command/goal/notification owners and request-cost accounting survive.
+      };
     case 'history_replaced': {
       const retained = new Set(fact.history.map((item) => item.id));
       const messages = fact.history.flatMap((item) => {

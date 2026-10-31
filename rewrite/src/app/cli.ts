@@ -26,13 +26,14 @@ import type { HeadlessIo } from '../clients/headless/index.js';
 const HELP = `Usage: term2 [options] [prompt...]
 
 Options:
-  --auto-approve    Allow automatic tool approval in a non-interactive run (M1 does not execute tool calls).
+  --auto-approve    Allow automatic tool approval in a non-interactive run.
+  -R, --resume <id> Resume an exact direct conversation ID with a follow-up prompt.
   --help            Show this help.
   --version         Show the installed version.
   --profile <name>  Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare).
   --lite            Start in the Bare profile (alias kept from Lite).
 
-The M1 direct CLI supports one text-only prompt. Interactive mode, resume, and tools are not available yet.
+The direct CLI supports one prompt per invocation. Resume requires an exact direct conversation ID and a follow-up prompt.
 `;
 
 const REJECTED_SUBCOMMANDS = new Set(['acp', 'control', 'discord', 'serve']);
@@ -45,6 +46,7 @@ type CliOptions = {
   readonly autoApprove: boolean;
   readonly lite: boolean;
   readonly profile: string | null;
+  readonly resumeId: string | null;
   readonly help: boolean;
   readonly version: boolean;
 };
@@ -55,6 +57,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
   let autoApprove = false;
   let lite = false;
   let profile: string | null = null;
+  let resumeId: string | null = null;
   let help = false;
   let version = false;
   let endOfOptions = false;
@@ -69,6 +72,14 @@ function parseArgs(argv: readonly string[]): CliOptions {
       autoApprove = true;
     } else if (!endOfOptions && token === '--lite') {
       lite = true;
+    } else if (!endOfOptions && (token === '--resume' || token === '-R')) {
+      if (resumeId !== null) throw new Error('--resume may only be specified once');
+      const value = argv[++index];
+      if (value === undefined || value.startsWith('-')) throw new Error('--resume requires an exact conversation ID');
+      if (!/^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+        throw new Error('--resume requires an exact direct conversation ID');
+      }
+      resumeId = value;
     } else if (!endOfOptions && token === '--help') {
       help = true;
     } else if (!endOfOptions && token === '--version') {
@@ -95,6 +106,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
     autoApprove,
     lite,
     profile,
+    resumeId,
     help,
     version,
   };
@@ -244,6 +256,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 
   if (options.prompt === null) {
+    if (options.resumeId !== null) throw new Error('--resume requires a follow-up prompt');
     stderr.write(`${NO_PROMPT_MESSAGE}\n`);
     return 1;
   }
@@ -267,6 +280,9 @@ async function main(argv: readonly string[]): Promise<number> {
     conversationsDir: directory,
     selection: { settings, logger, sessionContext },
     io,
+    autoApprove: options.autoApprove,
+    ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
+    profileExplicit: options.profile !== null || options.lite,
   });
   if (result.kind === 'completed') return 0;
   if (result.kind === 'cancelled') return result.signal ? exitCodeForSignal(result.signal) : 1;

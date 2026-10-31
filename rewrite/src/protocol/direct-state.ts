@@ -6,6 +6,7 @@ import type { DirectContextState } from '../session/direct-context.js';
 import { publicContext } from './direct-context.js';
 import type { DirectTaskState } from '../session/direct-background-types.js';
 import type { DirectQueueState } from '../session/direct-queue-types.js';
+import { publicCommandReceipt } from './direct-command-receipts.js';
 import { publicRequestCost } from './direct-costs.js';
 import { publicBudgetRequest } from './direct-budget.js';
 import { publicTurnResults } from './direct-turn-results.js';
@@ -56,6 +57,7 @@ export function snapshotDirectState(state: DirectSessionState & { readonly tasks
     budgetObservations: previous?.budgetObservations ?? [],
     turnResults,
     requestCosts: state.requestCosts.map(publicRequestCost),
+    commands: state.commands.map(publicCommandReceipt),
     admissions: (state.queue ? state.queue.records.map(record => record.admission) : state.admissions).map(admission => ({ ...admission })),
     usage: { ...state.usage }, reasoning: state.reasoning,
     reasoningIdentity: previous?.reasoning === state.reasoning ? previous.reasoningIdentity ?? null : null,

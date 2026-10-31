@@ -6,6 +6,7 @@ import { directDraftId, initialDirectState } from '../session/direct-state.js';
 import { contextFactEvent } from './direct-context.js';
 import type { DirectQueueState } from '../session/direct-queue-types.js';
 import { createDirectQueueState, directQueueSteeredInput, reduceDirectQueue } from '../session/direct-queue-state.js';
+import { commandFactEvent } from './direct-command-receipts.js';
 import { publicRequestCost } from './direct-costs.js';
 import { budgetFactEvent } from './direct-budget.js';
 import { completedFinalText } from './direct-turn-results.js';
@@ -125,6 +126,8 @@ export class DirectProjection {
       case 'task_finished':
       case 'task_interaction_opened':
       case 'task_interaction_closed': return [taskFactEvent(fact, this.#state, seq)];
+      case 'command_started':
+      case 'command_finished': return [commandFactEvent(fact, this.#state, seq)];
       case 'request_cost_recorded': return [this.#event('request_cost_recorded', publicRequestCost(fact), seq, fact.turnId)];
       case 'budget_opened':
       case 'budget_closed':

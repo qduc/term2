@@ -1,3 +1,5 @@
+import type { WireQuestion } from '../../protocol/direct-wire.js';
+
 /** Client display state. This is a view model, not a wire or persistence format. */
 export type Message = {
   readonly id: string;
@@ -24,6 +26,7 @@ export type InteractionView = {
   /** Only choices actually offered by the protocol may be rendered. */
   readonly choices: readonly { readonly id: string; readonly label: string }[];
   readonly acceptsText?: boolean;
+  readonly questions?: readonly WireQuestion[];
 };
 
 export type QueueItem = { readonly id: string; readonly text: string; readonly delivery: string };
@@ -32,6 +35,7 @@ export type TaskView = { readonly id: string; readonly label: string; readonly s
 export type TuiState = {
   readonly sessionId: string;
   readonly status: string;
+  readonly activeTurnId: string | null;
   readonly model: string;
   readonly messages: readonly Message[];
   /** Draft identity must include model step, so separate responses cannot merge. */

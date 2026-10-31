@@ -1,4 +1,6 @@
-import type { DirectConnection } from '../../host/in-process-direct-types.js';
+import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
+
+export type TuiConnection = DirectConnection | DirectReplayConnection;
 
 /**
  * App-owned local slash commands and host/config capabilities. This must not
@@ -6,5 +8,5 @@ import type { DirectConnection } from '../../host/in-process-direct-types.js';
  * commands must throw; session replacement and exit belong to the app.
  */
 export interface TuiIntegration {
-  command(connection: DirectConnection, input: string): Promise<{ readonly message?: string; readonly exit?: boolean }>;
+  command(connection: TuiConnection, input: string): Promise<{ readonly message?: string; readonly exit?: boolean }>;
 }

@@ -29,7 +29,7 @@ export type DirectPreparedConfiguration = DirectConfigurationState & {
 const id = z.string().min(1);
 const model = z.object({ provider: id, model: id }).strict();
 const reasoning = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
-const schema = z
+export const directConfigurationFactSchema = z
   .object({
     type: z.literal('configuration_changed'),
     configuration: z
@@ -48,7 +48,7 @@ const schema = z
 
 /** Validate only durable selection data; runtime objects and credentials never enter the log. */
 export function parseDirectConfigurationFact(raw: unknown): DirectConfigurationFact {
-  const value = schema.parse(raw);
+  const value = directConfigurationFactSchema.parse(raw);
   if (
     value.configuration.model.provider !== value.intent.modelSelection.provider ||
     value.configuration.model.model !== value.intent.modelSelection.model

@@ -6,6 +6,7 @@ import {
   reportSchema,
 } from '../../../source/services/completion-verification/contracts.js';
 import { directRolloverFactSchema, type DirectRolloverFact } from './direct-rollover.js';
+import { directSessionRotationSchema, type DirectSessionRotationFact } from './direct-session-rotation.js';
 import type { Fact } from './facts.js';
 import type { Item } from '../model/index.js';
 import {
@@ -35,7 +36,8 @@ export type DirectContextFact =
   | DirectGoalReminderFact
   | DirectVerificationFact
   | DirectMemoryFact
-  | DirectRolloverFact;
+  | DirectRolloverFact
+  | DirectSessionRotationFact;
 export type DirectContextState = {
   readonly goal: DirectGoalState;
   readonly memory: DirectMemoryState;
@@ -70,6 +72,7 @@ const receiptSchema = z.object({
 });
 const contextFactSchema = z.discriminatedUnion('type', [
   directRolloverFactSchema,
+  directSessionRotationSchema,
   z.object({
     type: z.literal('goal_changed'),
     goal: goalSchema.optional(),

@@ -38,14 +38,11 @@ const RECOVERABLE_ERROR_KINDS = new Set([
  * approval is denied, with the old reason sent to the model. With it, ordinary
  * tools and low/unknown-risk shell commands are allowed; medium/high-risk shell
  * commands are refused because this client cannot reproduce the old evaluator.
- * A question has no headless answerer, so it is stopped, not guessed.
+ * A question has no headless answerer, so it is explicitly declined, not guessed.
  */
 export function decideHeadlessApproval(interaction: WireInteraction, autoApprove: boolean): HeadlessDecision {
   if (interaction.kind === 'question') {
-    return {
-      decision: { kind: 'answer', answer: '', stopAfterApprovalResolution: true },
-      reportRejection: false,
-    };
+    return { decision: { kind: 'decline' }, reportRejection: false };
   }
   if (!autoApprove) {
     return { decision: { kind: 'deny', reason: NON_INTERACTIVE_REJECTION_REASON }, reportRejection: false };
@@ -73,6 +70,18 @@ function commandText(input: unknown): string {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return '';
   const command = (input as Record<string, unknown>)['command'];
   return typeof command === 'string' ? command : '';
+}
+
+/** Identity carried by the one cursor-addressable admission/turn-start frame. */
+function admissionIdentity(
+  admission: WireAdmission,
+): { readonly messageId: string; readonly turnId: string | null } | null {
+  if (admission.kind === 'rejected') return null;
+  if (admission.kind === 'duplicate') return admissionIdentity(admission.original);
+  return {
+    messageId: admission.messageId,
+    turnId: admission.kind === 'started' ? (admission.turnId ?? null) : null,
+  };
 }
 
 export async function runDirectHeadless(
@@ -199,6 +208,8 @@ export async function runDirectHeadless(
         requestId,
         text: options.prompt,
         origin: options.origin ?? { kind: 'cli' },
+        ...(options.attachments !== undefined ? { attachments: options.attachments } : {}),
+        ...(options.delivery !== undefined ? { delivery: options.delivery } : {}),
       });
     } catch (error) {
       errorText(error instanceof Error ? error.message : String(error));
@@ -249,8 +260,18 @@ export async function runDirectHeadless(
 
       if (targetTurnId === null) {
         if (event.type === 'turn_started' && event.turnId !== null) {
-          const ours = event.payload.input.some((message) => message.id === admission.messageId);
+          const admitted = event.payload.admission ? admissionIdentity(event.payload.admission) : null;
+          const ours =
+            event.payload.input.some((message) => message.id === admission.messageId) ||
+            admitted?.messageId === admission.messageId;
           if (ours) targetTurnId = event.turnId;
+          continue;
+        }
+        if (event.type === 'admission') {
+          const admitted = admissionIdentity(event.payload.admission);
+          if (admitted?.messageId === admission.messageId) {
+            targetTurnId = admitted.turnId ?? event.turnId;
+          }
           continue;
         }
         if (event.type === 'error') reportEventError(reportedErrors, io, event.payload.error.message, output);

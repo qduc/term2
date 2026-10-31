@@ -1,9 +1,12 @@
 # Direct headless client integration
 
-`runDirectHeadless(connection, options)` is the M5 headless path. It consumes
-only `DirectConnection` from `host/in-process-direct-types.ts` and
-`protocol/direct-wire.ts`; it never imports Session, Engine, adopted code or
-the bridge runtime, and never opens conversation storage.
+`runDirectHeadless(connection, options)` is the M5 headless path. It is
+aligned with the updated contract commit `0a27e134` (typed delivery,
+structured questions/answers, base64 images, admission identity, cursor replay
+and nested output). It consumes only `DirectConnection` from
+`host/in-process-direct-types.ts` and `protocol/direct-wire.ts`; it never
+imports Session, Engine, adopted code or the bridge runtime, and never opens
+conversation storage.
 
 ## App wiring
 
@@ -18,22 +21,28 @@ the bridge runtime, and never opens conversation storage.
    `--auto-approve`, `output` (`plain` or `json`), and the CLI's abort signal.
    The app keeps ownership of the signal-to-exit-code mapping: a
    `cancelled` result under SIGINT is 130 (SIGTERM 143); without a signal it
-   is 1.
+   is 1. `attachments` are passed through as raw padded base64 image parts;
+   `delivery` is omitted by default, and an explicit non-`auto` mode needs the
+   real `submitWithDelivery` capability or is reported unavailable.
 4. Pass `decideApproval` when the app can supply the exact
    `NonInteractiveApprovalPolicy` decision (including shell safety and the
    yellow-command evaluator) for a wire interaction. Without it the built-in
    conservative policy applies: deny without `--auto-approve`; with it allow
    ordinary tools and low/unknown-risk shell, deny medium/high-risk shell and
-   report that rejection.
+   report that rejection. A question is declined (`{kind:'decline'}`), because
+   headless has no interactive answerer. A custom decider may return structured
+   `answers`, `decline` or a supported `grant`; the client forwards it unchanged
+   and the protocol/Session validates question IDs, shapes and grant scope.
 5. After the run the app must dispose the host. `closeConnection` (default
    true) only detaches; it does not cancel a Session.
 
 ## Behaviour
 
-- `submit` carries a client request ID and `{kind:'cli'}` origin. Command
-  acknowledgement is admission only: the run waits for the submitted turn's
-  `turn_ended`. Queued/steering admissions wait for the matching
-  `turn_started` by message ID.
+- `submit` carries a client request ID, `{kind:'cli'}` origin and optional
+  attachments/delivery. Command acknowledgement is admission only: the run
+  waits for the submitted turn's `turn_ended`. Queued/steering admissions wait
+  for the matching `turn_started` or `admission` frame by message ID, including
+  the admission embedded in `turn_started` (never a second same-seq frame).
 - Plain stdout streams answer deltas and writes only the suffix a completed
   message did not stream. A completed turn ends stdout with one newline; a
   failed or cancelled turn leaves partial output unterminated.
@@ -55,6 +64,10 @@ the bridge runtime, and never opens conversation storage.
   submit. A failed answer (for example stale) is reported, a best-effort
   foreground cancel is sent, and the run fails; it is never reported as
   resolved.
+- `runDirectHeadless` requires an ordinary snapshot connection. A
+  `DirectReplayConnection` (`snapshot:null`) is for a client retaining state at
+  `replay.fromSeq`; headless one-shot resume uses `connect(principal, id)` and
+  does not reset or replay client state.
 
 ## Remaining shared contract gaps
 
@@ -71,14 +84,16 @@ the bridge runtime, and never opens conversation storage.
   golden requires a protocol-owned public event schema equivalent to the old
   records, not a client-side guess.
 - **Approval policy inputs:** the wire exposes `toolName`, `input`, `summary`,
-  `detail` and `risk`, but not the old safety classification, the yellow
-  command evaluator, MCP allowlists, `propose_goal`, or run-budget/check-in
-  interactions. The app must inject the exact policy through `decideApproval`;
-  run-budget pauses have no wire event yet.
-- **Questions:** the wire carries generic JSON, not typed question choices.
-  Headless has no answerer, so the default stops the question
-  (`answer:''`, `stopAfterApprovalResolution`). Existing ask_user parity needs
-  a typed question/answer contract.
+  `detail`, `risk`, typed `questions` and `supportedGrants` (empty under the
+  current M2 request contract), but not the old safety classification, the
+  yellow command evaluator, MCP allowlists or `propose_goal` policy. The app
+  must inject the exact policy through `decideApproval`; run-budget/check-in
+  interactions still have no wire event.
+- **Questions:** typed questions and structured `answers` are available to an
+  app-injected decider, but headless itself has no interactive presenter. The
+  default declines. Old ask_user parity still needs the app to choose answers,
+  and grants need a real scope-validating capability before any non-empty
+  `supportedGrants` appears.
 - **Background work:** `task_changed`/`subagent` exist, but the old headless
   wait for outstanding background work, notification turns and interrupted
   background failures needs M4 Session/app policy; the client currently ends

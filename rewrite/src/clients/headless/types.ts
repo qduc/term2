@@ -79,6 +79,7 @@ export type DirectHeadlessOutcome =
   | 'interrupted'
   | 'context_paused'
   | 'blocked'
+  | 'budget_paused'
   | 'error';
 
 export type DirectHeadlessResult = {

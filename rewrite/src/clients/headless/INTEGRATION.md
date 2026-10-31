@@ -22,8 +22,8 @@ conversation storage.
    `--show-reasoning`, `output` (`plain` or `json`), and the CLI's abort
    signal. The app keeps ownership of the signal-to-exit-code mapping: a
    `cancelled` result under SIGINT is 130 (SIGTERM 143); without a signal it
-   is 1. `context_paused` and `blocked` are exit 2; the app/CLI currently maps
-   `context_paused` but must also map `blocked`. `attachments` are passed
+   is 1. `context_paused`, `blocked` and `budget_paused` are exit 2. The app/CLI
+   maps `blocked` already and must add `budget_paused`. `attachments` are passed
    through as raw padded base64
    image parts; `delivery` is omitted by default, and an explicit non-`auto`
    mode needs the real `submitWithDelivery` capability or is reported
@@ -73,12 +73,19 @@ conversation storage.
   interactions). The client keeps the ordered stream and lets the cancelled
   terminal decide instead of reporting a failure. A stale `closed` failure is
   treated the same way; other failures remain failures.
+- `budget_opened` for the submitted turn, or a pending budget in the attach
+  snapshot, is reported as `run_budget_paused`/exit 2 without answering it.
+  `--auto-approve` never grants run budget or turns. The app/host must retain
+  that pending check-in for interactive resume; disposal must not turn it into
+  an accepted stop.
 - Exit codes: completed 0; failed, interrupted, cancelled or a command/stream
   error 1; resumable context failures (`request_input_limit`,
   `context_compaction_hard_fit`, `provider_context_overflow`, `context_paused`)
   and the accepted terminal causes `goal_check_unresolved` /
   `completion_verification_blocked` return 2 (`context_paused` / `blocked`).
-  The app must map `blocked` to exit 2 as well.
+  A pending/opened run-budget check-in returns `budget_paused`/exit 2 with the
+  old recovery text; headless never grants budget. The app must map `blocked`
+  and `budget_paused` to exit 2.
 - An abort before the turn starts detaches without cancelling another turn;
   the app's host disposal owns a queued admission. An abort after it starts
   sends one `cancel` and still waits for `turn_ended`.
@@ -111,8 +118,9 @@ conversation storage.
   `detail`, `risk`, typed `questions` and `supportedGrants` (empty under the
   current M2 request contract), but not the old safety classification, the
   yellow command evaluator, MCP allowlists or `propose_goal` policy. The app
-  must inject the exact policy through `decideApproval`; run-budget/check-in
-  interactions still have no wire event.
+  must inject the exact policy through `decideApproval`. Run-budget check-ins
+  have real `budget_opened`/`pendingBudgets` wire evidence; headless parks and
+  exits 2 rather than granting them.
 - **Questions:** typed questions and structured `answers` are available to an
   app-injected decider, but headless itself has no interactive presenter. The
   default declines. Old ask_user parity still needs the app to choose answers,

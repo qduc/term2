@@ -2,13 +2,12 @@
  * Rollover moves a session's work to a new log. Anything that cannot move refuses
  * before that write: queued input and live tasks belong to the old writer, and an
  * open approval would lose the only client that can answer it. The Session calls
- * this under its command reservation, which is what keeps these checks true while
- * the successor is written; see rollover-session-needs.md for what it must hold.
+ * this under its command reservation and refuses new input until it returns, which
+ * is what keeps these checks true while the successor is written.
  */
 import { randomUUID } from 'node:crypto';
-import type { SessionRolloverRequest } from '../../../source/contracts/session-rollover.js';
 import { composeSessionRolloverBrief } from '../../../source/services/session-rollover/session-rollover-brief.js';
-import type { DirectCommandOutcome } from '../session/direct-command-types.js';
+import type { DirectCommandOutcome, DirectRolloverRequest } from '../session/direct-command-types.js';
 import type { DurableGoal } from '../session/direct-goal.js';
 import type { DirectSession, DirectSessionState } from '../session/facade-types.js';
 
@@ -33,7 +32,7 @@ export type DirectRolloverInput = {
   readonly sessionId: string;
   readonly state: DirectSessionState;
   /** The model's handoff. A client's `/rollover` has none, so its successor starts no turn. */
-  readonly request?: SessionRolloverRequest;
+  readonly request?: DirectRolloverRequest;
   /** Writes the successor, keeping the source's workspace, model, owner and settings. */
   create(): Promise<DirectSession>;
   carryGoal(successor: DirectSession, goal: DurableGoal): void;

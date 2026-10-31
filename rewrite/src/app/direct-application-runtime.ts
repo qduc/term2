@@ -1,8 +1,9 @@
 /** Assembles one Session's runtime from the real tool surface. Runs no provider and no tool. */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { SessionRolloverRequest } from '../../../source/contracts/session-rollover.js';
+import { isDeepStrictEqual } from 'node:util';
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
+import { RUNTIME_MODIFIABLE_SETTINGS } from '../../../source/services/settings/settings-schema.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
@@ -13,7 +14,12 @@ import type {
   DirectContextPort,
 } from '../session/direct-capabilities.js';
 import type { DirectBinding } from '../session/facade-types.js';
-import type { DirectCommandConfiguration, DirectCommandOutcome } from '../session/direct-command-types.js';
+import type {
+  DirectCommandConfiguration,
+  DirectCommandOutcome,
+  DirectRolloverRequest,
+} from '../session/direct-command-types.js';
+import type { DirectPreparedConfiguration } from '../session/direct-configuration.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
@@ -22,7 +28,7 @@ import { withSessionScope, type SessionScope } from './direct-application-models
 import { createNestedAuthorizer } from './direct-application-nested.js';
 import { createDirectConfigMemoryBinding } from './direct-config-memory.js';
 import { borrowDirectConfigSurfaceOptions } from './direct-config-remote.js';
-import { prepareDirectConfiguration, type DirectConfiguredGeneration } from './direct-config-runtime.js';
+import { prepareDirectConfiguration } from './direct-config-runtime.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
@@ -48,18 +54,10 @@ export type DirectRuntimeOptions = {
   /** Decides whether a session may move to another model. Without it, none may. */
   readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void;
   /** Runs inside the Session's command reservation. */
-  readonly rollover: (sessionId: string, request?: SessionRolloverRequest) => Promise<DirectCommandOutcome>;
+  readonly rollover: (sessionId: string, request?: DirectRolloverRequest) => Promise<DirectCommandOutcome>;
   /** After any resumed selection is restored, so this reports what actually runs. */
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
-
-/**
- * A configured runtime the Session may still throw away: `dispose()` discards it.
- * `install()` is the Session's own last step, after the durable append and in the
- * same synchronous step as its swap, so it cannot throw. From then on the runtime
- * belongs to this session until shutdown.
- */
-export type DirectPreparedConfiguration = DirectConfiguredGeneration & { install(): void };
 
 /** What the app holds for one open session. */
 export type DirectRuntimeRecord = {
@@ -96,20 +94,36 @@ const continuedSettings = new AsyncLocalStorage<DirectSessionSettings>();
  */
 function sessionSettings(
   { selection, profileExplicit, approvalAlwaysAsks }: DirectRuntimeOptions,
-  { metadata, model }: DirectRuntimeContext,
+  { metadata, configuration, model }: DirectRuntimeContext,
 ): DirectSessionSettings {
-  const defaults = continuedSettings.getStore() ?? selection.settings;
+  const continued = continuedSettings.getStore();
+  const defaults = continued ?? selection.settings;
   const { service: settings } = createAppSettings({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
     loggingService: selection.logger,
   });
-  const profile = metadata && !profileExplicit ? metadata.profile.id : defaults.get('app.activeProfileId');
+  // `/clear` must not undo what someone changed, least of all a tightened approval
+  // mode. Only real differences: rewriting a default would change what it means.
+  if (continued) {
+    for (const key of RUNTIME_MODIFIABLE_SETTINGS) {
+      const value = continued.getDynamic(key);
+      if (value !== undefined && !isDeepStrictEqual(value, settings.getDynamic(key))) {
+        settings.setDynamic(key, value, { persist: false });
+      }
+    }
+  }
+  // The latest configuration, where there is one, outranks the session's start fact.
+  const stored = configuration?.profile ?? metadata?.profile;
+  const profile = stored && !profileExplicit ? stored.id : defaults.get('app.activeProfileId');
   settings.set('app.activeProfileId', profile, { persist: false });
   settings.set('agent.modelSelection', model, { persist: false });
-  const reasoning = metadata ? metadata.reasoning ?? 'default' : defaults.get('agent.reasoningEffort');
+  const reasoning =
+    configuration?.intent.reasoningEffort ??
+    (metadata ? metadata.reasoning ?? 'default' : defaults.get('agent.reasoningEffort'));
   settings.set('agent.reasoningEffort', reasoning, { persist: false });
-  if (metadata?.temperature !== undefined) settings.set('agent.temperature', metadata.temperature, { persist: false });
+  const temperature = configuration?.intent.temperature;
+  if (temperature !== undefined) settings.set('agent.temperature', temperature, { persist: false });
   if (approvalAlwaysAsks) settings.set('shell.autoApproveMode', 'off', { persist: false });
   return settings;
 }
@@ -199,7 +213,7 @@ export function createDirectRuntimes(
         readonly context: DirectRuntimeContext;
         readonly bound?: { readonly port: DirectContextPort; readonly capabilities: DirectContextCapabilities };
       } = { context };
-      const rollover = (request?: SessionRolloverRequest) => options.rollover(context.id, request);
+      const rollover = (request?: DirectRolloverRequest) => options.rollover(context.id, request);
       const configure = async (configuration: DirectCommandConfiguration): Promise<DirectPreparedConfiguration> => {
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
@@ -214,27 +228,39 @@ export function createDirectRuntimes(
           authorizeModel,
         });
         bindCheckIns(generation.surface, bound.port);
+        const { configuration: effective, intent, profile: nextProfile, request, capabilities, dispose } = generation;
         return {
-          ...generation,
+          configuration: effective,
+          intent,
+          profile: nextProfile,
+          request,
+          capabilities,
+          dispose,
           // The Session replaces its whole dependency set, so its own commands must survive.
           deps: { ...generation.deps, rollover, configure },
+          // The Session's atomic step: it poisons itself if this throws, so this only moves
+          // pointers. Anything that can throw or reach a listener runs just after, and
+          // before the command's result can reach anyone.
           install() {
             installed = {
-              context: { ...installed.context, model: generation.configuration.model },
-              bound: { port: bound.port, capabilities: generation.capabilities },
+              context: { ...installed.context, model: effective.model },
+              bound: { port: bound.port, capabilities },
             };
-            generations.push(generation.dispose);
-            publish(generation.surface, generation.profile.id, true);
-            try {
-              // Generations are read-only copies, so the next one has to start from this.
-              const { modelSelection, reasoningEffort, temperature } = generation.intent;
-              settings.set('agent.modelSelection', modelSelection, { persist: false });
-              settings.set('agent.reasoningEffort', reasoningEffort, { persist: false });
-              if (temperature !== undefined) settings.set('agent.temperature', temperature, { persist: false });
-              options.onSurface?.(generation.surface, getProfileMetadata(generation.profile.id));
-            } catch (error) {
-              logger.warn(`Could not record the new configuration: ${String(error)}`);
-            }
+            generations.push(dispose);
+            publish(generation.surface, nextProfile.id, true);
+            queueMicrotask(() => {
+              try {
+                // Generations are read-only copies, so the next one has to start from this.
+                settings.set('agent.modelSelection', intent.modelSelection, { persist: false });
+                settings.set('agent.reasoningEffort', intent.reasoningEffort, { persist: false });
+                if (intent.temperature !== undefined) {
+                  settings.set('agent.temperature', intent.temperature, { persist: false });
+                }
+                options.onSurface?.(generation.surface, getProfileMetadata(nextProfile.id));
+              } catch (error) {
+                logger.warn(`Could not record the new configuration: ${String(error)}`);
+              }
+            });
           },
         };
       };

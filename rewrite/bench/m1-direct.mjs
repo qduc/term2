@@ -380,7 +380,7 @@ row('R3', 'HTTP 500: exact stderr, failed terminal, follow-up request is user, u
     const r = await runCli(s, ['say hello']);
     assert.equal(r.code, 1);
     assert.equal(r.stdout, '');
-    assert.equal(r.stderr, 'Profile: bare\nerror boom\n');
+    assert.equal(r.stderr, 'Profile: bare\nerror 500 boom\n');
     assert.equal(s.requests.length, 1);
     const file = onlyFile(s.convDir);
     checkFormat(file);
@@ -388,7 +388,7 @@ row('R3', 'HTTP 500: exact stderr, failed terminal, follow-up request is user, u
     const end = facts.at(-1);
     assert.equal(end.type, 'turn_ended');
     assert.equal(end.outcome, 'failed');
-    assert.equal(end.error?.message, 'boom');
+    assert.equal(end.error?.message, '500 boom');
     assert.equal(replay(facts).status, 'idle');
     const reg = fakeRegistry(answerStream('Follow answer.'));
     const conv = openConversation({ log: openLog(file), models: reg, facts });

@@ -1,5 +1,11 @@
 /** Headless public types. Intent is expressed only through the direct wire contract. */
-import type { WireDecision, WireInteraction, WireOrigin } from '../../protocol/direct-wire.js';
+import type {
+  WireContent,
+  WireDecision,
+  WireInteraction,
+  WireOrigin,
+  WireSubmission,
+} from '../../protocol/direct-wire.js';
 
 /**
  * Renders one M1 turn. Structural types only, because clients may not import
@@ -42,6 +48,14 @@ export type DirectHeadlessOptions = {
   readonly io?: HeadlessIo;
   /** Defaults to `{kind:'cli'}` so Session can attribute the submission. */
   readonly origin?: WireOrigin;
+  /** Raw padded RFC4648 base64 image parts; the client never reads paths or data URIs. */
+  readonly attachments?: readonly WireContent[];
+  /**
+   * Omitted means the Session's actual default. Explicit modes other than
+   * `auto` need the real `submitWithDelivery` capability; absence is reported,
+   * never retried or faked.
+   */
+  readonly delivery?: WireSubmission['delivery'];
   /** Supplied by the app when it needs an idempotency key; otherwise generated. */
   readonly requestId?: string;
   /** Exact `--resume` target. A different attached session is refused before submit. */

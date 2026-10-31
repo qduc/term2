@@ -1,12 +1,13 @@
 /** Shared assembly result owned by the direct app, implemented in tool-surface.ts. */
 import type { InteractionDecision, InteractionRequest, ToolContextSeed } from '../engine/index.js';
-import type { Item, ModelRequest, ReasoningEffort, ToolSpec } from '../model/index.js';
+import type { Item, ReasoningEffort, ToolSpec } from '../model/index.js';
 import type { DirectRemoteWorkspace } from './direct-remote.js';
 import type { ProviderRegistryDeps } from '../model/provider.js';
 import type { ToolRegistry, Workspace } from '../tools/index.js';
 export type ProfileSelection = ProviderRegistryDeps;
 export type ToolSurfaceOptions = {
-  /** App-owned local manager. Capture never starts connections; the surface never closes it. */
+  /** App-owned local manager, shared across sessions/configured generations.
+   * Capture ONCE per surface generation; never connect or close the manager here. */
   readonly mcp?: {
     captureRequest(): {
       readonly source: import('../../../source/services/mcp/mcp-tool-source.js').McpToolSource;
@@ -33,12 +34,6 @@ export type ToolSurfaceOptions = {
   readonly discordSend?: import('../../../source/services/discord/discord-outbound.js').DiscordSend;
   readonly isDiscordInputEnabled?: () => boolean;
 };
-/** One immutable request binding; retain tools AND policy through approvals/background execution. */
-export type PreparedToolSurfaceRequest = {
-  readonly request: ModelRequest;
-  readonly tools: ToolRegistry;
-  readonly decideInteraction: AgentSurface['decideInteraction'];
-};
 export type AgentSurface = {
   readonly profileName: string;
   readonly instructions: string;
@@ -49,9 +44,6 @@ export type AgentSurface = {
   readonly providerOptions?: Readonly<Record<string, unknown>>;
   readonly notice: string | null;
   readonly runtime: {
-    /** Call once per actual model request, then layer native capabilities onto the returned pair.
-     * The caller must route this request's interactions to its captured policy, not the newest one. */
-    prepareRequestTools(request: ModelRequest): PreparedToolSurfaceRequest;
     /** Adapt native-owned source leaves against this SAME surface's policy/lifecycle context. */
     /** Withdraw the previous native leaf offering before building a replacement capability snapshot. */
     resetAdaptedTools(): void;

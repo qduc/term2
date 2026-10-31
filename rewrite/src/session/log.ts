@@ -19,31 +19,20 @@
 import { closeSync, fsyncSync, ftruncateSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { isKnownDirectFactType, validateFact } from './log-facts.js';
 import { LOG_FORMAT_VERSION, type Fact, type FactLine } from './facts.js';
 
 export interface ConversationLog {
   readonly path: string;
-  append(facts: readonly Fact[]): void;
+  /** Exact serialized entries, returned only after the write and required fsync succeed. */
+  append(facts: readonly Fact[]): readonly FactLine[];
   close(): void;
 }
-
-const FACT_TYPES: ReadonlySet<string> = new Set([
-  'session_started',
-  'turn_started',
-  'text_delta',
-  'item',
-  'tool_started',
-  'tool_finished',
-  'interaction_opened',
-  'interaction_closed',
-  'usage',
-  'turn_ended',
-]);
 
 const NEWLINE = 0x0a;
 
 type ParsedLog = {
-  readonly facts: readonly Fact[];
+  readonly entries: readonly FactLine[];
   readonly lastSeq: number;
   /** Byte length of the terminated lines; anything after it is a torn tail. */
   readonly complete: number;
@@ -56,10 +45,10 @@ const UTF8 = new TextDecoder('utf-8', { fatal: true });
  * only reported through `complete` and `lastSeq`, so callers can truncate it.
  */
 function parseLog(data: Buffer, path: string): ParsedLog {
-  if (data.length === 0) return { facts: [], lastSeq: 0, complete: 0 };
+  if (data.length === 0) return { entries: [], lastSeq: 0, complete: 0 };
 
   const complete = data.lastIndexOf(NEWLINE) + 1;
-  if (complete === 0) return { facts: [], lastSeq: 0, complete: 0 };
+  if (complete === 0) return { entries: [], lastSeq: 0, complete: 0 };
 
   let text: string;
   try {
@@ -72,7 +61,7 @@ function parseLog(data: Buffer, path: string): ParsedLog {
   // The empty string after the final newline.
   lines.pop();
 
-  const facts: Fact[] = [];
+  const entries: FactLine[] = [];
   let lastSeq = 0;
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -114,160 +103,20 @@ function parseLog(data: Buffer, path: string): ParsedLog {
       throw new Error(`${where}: log fact is not an object`);
     }
     const type = (fact as Record<string, unknown>)['type'];
-    if (typeof type !== 'string' || !FACT_TYPES.has(type)) {
+    if (typeof type !== 'string' || !isKnownDirectFactType(type)) {
       throw new Error(`${where}: unknown fact type ${JSON.stringify(String(type))}`);
     }
 
-    validateFact(fact as Record<string, unknown>, where);
-    facts.push(fact as Fact);
+    try {
+      validateFact(fact as Record<string, unknown>, where);
+    } catch (error) {
+      throw new Error(`${where}: invalid ${type}: ${errorMessage(error)}`, { cause: error });
+    }
+    entries.push(entry as FactLine);
     lastSeq = seq;
   }
 
-  return { facts, lastSeq, complete };
-}
-
-/** Validate additive direct facts without changing the v1 envelope or M1 payload rules. */
-function validateFact(fact: Record<string, unknown>, where: string): void {
-  const fail = (field: string): never => {
-    throw new Error(`${where}: invalid ${String(fact['type'])}.${field}`);
-  };
-  const text = (value: unknown, field: string): void => {
-    if (typeof value !== 'string' || value.length === 0) fail(field);
-  };
-  const optionalText = (record: Record<string, unknown>, field: string): void => {
-    if (field in record) text(record[field], field);
-  };
-  const object = (value: unknown, field: string): Record<string, unknown> => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(field);
-    return value as Record<string, unknown>;
-  };
-  const hasInput = (record: Record<string, unknown>): void => {
-    if (!('input' in record)) fail('input');
-  };
-  const result = (value: unknown): void => {
-    const record = object(value, 'result');
-    if (typeof record['output'] !== 'string' || typeof record['isError'] !== 'boolean') fail('result');
-    if ('providerOutput' in record) {
-      if (!Array.isArray(record['providerOutput'])) fail('result.providerOutput');
-      for (const part of record['providerOutput'] as unknown[]) object(part, 'result.providerOutput[]');
-    }
-  };
-  const resolution = (value: unknown): void => {
-    const record = object(value, 'resolution');
-    switch (record['kind']) {
-      case 'allow':
-      case 'cancelled':
-      case 'interrupted':
-        break;
-      case 'deny':
-        if ('reason' in record && typeof record['reason'] !== 'string') fail('resolution.reason');
-        break;
-      case 'answer':
-        if (typeof record['answer'] !== 'string') fail('resolution.answer');
-        break;
-      default:
-        fail('resolution.kind');
-    }
-    if ('stopAfterApprovalResolution' in record && typeof record['stopAfterApprovalResolution'] !== 'boolean') {
-      fail('resolution.stopAfterApprovalResolution');
-    }
-  };
-
-  if (
-    'modelStep' in fact &&
-    (typeof fact['modelStep'] !== 'number' || !Number.isSafeInteger(fact['modelStep']) || fact['modelStep'] < 0)
-  ) {
-    fail('modelStep');
-  }
-  switch (fact['type']) {
-    case 'session_started': {
-      if ('binding' in fact) {
-        const binding = object(fact['binding'], 'binding');
-        text(binding['client'], 'binding.client');
-        text(binding['id'], 'binding.id');
-      }
-      break;
-    }
-    case 'turn_started': {
-      if (!('submission' in fact)) break;
-      const submission = object(fact['submission'], 'submission');
-      text(submission['clientRequestId'], 'submission.clientRequestId');
-      text(submission['messageId'], 'submission.messageId');
-      if ('origin' in submission) {
-        const origin = object(submission['origin'], 'submission.origin');
-        if (!['cli', 'tui', 'acp', 'control', 'discord', 'api'].includes(origin['kind'] as string)) {
-          fail('submission.origin.kind');
-        }
-        if ('id' in origin && typeof origin['id'] !== 'string') fail('submission.origin.id');
-      }
-      const input = fact['input'];
-      if (!Array.isArray(input)) fail('input');
-      // Correlation must identify this admission's user input, not an assistant,
-      // an earlier turn's message or metadata that only happens to reuse the ID.
-      if (
-        !(input as unknown[]).some((item) => {
-          if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
-          const record = item as Record<string, unknown>;
-          return record['type'] === 'user_message' && record['id'] === submission['messageId'];
-        })
-      ) {
-        fail('submission.messageId');
-      }
-      break;
-    }
-    case 'item': {
-      if ('executionId' in fact) {
-        text(fact['executionId'], 'executionId');
-        const item = object(fact['item'], 'item');
-        if (item['type'] !== 'tool_call' && item['type'] !== 'tool_result') fail('executionId');
-      }
-      break;
-    }
-    case 'tool_started':
-      text(fact['turnId'], 'turnId');
-      text(fact['executionId'], 'executionId');
-      optionalText(fact, 'parentExecutionId');
-      if (fact['parentExecutionId'] === fact['executionId']) fail('parentExecutionId');
-      text(fact['callId'], 'callId');
-      text(fact['toolName'], 'toolName');
-      hasInput(fact);
-      break;
-    case 'tool_finished':
-      text(fact['turnId'], 'turnId');
-      text(fact['executionId'], 'executionId');
-      result(fact['result']);
-      break;
-    case 'interaction_opened': {
-      text(fact['turnId'], 'turnId');
-      const request = object(fact['request'], 'request');
-      text(request['requestId'], 'request.requestId');
-      text(request['turnId'], 'request.turnId');
-      if (request['turnId'] !== fact['turnId']) fail('request.turnId');
-      if (request['kind'] !== 'approval' && request['kind'] !== 'question') fail('request.kind');
-      text(request['toolName'], 'request.toolName');
-      if (typeof request['summary'] !== 'string') fail('request.summary');
-      if ('detail' in request && typeof request['detail'] !== 'string') fail('request.detail');
-      optionalText(request, 'executionId');
-      optionalText(request, 'parentExecutionId');
-      optionalText(request, 'sourceCallId');
-      if (
-        'risk' in request &&
-        request['risk'] !== 'low' &&
-        request['risk'] !== 'medium' &&
-        request['risk'] !== 'high'
-      ) {
-        fail('request.risk');
-      }
-      if ('presentation' in request) object(request['presentation'], 'request.presentation');
-      hasInput(request);
-      break;
-    }
-    case 'interaction_closed':
-      text(fact['turnId'], 'turnId');
-      text(fact['requestId'], 'requestId');
-      resolution(fact['resolution']);
-      break;
-  }
+  return { entries, lastSeq, complete };
 }
 
 function errorMessage(error: unknown): string {
@@ -283,14 +132,14 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
   return {
     path,
 
-    append(facts: readonly Fact[]): void {
+    append(facts: readonly Fact[]): readonly FactLine[] {
       if (dead) {
         throw new Error(`conversation log ${path} is unusable after an earlier write failure`);
       }
       if (handle === null) {
         throw new Error(`conversation log ${path} is closed`);
       }
-      if (facts.length === 0) return;
+      if (facts.length === 0) return [];
 
       const fd = handle;
 
@@ -305,6 +154,10 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
           sequence += 1;
           return `${JSON.stringify(line)}\n`;
         });
+        // Decode the actual bytes once: JSON serialization may omit undefined
+        // fields or invoke provider payload toJSON methods. Observers must receive
+        // the persisted values, not mutable caller objects or regenerated clocks.
+        const entries = lines.map((line) => JSON.parse(line) as FactLine);
         const buffer = Buffer.from(lines.join(''), 'utf8');
         if (pendingTruncate !== undefined) {
           ftruncateSync(fd, pendingTruncate);
@@ -322,6 +175,7 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
         if (!facts.every((fact) => fact.type === 'text_delta')) {
           fsyncSync(fd);
         }
+        return entries;
       } catch (error) {
         dead = true;
         handle = null;
@@ -357,7 +211,12 @@ export function openLog(path: string): ConversationLog {
   return createConversationLog(path, openSync(path, 'a'), lastSeq + 1, complete !== data.length ? complete : undefined);
 }
 
-/** Pure read; never writes. */
+/** Pure read of the exact accepted envelopes; ignores only an unterminated final line. */
+export function readFactLines(path: string): readonly FactLine[] {
+  return parseLog(readFileSync(path), path).entries;
+}
+
+/** Pure fact projection of the same validated entries; never writes. */
 export function readFacts(path: string): readonly Fact[] {
-  return parseLog(readFileSync(path), path).facts;
+  return readFactLines(path).map((entry) => entry.fact);
 }

@@ -3,6 +3,7 @@
  * single writer, appends facts plus companion turn-start facts, installs state,
  * then releases the effect. A plan alone never admits input or runs anything.
  */
+import { directQueueContentKey, directQueueOriginKey, validDirectQueueOrigin } from './direct-queue-decode.js';
 import { STEERING_NOTICE } from '../../../source/prompts/steering-notice.js';
 import type { TurnId } from '../engine/index.js';
 import type { ContentPart, Item, ItemId } from '../model/index.js';
@@ -52,6 +53,7 @@ export function submitDirectQueue(
   if (
     !body.clientRequestId ||
     !validContent(body.content) ||
+    !validDirectQueueOrigin(body.origin) ||
     (body.delivery !== 'steer' && body.delivery !== 'follow_up' && body.delivery !== 'reject_if_busy')
   )
     return reject('invalid');
@@ -268,10 +270,8 @@ function validContent(content: readonly ContentPart[]): boolean {
 function submissionKey(request: DirectQueueSubmission): string {
   return JSON.stringify([
     request.delivery === undefined || request.delivery === 'auto' ? 'follow_up' : request.delivery,
-    request.content.map((part) =>
-      part.type === 'text' ? ['text', part.text] : ['image', part.mediaType, part.data, part.detail ?? null],
-    ),
-    request.origin ? [request.origin.kind, request.origin.id ?? null] : null,
+    directQueueContentKey(request.content),
+    directQueueOriginKey(request.origin),
     request.humanInputAt ?? null,
   ]);
 }

@@ -31,15 +31,24 @@ type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[
 export function createToolSurface(selection: ProfileSelection, options: ToolSurfaceOptions = {}): AgentSurface {
   const { settings, logger } = selection;
   const modelSelection = settings.get('agent.modelSelection');
-  const workspace = surfaceWorkspace(options.workspace);
+  const remote = options.remote;
+  const workspace = surfaceWorkspace(options.workspace, remote);
+  const withInvocation = remote
+    ? <T>(toolName: string, context: unknown, operation: () => Promise<T>) => {
+        const signal = (context as { signal?: AbortSignal } | undefined)?.signal;
+        if (!signal) throw new Error('Remote tool invocation has no cancellation scope');
+        return remote.runTool(toolName, signal, operation);
+      }
+    : undefined;
   // Pin one context per surface; never retarget process.cwd or the global
   // active-workspace fallback while another Session owns tools/background work.
-  const executionContext = ExecutionContext.pin(workspace.root);
-  const skillsService = new SkillsService(logger, executionContext.getCwd());
-  skillsService.discoverSkills();
+  const executionContext = remote?.executionContext ?? ExecutionContext.pin(workspace.root);
+  // SkillsService is local-fs-only. Never scan a same-spelled remote path locally.
+  const skillsService = remote ? undefined : new SkillsService(logger, executionContext.getCwd());
+  skillsService?.discoverSkills();
   const policies = new ToolApprovalPolicyRegistry();
-  const readOnly = workspace.access === 'read';
-  const sessionAccess = new SessionAccessState(settings, { allowEdit: !readOnly });
+  const readOnly = remote?.sourcePolicy.readOnly ?? workspace.access === 'read';
+  const sessionAccess = new SessionAccessState(settings, { allowEdit: remote?.sourcePolicy.allowEdit ?? !readOnly });
   const shellChildren = new InvalidatableShellChildRegistry();
   const sessionId = randomUUID();
   const advisoryAbort = new AbortController();
@@ -68,6 +77,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     readOnly,
     shellChildRegistry: shellChildren,
     skillsService,
+    includeMemory: !remote && options.includeMemory !== false,
+    projectInstructions: options.projectInstructions,
+    withToolInvocation: withInvocation,
     getGoal: () => undefined,
     createMentor: unavailable,
     runSubagent: unavailable,
@@ -89,7 +101,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     executeScriptedTool: executeSourceChild,
     allowBackgroundShell: false,
     allowAskUser: options.interactive === true,
-    allowUnsandboxed: options.allowUnsandboxed !== false && !readOnly,
+    allowUnsandboxed:
+      options.allowUnsandboxed !== false && !readOnly && (remote?.sourcePolicy.allowUnsandboxed ?? true),
     discordSend: options.discordSend,
     isDiscordInputEnabled: options.isDiscordInputEnabled,
     // Keep the tool declaration, but do not create an old agent/runtime for it.
@@ -105,7 +118,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     { selection: modelSelection, reasoningEffort: settings.get('agent.reasoningEffort') },
     deps,
   );
-  const registry = createSourceToolRegistry(agent.tools, {
+  const offered = remote ? agent.tools.filter((tool) => !REMOTE_UNAVAILABLE.has(tool.name)) : agent.tools;
+  const registry = createSourceToolRegistry(offered, {
     policies,
     settings,
     sessionAccess,
@@ -133,7 +147,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   return {
     profileName: displayName(String(settings.get('app.activeProfileId'))),
     instructions: agent.resolveInstructionsForRequest?.() ?? String(agent.instructions),
-    tools: agent.tools.map(sourceToolSpec),
+    tools: offered.map(sourceToolSpec),
     ...(reasoning !== undefined ? { reasoning } : {}),
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
@@ -143,7 +157,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       tools: registry,
       toolContext: toolContext(selection, workspace),
       maxParallelToolCalls: settings.get('agent.maxParallelToolCalls') ?? 3,
-      dispose() {
+      async dispose() {
         advisoryAbort.abort();
         registry.dispose();
         shellChildren.invalidate();
@@ -151,6 +165,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         removePlanInterceptor();
         policies.clear();
         answers.disable();
+        await remote?.close();
       },
     },
     async decideInteraction(request, history) {
@@ -183,18 +198,29 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   };
 }
 
-/** Snapshot authority before building any tool; do not infer it from a stored path. */
-function surfaceWorkspace(workspace?: Workspace): Workspace {
+const REMOTE_UNAVAILABLE = new Set([
+  'read_code_outline',
+  'code_context_search',
+  'enter_worktree',
+  'exit_worktree',
+  'activate_skill',
+]);
+
+/** Snapshot authority before building tools; an SSH adapter must match a current grant exactly. */
+function surfaceWorkspace(workspace: Workspace | undefined, remote: ToolSurfaceOptions['remote']): Workspace {
+  if (remote && !workspace) throw new Error('Direct SSH tool surface requires an explicit authorized workspace');
   const selected: Workspace = workspace ?? { root: process.cwd(), target: 'local', access: 'read_write' };
-  if (selected.target !== 'local')
-    throw new Error(
-      'Direct source tool assembly requires a local workspace; remote execution context is not configured',
-    );
   if (selected.access !== 'read' && selected.access !== 'read_write')
     throw new Error('Invalid direct workspace access');
-  // ExecutionContext.pin validates an absolute root before skill/tool assembly.
-  // The caller/store resolves root identity and authority; do not replace a
-  // read-only/remote grant with authority inferred from local process state.
+  if (remote) {
+    const granted = remote.workspace;
+    if (selected.target !== granted.target || selected.root !== granted.root || selected.access !== granted.access)
+      throw new Error('Direct SSH adapter does not match the authorized workspace');
+    if (!remote.executionContext.isRemote() || !remote.executionContext.getSSHService()?.isConnected())
+      throw new Error('Direct SSH tool surface requires its connected execution context');
+    return granted;
+  }
+  if (selected.target !== 'local') throw new Error('Direct remote tools require a connected adapter');
   return Object.freeze({ ...selected });
 }
 

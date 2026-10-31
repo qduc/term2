@@ -275,6 +275,8 @@ export const getAgentDefinition = (
     /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
     proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
     skillsService?: SkillsService;
+    includeMemory?: boolean;
+    projectInstructions?: string;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
     postExecuteDeniedRead?: boolean;
     sessionAccess?: SessionAccessState;
@@ -418,17 +420,20 @@ export const getAgentDefinition = (
   const skillsCatalogEnabled = isContextSourceEnabled('skills-catalog');
   const memoryContextEnabled = isContextSourceEnabled('memory');
   const sessionBrowserContextEnabled = isContextSourceEnabled('session-browser');
-  const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
-    onWarning: (message) => loggingService.warn(message),
-  }).build(
-    { kind: 'main' },
-    {
-      projectPath: executionContext?.getCwd() ?? process.cwd(),
-      includeContext: !bareMode && memoryContextEnabled && hasCapability('memory'),
-      personalContextOptIn: bareMode && hasCapability('memory'),
-      snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
-    },
-  );
+  const memoryCapability: ReturnType<MemoryCapabilityBuilder['build']> =
+    deps.includeMemory === false
+      ? { access: 'none', tools: [], guidance: '', context: '' }
+      : new MemoryCapabilityBuilder(settingsService, {
+          onWarning: (message) => loggingService.warn(message),
+        }).build(
+          { kind: 'main' },
+          {
+            projectPath: executionContext?.getCwd() ?? process.cwd(),
+            includeContext: !bareMode && memoryContextEnabled && hasCapability('memory'),
+            personalContextOptIn: bareMode && hasCapability('memory'),
+            snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
+          },
+        );
   const discordSendEnabled =
     Boolean(deps.discordSend) &&
     !readOnly &&
@@ -475,7 +480,9 @@ export const getAgentDefinition = (
   const globAvailable = filesystemReadEnabled && !searchViaShell;
   const envInfo = environmentEnabled ? getEnvInfo(settingsService, executionContext, bareMode) : '';
   const skipAgentsMd = !projectInstructionsEnabled || (executionContext?.isRemote() ?? false);
-  const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
+  const agentsInstructions = projectInstructionsEnabled
+    ? deps.projectInstructions ?? (skipAgentsMd ? '' : getAgentsInstructions(cwd))
+    : '';
 
   let skillsInstructions = '';
   if (hasCapability('skills') && skillsCatalogEnabled && skillsService) {

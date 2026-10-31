@@ -15,7 +15,8 @@ export interface DirectConnection {
   /** Unsubscribe only; closing a connection never cancels or closes the Session. */
   close(): void;
 }
-/** Tail-only reconnect. Caller retains its state at replay.fromSeq; do not reset it. */
+/** Reconnect retains client state at replay.fromSeq. Consume tail, cut-state sync, then live.
+ * snapshot is null because no current snapshot may be applied BEFORE the tail. */
 export type DirectReplayConnection = Omit<DirectConnection, 'snapshot'> & {
   readonly snapshot: null;
   readonly replay: { readonly fromSeq: number; readonly toSeq: number };

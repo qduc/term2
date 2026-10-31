@@ -1,8 +1,10 @@
 /** Explicit public DTO construction. Never spread provider items, settings or engine handles. */
 import type { InteractionRequest } from '../engine/direct-types.js';
+import type { DirectTaskInteraction } from '../session/direct-background-types.js';
 import type { Item } from '../model/index.js';
+import { parseWireOrigin } from './direct-parse.js';
 import { interactionQuestions } from './direct-questions.js';
-import type { JsonValue, WireContent, WireInteraction, WireMessage } from './direct-wire.js';
+import type { JsonValue, WireContent, WireInteraction, WireMessage, WireTerminal } from './direct-wire.js';
 
 /** Copy plain tool presentation/input into JSON data; no truncation or live objects. */
 export function publicJson(value: unknown): JsonValue {
@@ -19,9 +21,12 @@ export function publicContent(content: readonly WireContent[]): readonly WireCon
 export function contentText(content: readonly WireContent[]): string {
   return content.map(part => part.type === 'text' ? part.text : '[image]').join('');
 }
-export function publicInteraction(request: InteractionRequest): WireInteraction {
+export function publicInteraction(request: InteractionRequest & Partial<Pick<DirectTaskInteraction, 'taskId' | 'sessionId' | 'origin'>>): WireInteraction {
   return {
     requestId: request.requestId, turnId: request.turnId,
+    ...(request.taskId ? { taskId: request.taskId } : {}),
+    ...(request.sessionId ? { sessionId: request.sessionId } : {}),
+    ...(request.origin ? { origin: parseWireOrigin(request.origin) } : {}),
     ...(request.executionId ? { executionId: request.executionId } : {}),
     ...(request.parentExecutionId ? { parentExecutionId: request.parentExecutionId } : {}),
     supportedGrants: [], ...(interactionQuestions(request) ? { questions: interactionQuestions(request) } : {}),
@@ -55,4 +60,15 @@ export function publicToolContent(parts: readonly Readonly<Record<string, unknow
     }
   }
   return content;
+}
+
+/** Retain native stop reasons only when the accepted terminal actually supplies them.
+ * A selected resolution stop is not cancellation; protocol never calls cancel for it.
+ */
+export function publicTerminal(terminal: WireTerminal): WireTerminal {
+  return { outcome: terminal.outcome,
+    ...(terminal.error ? { error: { kind: terminal.error.kind, message: terminal.error.message, retryable: terminal.error.retryable } } : {}),
+    ...(terminal.terminalCause !== undefined ? { terminalCause: terminal.terminalCause } : {}),
+    ...(terminal.notice !== undefined ? { notice: terminal.notice } : {}),
+  };
 }

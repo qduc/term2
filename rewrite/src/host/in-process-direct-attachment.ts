@@ -18,7 +18,7 @@ export class DirectAttachment {
     // Capture can enqueue callbacks while constructing. Never lose the atomic-cut tail.
     const pending: DirectSessionUpdate[] = [];
     let ready = false;
-    const capture = session.capture(update => {
+    const capture = session.captureFrom(0, update => {
       if (ready) this.#update(update);
       else pending.push(update);
     });
@@ -26,7 +26,11 @@ export class DirectAttachment {
     this.#position = capture.position;
     try {
       if (capture.state.id !== session.id) throw new Error('Captured state belongs to another session');
-      this.#projection = new DirectProjection(capture.state, capture.seq);
+      // Current arrays alone cannot recover mixed chronology or final/draft correlation.
+      // Reconstruct from the actual accepted prefix, then synchronize live-only state.
+      this.#projection = DirectProjection.forReplay(capture.state);
+      for (const entry of capture.replay) this.#projection.update(entry);
+      this.#projection.synchronize(capture.state);
     } catch (error) { capture.unsubscribe(); throw error; }
     ready = true;
     for (const update of pending) this.#update(update);

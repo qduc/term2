@@ -72,7 +72,6 @@ type Flag = {
 const SESSION_HELD = 'session goals need a Session goal API in the direct app (M4 context owner)';
 const JSON_HELD =
   'the old NDJSON event schema needs a protocol-owned read model, which the direct protocol does not expose yet';
-const SSH_HELD = 'the tool surface cannot run a remote workspace yet (lead: ToolSurfaceOptions.remote and remoteContext)';
 
 /** Builds one flag. `suffix` is its help placeholder: ' <x>' takes a value, '[=<x>]' takes only an inline one. */
 const opt = (names: string[], suffix: string, help: string, refusal?: string, value?: Flag['value']): Flag => {
@@ -106,7 +105,7 @@ const FLAGS: readonly Flag[] = [
     refusal: JSON_HELD,
     interactiveNoOp: true,
   },
-  opt(['--ssh'], ' <user@host>', 'Enable SSH mode for a remote host', SSH_HELD),
+  opt(['--ssh'], ' <user@host>', 'Enable SSH mode for a remote host'),
   opt(['--discord-input'], '', 'Allow Discord input and explicit root notifications on this control socket'),
   opt(['--remote-dir'], ' <path>', 'Remote working directory (required for non-lite SSH sessions)'),
   opt(['--ssh-port'], ' <port>', 'SSH port (default: 22)'),

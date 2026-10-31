@@ -109,11 +109,11 @@ export class TurnTools {
     const plans: Plan[] = [];
     for (const call of calls) {
       plans.push(
-        call.item.toolName === 'goal_check' && calls.length !== 1
+        ['goal_check', 'session_rollover'].includes(call.item.toolName) && calls.length !== 1
           ? {
               call,
               parallelSafe: false,
-              result: errorResult('goal_check must be called by itself after other tool results'),
+              result: errorResult(`${call.item.toolName} must be called by itself after other tool results`),
             }
           : await this.#plan(call),
       );
@@ -244,6 +244,7 @@ export class TurnTools {
     };
     await this.events.publish({ type: 'item', item, executionId: call.executionId, modelStep: call.modelStep });
     history.push(item);
+    if (result.stopAfterExecution) this.#stop = call.execution;
   }
 
   #context(root: Execution): ToolContext {
@@ -301,8 +302,8 @@ export class TurnTools {
       ) => {
         const parent = current();
         this.#checkBody(parent);
-        if (descriptor.toolName === 'goal_check' || descriptor.toolName === 'propose_goal')
-          throw new Error('goal_check is root-only');
+        if (['goal_check', 'propose_goal', 'session_rollover'].includes(descriptor.toolName))
+          throw new Error(`${descriptor.toolName} is root-only`);
         const execution = this.#allocate(
           descriptor.toolName,
           descriptor.input,

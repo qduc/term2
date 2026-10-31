@@ -853,9 +853,12 @@ row('R12', 'home guard from a fake HOME: the four §5 rows', async () => {
     assert.equal(s.requests.length, before, 'refused before any provider call');
     const lite = await runCli(s, ['--lite', '--auto-approve', 'say hello'], { cwd: s.home });
     assert.equal(lite.code, 0, lite.stderr);
+    assert.equal(lite.stdout, 'Hello there.\n');
+    assert.equal(s.requests.length, before + 1, 'lite from home reaches the provider once');
     const noPrompt = await runCli(s, [], { cwd: s.home });
     assert.equal(noPrompt.code, 1);
-    assert.ok(noPrompt.stderr.includes('Cancelled.'), noPrompt.stderr);
+    assert.ok(noPrompt.stderr.includes('non-lite mode from your home directory'), noPrompt.stderr);
+    assert.ok(noPrompt.stderr.endsWith('Cancelled.\n'), noPrompt.stderr);
   } finally {
     await s.close();
   }

@@ -32,6 +32,8 @@ export type Turn = {
 export type TurnRequest = Omit<TurnSpec, 'turnId' | 'history' | 'newItems'> & {
   readonly input: TurnSpec['newItems'];
   readonly notice?: string;
+  /** Actual source profile mode label, supplied by app from resolved profile metadata. */
+  readonly previewMode?: string;
   /** Optional durable facade correlation; committed atomically with turn_started. */
   readonly submission?: SubmissionMetadata;
 };
@@ -52,6 +54,8 @@ export type Conversation = {
     provenance?: AnswerProvenance,
   ): AnswerResult;
   readonly tasks: DirectBackgroundTasks;
+  /** Pure planned provider input; never accepts draft/context or advances continuity. */
+  snapshotInputPreview(request: TurnRequest): import('./direct-preview.js').DirectPlannedInput;
   abort(
     expectedTurnId: import('../engine/index.js').TurnId,
     discardQueue?: boolean,

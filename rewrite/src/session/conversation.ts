@@ -18,6 +18,8 @@ import type {
 } from '../engine/index.js';
 import { parseDirectOrigin } from './direct-origin.js';
 import { DirectSubagents } from './direct-subagent.js';
+import { DirectContinuity, type DirectContinuityBinding } from '../engine/direct-recovery-continuity.js';
+import { directPreviewConfiguration, directPreviewOccurrences } from './direct-preview.js';
 import { DirectRunBudgets } from './direct-run-budget.js';
 import { createDirectBranchDriver } from './direct-branches.js';
 import type { BudgetDecision } from '../engine/direct-types.js';
@@ -38,7 +40,7 @@ import { initialDirectContextState, reduceDirectContext, type DirectContextFact 
 import { bindDirectCapabilities } from './direct-capabilities.js';
 import { isDirectTaskFact, isDirectQueueFact } from './facts.js';
 import type { DirectOrigin } from './facade-types.js';
-import type { Item, ModelError } from '../model/index.js';
+import type { Item, ModelError, ModelRequest } from '../model/index.js';
 import type {
   AnswerResult,
   AnswerProvenance,
@@ -78,6 +80,9 @@ function conversation(
   newEntries: readonly FactLine[] = [],
 ): Conversation {
   let active: (Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> }) | null = null;
+  const continuity = deps.continuity
+    ? { ...deps.continuity, state: deps.continuity.state ?? new DirectContinuity() }
+    : undefined;
   let context = initialDirectContextState();
   let queueState: DirectQueueState = createDirectQueueState();
   let taskStates: readonly DirectTaskState[] = [];
@@ -495,12 +500,13 @@ function conversation(
           type: 'turn_started',
           turnId,
           input: request.input,
+          ...(directPreviewConfiguration(request) ? { requestConfiguration: directPreviewConfiguration(request) } : {}),
           ...(request.submission ? { submission: request.submission } : {}),
         },
       ])
     )
       throw new Error(logFailure!.message);
-    const { input, notice, submission: _submission, ...settings } = request;
+    const { input, notice, submission: _submission, previewMode: _previewMode, ...settings } = request;
     try {
       const runNested: NonNullable<TurnDeps['runNested']> = async (nested, parent) => {
         if (!deps.authorizeNested) throw new Error('App has not supplied direct nested authority');
@@ -551,6 +557,7 @@ function conversation(
         {
           ...deps,
           budget: runBudgets.open(turnId),
+          continuity,
           takeSteering: boundary,
           prepareRequest: capabilities!.prepareRequest,
           normalStop: capabilities!.normalStop,
@@ -602,6 +609,49 @@ function conversation(
         return { kind: 'not_admitting', reason: logFailure!.message };
       active?.cancel();
       return { kind: 'aborted', turnId: expectedTurnId, discardedMessageIds };
+    },
+    snapshotInputPreview(request) {
+      if (closed || logFailure) throw new Error(logFailure?.message ?? 'Session is closed');
+      const configuration = directPreviewConfiguration(request);
+      if (!configuration) throw new Error('App has not supplied the effective previewMode');
+      if (active) throw new Error('Input preview requires an accepted root request boundary');
+      const history = liveReplay().history;
+      // This is the same pure admission plan, but its returned context facts are
+      // deliberately NOT accepted. No memory/notice/goal state is consumed.
+      const human = capabilities!.humanPlan('preview', request.input);
+      const modelInput = request.notice ? withNotice(human.modelInput, request.notice) : human.modelInput;
+      const canonical: ModelRequest = {
+        model: request.model,
+        instructions: request.instructions,
+        input: [...history, ...modelInput],
+        tools: request.tools,
+        ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
+        ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+        ...(request.maxOutputTokens !== undefined ? { maxOutputTokens: request.maxOutputTokens } : {}),
+        ...(request.providerOptions !== undefined ? { providerOptions: request.providerOptions } : {}),
+      };
+      const prepared = capabilities!.previewRequest(canonical);
+      let selected = { request: prepared, chained: false };
+      if (continuity) {
+        // Engine owns this read-only selector. Never call prepare here: even an
+        // unchainable preview must not clear a checkpoint or increment a ticket.
+        const state = continuity.state as DirectContinuity & {
+          preview?: (
+            request: ModelRequest,
+            binding: DirectContinuityBinding,
+          ) => { request: ModelRequest; chained: boolean };
+        };
+        if (!state.preview) throw new Error('Read-only provider continuity selection is unavailable');
+        selected = state.preview(prepared, continuity.binding);
+      }
+      return structuredClone({
+        input: selected.request.input,
+        kind: selected.chained ? 'delta' : 'full_history',
+        configuration,
+        queueActive:
+          !!active || !!completionHeld || !!queueState.active || (!queueState.pause && queueState.pending.length > 0),
+        toolOccurrences: directPreviewOccurrences(facts, selected.request.input),
+      });
     },
     context: () => structuredClone(context),
     setGoal(generation, goal, source = 'user') {

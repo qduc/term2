@@ -60,12 +60,11 @@ conversation storage.
   required]`, `[question]`, retry and notice lines); errors, `Approval
   Rejected` verdicts and reasoning (when enabled) remain. JSON mode is
   unaffected.
-- `json` currently emits one JSON record per line: an old-style
-  `session_start` (`profileMetadata` from the app), every received wire event,
-  then `completed`/`error`/`context_paused`. This is **not** old
-  `ConversationEvent` parity yet; the protocol-owned read model is required
-  (see `parallel-headless-parity-contract-needs.md`). The CLI must not enable
-  `--json` before that mapping exists.
+- `json` currently fails explicitly with `--json output requires the direct
+  conversation-event read model` (exit 1) before submit. Emitting wire events
+  under the old flag would misstate parity. The protocol-owned read model is
+  required (see `parallel-headless-parity-contract-needs.md`); remove the gate
+  only when that mapping exists.
 - A stale interaction answer after abort is expected (Session closes pending
   interactions). The client keeps the ordered stream and lets the cancelled
   terminal decide instead of reporting a failure. A stale `closed` failure is

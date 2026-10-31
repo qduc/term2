@@ -9,7 +9,11 @@ import { createDurableGoal } from '../../../source/services/conversation/durable
 import type { DurableGoal } from '../../../source/services/logging/conversation-log-events.js';
 
 export type OutputOptions = { readonly json: boolean; readonly quiet: boolean; readonly showReasoning: boolean };
-export type SshTarget = { readonly target: string; readonly remoteDir: string | null; readonly port: number };
+/**
+ * `port` is null when --ssh-port was absent, so the resolver can read ~/.ssh/config.
+ * An explicit 22 is a number, which is a real override and not the default.
+ */
+export type SshTarget = { readonly target: string; readonly remoteDir: string | null; readonly port: number | null };
 
 /**
  * Session-level options, typed for the app owner. Every field is parsed and
@@ -194,8 +198,8 @@ function parseResumeId(value: string): string {
   return value;
 }
 
-function parsePort(value: string | null): number {
-  if (value === null) return 22;
+function parsePort(value: string | null): number | null {
+  if (value === null) return null;
   const port = Number(value);
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(port) || port < 1 || port > 65_535) {
     throw new Error('--ssh-port requires a port number in [1, 65535]');

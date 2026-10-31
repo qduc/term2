@@ -215,6 +215,7 @@ export class DirectBackgroundTasks {
       sessionId: this.#sessionId,
       kind: request.kind,
       label: request.label,
+      ...(request.input !== undefined ? { input: request.input } : {}),
       name: request.name,
       role: request.role,
       model: request.model,

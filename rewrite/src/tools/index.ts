@@ -37,6 +37,8 @@ export type SubagentTaskState = {
   readonly sessionId: string;
   readonly kind: 'subagent';
   readonly label: string;
+  /** Exact caller-provided task input, not a display label or reconstructed history. */
+  readonly input?: string;
   readonly name?: string;
   readonly role?: string;
   readonly model?: ModelRef;
@@ -72,6 +74,8 @@ export type SubagentTaskPort = {
   cancel(target: string): { readonly ok: boolean; readonly code?: string };
 };
 export type NestedRunRequest = {
+  /** Original caller task input, preserved separately from resolved instructions/history. */
+  readonly input?: string;
   readonly mode?: 'foreground' | 'background';
   readonly name?: string;
   readonly role?: string;
@@ -86,6 +90,8 @@ export type NestedRunRequest = {
 };
 export type NestedRunResult = {
   readonly runId?: string;
+  /** Distinct tool names with accepted physical start receipts in this branch, in first-start order. */
+  readonly toolsUsed?: readonly string[];
   readonly items: readonly Item[];
   readonly outcome: NestedRunOutcome;
 };

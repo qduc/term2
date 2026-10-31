@@ -1,4 +1,4 @@
-import type { WireQuestion } from '../../protocol/direct-wire.js';
+import type { WireContent, WireQuestion } from '../../protocol/direct-wire.js';
 
 /** Client display state. This is a view model, not a wire or persistence format. */
 export type Message = {
@@ -6,6 +6,8 @@ export type Message = {
   readonly role: 'user' | 'assistant' | 'tool' | 'system';
   readonly text: string;
   readonly error?: boolean;
+  readonly historyText?: string;
+  readonly attachments?: readonly WireContent[];
 };
 
 export type ToolView = {
@@ -47,6 +49,7 @@ export type TuiState = {
   readonly queueState: string;
   readonly tasks: readonly TaskView[];
   readonly notices: readonly string[];
+  readonly liveEvents?: readonly { readonly key: string; readonly text: string }[];
   readonly usage?: string;
   readonly cost?: string;
   readonly goal?: string;

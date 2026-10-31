@@ -3,12 +3,20 @@
  * conversations-next directory. Copied envelopes keep their original `at`
  * and every accepted fact, including goal, queue, memory, branch and task
  * facts. ConversationLog.append is not used for those lines because it
- * stamps a new clock. An open turn's replay recovery is appended only on
- * the copy. The source is never opened for write, and no live runtime,
- * task or tool is started.
+ * stamps a new clock. Replay recovery for an open turn, queue or branch is
+ * appended only on the copy. Background task recovery is not written here;
+ * opening the copy and admitting new work does that under normal Session
+ * policy. The source is never opened for write, and no live runtime, task
+ * or tool is started.
+ *
+ * Stored workspaceIdentity is only a hint. The resolver returns the current
+ * grant, which must match that hint's root, target and access. A path-only
+ * source matches only a current local grant. The copy persists that grant,
+ * not a path relabel and not the old record.
  *
  * Requires the lead fact/log contracts: readFactLines, the widened Fact
- * union, and replay that understands that vocabulary.
+ * union, native session_started.forkedFrom, and replay that understands
+ * that vocabulary.
  */
 import { randomUUID } from 'node:crypto';
 import { closeSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
@@ -32,8 +40,11 @@ export type DirectForkRequest = {
    * match session_started.binding. Omitting it does not rebind or drop it.
    */
   readonly expectedBinding?: DirectBinding;
-  /** The store's resolver. The resolved root must match the stored path. */
-  readonly resolveWorkspace: (root: string) => Workspace | Promise<Workspace>;
+  /**
+   * Same resolver passed to createDirectSessionStore. The identity argument
+   * is the preserved grant hint, never authority by itself.
+   */
+  readonly resolveWorkspace: (root: string, identity?: Workspace) => Workspace | Promise<Workspace>;
 };
 
 export type DirectForkResult = {
@@ -47,12 +58,16 @@ export type DirectForkResult = {
   readonly materializedRecovery: number;
 };
 
-type ForkedStart = SessionStartedFact & { readonly forkedFrom: string };
+type ForkedStart = SessionStartedFact & {
+  readonly forkedFrom: string;
+  readonly workspaceIdentity: Workspace;
+};
 
 /**
  * Throws when the source is missing, unauthorized, foreign, or not a valid
- * replay. Those failures happen before the new log is created. A failed
- * write is deleted. Success returns the new id and does not modify the source.
+ * replay, or when the current grant does not match the stored identity.
+ * Those failures happen before the new log is created. A failed write is
+ * deleted. Success returns the new id and does not modify the source.
  */
 export async function forkDirectConversation(request: DirectForkRequest): Promise<DirectForkResult> {
   if (typeof request.directory !== 'string' || request.directory.length === 0) {
@@ -69,18 +84,21 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
   const directory = path.resolve(request.directory);
   await assertDirectDirectory(directory, sourceId);
   const sourceLines = readFactLines(logPath(directory, sourceId));
-  const metadata = sessionMetadata(sourceId, sourceLines.map((line) => line.fact));
+  const metadata = sessionMetadata(
+    sourceId,
+    sourceLines.map((line) => line.fact),
+  );
   validateExpectedBinding(metadata.binding, expected);
   // Reject a log this Session cannot replay before any new file exists.
   // Clone first so projection cannot alias the envelopes we copy.
   replay(sourceLines.map((line) => structuredClone(line.fact)));
-  const workspace = await resolveAuthority(request.resolveWorkspace, metadata.workspace);
+  const workspace = await resolveAuthority(request.resolveWorkspace, metadata.workspace, storedIdentity(metadata));
   const id = newDirectId();
   const copied = sourceLines.map((line) => ({
     v: line.v,
     seq: line.seq,
     at: line.at,
-    fact: retargetFact(line.fact, sourceId, id, workspace.root),
+    fact: retargetFact(line.fact, sourceId, id, workspace),
   }));
   const projected = replay(copied.map((line) => line.fact));
   const stampedAt = new Date().toISOString();
@@ -133,18 +151,25 @@ async function assertDirectDirectory(directory: string, sourceId: string): Promi
 }
 
 /**
- * New conversation id and workspace authority. Task ownership follows that id
- * so replay does not treat the copy as another Session. Memory sourceSessionId
- * stays the recorded provenance and is not rewritten. forkedFrom is the
- * immediate source, on the single session_started fact.
+ * New conversation id and current workspace grant. Task ownership follows that
+ * id so replay does not treat the copy as another Session. Memory sourceSessionId
+ * and task workspace snapshots stay recorded provenance and are not rewritten.
+ * forkedFrom is the immediate source, on the single session_started fact.
+ * The persisted identity is the current grant, never the source's old record.
  */
-function retargetFact(fact: Fact, sourceId: string, id: string, workspace: string): Fact {
+function retargetFact(fact: Fact, sourceId: string, id: string, authority: Workspace): Fact {
   const copy = structuredClone(fact);
   if (copy.type === 'session_started') {
     if (copy.id !== sourceId) {
       throw new Error(`direct Session ${sourceId} has invalid or mismatched session_started metadata`);
     }
-    const started: ForkedStart = { ...copy, id, workspace, forkedFrom: sourceId };
+    const started: ForkedStart = {
+      ...copy,
+      id,
+      workspace: authority.root,
+      workspaceIdentity: { root: authority.root, target: authority.target, access: authority.access },
+      forkedFrom: sourceId,
+    };
     return started;
   }
   if (copy.type === 'task_started') {
@@ -193,8 +218,16 @@ async function writeFork(directory: string, sourceId: string, id: string, lines:
       }
     }
     const started = readBack[0]?.fact;
-    if (started?.type !== 'session_started' || started.id !== id || provenanceOf(started) !== sourceId) {
-      throw new Error('direct fork lost its provenance');
+    const expectedStart = lines[0]?.fact;
+    if (
+      started?.type !== 'session_started' ||
+      expectedStart?.type !== 'session_started' ||
+      started.id !== id ||
+      started.workspace !== expectedStart.workspace ||
+      provenanceOf(started) !== sourceId ||
+      !sameExactGrant(workspaceIdentityOf(started), workspaceIdentityOf(expectedStart))
+    ) {
+      throw new Error('direct fork lost its provenance or workspace grant');
     }
     if (replay(readBack.map((line) => line.fact)).recoveryFacts.length !== 0) {
       throw new Error('direct fork replay did not settle');
@@ -226,14 +259,74 @@ function serializeLine(line: FactLine): string {
 }
 
 async function resolveAuthority(
-  resolveWorkspace: (root: string) => Workspace | Promise<Workspace>,
+  resolveWorkspace: (root: string, identity?: Workspace) => Workspace | Promise<Workspace>,
   storedRoot: string,
+  identity: Workspace | undefined,
 ): Promise<Workspace> {
-  const workspace = await resolveWorkspace(storedRoot);
-  if (typeof workspace?.root !== 'string' || path.resolve(workspace.root) !== path.resolve(storedRoot)) {
-    throw new Error('resolved workspace does not match the stored root');
+  const workspace = await resolveWorkspace(storedRoot, identity);
+  if (!isWorkspaceGrant(workspace)) throw new Error('direct fork resolver did not return a workspace grant');
+  if (identity) {
+    if (identity.root !== storedRoot || !sameWorkspace(workspace, identity)) {
+      throw new Error('current workspace grant does not match the stored/requested identity');
+    }
+  } else if (workspace.target !== 'local' || path.resolve(workspace.root) !== path.resolve(storedRoot)) {
+    // A path-only record has no endpoint or access to keep. Do not relabel it as SSH.
+    throw new Error('path-only direct Session requires a matching current local workspace grant');
   }
-  return { ...workspace, root: path.resolve(workspace.root) };
+  const root = workspace.target === 'local' ? path.resolve(workspace.root) : workspace.root;
+  return { root, target: workspace.target, access: workspace.access };
+}
+
+function storedIdentity(fact: SessionStartedFact): Workspace | undefined {
+  const record = fact as SessionStartedFact & { readonly workspaceIdentity?: unknown };
+  if (!('workspaceIdentity' in record) || record.workspaceIdentity === undefined) return undefined;
+  if (!isWorkspaceGrant(record.workspaceIdentity)) {
+    throw new Error('direct fork stored workspace identity is not a grant');
+  }
+  return {
+    root: record.workspaceIdentity.root,
+    target: record.workspaceIdentity.target,
+    access: record.workspaceIdentity.access,
+  };
+}
+
+function isWorkspaceGrant(value: unknown): value is Workspace {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const grant = value as Workspace;
+  return (
+    typeof grant.root === 'string' &&
+    grant.root.length > 0 &&
+    typeof grant.target === 'string' &&
+    grant.target.length > 0 &&
+    (grant.access === 'read' || grant.access === 'read_write')
+  );
+}
+
+/** Local roots compare by resolved path. Any other target must match the endpoint string. */
+function sameWorkspace(left: Workspace, right: Workspace): boolean {
+  return (
+    left.access === right.access &&
+    left.target === right.target &&
+    (left.target === 'local' ? path.resolve(left.root) === path.resolve(right.root) : left.root === right.root)
+  );
+}
+
+function sameExactGrant(left: Workspace | undefined, right: Workspace | undefined): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.root === right.root &&
+    left.target === right.target &&
+    left.access === right.access
+  );
+}
+
+function workspaceIdentityOf(fact: Fact): Workspace | undefined {
+  if (fact.type !== 'session_started') return undefined;
+  const identity = (fact as SessionStartedFact & { readonly workspaceIdentity?: unknown }).workspaceIdentity;
+  return isWorkspaceGrant(identity)
+    ? { root: identity.root, target: identity.target, access: identity.access }
+    : undefined;
 }
 
 function sessionMetadata(id: string, facts: readonly Fact[]): SessionStartedFact {

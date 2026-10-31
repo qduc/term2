@@ -1,0 +1,131 @@
+/** Runtime command decoding shared by local and remote transports. Invalid input has no effect. */
+import type { WireCommand, WireConfiguration, WireContent, WireDecision, WireOrigin, WireQuestionAnswer } from './direct-wire.js';
+import { DirectProtocolError } from './direct-errors.js';
+
+type ObjectValue = Record<string, unknown>;
+const invalid = (message: string): never => { throw new DirectProtocolError('invalid_command', message); };
+function object(value: unknown): ObjectValue {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid('Expected command object');
+  return value as ObjectValue;
+}
+function fields(value: ObjectValue, allowed: readonly string[]): void {
+  for (const key of Object.keys(value)) if (!allowed.includes(key)) invalid(`Unknown command field: ${key}`);
+}
+function text(value: unknown, name: string): string {
+  return typeof value === 'string' ? value : invalid(`Expected string ${name}`);
+}
+function id(value: unknown, name: string): string {
+  const result = text(value, name);
+  return result.length > 0 ? result : invalid(`Expected nonempty ${name}`);
+}
+function choice<T extends string>(value: unknown, allowed: readonly T[], name: string): T {
+  return typeof value === 'string' && allowed.includes(value as T) ? value as T : invalid(`Invalid ${name}`);
+}
+function decision(raw: unknown): WireDecision {
+  const value = object(raw);
+  fields(value, ['kind', 'reason', 'answer', 'answers', 'grant', 'stopAfterApprovalResolution']);
+  if (value.stopAfterApprovalResolution !== undefined && typeof value.stopAfterApprovalResolution !== 'boolean') invalid('Expected boolean stopAfterApprovalResolution');
+  const stop = value.stopAfterApprovalResolution === undefined ? {} : { stopAfterApprovalResolution: value.stopAfterApprovalResolution as boolean };
+  if (value.kind !== 'answers' && value.answers !== undefined) invalid('This decision has no answer set');
+  if (value.kind !== 'grant' && value.grant !== undefined) invalid('This decision has no grant');
+  switch (value.kind) {
+    case 'decline':
+      if (value.reason !== undefined || value.answer !== undefined) invalid('Decline has no answer/reason');
+      return { kind: 'decline', ...stop };
+    case 'answers': {
+      if (!Array.isArray(value.answers) || value.reason !== undefined || value.answer !== undefined) invalid('Expected structured question answers');
+      const answers: WireQuestionAnswer[] = (value.answers as unknown[]).map(raw => {
+        const answer = object(raw); fields(answer, ['questionId', 'value']);
+        const result = Array.isArray(answer.value) ? answer.value.map(item => text(item, 'answer value')) : text(answer.value, 'answer value');
+        return { questionId: id(answer.questionId, 'questionId'), value: result };
+      });
+      return { kind: 'answers', answers, ...stop };
+    }
+    case 'grant':
+      if (value.reason !== undefined || value.answer !== undefined) invalid('Grant has no answer/reason');
+      return { kind: 'grant', grant: choice(value.grant, ['allow-remember', 'unsandboxed-once', 'allow-folder-session', 'allow-edit-file-session', 'allow-edit-folder-session', 'docker-allow-once', 'docker-allow-session', 'docker-allow-project'], 'grant'), ...stop };
+    case 'allow':
+      if (value.reason !== undefined || value.answer !== undefined) invalid('Allow has no answer/reason');
+      return { kind: 'allow', ...stop };
+    case 'deny':
+      if (value.answer !== undefined) invalid('Deny has no question answer');
+      return { kind: 'deny', ...(value.reason !== undefined ? { reason: text(value.reason, 'reason') } : {}), ...stop };
+    case 'answer':
+      if (value.reason !== undefined) invalid('Question answer has no denial reason');
+      return { kind: 'answer', answer: text(value.answer, 'answer'), ...stop };
+    default: return invalid('Invalid interaction decision');
+  }
+}
+function content(raw: unknown): WireContent {
+  const value = object(raw);
+  if (value.type === 'text') { fields(value, ['type', 'text']); return { type: 'text', text: text(value.text, 'text') }; }
+  if (value.type !== 'image') return invalid('Invalid attachment type');
+  fields(value, ['type', 'mediaType', 'data', 'detail']);
+  const data = text(value.data, 'data');
+  const padding = data.indexOf('=');
+  if (!data.length || data.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(data) || (padding >= 0 && (padding < data.length - 2 || (padding === data.length - 2 && !data.endsWith('=='))))) invalid('Image data must be raw padded base64, not a path, URL or data URI');
+  const mediaType = id(value.mediaType, 'mediaType');
+  if (!/^image\/[a-zA-Z0-9.+-]+$/.test(mediaType)) invalid('Expected image media type');
+  return { type: 'image', mediaType, data,
+    ...(value.detail !== undefined ? { detail: text(value.detail, 'detail') } : {}) };
+}
+function origin(raw: unknown): WireOrigin {
+  const value = object(raw); fields(value, ['kind', 'id']);
+  return { kind: choice(value.kind, ['cli', 'tui', 'acp', 'control', 'discord', 'api'], 'origin'),
+    ...(value.id !== undefined ? { id: id(value.id, 'origin id') } : {}) };
+}
+function configuration(raw: unknown): WireConfiguration {
+  const value = object(raw); fields(value, ['model', 'reasoning', 'temperature']);
+  let model: WireConfiguration['model'];
+  if (value.model !== undefined) {
+    const ref = object(value.model); fields(ref, ['provider', 'model']);
+    model = { provider: id(ref.provider, 'provider'), model: id(ref.model, 'model') };
+  }
+  if (value.temperature !== undefined && (typeof value.temperature !== 'number' || !Number.isFinite(value.temperature))) invalid('Expected finite temperature');
+  return { ...(model ? { model } : {}),
+    ...(value.reasoning !== undefined ? { reasoning: choice(value.reasoning, ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'], 'reasoning') } : {}),
+    ...(value.temperature !== undefined ? { temperature: value.temperature as number } : {}) };
+}
+/** Does not normalize user text, request identities, or grant authority. Session owns admission/policy. */
+export function parseWireCommand(raw: unknown): WireCommand {
+  const value = object(raw);
+  switch (value.type) {
+    case 'submit':
+    {
+      fields(value, ['type', 'requestId', 'text', 'attachments', 'origin', 'delivery']);
+      if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');
+      return { type: value.type, requestId: id(value.requestId, 'requestId'), text: text(value.text, 'text'),
+        ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}),
+        ...(value.origin !== undefined ? { origin: origin(value.origin) } : {}),
+        ...(value.delivery !== undefined ? { delivery: choice(value.delivery, ['auto', 'steer', 'follow_up'], 'delivery') } : {}) };
+    }
+    case 'answer': fields(value, ['type', 'requestId', 'decision']);
+      return { type: 'answer', requestId: id(value.requestId, 'requestId'), decision: decision(value.decision) };
+    case 'cancel': {
+      fields(value, ['type', 'target']);
+      if (value.target === undefined) return { type: 'cancel' };
+      const target = object(value.target);
+      if (target.kind === 'foreground') { fields(target, ['kind']); return { type: 'cancel', target: { kind: 'foreground' } }; }
+      fields(target, ['kind', 'id']);
+      if (target.kind !== 'task') return invalid('Invalid cancellation target');
+      return { type: 'cancel', target: { kind: 'task', id: id(target.id, 'task id') } };
+    }
+    case 'retry': fields(value, ['type', 'target', 'executionId']);
+      return { type: 'retry', target: choice(value.target, ['turn', 'tool'], 'retry target'),
+        ...(value.executionId !== undefined ? { executionId: id(value.executionId, 'executionId') } : {}) };
+    case 'configure': fields(value, ['type', 'configuration']); return { type: 'configure', configuration: configuration(value.configuration) };
+    case 'queue_edit': fields(value, ['type', 'messageId', 'text', 'attachments']);
+      if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');
+      return { type: 'queue_edit', messageId: id(value.messageId, 'messageId'), text: text(value.text, 'text'), ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}) };
+    case 'queue_retract': fields(value, ['type', 'messageId']); return { type: 'queue_retract', messageId: id(value.messageId, 'messageId') };
+    case 'task_control': fields(value, ['type', 'taskId', 'action']);
+      return { type: 'task_control', taskId: id(value.taskId, 'taskId'), action: choice(value.action, ['cancel', 'check_in', 'foreground'], 'task action') };
+    case 'rewind': fields(value, ['type', 'targetId']); return { type: 'rewind', targetId: id(value.targetId, 'targetId') };
+    case 'preview': fields(value, ['type', 'text', 'attachments']);
+      if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');
+      return { type: 'preview', text: text(value.text, 'text'), ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}) };
+    case 'compact': case 'queue_resume': case 'queue_discard': case 'list_rewind_targets': case 'reset': case 'rollover':
+      fields(value, ['type']); return { type: value.type };
+    default: return invalid('Unknown direct command type');
+  }
+}

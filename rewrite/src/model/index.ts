@@ -6,6 +6,12 @@
  * Depends on: nothing.
  */
 
+import type { RetryRecoveryBudget } from '../../../source/services/retry/retry-recovery-budget.js';
+
+export { ModelFailure } from './failure.js';
+export type { ModelRecoveryEvidence } from './failure.js';
+export type ModelRecoveryBudget = RetryRecoveryBudget;
+
 // ---------- Conversation items (provider-neutral history) ----------
 
 export type ItemId = string & { readonly __brand: 'ItemId' };
@@ -105,6 +111,16 @@ export type ModelRequest = {
   readonly previousResponseId?: string | null;
   /** Send a self-contained request and suppress provider-side continuation. */
   readonly disableChaining?: boolean;
+  /**
+   * Live-only engine-owned reservation. Presence disables ALL adapter/SDK
+   * physical retries so every dispatch re-enters engine request preparation.
+   * Never serialize this capability to providers or Session facts.
+   */
+  readonly recovery?: { readonly budget: ModelRecoveryBudget; readonly dispatchClaimed?: boolean };
+  /** OpenAI Responses standard tier; unsupported adapters reject this flag. */
+  readonly useStandardServiceTier?: boolean;
+  /** A self-contained HTTP request on supported WS adapters, not an implicit retry. */
+  readonly downgradeTransport?: boolean;
 };
 
 export type Usage = {
@@ -151,10 +167,19 @@ export type ModelError = {
   readonly retryAfterMs?: number;
 };
 
+export type ModelCapabilities = {
+  readonly continuity: boolean;
+  readonly standardServiceTier: boolean;
+  readonly httpTransportDowngrade: boolean;
+};
+
 export interface Model {
   readonly ref: ModelRef;
   readonly contextWindow: number;
-  /** Retries retryable errors internally and reports them as `retrying` events. Throws `ModelError` when it gives up. */
+  /** Actual catalog capacity; absent for uncatalogued models. */
+  readonly catalogContextWindow?: number;
+  readonly capabilities?: ModelCapabilities;
+  /** With recovery injected, one physical attempt only. Throws live ModelFailure; serialize only its ModelError fields. */
   stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent>;
   /** Native compaction where the provider supports it. */
   compact?(request: ModelRequest, signal: AbortSignal): Promise<readonly Item[]>;

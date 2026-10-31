@@ -8,12 +8,16 @@ export type DirectCommandConfiguration = {
   readonly reasoning?: ReasoningEffort;
   readonly temperature?: number;
 };
+export type DirectRolloverRequest = {
+  readonly brief: string;
+  readonly reason?: 'context_pressure' | 'task_boundary';
+};
 export type DirectCommandOperation =
   | { readonly kind: 'retry'; readonly target: 'turn' | 'tool'; readonly executionId?: ExecutionId }
   | { readonly kind: 'compact' }
   | { readonly kind: 'rewind'; readonly targetId: string }
   | { readonly kind: 'configure'; readonly configuration: DirectCommandConfiguration }
-  | { readonly kind: 'rollover' };
+  | { readonly kind: 'rollover'; readonly request?: DirectRolloverRequest };
 export type DirectCommandRequest = { readonly commandId: string; readonly operation: DirectCommandOperation };
 export type DirectCommandOutcome =
   | { readonly kind: 'retried'; readonly turnId: TurnId }

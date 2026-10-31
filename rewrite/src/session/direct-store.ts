@@ -17,6 +17,7 @@ export type DirectRuntimeContext = {
   readonly workspace: Workspace;
   readonly model: ModelRef;
   readonly binding?: DirectBinding;
+  readonly rolloverFrom?: string;
   /** Existing metadata must select the actual restored profile/settings on open. */
   readonly metadata?: SessionStartedFact;
 };
@@ -38,7 +39,12 @@ export type DirectSessionStoreOptions = {
   ) => DirectConversationRuntime | Promise<DirectConversationRuntime>;
 };
 export interface DirectLocalStore extends DirectSessionStore {
-  create(workspace: Workspace, model: ModelRef, binding?: DirectBinding): Promise<DirectLiveSession>;
+  create(
+    workspace: Workspace,
+    model: ModelRef,
+    binding?: DirectBinding,
+    lineage?: { readonly rolloverFrom: string },
+  ): Promise<DirectLiveSession>;
   open(id: string, binding?: DirectBinding): Promise<DirectLiveSession>;
 }
 
@@ -134,6 +140,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
               model: context.model,
               profile: ownedRuntime.profile,
               appVersion: ownedRuntime.appVersion,
+              ...(context.rolloverFrom ? { rolloverFrom: context.rolloverFrom } : {}),
               ...(context.binding ? { binding: context.binding } : {}),
               ...(ownedRuntime.request.reasoning !== undefined ? { reasoning: ownedRuntime.request.reasoning } : {}),
             },
@@ -162,8 +169,10 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
   };
 
   return {
-    async create(workspace, model, binding) {
+    async create(workspace, model, binding, lineage) {
       assertOpen();
+      const rolloverFrom = lineage?.rolloverFrom;
+      if (rolloverFrom !== undefined) requireDirectId(rolloverFrom);
       binding = binding ? structuredClone(binding) : undefined;
       workspace = { ...workspace };
       model = { ...model };
@@ -180,6 +189,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         construct(
           {
             id,
+            ...(rolloverFrom ? { rolloverFrom } : {}),
             workspace: authority,
             model: structuredClone(model),
             ...(binding ? { binding: structuredClone(binding) } : {}),

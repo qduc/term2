@@ -26,7 +26,18 @@ const request = z
       z.object({ kind: z.literal('compact') }).strict(),
       z.object({ kind: z.literal('rewind'), targetId: id }).strict(),
       z.object({ kind: z.literal('configure'), configuration }).strict(),
-      z.object({ kind: z.literal('rollover') }).strict(),
+      z
+        .object({
+          kind: z.literal('rollover'),
+          request: z
+            .object({
+              brief: z.string().min(1),
+              reason: z.enum(['context_pressure', 'task_boundary']).optional(),
+            })
+            .strict()
+            .optional(),
+        })
+        .strict(),
     ]),
   })
   .strict()
@@ -161,6 +172,8 @@ function requestKey(input: DirectCommandRequest): string {
       return JSON.stringify([operation.kind, operation.target, operation.executionId ?? null]);
     case 'rewind':
       return JSON.stringify([operation.kind, operation.targetId]);
+    case 'rollover':
+      return JSON.stringify([operation.kind, operation.request?.brief ?? null, operation.request?.reason ?? null]);
     case 'configure':
       return JSON.stringify([
         operation.kind,

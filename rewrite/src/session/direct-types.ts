@@ -94,6 +94,11 @@ export type Conversation = {
 export type ConversationDeps = TurnDeps & {
   readonly log: ConversationLog;
   readonly context?: DirectContextFactory;
+  /** Called once under the command reservation, before any foreground cancellation.
+   * App owns veto/successor creation; Session alone persists its actual outcome. */
+  readonly rollover?: (
+    request?: import('./direct-command-types.js').DirectRolloverRequest,
+  ) => Promise<import('./direct-command-types.js').DirectCommandOutcome>;
   readonly authorizeNested?: import('./direct-branches.js').DirectNestedAuthorizer;
   readonly publishNotice?: (notice: import('./direct-memory.js').DirectAutomaticMemoryNotice) => void;
   readonly publishBranch?: (event: import('./facade-types.js').DirectBranchTransient) => void;

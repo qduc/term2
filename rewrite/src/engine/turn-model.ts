@@ -368,6 +368,13 @@ export class TurnModel {
             this.#hasOutput = true;
             this.#requestHasOutput = true;
             break;
+          case 'tool_call_streaming_delta':
+            await this.events.publish({ ...event, turnId: this.spec.turnId, modelStep });
+            // Progress already shown to the caller is physical output evidence,
+            // even though it is not a completed/admitted tool or history item.
+            this.#hasOutput = true;
+            this.#requestHasOutput = true;
+            break;
           case 'item': {
             const call = event.item.type === 'tool_call' ? this.tools.root(event.item, modelStep) : undefined;
             await this.events.publish({

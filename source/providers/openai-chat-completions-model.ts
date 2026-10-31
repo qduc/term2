@@ -178,6 +178,8 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
           }
           yield {
             type: 'tool_call_streaming_delta',
+            ...(current.id ? { callId: current.id } : {}),
+            ...(typeof call.index === 'number' ? { callIndex: call.index } : {}),
             ...(current.name ? { toolName: current.name } : {}),
             argumentCharCount: current.arguments.length,
           };

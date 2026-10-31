@@ -28140,6 +28140,39 @@
       "failures": [],
       "evidence": [],
       "notes": "Nine local commands: root tsc, rewrite tsc, layers, complexity, hops, four compaction modes. Related dirty-tree benches (retry turn/tool/fsync, history basic/held/fsync, settings four modes, goal set/fsync/achieve, foreground, capture) also passed before this commit; c3a-network and goal propose-* fail on HEAD in this environment too."
+    },
+    {
+      "id": "2026-10-31-m1-task0-freeze",
+      "timestamp": "2026-10-31T08:32:27Z",
+      "commit": "779e49ba0e71577488fc6569ed81a8a3945cdd5b",
+      "tree": "02d046d6a93617cbd5e28bf91fd8e006a00cb8f0",
+      "revision_kind": "clean commit",
+      "base_commit": "6a192b81335cb1772bad76f5ae5e2a72b6761073",
+      "task_ids": ["2026-10-31-m1-task0-freeze"],
+      "suite": "M1 task 0: frozen contracts and D12 source cuts",
+      "command": "pnpm exec tsc --noEmit; pnpm exec tsc -p rewrite/tsconfig.json; node rewrite/scripts/check-layers.mjs; node rewrite/scripts/check-complexity.mjs; node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts; node rewrite/parity/inventory.mjs; pnpm build; node rewrite/parity/run.mjs check --cli dist/cli.js",
+      "command_complete": true,
+      "environment": {
+        "os": "Linux",
+        "node_version": "v24.19.0",
+        "pnpm_version": "11.7.0",
+        "notes": "Worktree .worktrees/rewrite-direct-lead, local fake providers only, no live provider calls. Results below for the broader tiers come from c46ac0fafd70f33fc46a8db92ee25a2d202c82d8, an earlier local amend that differs from this commit only by whole-file formatting of rewrite/scripts/check-layers.mjs."
+      },
+      "result": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "files_passed": null,
+        "files_failed": 0,
+        "files_skipped": 0,
+        "exit_code": 0
+      },
+      "failures": [],
+      "evidence": [
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/task0-evidence",
+        "/home/qduc/coord/term2/tasks/direct-engine-rewrite/task0-report.md"
+      ],
+      "notes": "Result counts are old CLI parity on this commit. Static gates passed on this commit; layer check at 526 edges and rejected a probe import from session/replay.ts. On c46ac0fa: pnpm test:integration 409 passed 1 skipped (41 files); pnpm test 28 passed; pnpm test:e2e 58 passed; pnpm test:provider-black-box 238 passed 1 skipped. CI port bench step on c46ac0fa and on base 6a192b81: 22 pass, 7 fail, same commands on both. All 7 pass on c46ac0fa with HOME set to an empty temp directory: they read this machine's real settings (shell.autoApproveMode always), so this is an environment dependency in the benches, not a Task 0 regression. Load evidence uses the throwaway spike over rewrite/dist, not the unimplemented new CLI: 288 app modules loaded, none denied (320 before the cuts on the throwaway copy)."
     }
   ]
 }

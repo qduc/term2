@@ -84,6 +84,10 @@ export type Conversation = {
     expectedTurnId: import('../engine/index.js').TurnId,
     discardQueue?: boolean,
   ): import('./facade-types.js').DirectAbortResult;
+  /** Actual accepted request for this completed root, consumed before foreground queue dispatch. */
+  rolloverAtBoundary(
+    turnId: import('../engine/index.js').TurnId,
+  ): import('./direct-command-types.js').DirectCommandRequest | undefined;
   context(): DirectContextState;
   setGoal(
     expectedGeneration: number,

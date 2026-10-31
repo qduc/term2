@@ -85,7 +85,12 @@ export function startNestedTurn(
     throw new RangeError('Native branch output token limit must be a positive integer');
   if (!options.deps.toolContext) throw new Error('A branch requires an authorized workspace and settings');
   const names = new Set(request.toolNames);
-  if (names.size !== request.toolNames.length || names.has('goal_check') || names.has('propose_goal'))
+  if (
+    names.size !== request.toolNames.length ||
+    names.has('goal_check') ||
+    names.has('propose_goal') ||
+    names.has('session_rollover')
+  )
     throw new Error('Invalid child authority: duplicate or root-only tool');
   const registry = options.deps.tools;
   const tools = request.toolNames.map((name) => {

@@ -27,6 +27,7 @@ import {
   type DirectNotificationState,
 } from './direct-notifications.js';
 import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './direct-configuration.js';
+import { directRolloverAtBoundary } from './direct-rollover.js';
 import { captureDirectFinalWindow } from './direct-final.js';
 import { captureDirectCommandHistory } from './direct-history-capture.js';
 import { listDirectRewindTargets, planDirectHistoryCommand } from './direct-command-history.js';
@@ -349,6 +350,36 @@ function conversation(
     validTurn: (turnId) => !!active && active.turnId === turnId && !active.cancelled && !closed && !logFailure,
     baseTools: deps.tools,
     capabilities: supplied,
+    canRollover: () => !!runtimeDeps.rollover,
+    requestRollover(turnId, request) {
+      if (
+        !runtimeDeps.rollover ||
+        !active ||
+        active.turnId !== turnId ||
+        active.cancelled ||
+        commandOwner ||
+        closed ||
+        logFailure
+      )
+        return { ok: false, status: 'rollover_blocked', error: 'This root no longer has rollover authority.' };
+      const existing = facts.find((fact) => fact.type === 'rollover_requested' && fact.turnId === turnId);
+      if (existing?.type === 'rollover_requested') {
+        if (existing.request.brief !== request.brief || existing.request.reason !== request.reason)
+          return { ok: false, status: 'rollover_blocked', error: 'This root already accepted a different handoff.' };
+        return { ok: true, status: 'rollover_requested', rolloverId: existing.commandId };
+      }
+      const commandId = `rollover:${randomUUID()}`;
+      if (
+        !contextCommit(
+          context.goal.generation,
+          [{ type: 'rollover_requested', turnId, commandId, request: structuredClone(request) }],
+          turnId,
+        )
+      )
+        return { ok: false, status: 'rollover_blocked', error: logFailure?.message ?? 'The handoff was not accepted.' };
+      completionHeld = turnId;
+      return { ok: true, status: 'rollover_requested', rolloverId: commandId };
+    },
   });
   for (const entry of newEntries) capabilities.accepted(entry);
   const environment = () => ({
@@ -594,7 +625,8 @@ function conversation(
   ): StartedConversationTurn => {
     if (closed) throw new Error(`conversation ${id} is closed`);
     if (rolloverDestination()) throw new Error(`Session rolled over to ${rolloverDestination()}`);
-    if (active) throw new Error(`conversation ${id} already has an active turn`);
+    if (active || (completionHeld && !planned?.accepted))
+      throw new Error(`conversation ${id} already owns a foreground completion boundary`);
     if (commandOwner && !planned?.accepted) throw new Error('Session history is reserved by a command');
     if (logFailure || !recover()) throw new Error(logFailure!.message);
     if (
@@ -847,6 +879,18 @@ function conversation(
           receipt: structuredClone(commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!),
         };
       };
+      const boundaryRollover = completionHeld ? directRolloverAtBoundary(facts, completionHeld) : undefined;
+      if (
+        boundaryRollover &&
+        (request.commandId !== boundaryRollover.commandId || request.operation.kind !== 'rollover')
+      )
+        return Promise.resolve({
+          result: finish({
+            kind: 'rejected',
+            code: 'busy',
+            message: 'The settled root owns its accepted rollover boundary.',
+          }),
+        });
       if (commandOwner)
         return Promise.resolve({
           result: finish({ kind: 'rejected', code: 'busy', message: 'Another Session command owns history mutation.' }),
@@ -1140,6 +1184,11 @@ function conversation(
           };
         } finally {
           if (commandOwner === owner) commandOwner = null;
+          const handoff = facts.find(
+            (fact) => fact.type === 'rollover_requested' && fact.commandId === request.commandId,
+          );
+          if (handoff?.type === 'rollover_requested' && completionHeld === handoff.turnId && !active)
+            completionHeld = null;
         }
       };
       const done = work();
@@ -1197,6 +1246,7 @@ function conversation(
         toolOccurrences: directPreviewOccurrences(facts, selected.request.input),
       });
     },
+    rolloverAtBoundary: (turnId) => directRolloverAtBoundary(facts, turnId),
     context: () => structuredClone(context),
     setGoal(generation, goal, source = 'user') {
       if (closed || logFailure || !recover()) return false;
@@ -1211,7 +1261,11 @@ function conversation(
       }
     },
     submit(request, settings) {
-      if (commandOwner?.kind === 'rollover' || rolloverDestination())
+      if (
+        commandOwner?.kind === 'rollover' ||
+        rolloverDestination() ||
+        (completionHeld && directRolloverAtBoundary(facts, completionHeld))
+      )
         return {
           admission: {
             kind: 'rejected',
@@ -1256,7 +1310,12 @@ function conversation(
       const plan = planDirectQueue(queueState, command, environment());
       if (plan.effect?.kind === 'start') throw new Error('Use advanceQueue for dispatch');
       if (!commit(plan.facts)) return { kind: 'rejected', reason: 'invalid' };
-      if (command.kind === 'settled' && command.turnId === completionHeld) completionHeld = null;
+      if (
+        command.kind === 'settled' &&
+        command.turnId === completionHeld &&
+        !directRolloverAtBoundary(facts, command.turnId)
+      )
+        completionHeld = null;
       if (plan.effect?.kind === 'cancel') active?.cancel();
       return plan.result;
     },

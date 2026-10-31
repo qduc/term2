@@ -145,6 +145,8 @@ export type ApprovalRequirement =
   | { readonly kind: 'deny'; readonly reason: string };
 
 export type ToolResult = {
+  /** Native root continuation control; settle this result and physical cleanup before stopping. */
+  readonly stopAfterExecution?: true;
   readonly output: string;
   readonly isError: boolean;
   /** Provider-facing structured tool output, such as image parts from read_file. */

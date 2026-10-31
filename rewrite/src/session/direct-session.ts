@@ -180,6 +180,11 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         const outcome = state.terminal?.turnId === admittedTurnId ? state.terminal.outcome : 'interrupted';
         conversation.queue({ kind: 'settled', turnId: admittedTurnId, outcome });
       }
+      // A tool's accepted request is consumed only after its SAME physical
+      // iterator and queue settlement, before another queued root can dispatch.
+      const rollover =
+        admittedTurnId && !closing && !fault ? conversation.rolloverAtBoundary(admittedTurnId) : undefined;
+      if (rollover) await executeCommand(rollover);
       publishState();
       if (!closing && !fault) advance();
     } catch (error) {
@@ -215,6 +220,34 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     const started = conversation.advanceQueue(requestSettings());
     if (started) startDrain(started.turn, started.turnId);
   };
+  const executeCommand = (
+    request: import('./direct-command-types.js').DirectCommandRequest,
+  ): Promise<import('./direct-command-types.js').DirectCommandResult> => {
+    if (closing || fault)
+      return Promise.resolve({ kind: 'not_admitting' as const, reason: fault?.message ?? 'Session is closed' });
+    // Conversation acquires ownership synchronously, before this await. The
+    // existing facade drain remains the only semantic-stream reader.
+    const operation = conversation
+      .command(structuredClone(request), requestSettings(), async () => {
+        if (active) await active.done;
+      })
+      .then(({ result, started }) => {
+        if (started) {
+          if (closing) started.turn.cancel();
+          startDrain(started.turn, started.turnId);
+        } else if (!closing && !fault) advance();
+        publishState();
+        return structuredClone(result);
+      })
+      .catch((error) => {
+        recordFault(error);
+        throw error;
+      });
+    commands.add(operation);
+    void operation.finally(() => commands.delete(operation)).catch(() => {});
+    return operation;
+  };
+
   const submit = async (request: import('./direct-queue-types.js').DirectQueueSubmission): Promise<DirectAdmission> => {
     const invalid = validateSubmission(request);
     if (invalid) return { kind: 'rejected', clientRequestId: request.clientRequestId, reason: invalid };
@@ -262,31 +295,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       return Promise.resolve(structuredClone(result));
     },
     rewindTargets: () => conversation.rewindTargets(),
-    command(request) {
-      if (closing || fault)
-        return Promise.resolve({ kind: 'not_admitting' as const, reason: fault?.message ?? 'Session is closed' });
-      // Conversation acquires ownership synchronously, before this await. The
-      // existing facade drain remains the only semantic-stream reader.
-      const operation = conversation
-        .command(structuredClone(request), requestSettings(), async () => {
-          if (active) await active.done;
-        })
-        .then(({ result, started }) => {
-          if (started) {
-            if (closing) started.turn.cancel();
-            startDrain(started.turn, started.turnId);
-          } else if (!closing && !fault) advance();
-          publishState();
-          return structuredClone(result);
-        })
-        .catch((error) => {
-          recordFault(error);
-          throw error;
-        });
-      commands.add(operation);
-      void operation.finally(() => commands.delete(operation)).catch(() => {});
-      return operation;
-    },
+    command: executeCommand,
     submit,
     submitWithDelivery: submit,
     editQueue: (messageId, edit) => mutate({ kind: 'edit', messageId, edit }),

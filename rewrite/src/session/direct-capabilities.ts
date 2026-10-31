@@ -15,6 +15,7 @@ import { createDirectGoalStopPolicy, type DirectGoalHistoryItem } from './direct
 import { createDirectGoalVerifier } from './direct-goal-verification.js';
 import type { DirectMemoryCapability, DirectAutomaticMemoryNotice } from './direct-memory.js';
 import type { createDirectHooks, DirectHookAcceptedMetadata } from './direct-hooks.js';
+import { createDirectRolloverTool, type DirectRolloverRequestOutcome } from './direct-rollover.js';
 import type { DirectBackgroundTasks } from './direct-background.js';
 
 export type DirectContextPort = {
@@ -54,6 +55,11 @@ export function bindDirectCapabilities(options: {
   readonly validTurn: (turnId: TurnId) => boolean;
   readonly baseTools?: ToolRegistry;
   readonly capabilities?: DirectContextCapabilities;
+  readonly canRollover?: () => boolean;
+  readonly requestRollover?: (
+    turnId: TurnId,
+    request: import('./direct-command-types.js').DirectRolloverRequest,
+  ) => DirectRolloverRequestOutcome;
 }) {
   let capabilities = options.capabilities ?? {};
   let baseTools = options.baseTools;
@@ -124,17 +130,28 @@ export function bindDirectCapabilities(options: {
         }),
       );
     }
+    if (options.canRollover?.())
+      bound.push(
+        createDirectRolloverTool((request) =>
+          turnId && options.requestRollover
+            ? options.requestRollover(turnId, request)
+            : { ok: false, status: 'rollover_blocked', error: 'No live root owns this request.' },
+        ),
+      );
     const overrides = new Map(bound.map((tool) => [tool.spec.name, tool]));
     // Never retain a stale/source goal declaration when no direct goal exists.
     const specs = request.tools.filter(
-      (tool) => !['goal_check', 'propose_goal'].includes(tool.name) && !overrides.has(tool.name),
+      (tool) => !['goal_check', 'propose_goal', 'session_rollover'].includes(tool.name) && !overrides.has(tool.name),
     );
     const tools: ToolRegistry = {
       get: (name) =>
-        overrides.get(name) ?? (['goal_check', 'propose_goal'].includes(name) ? undefined : baseTools?.get(name)),
+        overrides.get(name) ??
+        (['goal_check', 'propose_goal', 'session_rollover'].includes(name) ? undefined : baseTools?.get(name)),
       available: (ctx) => [
         ...(baseTools?.available(ctx) ?? []).filter(
-          (tool) => !overrides.has(tool.spec.name) && !['goal_check', 'propose_goal'].includes(tool.spec.name),
+          (tool) =>
+            !overrides.has(tool.spec.name) &&
+            !['goal_check', 'propose_goal', 'session_rollover'].includes(tool.spec.name),
         ),
         ...bound,
       ],

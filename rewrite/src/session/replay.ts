@@ -29,6 +29,11 @@ import { parseDirectConfigurationFact } from './direct-configuration.js';
 export type ReplayOptions = {
   /** False for live history/root settlement; only explicit reopen recovers/pauses the queue. */
   readonly recoverQueue?: boolean;
+  /**
+   * False keeps accepted root history. Missing tool results, closures, budget stops,
+   * and a terminal are not invented. Busy preview passes false with recoverQueue false.
+   */
+  readonly recoverActiveTurn?: boolean;
 };
 export type ReplayedBranch = {
   readonly branchId: string;
@@ -101,7 +106,7 @@ type ActiveTurn = {
  * Session must append them before the next turn's start, in the supplied order.
  */
 export function replay(facts: readonly Fact[], options: ReplayOptions = {}): ReplayedConversation {
-  return replayProjection(facts, options, true);
+  return replayProjection(facts, options, options.recoverActiveTurn !== false);
 }
 
 function replayProjection(
@@ -117,6 +122,7 @@ function replayProjection(
   const backgroundFacts: DirectBackgroundFact[] = [];
   const branches = new Map<string, BranchStream>();
   let commandReceipts: DirectCommandReceipts = [];
+  const maintenanceCommands = new Set<string>();
   let notifications: DirectNotificationState = { notices: [], deliveries: [] };
   const noticeDeliveries = new Set<TurnId>();
   const silentTurns = new Set<TurnId>();
@@ -253,7 +259,19 @@ function replayProjection(
           throw new Error('replay: background notice delivery is not a silent turn');
         }
         lastOutcome = null;
-        if (fact.retryContext) {
+        if (fact.maintenance) {
+          // Compaction is an empty root owned by one pending compact command. It contributes no user transcript.
+          if (fact.submission || fact.silent || fact.retryContext || fact.input.length !== 0) {
+            throw new Error('replay: maintenance is not a human, silent, or retry admission');
+          }
+          const commandId = fact.maintenance.commandId;
+          if (maintenanceCommands.has(commandId)) throw new Error('replay: compaction command already admitted a root');
+          const receipt = commandReceipts.find((item) => item.request.commandId === commandId);
+          if (!receipt || receipt.outcome !== undefined || receipt.request.operation.kind !== 'compact') {
+            throw new Error('replay: compaction maintenance has no pending compact command');
+          }
+          maintenanceCommands.add(commandId);
+        } else if (fact.retryContext) {
           // Continuation reuses the replacement history. Do not readmit its source input or memory.
           if (fact.submission || fact.input.length !== 0) throw new Error('replay: retry is not a new admission');
           if (lastRootTurnId === undefined || fact.retryContext.sourceTurnId !== lastRootTurnId) {
@@ -427,6 +445,12 @@ function replayProjection(
       }
       case 'turn_ended': {
         const turn = requireActive(fact.turnId, fact.type);
+        if (
+          fact.finalWindow &&
+          (fact.finalWindow.turnId !== fact.turnId || fact.finalWindow.record.terminalCause !== fact.terminalCause)
+        ) {
+          throw new Error('replay: final window does not match its terminal');
+        }
         // Repairs belong before the terminal, never appended behind a closed turn.
         if (hasUnsettledRoots(turn) || turn.interactions.size !== 0 || turn.budgets.size !== 0) {
           throw new Error(`replay: turn ${turn.turnId} ended with unsettled calls, interactions or budget waits`);

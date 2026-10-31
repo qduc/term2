@@ -398,6 +398,10 @@ async function main(argv: readonly string[]): Promise<number> {
         stderr.write(`${NO_PROMPT_MESSAGE}\n`);
         return 1;
       }
+      // A bare -m opens the model picker on a TTY unless --json or the harness-idle marker is set (source/cli.tsx).
+      if (command.options.model === '' && !command.options.output.json && !process.env['TERM2_HARNESS_IDLE_PATH']) {
+        throw refused({ flag: '-m', reason: 'the model picker is not in the direct TUI yet (picker host owner)' });
+      }
       return runInteractive(command.options);
     case 'headless':
       if (command.refused) throw refused(command.refused);
@@ -414,7 +418,9 @@ async function main(argv: readonly string[]): Promise<number> {
       }
       return launchDirect({ kind: 'control', argv: command.argv });
     case 'discord':
-      return launchDirect({ kind: 'discord', argv: command.argv });
+      // The bridge reports SIGINT/SIGTERM through process.exitCode, which the current CLI keeps as the exit status.
+      await launchDirect({ kind: 'discord', argv: command.argv });
+      return process.exitCode ?? 0;
   }
 }
 

@@ -1,8 +1,8 @@
 /** Mapping of the committed M4 helper data, not a task runner or durable owner.
  * Session must accept/validate these facts and expose task state before production use.
  */
-import type { DirectBackgroundFact, DirectTaskResult, DirectTaskState } from '../session/direct-background-types.js';
-import type { WireEvent, WireSnapshot, WireTask, WireTaskResult } from './direct-wire.js';
+import type { DirectBackgroundFact, DirectTaskInteraction, DirectTaskResult, DirectTaskState } from '../session/direct-background-types.js';
+import type { WireEvent, WireSnapshot, WireTask, WireTaskOwner, WireTaskResult } from './direct-wire.js';
 import { parseWireOrigin } from './direct-parse.js';
 import { publicInteraction } from './direct-public.js';
 
@@ -47,21 +47,40 @@ export function publicTask(task: DirectTaskState): WireTask {
     ...(result ? { result, ...(result.output !== undefined ? { text: result.output } : {}) } : {}),
   };
 }
+/** Carry accepted descriptor ownership without publishing workspace or private result data. */
+export function publicTaskOwner(task: WireTask): WireTaskOwner {
+  return {
+    id: task.id, turnId: task.turnId, sessionId: task.sessionId,
+    ...(task.parentExecutionId ? { parentExecutionId: task.parentExecutionId } : {}),
+    ...(task.sourceCallId ? { sourceCallId: task.sourceCallId } : {}),
+    ...(task.origin ? { origin: task.origin } : {}),
+    ...(task.kind ? { kind: task.kind } : {}),
+    ...(task.name ? { name: task.name } : {}),
+    ...(task.role ? { role: task.role } : {}),
+  };
+}
+/** The request keeps its real child turn; its owner retains the accepted parent/role. */
+export function publicTaskInteraction(request: DirectTaskInteraction, task: WireTask) {
+  return { ...publicInteraction(request), taskOwner: publicTaskOwner(task) };
+}
 /** One accepted task fact maps to one cursor-addressable event, never a root answer. */
 export function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, seq: number): WireEvent {
   const base = { sessionId: state.sessionId, seq };
   if (fact.type === 'task_started') {
     return { ...base, turnId: fact.task.parentTurnId, type: 'task_changed',
-      payload: { task: publicTask({ ...fact.task, mode: fact.mode, status: 'running', lastActivityAt: fact.task.startedAt, pendingInteractions: [] }) } };
+      payload: { change: fact.type, at: fact.task.startedAt,
+        task: publicTask({ ...fact.task, mode: fact.mode, status: 'running', lastActivityAt: fact.task.startedAt, pendingInteractions: [] }) } };
   }
-  if (fact.type === 'task_interaction_opened') {
-    return { ...base, turnId: fact.request.turnId, type: 'interaction_opened', payload: { interaction: publicInteraction(fact.request) } };
-  }
-  const task = state.tasks.find(task => task.id === fact.taskId);
+  const taskId = fact.type === 'task_interaction_opened' ? fact.request.taskId : fact.taskId;
+  const task = state.tasks.find(task => task.id === taskId);
   if (!task) throw new Error('Task fact has no projected task identity');
+  if (fact.type === 'task_interaction_opened') {
+    return { ...base, turnId: task.turnId ?? null, type: 'interaction_opened',
+      payload: { interaction: publicTaskInteraction(fact.request, task) } };
+  }
   if (fact.type === 'task_interaction_closed') {
     return { ...base, turnId: task.turnId ?? null, type: 'interaction_resolved', payload: {
-      taskId: fact.taskId, requestId: fact.requestId,
+      taskId: fact.taskId, taskOwner: publicTaskOwner(task), requestId: fact.requestId,
       resolution: fact.resolution.kind === 'decision' ? fact.resolution.decision : fact.resolution,
     } };
   }
@@ -75,5 +94,5 @@ export function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, s
       break;
     }
   }
-  return { ...base, turnId: task.turnId ?? null, type: 'task_changed', payload: { task: next } };
+  return { ...base, turnId: task.turnId ?? null, type: 'task_changed', payload: { change: fact.type, at: fact.at, task: next } };
 }

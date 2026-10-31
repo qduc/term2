@@ -16,8 +16,15 @@ import { BARE_PROFILE_ID, canonicalProfileId } from '../../../source/services/pr
 import { SessionContextService } from '../../../source/services/session/session-context-service.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import { shouldWarnOnHomeDirectoryStart } from '../../../source/utils/home-directory-start-guard.js';
+import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
+import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
 import { createAppSettings } from './settings.js';
-import { run } from './run.js';
+import {
+  launchDirect,
+  runDirectHeadlessOnHost,
+  type DirectHeadlessRequest,
+  type DirectLaunchRequest,
+} from './direct-launch.js';
 import type { HeadlessIo } from '../clients/headless/index.js';
 import {
   CONTROL_USAGE,
@@ -113,7 +120,7 @@ function exitCodeForSignal(signal: NodeJS.Signals): number {
 }
 
 async function runWithSignals(
-  request: Parameters<typeof run>[0],
+  request: DirectHeadlessRequest,
 ): Promise<{ readonly kind: 'completed' | 'cancelled' | 'failed'; readonly signal?: NodeJS.Signals }> {
   // The handle has no started bit. Latch observed activity so later inactivity
   // waits for its durable result.
@@ -144,7 +151,7 @@ async function runWithSignals(
   process.on('SIGINT', () => onSignal('SIGINT'));
   process.on('SIGTERM', () => onSignal('SIGTERM'));
 
-  const handle = run(request);
+  const handle = runDirectHeadlessOnHost(request);
   turnHasStarted = handle.turnActive();
   const result = await handle.result;
   return { kind: result.kind, ...(receivedSignal === undefined ? {} : { signal: receivedSignal }) };
@@ -294,10 +301,78 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     autoApprove: options.autoApprove,
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
     profileExplicit: options.profile !== null || options.lite,
+    output: options.output.json ? 'json' : 'plain',
+    showReasoning: options.output.showReasoning,
   });
   if (result.kind === 'completed') return 0;
   if (result.kind === 'cancelled') return result.signal ? exitCodeForSignal(result.signal) : 1;
   return 1;
+}
+
+/**
+ * Resolves --control-socket: a bare flag uses the pid; a rejected name is
+ * reported and the TUI starts without a socket, as the current CLI does.
+ */
+function resolveControlSocket(options: SessionOptions): { name: string; discordInput: boolean } | undefined {
+  if (options.controlSocket === null) return undefined;
+  const name = options.controlSocket.name ?? String(process.pid);
+  if (!isControlSocketName(name)) {
+    stderr.write(`Control socket name rejected: ${name}\n`);
+    return undefined;
+  }
+  return { name, discordInput: options.discordInput };
+}
+
+async function runInteractive(options: SessionOptions): Promise<number> {
+  const directory = conversationsDirectory();
+  await checkConversationsDirectory(directory);
+
+  const sessionContext = new SessionContextService();
+  const logger = new LoggingService({ sessionContextService: sessionContext });
+  const { service: settings } = createAppSettings({
+    env: buildEnvOverrides(),
+    disableFilePersistence: true,
+    loggingService: logger,
+  });
+  const modelError = await applyModelOverrides(options, settings, logger);
+  if (modelError !== null) {
+    stderr.write(`${modelError}\n`);
+    return 1;
+  }
+  chooseProfile(options, settings);
+
+  // The launcher runs the home-directory confirmation for this mode (`lite` selects it).
+  const controlSocket = resolveControlSocket(options);
+  const request: DirectLaunchRequest = {
+    kind: 'interactive',
+    conversationsDir: directory,
+    selection: { settings, logger, sessionContext },
+    profileExplicit: options.profile !== null || options.lite,
+    lite: options.lite,
+    ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
+    ...(controlSocket === undefined ? {} : { controlSocket }),
+  };
+  return launchDirect(request);
+}
+
+async function runAcp(args: AcpArgs): Promise<number> {
+  const directory = conversationsDirectory();
+  await checkConversationsDirectory(directory);
+
+  const sessionContext = new SessionContextService();
+  const logger = new LoggingService({ sessionContextService: sessionContext });
+  const { service: settings } = createAppSettings({
+    env: buildEnvOverrides(),
+    disableFilePersistence: true,
+    loggingService: logger,
+  });
+  // The launcher resolves --provider, --model and --effort itself, so no overrides are applied here.
+  return launchDirect({
+    kind: 'acp',
+    conversationsDir: directory,
+    selection: { settings, logger, sessionContext },
+    args,
+  });
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -318,24 +393,28 @@ async function main(argv: readonly string[]): Promise<number> {
       return runListModelsCommand(command.search, command.refresh);
     case 'interactive':
       if (command.refused) throw refused(command.refused);
-      if (stdin.isTTY && stdout.isTTY) throw notAvailable('The interactive terminal UI', 'lands in M5');
-      stderr.write(`${NO_PROMPT_MESSAGE}\n`);
-      return 1;
+      if (!(stdin.isTTY && stdout.isTTY)) {
+        if (command.options.resumeId !== null) throw new Error('--resume requires a follow-up prompt');
+        stderr.write(`${NO_PROMPT_MESSAGE}\n`);
+        return 1;
+      }
+      return runInteractive(command.options);
     case 'headless':
       if (command.refused) throw refused(command.refused);
       return runHeadless(command.prompt, command.options);
     case 'serve':
-      throw notAvailable('term2 serve', 'lands in M6');
+      // Waits for the host config the direct serve launcher needs; never falls back to the current CLI.
+      throw notAvailable('term2 serve', 'waits for host config (M6)');
     case 'acp':
-      throw notAvailable('term2 acp', 'lands in M6');
+      return runAcp(command.args);
     case 'control':
       if (!command.valid) {
         stderr.write(CONTROL_USAGE);
         return 1;
       }
-      throw notAvailable('term2 control', 'lands in M6');
+      return launchDirect({ kind: 'control', argv: command.argv });
     case 'discord':
-      throw notAvailable('term2 discord', 'lands in M6');
+      return launchDirect({ kind: 'discord', argv: command.argv });
   }
 }
 

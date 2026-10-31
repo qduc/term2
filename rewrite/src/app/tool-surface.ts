@@ -16,6 +16,7 @@ import { SkillsService } from '../../../source/services/skills/skills-service.js
 import { InvalidatableShellChildRegistry } from '../../../source/utils/shell/shell-child-registry.js';
 import type { ProviderInputItem } from '../../../source/contracts/provider-input.js';
 import type { ToolContextSeed } from '../engine/index.js';
+import type { Workspace } from '../tools/index.js';
 import type { Item, ItemId, ModelRegistry, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from '../tools/source-tools.js';
@@ -30,11 +31,15 @@ type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[
 export function createToolSurface(selection: ProfileSelection, options: ToolSurfaceOptions = {}): AgentSurface {
   const { settings, logger } = selection;
   const modelSelection = settings.get('agent.modelSelection');
-  const executionContext = new ExecutionContext();
+  const workspace = surfaceWorkspace(options.workspace);
+  // Pin one context per surface; never retarget process.cwd or the global
+  // active-workspace fallback while another Session owns tools/background work.
+  const executionContext = ExecutionContext.pin(workspace.root);
   const skillsService = new SkillsService(logger, executionContext.getCwd());
   skillsService.discoverSkills();
   const policies = new ToolApprovalPolicyRegistry();
-  const sessionAccess = new SessionAccessState(settings);
+  const readOnly = workspace.access === 'read';
+  const sessionAccess = new SessionAccessState(settings, { allowEdit: !readOnly });
   const shellChildren = new InvalidatableShellChildRegistry();
   const sessionId = randomUUID();
   const advisoryAbort = new AbortController();
@@ -60,6 +65,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     serviceTierOverrideForNextRequest: null,
     approvalPolicyRegistry: policies,
     sessionAccess,
+    readOnly,
     shellChildRegistry: shellChildren,
     skillsService,
     getGoal: () => undefined,
@@ -83,7 +89,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     executeScriptedTool: executeSourceChild,
     allowBackgroundShell: false,
     allowAskUser: options.interactive === true,
-    allowUnsandboxed: true,
+    allowUnsandboxed: !readOnly,
     // Keep the tool declaration, but do not create an old agent/runtime for it.
     getAgentRuntime: () => ({
       agent: () => {
@@ -133,7 +139,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     notice,
     runtime: {
       tools: registry,
-      toolContext: toolContext(selection, executionContext),
+      toolContext: toolContext(selection, workspace),
       maxParallelToolCalls: settings.get('agent.maxParallelToolCalls') ?? 3,
       dispose() {
         advisoryAbort.abort();
@@ -173,13 +179,28 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   };
 }
 
+/** Snapshot authority before building any tool; do not infer it from a stored path. */
+function surfaceWorkspace(workspace?: Workspace): Workspace {
+  const selected: Workspace = workspace ?? { root: process.cwd(), target: 'local', access: 'read_write' };
+  if (selected.target !== 'local')
+    throw new Error(
+      'Direct source tool assembly requires a local workspace; remote execution context is not configured',
+    );
+  if (selected.access !== 'read' && selected.access !== 'read_write')
+    throw new Error('Invalid direct workspace access');
+  // ExecutionContext.pin validates an absolute root before skill/tool assembly.
+  // The caller/store resolves root identity and authority; do not replace a
+  // read-only/remote grant with authority inferred from local process state.
+  return Object.freeze({ ...selected });
+}
+
 function displayName(profileId: string): string {
   return profileId === 'builtin:standard' ? 'full' : profileId.replace(/^builtin:/, '');
 }
 
-function toolContext({ settings }: ProfileSelection, executionContext: ExecutionContext): ToolContextSeed {
+function toolContext({ settings }: ProfileSelection, workspace: Workspace): ToolContextSeed {
   return {
-    workspace: { root: executionContext.getCwd(), target: 'local', access: 'read_write' },
+    workspace,
     settings: {
       get: (key) => settings.getDynamic(key) as ReturnType<ToolContextSeed['settings']['get']>,
       watch(listener) {

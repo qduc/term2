@@ -3,32 +3,17 @@ import type { TurnId } from '../engine/index.js';
 import type { ContentPart, ModelError, ModelRef, Usage } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { DirectMessage, DirectSessionState, DirectToolDisplay } from './facade-types.js';
-import type { Fact, TurnOutcomeName } from './facts.js';
+export type { DirectDraft } from './facade-types.js';
+import type { Fact } from './facts.js';
 
-export type DirectDraft = {
-  readonly id: string;
-  readonly turnId: TurnId;
-  readonly modelStep: number;
-  readonly text: string;
-};
 export type DirectDisplayTool = DirectToolDisplay & {
-  readonly parentExecutionId?: string;
-  readonly callId: string;
   /** A model call is not evidence that its physical body started. */
   readonly phase: 'called' | 'started' | 'completed' | 'unknown';
-  readonly isError?: boolean;
-  readonly providerOutput?: readonly Readonly<Record<string, unknown>>[];
-  readonly display?: unknown;
 };
-/** Extra read-model fields awaiting reconciliation into shared facade-types.ts. */
+/** The shared public read model plus explicit non-durable runtime failure. */
 export type DirectPublicState = Omit<DirectSessionState, 'tools'> & {
   readonly tools: readonly DirectDisplayTool[];
-  readonly activeTurnId: TurnId | null;
-  readonly drafts: readonly DirectDraft[];
-  readonly reasoning: string;
-  /** Non-durable terminal failure when the writer/semantic stream could not settle. */
   readonly runtimeError: ModelError | null;
-  readonly terminal: { readonly turnId: TurnId; readonly outcome: TurnOutcomeName; readonly error?: ModelError } | null;
 };
 
 /** Starts an empty read model; accepted facts, not provider calls, advance it. */
@@ -52,8 +37,8 @@ export function initialDirectState(id: string, workspace: Workspace, model: Mode
 }
 
 /** Identical stable draft identity for live projection and read-only replay. */
-export function directDraftId(turnId: TurnId, modelStep = 1): string {
-  return `${turnId}-step-${modelStep}-partial`;
+export function directDraftId(turnId: TurnId, modelStep?: number): string {
+  return modelStep === undefined ? `${turnId}-partial` : `${turnId}-model-${modelStep}-partial`;
 }
 
 /** Applies one accepted fact without mutating any previously captured snapshot. */
@@ -70,10 +55,11 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact): DirectPu
         runtimeError: null,
         terminal: null,
         messages: [...state.messages, ...fact.input.flatMap(messageFor)],
+        admissions: fact.submission ? [...state.admissions, directSubmittedTurn(fact)!.admission] : state.admissions,
       };
     case 'text_delta': {
       const modelStep = fact.modelStep ?? 1;
-      const id = directDraftId(fact.turnId, modelStep);
+      const id = directDraftId(fact.turnId, fact.modelStep);
       const existing = state.drafts.find((draft) => draft.id === id);
       const draft = { id, turnId: fact.turnId, modelStep, text: (existing?.text ?? '') + fact.delta };
       return {
@@ -240,4 +226,27 @@ function addUsage(left: Usage, right: Usage): Usage {
 function replaceTool(tools: readonly DirectDisplayTool[], tool: DirectDisplayTool): readonly DirectDisplayTool[] {
   const existing = tools.findIndex((entry) => entry.executionId === tool.executionId);
   return existing < 0 ? [...tools, tool] : tools.map((entry, index) => (index === existing ? tool : entry));
+}
+
+/** Reads exactly the durable user item named by turn_started submission correlation. */
+export function directSubmittedTurn(fact: Extract<Fact, { readonly type: 'turn_started' }>) {
+  if (!fact.submission) return null;
+  const submission = fact.submission;
+  const item = fact.input.find((entry) => entry.type === 'user_message' && entry.id === submission.messageId);
+  if (!submission.clientRequestId?.trim() || item?.type !== 'user_message') {
+    throw new Error('invalid direct turn submission correlation');
+  }
+  return {
+    request: {
+      clientRequestId: submission.clientRequestId,
+      content: item.content,
+      ...(submission.origin ? { origin: submission.origin } : {}),
+    },
+    admission: {
+      kind: 'started',
+      clientRequestId: submission.clientRequestId,
+      messageId: submission.messageId,
+      turnId: fact.turnId,
+    } as const,
+  };
 }

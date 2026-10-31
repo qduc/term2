@@ -99,6 +99,11 @@ export interface AgentFactoryDeps {
   getAgentRuntime?: () => Pick<AgentRuntime, 'agent'> | null;
   /** Root-session-only policy capability for explicitly opted-in definitions. */
   postExecutePauseCapability?: PostExecutePauseCapability;
+  /** Optional pre-body gate for physical calls made by a script, never root calls. */
+  executeScriptedTool?: (
+    input: { toolName: string; arguments: unknown; context: unknown; details: unknown },
+    execute: () => Promise<unknown>,
+  ) => Promise<unknown>;
   /** Policy authority owned by this tool graph. */
   approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   /** Handle-owned state for root read and Docker capabilities. */
@@ -250,7 +255,15 @@ export function buildAgentTools({
             return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
           }
 
-          const executeOriginal = () => Promise.resolve(definition.execute(normalizedParams, _context, details));
+          const executeOriginal = () => {
+            const execute = () => Promise.resolve(definition.execute(normalizedParams, _context, details));
+            return isScriptedToolCall(_context) && deps.executeScriptedTool
+              ? deps.executeScriptedTool(
+                  { toolName: definition.name, arguments: normalizedParams, context: _context, details },
+                  execute,
+                )
+              : execute();
+          };
           const result = await executeOriginal();
           const postExecute =
             definition.postExecute ??

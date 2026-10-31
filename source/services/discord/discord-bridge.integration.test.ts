@@ -72,7 +72,9 @@ async function fixture(
 ) {
   const root = fs.mkdtempSync(
     path.join(
-      options.approveImages === false ? os.homedir() : process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(),
+      // Keep image reads outside the app's implicitly allowed scratch root, even
+      // when the invoking session exports its own app-suffix TMPDIR.
+      options.imageTools ? os.homedir() : process.platform === 'darwin' ? '/private/tmp' : os.tmpdir(),
       'term2-discord-',
     ),
   );
@@ -157,7 +159,10 @@ async function fixture(
     const settings = createMockSettingsService({
       'agent.modelSelection': { provider: providerId, model: 'fixture-model' },
       'agent.retryAttempts': 0,
-      ...(options.imageTools && options.approveImages !== false ? { 'shell.autoApproveMode': 'always' } : {}),
+      // Settings loading demotes 'always' to 'auto' if the sandbox is enabled.
+      ...(options.imageTools && options.approveImages !== false
+        ? { 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }
+        : {}),
       ...(options.proactive ? { 'app.activeProfileId': options.profile ?? 'builtin:bare' } : {}),
     });
     const context = new SessionContextService();

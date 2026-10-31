@@ -122,9 +122,13 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   typecheck the integrated tree, not only the pre-merge branch.
 - **Independent oracles:** Discord reaction fixtures incremented the sent ID
   twice (created IDs 10/12 versus acknowledged 11/13); assert the association
-  against actual acknowledgements. Image bytes reached model input even though
-  completed job text had cleared `read_file`; observe the model request, not an
-  unrelated transient field. Headless approval-required results do not prove a
+  against actual acknowledgements. Discord image fixtures must stage outside the
+  app scratch root: an inherited app-suffix `TMPDIR` otherwise bypasses read approval
+  and can mask invalid settings. On load, `shell.autoApproveMode: always` with
+  `sandbox.enabled: true` is deliberately demoted to `auto`; an unattended-read
+  fixture must configure both settings consistently. Image bytes reached model input
+  even though completed job text had cleared `read_file`; observe the model request,
+  not an unrelated transient field. Headless approval-required results do not prove a
   bypass; an interactive approval claim needs an interactive owner.
 
 ### Local-only boundary lessons reviewed for reconciliation

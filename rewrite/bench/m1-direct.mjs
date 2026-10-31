@@ -78,7 +78,7 @@ async function respond(res, step) {
   res.end();
 }
 
-async function scenario(script) {
+async function scenario(script, agent = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'm1-bench-')));
   const s = {
     root,
@@ -111,7 +111,7 @@ async function scenario(script) {
   fs.writeFileSync(
     path.join(stateDir, 'settings.json'),
     JSON.stringify({
-      agent: { retryAttempts: 0, modelSelection: { model: MODEL.model, provider: MODEL.provider } },
+      agent: { retryAttempts: 0, modelSelection: { model: MODEL.model, provider: MODEL.provider }, ...agent },
       providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
       sandbox: { enabled: false },
     }),
@@ -884,6 +884,101 @@ row('R14', 'no prompt, non-TTY, outside home: interactive-terminal refusal', asy
     assert.equal(r.code, 1);
     assert.ok(r.stderr.includes('term2 needs an interactive terminal'), r.stderr);
     assert.equal(s.requests.length, 0);
+  } finally {
+    await s.close();
+  }
+});
+
+row('R15', 'stalled stream: idle limit ends the turn as failed, text kept, no retry', async () => {
+  const stalled = () => ({
+    actions: [{ data: chunk({ role: 'assistant', content: 'partial' }) }, { hold: true }],
+  });
+  const s = await scenario(stalled, { maxModelStreamIdleMs: 300, retryAttempts: 2 });
+  try {
+    const r = await runCli(s, ['say hello']);
+    assert.equal(r.code, 1, r.stderr);
+    assert.equal(r.stdout, 'partial');
+    assert.equal(s.requests.length, 1, 'a stall is not retried');
+    assert.match(
+      r.stderr,
+      /^Profile: bare\nerror Model request stalled with no streamed output[^\n]*\(text 7, [^\n]*\n$/,
+    );
+    const file = onlyFile(s.convDir);
+    const facts = readFacts(file);
+    assert.equal(facts.at(-1).outcome, 'failed');
+    assert.equal(deltas(facts), 'partial');
+  } finally {
+    await s.close();
+  }
+});
+
+row('R16', 'output cap: text over the limit is neither shown nor logged, turn fails', async () => {
+  const s = await scenario(
+    () => ({
+      actions: [
+        { data: chunk({ role: 'assistant', content: 'kept ' }) },
+        { data: chunk({ content: 'over the limit' }) },
+        { data: usageChunk() },
+        { done: true },
+      ],
+    }),
+    { maxStreamOutputChars: 8 },
+  );
+  try {
+    const r = await runCli(s, ['say hello']);
+    assert.equal(r.code, 1, r.stderr);
+    assert.equal(r.stdout, 'kept ');
+    assert.equal(r.stderr, 'Profile: bare\nerror Model output was stopped because text exceeded its limit.\n');
+    const facts = readFacts(onlyFile(s.convDir));
+    assert.equal(facts.at(-1).outcome, 'failed');
+    assert.equal(deltas(facts), 'kept ');
+  } finally {
+    await s.close();
+  }
+});
+
+row('R17', 'late signal: a signal after the durable result never replaces its exit code', async () => {
+  // The trigger is the last output, written after the terminal fact, so the signal lands during exit.
+  const cases = [
+    { script: okScript('Hello there.'), stream: 'stdout', mark: 'Hello there.\n', code: 0 },
+    {
+      script: () => ({ status: 500, json: { error: { message: 'boom', type: 'server_error' } } }),
+      stream: 'stderr',
+      mark: 'error 500 boom\n',
+      code: 1,
+    },
+  ];
+  for (const { script, stream, mark, code } of cases) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const signal = attempt % 2 ? 'SIGINT' : 'SIGTERM';
+      const s = await scenario(script);
+      try {
+        const run = startCli(s, ['say hello']);
+        let sent = false;
+        run.child[stream].on('data', () => {
+          if (sent || !(stream === 'stdout' ? run.out() : run.err()).endsWith(mark)) return;
+          sent = true;
+          // A burst, because the window during process exit is too short for one signal to hit reliably.
+          const burst = setInterval(() => run.child.kill(signal), 1);
+          run.child.once('close', () => clearInterval(burst));
+        });
+        const r = await run.exited;
+        if (r.stderr.includes(STUB)) throw new Blocked(`CLI is still the M1 stub (${STUB})`);
+        assert.equal(r.signal, null, `${signal} ${attempt} must not kill the process after its result`);
+        assert.equal(r.code, code, `${signal} ${attempt} exit (stderr ${JSON.stringify(r.stderr)})`);
+      } finally {
+        await s.close();
+      }
+    }
+  }
+});
+
+row('R18', 'environment overrides reach the request', async () => {
+  const s = await scenario(okScript('Hello there.'));
+  try {
+    const r = await runCli(s, ['say hello'], { env: { TERM2_SUPERVISED: '1' } });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(s.requests[0].max_tokens, 8192);
   } finally {
     await s.close();
   }

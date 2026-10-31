@@ -132,6 +132,14 @@ export async function runDirectHeadless(
     turnId: targetTurnId,
   });
 
+  // The old --json schema is a ConversationEvent read model, not the wire event
+  // stream. Until protocol publishes that mapping, fail explicitly instead of
+  // presenting wire events as parity. Remove this gate with the read model.
+  if (output === 'json') {
+    errorText('--json output requires the direct conversation-event read model, which is not available yet.');
+    return result('error', 1);
+  }
+
   const onAbort = (): void => {
     if (targetTurnId === null) {
       // No turn to cancel yet. Detach and report cancellation; the app's host

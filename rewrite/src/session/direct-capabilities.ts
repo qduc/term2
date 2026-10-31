@@ -64,79 +64,84 @@ export function bindDirectCapabilities(options: {
   const write = (turnId: TurnId, generation: number, facts: readonly DirectContextFact[]): boolean =>
     options.validTurn(turnId) && options.commit(generation, facts, turnId);
 
+  const planRequest = (request: ModelRequest, turnId?: TurnId) => {
+    const { instructions, requestGoal } = planDirectInstructions(
+      request.instructions,
+      options.read(),
+      capabilities.memory,
+    );
+    const bound: Tool[] = [...(capabilities.memory?.tools ?? [])];
+    if (requestGoal.goal?.status === 'active') {
+      bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
+    }
+    if (capabilities.proposeGoal && !requestGoal.goal && !requestGoal.proposalMade) {
+      bound.push(
+        createDirectProposeGoalTool({
+          readGoal: () => options.read().goal,
+          commit: (generation, facts) => (turnId ? write(turnId, generation, facts) : false),
+          async approve(goal, context) {
+            if (!context.interact) return { approved: false, source: 'system' };
+            const before = options.facts().length;
+            const decision = await context.interact({
+              kind: 'approval',
+              toolName: 'propose_goal',
+              input: { goal },
+              summary: `Create durable goal: ${goal.outcome}`,
+              presentation: { requiresExplicitUser: true, goalId: goal.id },
+            });
+            // Only an accepted closure for THIS proposal and real user source
+            // can grant it. Headless policy answers retain system provenance.
+            const facts = options.facts().slice(before);
+            const opened = facts.find(
+              (fact) =>
+                fact.type === 'interaction_opened' &&
+                fact.request.toolName === 'propose_goal' &&
+                fact.request.presentation?.goalId === goal.id,
+            );
+            const closed =
+              opened?.type === 'interaction_opened'
+                ? facts.find(
+                    (fact) => fact.type === 'interaction_closed' && fact.requestId === opened.request.requestId,
+                  )
+                : undefined;
+            return {
+              approved:
+                decision.kind === 'allow' &&
+                closed?.type === 'interaction_closed' &&
+                closed.resolution.kind === 'allow' &&
+                closed.resolutionSource === 'user',
+              source: closed?.type === 'interaction_closed' ? closed.resolutionSource ?? 'system' : 'system',
+            };
+          },
+        }),
+      );
+    }
+    const overrides = new Map(bound.map((tool) => [tool.spec.name, tool]));
+    // Never retain a stale/source goal declaration when no direct goal exists.
+    const specs = request.tools.filter(
+      (tool) => !['goal_check', 'propose_goal'].includes(tool.name) && !overrides.has(tool.name),
+    );
+    const tools: ToolRegistry = {
+      get: (name) =>
+        overrides.get(name) ??
+        (['goal_check', 'propose_goal'].includes(name) ? undefined : options.baseTools?.get(name)),
+      available: (ctx) => [
+        ...(options.baseTools?.available(ctx) ?? []).filter(
+          (tool) => !overrides.has(tool.spec.name) && !['goal_check', 'propose_goal'].includes(tool.spec.name),
+        ),
+        ...bound,
+      ],
+    };
+    return { request: { ...request, instructions, tools: [...specs, ...bound.map((tool) => tool.spec)] }, tools };
+  };
+
   return {
+    previewRequest: (request: ModelRequest) => planRequest(request).request,
     async prepareRequest(request: ModelRequest, input: { turnId: TurnId; modelStep: number; signal: AbortSignal }) {
       await ensureStarted();
       input.signal.throwIfAborted();
       if (!options.validTurn(input.turnId)) throw new Error('Stale Session request');
-      const { instructions, requestGoal } = planDirectInstructions(
-        request.instructions,
-        options.read(),
-        capabilities.memory,
-      );
-      const bound: Tool[] = [...(capabilities.memory?.tools ?? [])];
-      if (requestGoal.goal?.status === 'active') {
-        bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
-      }
-      if (capabilities.proposeGoal && !requestGoal.goal && !requestGoal.proposalMade) {
-        bound.push(
-          createDirectProposeGoalTool({
-            readGoal: () => options.read().goal,
-            commit: (generation, facts) => write(input.turnId, generation, facts),
-            async approve(goal, context) {
-              if (!context.interact) return { approved: false, source: 'system' };
-              const before = options.facts().length;
-              const decision = await context.interact({
-                kind: 'approval',
-                toolName: 'propose_goal',
-                input: { goal },
-                summary: `Create durable goal: ${goal.outcome}`,
-                presentation: { requiresExplicitUser: true, goalId: goal.id },
-              });
-              // Only an accepted closure for THIS proposal and real user source
-              // can grant it. Headless policy answers retain system provenance.
-              const facts = options.facts().slice(before);
-              const opened = facts.find(
-                (fact) =>
-                  fact.type === 'interaction_opened' &&
-                  fact.request.toolName === 'propose_goal' &&
-                  fact.request.presentation?.goalId === goal.id,
-              );
-              const closed =
-                opened?.type === 'interaction_opened'
-                  ? facts.find(
-                      (fact) => fact.type === 'interaction_closed' && fact.requestId === opened.request.requestId,
-                    )
-                  : undefined;
-              return {
-                approved:
-                  decision.kind === 'allow' &&
-                  closed?.type === 'interaction_closed' &&
-                  closed.resolution.kind === 'allow' &&
-                  closed.resolutionSource === 'user',
-                source: closed?.type === 'interaction_closed' ? closed.resolutionSource ?? 'system' : 'system',
-              };
-            },
-          }),
-        );
-      }
-      const overrides = new Map(bound.map((tool) => [tool.spec.name, tool]));
-      // Never retain a stale/source goal declaration when no direct goal exists.
-      const specs = request.tools.filter(
-        (tool) => !['goal_check', 'propose_goal'].includes(tool.name) && !overrides.has(tool.name),
-      );
-      const tools: ToolRegistry = {
-        get: (name) =>
-          overrides.get(name) ??
-          (['goal_check', 'propose_goal'].includes(name) ? undefined : options.baseTools?.get(name)),
-        available: (ctx) => [
-          ...(options.baseTools?.available(ctx) ?? []).filter(
-            (tool) => !overrides.has(tool.spec.name) && !['goal_check', 'propose_goal'].includes(tool.spec.name),
-          ),
-          ...bound,
-        ],
-      };
-      return { request: { ...request, instructions, tools: [...specs, ...bound.map((tool) => tool.spec)] }, tools };
+      return planRequest(request, input.turnId);
     },
     async normalStop(input: { turnId: TurnId; signal: AbortSignal }) {
       input.signal.throwIfAborted();

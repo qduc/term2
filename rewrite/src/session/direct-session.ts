@@ -1,4 +1,7 @@
 /** Live host facade over one direct Conversation. Only that Conversation writes facts. */
+import { randomUUID } from 'node:crypto';
+import { directPreviewLifecycle } from './direct-preview.js';
+import type { Item, ItemId } from '../model/index.js';
 import type { InteractionDecision, InteractionRequestId, TurnId } from '../engine/index.js';
 import type { ModelError, ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
@@ -79,6 +82,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     seq = entry.seq;
     durable.push({ type: 'fact', position: ++position, seq: entry.seq, at: entry.at, fact: entry.fact });
   }
+  const resumedAtSeq = seq;
   let reopened = true;
   const publicState = () => (reopened ? interruptedDirectState(state) : state);
 
@@ -232,6 +236,15 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   };
   return {
     id: options.id,
+    snapshotInputPreview(request) {
+      if (closing || fault) throw new Error(fault?.message ?? 'Session is closed');
+      const content = [{ type: 'text' as const, text: request.text }, ...(request.attachments ?? [])];
+      const invalid = validateSubmission({ clientRequestId: 'preview', content });
+      if (invalid) throw new Error(invalid);
+      const draft: Item = { type: 'user_message', id: randomUUID() as ItemId, content };
+      const planned = conversation.snapshotInputPreview({ ...options.request, model: options.model, input: [draft] });
+      return structuredClone({ ...planned, ...directPreviewLifecycle(durable, resumedAtSeq) });
+    },
     submit,
     submitWithDelivery: submit,
     editQueue: (messageId, edit) => mutate({ kind: 'edit', messageId, edit }),

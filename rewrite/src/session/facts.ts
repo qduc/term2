@@ -68,6 +68,7 @@ export type DirectTurnFact =
   | { readonly type: 'budget_observed'; readonly turnId: TurnId; readonly evidence: RunBudgetEvent }
   | {
       readonly type: 'turn_started';
+      readonly requestConfiguration?: import('./direct-preview.js').DirectPreviewConfiguration;
       readonly turnId: TurnId;
       readonly input: readonly Item[];
       readonly submission?: SubmissionMetadata;

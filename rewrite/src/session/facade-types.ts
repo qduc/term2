@@ -143,6 +143,9 @@ export type DirectSessionReplayCapture = DirectSessionCapture & {
 export type DirectCancelTarget = { readonly kind: 'foreground' } | { readonly kind: 'task'; readonly id: string };
 export interface DirectSession {
   readonly id: string;
+  snapshotInputPreview(
+    request: import('./direct-preview.js').DirectPreviewRequest,
+  ): import('./direct-preview.js').DirectPreviewSnapshot;
   submit(request: DirectSubmission): Promise<DirectAdmission>;
   submitWithDelivery(request: DirectQueueSubmission): Promise<DirectAdmission>;
   editQueue(messageId: string, edit: DirectQueueEdit): Promise<DirectQueueMutation>;

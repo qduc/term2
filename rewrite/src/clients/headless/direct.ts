@@ -119,6 +119,9 @@ export async function runDirectHeadless(
    * not finish between the two events if the task frame is observed first.
    */
   const expectedCompletion = new Set<string>();
+  const endedTurns = new Set<string>();
+  for (const turn of connection.snapshot.turnResults ?? []) endedTurns.add(turn.turnId);
+  if (connection.snapshot.terminal !== null) endedTurns.add(connection.snapshot.terminal.turnId);
   for (const notice of connection.snapshot.notifications?.notices ?? []) notices.set(notice.id, notice);
   for (const delivery of connection.snapshot.notifications?.deliveries ?? []) {
     for (const id of delivery.notificationIds) delivered.add(id);
@@ -441,13 +444,15 @@ export async function runDirectHeadless(
         }
         const result = drained.result;
         if (result.kind === 'started' || result.kind === 'duplicate') {
-          targetTurnId = result.turnId;
-          lastTurnId = result.turnId;
-          finalText = '';
-          streamedText = '';
-          streamedByMessage.clear();
           phase.drainRequestId = null;
           phase.nextDrainAt = 0;
+          if (!endedTurns.has(result.turnId)) {
+            targetTurnId = result.turnId;
+            lastTurnId = result.turnId;
+            finalText = '';
+            streamedText = '';
+            streamedByMessage.clear();
+          }
           return null;
         }
         phase.drainRequestId = null;
@@ -629,6 +634,7 @@ export async function runDirectHeadless(
         case 'turn_ended': {
           if (!forTurn) break;
           lastTurnId = targetTurnId;
+          if (targetTurnId !== null) endedTurns.add(targetTurnId);
           const outcome = event.payload.outcome;
           const terminalCause = event.payload.terminalCause;
           if (background !== null && (abortedInBackground || options.signal?.aborted)) {

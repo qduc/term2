@@ -1,18 +1,24 @@
 /**
  * Copy one authorized direct conversation into a new log in the same
- * conversations-next directory. The source is only read. Replay recovery for
- * an open turn is appended to the copy, so the fork does not resume live work
- * or re-run an unobserved tool effect. No runtime is constructed; the host
- * opens the returned id through the direct store.
+ * conversations-next directory. Copied envelopes keep their original `at`
+ * and every accepted fact, including goal, queue, memory, branch and task
+ * facts. ConversationLog.append is not used for those lines because it
+ * stamps a new clock. An open turn's replay recovery is appended only on
+ * the copy. The source is never opened for write, and no live runtime,
+ * task or tool is started.
+ *
+ * Requires the lead fact/log contracts: readFactLines, the widened Fact
+ * union, and replay that understands that vocabulary.
  */
 import { randomUUID } from 'node:crypto';
+import { closeSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { lstat, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { DirectBinding } from './facade-types.js';
-import type { Fact, SessionStartedFact } from './facts.js';
-import { createLog, readFacts, type ConversationLog } from './log.js';
+import { LOG_FORMAT_VERSION, type Fact, type FactLine, type SessionStartedFact } from './facts.js';
+import { readFactLines } from './log.js';
 import { replay } from './replay.js';
 
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -37,14 +43,11 @@ export type DirectForkResult = {
   readonly model: ModelRef;
   readonly binding?: DirectBinding;
   readonly status: 'idle' | 'interrupted';
-  /** Recovery facts written on the fork only. Zero when the source turn was already closed. */
+  /** Recovery facts written on the fork only. Zero when replay was already stable. */
   readonly materializedRecovery: number;
 };
 
-type SettledFork = {
-  readonly status: 'idle' | 'interrupted';
-  readonly started: SessionStartedFact;
-};
+type ForkedStart = SessionStartedFact & { readonly forkedFrom: string };
 
 /**
  * Throws when the source is missing, unauthorized, foreign, or not a valid
@@ -65,23 +68,43 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
 
   const directory = path.resolve(request.directory);
   await assertDirectDirectory(directory, sourceId);
-  const sourceFacts = readFacts(logPath(directory, sourceId));
-  const metadata = sessionMetadata(sourceId, sourceFacts);
+  const sourceLines = readFactLines(logPath(directory, sourceId));
+  const metadata = sessionMetadata(sourceId, sourceLines.map((line) => line.fact));
   validateExpectedBinding(metadata.binding, expected);
-  const projected = replay(sourceFacts);
+  // Reject a log this Session cannot replay before any new file exists.
+  // Clone first so projection cannot alias the envelopes we copy.
+  replay(sourceLines.map((line) => structuredClone(line.fact)));
   const workspace = await resolveAuthority(request.resolveWorkspace, metadata.workspace);
   const id = newDirectId();
-  const facts = copiedFacts(metadata, id, workspace.root, sourceFacts, projected.recoveryFacts);
-  const settled = await writeFork(directory, sourceId, id, facts);
+  const copied = sourceLines.map((line) => ({
+    v: line.v,
+    seq: line.seq,
+    at: line.at,
+    fact: retargetFact(line.fact, sourceId, id, workspace.root),
+  }));
+  const projected = replay(copied.map((line) => line.fact));
+  const stampedAt = new Date().toISOString();
+  const recovery = projected.recoveryFacts.map((fact, index) => ({
+    v: LOG_FORMAT_VERSION,
+    seq: copied.length + index + 1,
+    at: stampedAt,
+    fact,
+  }));
+  const lines = [...copied, ...recovery];
+  const stable = replay(lines.map((line) => line.fact));
+  if (stable.recoveryFacts.length !== 0) throw new Error('direct fork replay did not settle');
+  await writeFork(directory, sourceId, id, lines);
 
+  const started = lines[0]?.fact;
+  if (started?.type !== 'session_started') throw new Error('direct fork lost its session_started fact');
   return {
     sourceId,
     id,
     workspace,
-    model: structuredClone(settled.started.model),
-    ...(settled.started.binding ? { binding: structuredClone(settled.started.binding) } : {}),
-    status: settled.status,
-    materializedRecovery: projected.recoveryFacts.length,
+    model: structuredClone(started.model),
+    ...(started.binding ? { binding: structuredClone(started.binding) } : {}),
+    status: stable.status,
+    materializedRecovery: recovery.length,
   };
 }
 
@@ -109,75 +132,97 @@ async function assertDirectDirectory(directory: string, sourceId: string): Promi
   if (!found) throw new Error(`direct fork source ${sourceId} does not exist`);
 }
 
-function copiedFacts(
-  metadata: SessionStartedFact,
-  id: string,
-  workspace: string,
-  source: readonly Fact[],
-  recovery: readonly Fact[],
-): Fact[] {
-  const started: SessionStartedFact = {
-    ...structuredClone(metadata),
-    type: 'session_started',
-    id,
-    workspace,
-  };
-  return [
-    started,
-    ...source.slice(1).map((fact) => structuredClone(fact)),
-    ...recovery.map((fact) => structuredClone(fact)),
-  ];
+/**
+ * New conversation id and workspace authority. Task ownership follows that id
+ * so replay does not treat the copy as another Session. Memory sourceSessionId
+ * stays the recorded provenance and is not rewritten. forkedFrom is the
+ * immediate source, on the single session_started fact.
+ */
+function retargetFact(fact: Fact, sourceId: string, id: string, workspace: string): Fact {
+  const copy = structuredClone(fact);
+  if (copy.type === 'session_started') {
+    if (copy.id !== sourceId) {
+      throw new Error(`direct Session ${sourceId} has invalid or mismatched session_started metadata`);
+    }
+    const started: ForkedStart = { ...copy, id, workspace, forkedFrom: sourceId };
+    return started;
+  }
+  if (copy.type === 'task_started') {
+    if (copy.task.sessionId !== sourceId) {
+      throw new Error('direct fork task belongs to a different Session');
+    }
+    return { ...copy, task: { ...copy.task, sessionId: id } };
+  }
+  if (copy.type === 'task_interaction_opened') {
+    if (copy.request.sessionId !== sourceId) {
+      throw new Error('direct fork task interaction belongs to a different Session');
+    }
+    return { ...copy, request: { ...copy.request, sessionId: id } };
+  }
+  return copy;
 }
 
-async function writeFork(
-  directory: string,
-  sourceId: string,
-  id: string,
-  facts: readonly Fact[],
-): Promise<SettledFork> {
+async function writeFork(directory: string, sourceId: string, id: string, lines: readonly FactLine[]): Promise<void> {
   const target = logPath(directory, id);
   if (id === sourceId || path.resolve(target) === path.resolve(logPath(directory, sourceId))) {
     throw new Error('direct fork refused to write the source log');
   }
-  let log: ConversationLog | undefined;
+  const payload = Buffer.from(lines.map(serializeLine).join(''), 'utf8');
+  let fd: number | undefined;
   let created = false;
   try {
-    log = createLog(directory, id);
+    fd = openSync(target, 'wx');
     created = true;
-    log.append(facts);
-    log.close();
-    const written = readFacts(target);
-    if (written.length !== facts.length) throw new Error('direct fork log did not retain every copied fact');
-    const started = sessionMetadata(id, written);
-    const stable = replay(written);
-    if (stable.recoveryFacts.length !== 0) throw new Error('direct fork replay did not settle');
-    return { status: stable.status, started };
+    let offset = 0;
+    while (offset < payload.length) {
+      const written = writeSync(fd, payload, offset, payload.length - offset);
+      if (written <= 0) throw new Error(`short write: wrote ${written} of ${payload.length - offset} bytes`);
+      offset += written;
+    }
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = undefined;
+    if (!readFileSync(target).equals(payload)) throw new Error('direct fork log did not retain the copied envelopes');
+    const readBack = readFactLines(target);
+    if (readBack.length !== lines.length) throw new Error('direct fork log did not retain every copied fact');
+    for (let index = 0; index < lines.length; index += 1) {
+      const expected = lines[index]!;
+      const actual = readBack[index]!;
+      if (actual.at !== expected.at || actual.seq !== expected.seq || actual.fact.type !== expected.fact.type) {
+        throw new Error('direct fork changed an envelope timestamp, sequence or fact type');
+      }
+    }
+    const started = readBack[0]?.fact;
+    if (started?.type !== 'session_started' || started.id !== id || provenanceOf(started) !== sourceId) {
+      throw new Error('direct fork lost its provenance');
+    }
+    if (replay(readBack.map((line) => line.fact)).recoveryFacts.length !== 0) {
+      throw new Error('direct fork replay did not settle');
+    }
   } catch (error) {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // The write error is the one worth reporting.
+      }
+    }
     if (!created) {
       throw new Error(`direct fork could not create a new log: ${errorText(error)}`, { cause: error });
     }
     try {
-      await discardNewLog(log, target);
+      await unlink(target);
     } catch (cleanup) {
-      throw new AggregateError([error, cleanup], 'direct fork failed and the new log could not be removed');
+      if ((cleanup as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw new AggregateError([error, cleanup], 'direct fork failed and the new log could not be removed');
+      }
     }
     throw error;
   }
 }
 
-async function discardNewLog(log: ConversationLog | undefined, target: string): Promise<void> {
-  const failures: unknown[] = [];
-  try {
-    log?.close();
-  } catch (error) {
-    failures.push(error);
-  }
-  try {
-    await unlink(target);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') failures.push(error);
-  }
-  if (failures.length > 0) throw new AggregateError(failures, 'direct fork could not remove its new log');
+function serializeLine(line: FactLine): string {
+  return `${JSON.stringify({ v: line.v, seq: line.seq, at: line.at, fact: line.fact })}\n`;
 }
 
 async function resolveAuthority(
@@ -215,6 +260,12 @@ function validateBinding(binding: DirectBinding | undefined): void {
   ) {
     throw new Error('direct Session binding requires nonempty client and id');
   }
+}
+
+function provenanceOf(fact: Fact): string | undefined {
+  if (fact.type !== 'session_started') return undefined;
+  const started = fact as ForkedStart;
+  return typeof started.forkedFrom === 'string' && started.forkedFrom.length > 0 ? started.forkedFrom : undefined;
 }
 
 function validateExpectedBinding(stored: DirectBinding | undefined, expected: DirectBinding | undefined): void {

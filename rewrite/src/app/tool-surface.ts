@@ -13,7 +13,7 @@ import { primeActiveProfileNoticeIfActive } from '../../../source/services/mode-
 import { installPlanModeInterceptor } from '../../../source/services/plan-mode-interceptor.js';
 import { SessionAccessState } from '../../../source/services/session/session-access-state.js';
 import { SkillsService } from '../../../source/services/skills/skills-service.js';
-import { bindRunCodeRegistry, TOOL_NAME_RUN_CODE } from '../../../source/tools/system/run-code/run-code.js';
+import { bindRunCodeRegistry } from '../../../source/tools/system/run-code/run-code.js';
 import { TOOL_NAME_DESCRIBE } from '../../../source/tools/system/run-code/run-code-runtime.js';
 import type { AnyToolDefinition } from '../../../source/tools/types.js';
 import { InvalidatableShellChildRegistry } from '../../../source/utils/shell/shell-child-registry.js';
@@ -28,13 +28,18 @@ import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-
 
 type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[0]['addToolInterceptor']>[0];
 
-/** Build one generation's base graph; MCP requests capture their own script graph and policy. */
+/** Build one generation's graph and frozen MCP catalog/policy together.
+ * App retains old generations for their branches and rebuilds at idle on catalog changes. */
 export function createToolSurface(selection: ProfileSelection, options: ToolSurfaceOptions = {}): AgentSurface {
   const { settings, logger } = selection;
   const modelSelection = settings.get('agent.modelSelection');
   const remote = options.remote;
-  if (remote && options.mcp) throw new Error('Direct MCP is unavailable for SSH workspaces');
   const workspace = surfaceWorkspace(options.workspace, remote);
+  if (remote && options.mcp) throw new Error('Direct MCP is unavailable for SSH workspaces');
+  // Despite its adapter API name, capture once per GENERATION, not per request.
+  // Declaration, script execution and headless policy share this frozen catalog;
+  // app owns refresh/configure and the manager outlives every retained surface.
+  const mcp = options.mcp?.captureRequest();
   const targetInvocation = remote
     ? <T>(toolName: string, context: unknown, operation: () => Promise<T>) => {
         const signal = (context as { signal?: AbortSignal } | undefined)?.signal;
@@ -69,8 +74,6 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   );
   let sourceGraph: AnyToolDefinition[] = [];
   let baseGraph: AnyToolDefinition[] = [];
-  const adaptedDefinitions = new Map<string, AnyToolDefinition>();
-  const requestResources = new Map<ReturnType<typeof createSourceToolRegistry>, ToolApprovalPolicyRegistry>();
   const delegation = createDirectSubagentTools({
     selection,
     workspace,
@@ -99,6 +102,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     providerId: modelSelection.provider,
     serviceTierOverrideForNextRequest: null,
     approvalPolicyRegistry: policies,
+    mcpToolSource: mcp?.source,
     sessionAccess,
     readOnly,
     shellChildRegistry: shellChildren,
@@ -163,10 +167,59 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     logger,
     sessionContextService: selection.sessionContext,
     agentClient: advisoryClient(createProviderRegistry(selection), selection, advisoryAbort.signal),
+    // Exactly the source run_code collision set; MCP adapter owns member identity
+    // and allowlist matching. No second name policy or live catalog lookup here.
+    ...mcp?.approvalPolicy(new Set([...sourceGraph.map((tool) => tool.name), TOOL_NAME_DESCRIBE])),
   });
-  const decideWith =
-    (policy: NonInteractiveApprovalPolicy): AgentSurface['decideInteraction'] =>
-    async (request, history) => {
+  return {
+    profileName: displayName(String(settings.get('app.activeProfileId'))),
+    instructions: agent.resolveInstructionsForRequest?.() ?? String(agent.instructions),
+    tools: offered.map(sourceToolSpec),
+    ...(reasoning !== undefined ? { reasoning } : {}),
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(providerOptions !== undefined ? { providerOptions } : {}),
+    notice,
+    runtime: {
+      tools: registry,
+      resolveNestedAuthority: delegation.resolveNestedAuthority,
+      bindTaskCheckIn: delegation.bindTaskCheckIn,
+      resetAdaptedTools() {
+        sourceGraph.splice(0, sourceGraph.length, ...baseGraph);
+        bindRunCodeRegistry(sourceGraph);
+      },
+      adaptTool(definition) {
+        if (remote) throw new Error('Native local source-leaf adaptation is unavailable for SSH workspaces');
+        if (baseGraph.some((tool) => tool.name === definition.name))
+          throw new Error(`Native source leaf collides with the fixed graph: ${definition.name}`);
+        const [wrapped] = buildAgentTools({
+          toolDefinitions: [definition],
+          resolvedModel: agent.model,
+          shouldUseNativePatchTool: false,
+          deps: { ...deps, onToolGraph: undefined },
+        });
+        if (!wrapped) throw new Error('Native source leaf was not adapted');
+        const old = sourceGraph.findIndex((tool) => tool.name === wrapped.name);
+        if (old < 0) sourceGraph.push(wrapped);
+        else sourceGraph[old] = wrapped;
+        bindRunCodeRegistry(sourceGraph);
+        return registry.adaptTool(wrapped);
+      },
+      toolContext: toolContext(selection, workspace),
+      maxParallelToolCalls: settings.get('agent.maxParallelToolCalls') ?? 3,
+      async dispose() {
+        advisoryAbort.abort();
+        registry.dispose();
+        delegation.dispose();
+        shellChildren.invalidate();
+        sessionAccess.dispose();
+        removePlanInterceptor();
+        policies.clear();
+        answers.disable();
+        await remote?.close();
+      },
+    },
+    async decideInteraction(request, history) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };
       if (request.kind === 'question') {
@@ -192,142 +245,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         getHistory: () => approvalHistory(history),
       });
       return decision.answer === 'y' ? { kind: 'allow' } : { kind: 'deny', reason: decision.rejectionReason };
-    };
-  return {
-    profileName: displayName(String(settings.get('app.activeProfileId'))),
-    instructions: agent.resolveInstructionsForRequest?.() ?? String(agent.instructions),
-    tools: offered.map(sourceToolSpec),
-    ...(reasoning !== undefined ? { reasoning } : {}),
-    ...(temperature !== undefined ? { temperature } : {}),
-    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-    ...(providerOptions !== undefined ? { providerOptions } : {}),
-    notice,
-    runtime: {
-      tools: registry,
-      prepareRequestTools(request) {
-        if (!options.mcp) return { request, tools: registry, decideInteraction: decideWith(policy) };
-        const captured = options.mcp.captureRequest();
-        const requestPolicies = new ToolApprovalPolicyRegistry();
-        let requestGraph: AnyToolDefinition[] = [];
-        const requestDeps: AgentFactoryDeps = {
-          ...deps,
-          approvalPolicyRegistry: requestPolicies,
-          mcpToolSource: captured.source,
-          onToolGraph(graph) {
-            requestGraph = graph;
-          },
-        };
-        let requestRegistry: ReturnType<typeof createSourceToolRegistry> | undefined;
-        try {
-          // Source owns profile gates, provisioning, script-only MCP exposure and
-          // policy wrapping. Never rebind the base graph or an older request here.
-          const { agent: requestAgent } = buildAgent(
-            { selection: modelSelection, reasoningEffort: settings.get('agent.reasoningEffort') },
-            requestDeps,
-          );
-          if (adaptedDefinitions.size) {
-            const adapted = buildAgentTools({
-              toolDefinitions: [...adaptedDefinitions.values()],
-              resolvedModel: requestAgent.model,
-              shouldUseNativePatchTool: false,
-              deps: { ...requestDeps, onToolGraph: undefined },
-            });
-            requestGraph.push(...adapted);
-            bindRunCodeRegistry(requestGraph);
-          }
-          // Match exactly the source run_code collision set, including describe.
-          const requestPolicy = new NonInteractiveApprovalPolicy({
-            settingsService: settings,
-            logger,
-            sessionContextService: selection.sessionContext,
-            agentClient: advisoryClient(createProviderRegistry(selection), selection, advisoryAbort.signal),
-            ...captured.approvalPolicy(new Set([...requestGraph.map((tool) => tool.name), TOOL_NAME_DESCRIBE])),
-          });
-          const scripted = requestAgent.tools.filter((tool) => tool.name === TOOL_NAME_RUN_CODE);
-          requestRegistry = createSourceToolRegistry(scripted, {
-            policies: requestPolicies,
-            settings,
-            sessionAccess,
-            sessionId,
-            withAnswer: (answer, operation) => answers.run(answer, operation),
-            checkInterceptors: deps.checkToolInterceptors,
-          });
-          // Native/direct tool authority is unchanged. Only the request's
-          // run_code declaration and its captured scripted executor are replaced.
-          const runCode = requestRegistry.get(TOOL_NAME_RUN_CODE);
-          const pairedTools = {
-            get: (name: string) => (name === TOOL_NAME_RUN_CODE ? runCode : registry.get(name)),
-            available: (context: Parameters<typeof registry.available>[0]) =>
-              registry
-                .available(context)
-                .flatMap((tool) => (tool.spec.name === TOOL_NAME_RUN_CODE ? (runCode ? [runCode] : []) : [tool])),
-          };
-          requestResources.set(requestRegistry, requestPolicies);
-          return {
-            request: {
-              ...request,
-              tools: request.tools.flatMap((tool) =>
-                tool.name === TOOL_NAME_RUN_CODE ? (runCode ? [runCode.spec] : []) : [tool],
-              ),
-            },
-            tools: pairedTools,
-            decideInteraction: decideWith(requestPolicy),
-          };
-        } catch (error) {
-          requestRegistry?.dispose();
-          requestPolicies.clear();
-          throw error;
-        }
-      },
-      resolveNestedAuthority: delegation.resolveNestedAuthority,
-      bindTaskCheckIn: delegation.bindTaskCheckIn,
-      resetAdaptedTools() {
-        adaptedDefinitions.clear();
-        sourceGraph.splice(0, sourceGraph.length, ...baseGraph);
-        bindRunCodeRegistry(sourceGraph);
-      },
-      adaptTool(definition) {
-        if (remote) throw new Error('Native local source-leaf adaptation is unavailable for SSH workspaces');
-        if (baseGraph.some((tool) => tool.name === definition.name))
-          throw new Error(`Native source leaf collides with the fixed graph: ${definition.name}`);
-        const [wrapped] = buildAgentTools({
-          toolDefinitions: [definition],
-          resolvedModel: agent.model,
-          shouldUseNativePatchTool: false,
-          deps: { ...deps, onToolGraph: undefined },
-        });
-        if (!wrapped) throw new Error('Native source leaf was not adapted');
-        const old = sourceGraph.findIndex((tool) => tool.name === wrapped.name);
-        if (old < 0) sourceGraph.push(wrapped);
-        else sourceGraph[old] = wrapped;
-        bindRunCodeRegistry(sourceGraph);
-        const tool = registry.adaptTool(wrapped);
-        adaptedDefinitions.set(definition.name, definition);
-        return tool;
-      },
-      toolContext: toolContext(selection, workspace),
-      maxParallelToolCalls: settings.get('agent.maxParallelToolCalls') ?? 3,
-      async dispose() {
-        advisoryAbort.abort();
-        registry.dispose();
-        // App disposes a surface after Session/background drain. Never close the
-        // app-owned MCP manager or invalidate an older request on catalog refresh.
-        for (const [requestRegistry, requestPolicies] of requestResources) {
-          requestRegistry.dispose();
-          requestPolicies.clear();
-        }
-        requestResources.clear();
-        adaptedDefinitions.clear();
-        delegation.dispose();
-        shellChildren.invalidate();
-        sessionAccess.dispose();
-        removePlanInterceptor();
-        policies.clear();
-        answers.disable();
-        await remote?.close();
-      },
     },
-    decideInteraction: decideWith(policy),
   };
 }
 

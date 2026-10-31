@@ -3,15 +3,17 @@ import fs from 'node:fs';
 import { runDirectHeadless } from '../clients/headless/index.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import { createLocalAuthority, localGrant } from './direct-application-workspaces.js';
-import type { RunHandle, RunRequest, RunResult } from './run-types.js';
+import type { DirectHeadlessRequest } from './direct-launch-types.js';
+import type { RunHandle, RunResult } from './run-types.js';
 
-export function runDirectHeadlessOnHost(request: RunRequest): RunHandle {
+export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): RunHandle {
   const stop = new AbortController();
   let active = false;
 
   const execute = async (): Promise<RunResult> => {
-    const { io, prompt, resumeId, conversationsDir, selection, autoApprove = false } = request;
+    const { io, prompt, resumeId, conversationsDir, selection, autoApprove = false, output = 'plain' } = request;
     let application: DirectApplication | null = null;
+    let profileMetadata: Readonly<Record<string, unknown>> = {};
     try {
       const root = fs.realpathSync(process.cwd());
       const app = createDirectApplication({
@@ -20,7 +22,10 @@ export function runDirectHeadlessOnHost(request: RunRequest): RunHandle {
         ...(request.profileExplicit !== undefined ? { profileExplicit: request.profileExplicit } : {}),
         surface: { autoApprove, interactive: false },
         authority: createLocalAuthority((candidate) => candidate === root),
-        onSurface: (surface) => io.stderr.write(`Profile: ${surface.profileName}\n`),
+        onSurface(surface, profile) {
+          profileMetadata = profile;
+          if (output === 'plain') io.stderr.write(`Profile: ${surface.profileName}\n`);
+        },
       });
       application = app;
       const connection =
@@ -31,7 +36,10 @@ export function runDirectHeadlessOnHost(request: RunRequest): RunHandle {
       const { outcome } = await runDirectHeadless(connection, {
         prompt,
         io,
+        output,
         autoApprove,
+        profileMetadata,
+        ...(request.showReasoning === undefined ? {} : { showReasoning: request.showReasoning }),
         signal: stop.signal,
         decideApproval: app.headlessPolicy(connection.sessionId, autoApprove, stop.signal),
         ...(resumeId === undefined ? {} : { expectedSessionId: resumeId }),

@@ -1,6 +1,7 @@
 /** What `cli.ts` hands the direct application after parsing. No Session or engine authority crosses here. */
 import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
 import type { ServeArgs } from '../../../source/gateway/serve-args.js';
+import type { RunRequest } from './run-types.js';
 import type { ProfileSelection } from './tool-contract.js';
 
 /**
@@ -14,6 +15,13 @@ export type DirectLaunchBase = {
   readonly selection: ProfileSelection;
   /** True only for an explicit profile flag, which overrides a resumed profile. */
   readonly profileExplicit?: boolean;
+};
+
+/** A headless run. Output modes live here because only the host client reads them. */
+export type DirectHeadlessRequest = RunRequest & {
+  readonly output?: 'plain' | 'json';
+  /** Reasoning deltas go to stderr, never stdout. */
+  readonly showReasoning?: boolean;
 };
 
 export type DirectControlSocketRequest = {

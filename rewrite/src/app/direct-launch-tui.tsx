@@ -19,6 +19,7 @@ import { Tui, type TuiIntegration } from '../clients/tui/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import { createLocalAuthority, localGrant } from './direct-application-workspaces.js';
+import { attachControlSocket, type DirectControlAttachment } from './direct-launch-control.js';
 import { createDirectTuiCommands } from './direct-launch-tui-commands.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
 
@@ -41,17 +42,28 @@ function DirectTui({
   app,
   root,
   initial,
+  control,
   onExit,
 }: {
   readonly app: DirectApplication;
   readonly root: string;
   readonly initial: DirectConnection;
+  readonly control: DirectControlAttachment | null;
   readonly onExit: () => void;
 }): React.ReactElement {
+  // Replacement attaches fresh in this process, so an ordinary snapshot always applies and no cursor is retained.
   const [connection, setConnection] = useState(initial);
   const integration: TuiIntegration = useMemo(
-    () => createDirectTuiCommands({ app, root, replace: setConnection }),
-    [app, root],
+    () =>
+      createDirectTuiCommands({
+        app,
+        root,
+        async replace(next) {
+          setConnection(next);
+          await control?.rebind(next.sessionId);
+        },
+      }),
+    [app, root, control],
   );
   return <Tui connection={connection} integration={integration} onExit={onExit} />;
 }
@@ -59,7 +71,7 @@ function DirectTui({
 export async function launchTui(request: InteractiveRequest): Promise<number> {
   if (!(await confirmHomeStart(request.lite))) return 1;
 
-  const { conversationsDir, selection, resumeId, profileExplicit } = request;
+  const { conversationsDir, selection, resumeId, profileExplicit, controlSocket } = request;
   const { settings } = selection;
   const root = fs.realpathSync(process.cwd());
   const app = createDirectApplication({
@@ -69,6 +81,17 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
     surface: { interactive: true },
     authority: createLocalAuthority((candidate) => candidate === root),
   });
+  let control: DirectControlAttachment | null = null;
+  let unmount: (() => void) | null = null;
+  let exitCode = 0;
+  // Ink leaves Ctrl+C to the composer, so an outside signal is the only other way out.
+  const onSignal = (signal: NodeJS.Signals): void => {
+    exitCode = signal === 'SIGINT' ? 130 : 143;
+    if (unmount) unmount();
+    else process.exit(exitCode);
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
   try {
     const initial =
       resumeId === undefined
@@ -80,19 +103,29 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
       ? await detectTerminalBackground({ stdin, stdout })
       : undefined;
 
+    if (controlSocket) {
+      const attached = await attachControlSocket(app, { conversationsDir, root, sessionId: initial.sessionId, ...controlSocket });
+      control = attached.attachment;
+      stderr.write(`${attached.notice}\n`);
+    }
+
     const instance = render(
       (
         <SettingsThemeProvider settingsService={settings} detectedBackground={detectedBackground}>
           <SettingsSkinProvider settingsService={settings}>
-            <DirectTui app={app} root={root} initial={initial} onExit={() => instance.unmount()} />
+            <DirectTui app={app} root={root} initial={initial} control={control} onExit={() => instance.unmount()} />
           </SettingsSkinProvider>
         </SettingsThemeProvider>
       ) as ReactNode,
       getInkRenderOptions(),
     );
+    unmount = () => instance.unmount();
     await instance.waitUntilExit();
-    return 0;
+    return exitCode;
   } finally {
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+    await control?.close();
     await app.close();
   }
 }

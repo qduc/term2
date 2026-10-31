@@ -2,7 +2,7 @@
 import type { DirectLaunchRequest } from './direct-launch-types.js';
 
 export { runDirectHeadlessOnHost } from './direct-launch-headless.js';
-export type { DirectLaunchRequest } from './direct-launch-types.js';
+export type { DirectHeadlessRequest, DirectLaunchRequest } from './direct-launch-types.js';
 
 export async function launchDirect(request: DirectLaunchRequest): Promise<number> {
   switch (request.kind) {
@@ -10,9 +10,11 @@ export async function launchDirect(request: DirectLaunchRequest): Promise<number
       return (await import('./direct-launch-tui.js')).launchTui(request);
     case 'acp':
       return (await import('./direct-launch-acp.js')).launchAcp(request);
-    case 'serve':
     case 'control':
+      return (await import('./direct-launch-control.js')).launchControl(request.argv);
     case 'discord':
-      throw new Error(`term2 ${request.kind} is not wired into the direct executable yet.`);
+      return (await import('./direct-launch-control.js')).launchDiscord(request.argv);
+    case 'serve':
+      throw new Error('term2 serve is not wired into the direct executable yet.');
   }
 }

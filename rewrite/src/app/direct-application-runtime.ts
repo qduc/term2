@@ -15,7 +15,8 @@ export type DirectRuntimeOptions = {
   readonly profileExplicit?: boolean;
   /** Fixed per mode. The workspace comes from each session's own authority. */
   readonly surface: Omit<ToolSurfaceOptions, 'workspace'>;
-  readonly onSurface?: (surface: AgentSurface) => void;
+  /** After any resumed selection is restored, so this reports what actually runs. */
+  readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
 
 export type DirectRuntimes = {
@@ -72,7 +73,7 @@ export function createDirectRuntimes(options: DirectRuntimeOptions): DirectRunti
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
       surfaces.set(context.id, surface);
       scopes.set(context.id, scope);
-      options.onSurface?.(surface);
+      options.onSurface?.(surface, profile);
       return {
         deps: {
           models: withGenerationGuard(withSessionScope(createProviderRegistry(selection), scope), selection),

@@ -1117,14 +1117,7 @@ function conversation(
       if (continuity) {
         // Engine owns this read-only selector. Never call prepare here: even an
         // unchainable preview must not clear a checkpoint or increment a ticket.
-        const state = continuity.state as DirectContinuity & {
-          preview?: (
-            request: ModelRequest,
-            binding: DirectContinuityBinding,
-          ) => { request: ModelRequest; chained: boolean };
-        };
-        if (!state.preview) throw new Error('Read-only provider continuity selection is unavailable');
-        selected = state.preview(prepared, continuity.binding);
+        selected = continuity.state!.preview(prepared, continuity.binding, true);
       }
       return structuredClone({
         input: selected.request.input,

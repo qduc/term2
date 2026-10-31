@@ -17,6 +17,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/cli-args.ts',
   'app/cli.ts',
   'app/direct-application-hooks.ts',
+  'app/direct-application-mcp.ts',
   'app/direct-application-nested.ts',
   'app/direct-application-policy.ts',
   'app/direct-application-rollover.ts',

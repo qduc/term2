@@ -1,12 +1,11 @@
-/**
- * Direct turn advancement. Session is the sole consumer and accepts each event
- * after committing it. Models and tools are injected leaves; no persistence or
- * legacy driver lives here. A terminal is emitted only after physical cleanup.
- */
-import type { Item, ItemId, ModelError, ModelRequest, StopReason } from '../model/index.js';
+/** Direct advancement; Session is the only writer and event-acceptance authority. */
+import type { Item, ItemId } from '../model/index.js';
+import type { NestedRunRequest, ToolRegistry } from '../tools/index.js';
 import type { TurnDeps, TurnHandle, TurnResult, TurnSpec } from './direct-types.js';
 import { TurnEvents, cancelled } from './turn-events.js';
-import { TurnTools, type RootCall } from './turn-tools.js';
+import { TurnTools } from './turn-tools.js';
+import { NativeBudgetExhausted, TurnBudgetControl } from './turn-budget.js';
+import { TurnModel, toModelError } from './turn-model.js';
 
 export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from './direct-types.js';
 
@@ -14,19 +13,22 @@ export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from './direct-types
 export function startTurn(spec: TurnSpec, deps: TurnDeps): TurnHandle {
   const controller = new AbortController();
   const channel = new TurnEvents();
-  const tools = new TurnTools(spec, deps, controller.signal, channel);
+  const budget = new TurnBudgetControl(spec, deps, channel, controller.signal);
+  const tools = new TurnTools(spec, deps, controller.signal, channel, budget);
+  const model = new TurnModel(spec, deps, controller.signal, channel, tools, budget);
   const cancel = (): void => {
     controller.abort();
     channel.cancel();
     tools.cancel();
+    budget.cancel();
   };
   const events = (async function* () {
-    const work = drive(spec, deps, controller, channel, tools);
+    const work = drive(spec, deps, controller, channel, tools, model);
     try {
       yield* channel.events();
     } finally {
       cancel();
-      // A consumer that closes early still owns cancellation and physical cleanup.
+      // An early-returning consumer still owns physical cancellation and cleanup.
       await work;
     }
   })();
@@ -34,8 +36,58 @@ export function startTurn(spec: TurnSpec, deps: TurnDeps): TurnHandle {
     events,
     accept: (token) => channel.accept(token),
     answer: (id, decision) => tools.answer(id, decision),
+    answerBudget: (id, decision) => budget.answer(id, decision),
     cancel,
   };
+}
+
+/**
+ * A branch is the same driver with exact resolved authority and native limits.
+ * Session allocates its identity, consumes/accepts its events into branch facts,
+ * and owns background lifetime and durable interaction answers. No second log.
+ */
+export function startNestedTurn(request: NestedRunRequest, options: { readonly turnId: TurnSpec['turnId']; readonly deps: TurnDeps }): TurnHandle {
+  if (request.budget.kind === 'adopted') throw new Error('Direct branches require a native budget');
+  for (const limit of [request.budget.maxModelCalls, request.budget.maxToolCalls]) {
+    if (!Number.isSafeInteger(limit) || limit < 0) throw new RangeError('Native branch limits must be nonnegative integers');
+  }
+  if (!options.deps.toolContext) throw new Error('A branch requires an authorized workspace and settings');
+  const names = new Set(request.toolNames);
+  if (names.size !== request.toolNames.length || (names.has('goal_check') || names.has('propose_goal'))) throw new Error('Invalid child authority: duplicate or root-only tool');
+  const registry = options.deps.tools;
+  const tools = request.toolNames.map((name) => {
+    const tool = registry?.get(name);
+    if (!tool) throw new Error(`Unknown child tool: ${name}`);
+    return tool;
+  });
+  const scoped: ToolRegistry = {
+    get: (name) => names.has(name) ? registry?.get(name) : undefined,
+    available: () => tools,
+  };
+  const prepare = options.deps.prepareRequest;
+  return startTurn({
+    turnId: options.turnId,
+    history: [],
+    newItems: request.items,
+    instructions: request.instructions,
+    model: request.model,
+    tools: tools.map((tool) => tool.spec),
+    ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
+    limits: { maxModelCalls: request.budget.maxModelCalls, maxToolCalls: request.budget.maxToolCalls },
+  }, {
+    ...options.deps,
+    tools: scoped,
+    // Root goal/memory preparation may not expand resolved child authority.
+    ...(prepare ? { prepareRequest: async (input, context) => {
+      const surface = await prepare(input, context);
+      if (surface.request.tools.some((tool) => !names.has(tool.name))) throw new Error('Request preparation expanded child authority');
+      const selected = surface.tools ?? scoped;
+      return {
+        request: surface.request,
+        tools: { get: (name: string) => names.has(name) ? selected.get(name) : undefined, available: (seed) => selected.available(seed).filter((tool) => names.has(tool.spec.name)) },
+      };
+    } } : {}),
+  });
 }
 
 async function drive(
@@ -44,132 +96,49 @@ async function drive(
   controller: AbortController,
   events: TurnEvents,
   tools: TurnTools,
+  model: TurnModel,
 ): Promise<void> {
   const { signal } = controller;
   let result: TurnResult = { kind: 'completed' };
   const history = [...spec.history, ...spec.newItems];
+  let reminderOrdinal = 0;
   try {
-    let modelStep = 0;
     while (!signal.aborted && !tools.stopped) {
-      const calls = await modelStepRun(spec, deps, signal, events, tools, history, ++modelStep);
-      if (calls.length === 0) break;
-      await tools.run(calls, history);
+      const calls = await model.run(history);
+      if (calls.length > 0) {
+        await tools.run(calls, history);
+        if (tools.exhausted) throw new NativeBudgetExhausted('Native child tool-call budget exhausted');
+        if (tools.stopped) break;
+        // A lone final goal check is itself the normal-stop boundary; don't
+        // dispatch another model just to rediscover its accepted receipt.
+        if (calls.length !== 1 || calls[0]!.item.toolName !== 'goal_check') continue;
+      }
+      const decision = await deps.normalStop?.({ turnId: spec.turnId, signal });
+      if (signal.aborted) throw cancelled();
+      if (!decision || decision.action === 'stop') {
+        if (decision?.terminalCause) result = { kind: 'interrupted', terminalCause: decision.terminalCause, ...(decision.notice !== undefined ? { notice: decision.notice } : {}) };
+        break;
+      }
+      if (!decision.reminder) throw new Error('Normal-stop continuation requires a reminder');
+      const item: Item = { type: 'summary', id: `${spec.turnId}:normal-stop:${++reminderOrdinal}` as ItemId, text: decision.reminder, replaces: [] };
+      await events.publish({ type: 'item', item });
+      history.push(item);
     }
     if (signal.aborted) result = { kind: 'cancelled' };
   } catch (error) {
-    result = signal.aborted ? { kind: 'cancelled' } : { kind: 'failed', error: toModelError(error) };
+    result = signal.aborted
+      ? { kind: 'cancelled' }
+      : error instanceof NativeBudgetExhausted
+        ? { kind: 'interrupted', terminalCause: 'budget_exhausted', notice: error.message }
+        : { kind: 'failed', error: toModelError(error) };
+    model.clear();
     controller.abort();
     events.cancel();
   } finally {
-    // All root and scripted operations must have settled before Session can go idle.
+    if (signal.aborted || result.kind !== 'completed') model.clear();
+    // Session cannot go idle while root/scripted descendants still have bodies.
     tools.cancel();
     await tools.cleanup();
     events.finish(result);
   }
-}
-
-async function modelStepRun(
-  spec: TurnSpec,
-  deps: TurnDeps,
-  signal: AbortSignal,
-  events: TurnEvents,
-  tools: TurnTools,
-  history: Item[],
-  modelStep: number,
-): Promise<RootCall[]> {
-  // Session commits queued steering before returning model-facing input. Do not
-  // emit duplicate item facts: queue_steered is the canonical durable evidence.
-  const steering = await deps.takeSteering?.(spec.turnId);
-  if (signal.aborted) throw cancelled();
-  if (steering?.length) history.push(...steering);
-  const calls: RootCall[] = [];
-  const stepItems: Item[] = [];
-  let text = '';
-  let textPosition = 0;
-  let stop: StopReason | undefined;
-  for await (const event of deps.models.resolve(spec.model).stream(toRequest(spec, history), signal)) {
-    if (signal.aborted) throw cancelled();
-    switch (event.type) {
-      case 'text_delta':
-        await events.publish({ type: 'text_delta', delta: event.delta, modelStep });
-        if (!text) textPosition = stepItems.length;
-        text += event.delta;
-        break;
-      case 'reasoning_delta':
-        await events.publish({ type: 'reasoning_delta', delta: event.delta });
-        break;
-      case 'item': {
-        const call = event.item.type === 'tool_call' ? tools.root(event.item, modelStep) : undefined;
-        await events.publish({
-          type: 'item',
-          item: event.item,
-          modelStep,
-          ...(call ? { executionId: call.executionId } : {}),
-        });
-        stepItems.push(event.item);
-        if (event.item.type === 'assistant_message') text = '';
-        if (call) {
-          calls.push(call);
-          await events.publish({
-            type: 'tool_called',
-            executionId: call.executionId,
-            callId: call.item.callId,
-            toolName: call.item.toolName,
-            input: call.item.input,
-          });
-        }
-        break;
-      }
-      case 'usage':
-        await events.publish({ type: 'usage', usage: event.usage, modelStep });
-        break;
-      case 'done':
-        stop = event.stopReason;
-        break;
-      case 'retrying':
-        // Provider-owned transport retry; no engine replay of tools or model steps.
-        break;
-    }
-  }
-  if (signal.aborted) throw cancelled();
-  if (stop === undefined) throw new Error('Model stream ended before the response completed.');
-  if (calls.length > 0 && (stop === 'max_tokens' || stop === 'refusal')) {
-    throw new Error(`Model response ended with ${stop}; tool calls were not executed.`);
-  }
-  if (text) {
-    stepItems.splice(textPosition, 0, {
-      type: 'assistant_message',
-      id: `${spec.turnId}-model-${modelStep}-partial` as ItemId,
-      content: [{ type: 'text', text }],
-    });
-  }
-  history.push(...stepItems);
-  return calls;
-}
-
-function toRequest(spec: TurnSpec, history: readonly Item[]): ModelRequest {
-  return {
-    model: spec.model,
-    instructions: spec.instructions,
-    input: [...history],
-    tools: spec.tools,
-    ...(spec.reasoning !== undefined ? { reasoning: spec.reasoning } : {}),
-    ...(spec.temperature !== undefined ? { temperature: spec.temperature } : {}),
-    ...(spec.maxOutputTokens !== undefined ? { maxOutputTokens: spec.maxOutputTokens } : {}),
-    ...(spec.providerOptions !== undefined ? { providerOptions: spec.providerOptions } : {}),
-  };
-}
-
-/** Spelled out because `message` is not enumerable on an Error. */
-function toModelError(error: unknown): ModelError {
-  const { kind, message, retryable, retryAfterMs } = (error ?? {}) as Partial<ModelError>;
-  if (typeof kind === 'string' && typeof message === 'string') {
-    return {
-      kind,
-      message,
-      retryable: retryable === true,
-      ...(typeof retryAfterMs === 'number' ? { retryAfterMs } : {}),
-    };
-  }
-  return { kind: 'provider', message: error instanceof Error ? error.message : String(error), retryable: false };
 }

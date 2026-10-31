@@ -1,6 +1,6 @@
 /** Turn-local tool planning, physical admission, interactions and ordered settlement. */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { Item, ItemId, ToolCallId } from '../model/index.js';
+import type { Item, ItemId, ToolCallId, ModelRequest } from '../model/index.js';
 import type {
   ApprovalRequirement,
   ExecutionId,
@@ -10,8 +10,10 @@ import type {
   ToolContext,
   ToolInteractionRequest,
   ToolResult,
+  ToolRegistry,
 } from '../tools/index.js';
 import type { InteractionRequest, TurnDeps, TurnSpec } from './direct-types.js';
+import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 
 type CallItem = Extract<Item, { type: 'tool_call' }>;
@@ -21,6 +23,7 @@ type Execution = {
   readonly callId: ToolCallId;
   readonly toolName: string;
   input: unknown;
+  rawArguments?: string;
   readonly children: Set<Promise<unknown>>;
   open: boolean;
   admitted: boolean;
@@ -54,7 +57,10 @@ type StopTarget = {
 };
 
 export class TurnTools {
-  readonly #offered: ReadonlySet<string>;
+  #offered: ReadonlySet<string>;
+  #registry: ToolRegistry | undefined;
+  #physicalCalls = 0;
+  #completed = 0;
   readonly #scope = new AsyncLocalStorage<Execution>();
   readonly #interactions = new Map<InteractionRequestId, PendingInteraction>();
   readonly #running = new Set<Promise<unknown>>();
@@ -68,9 +74,20 @@ export class TurnTools {
     readonly deps: TurnDeps,
     readonly signal: AbortSignal,
     readonly events: TurnEvents,
+    readonly budget: TurnBudgetControl,
   ) {
     this.#offered = new Set(spec.tools.map((tool) => tool.name));
+    this.#registry = deps.tools;
   }
+
+  /** Bind declarations AND execution authority to this actual request snapshot. */
+  bindRequest(request: ModelRequest, registry?: ToolRegistry): void {
+    this.#offered = new Set(request.tools.map((tool) => tool.name));
+    this.#registry = registry ?? this.deps.tools;
+  }
+
+  get completed(): number { return this.#completed; }
+  get exhausted(): boolean { return this.spec.limits !== undefined && this.#physicalCalls >= this.spec.limits.maxToolCalls; }
 
   get stopped(): boolean {
     return this.#stop !== undefined;
@@ -79,13 +96,18 @@ export class TurnTools {
   /** Provider call IDs are presentation only; even repeated IDs allocate a fresh occurrence. */
   root(item: CallItem, modelStep: number): RootCall {
     const execution = this.#allocate(item.toolName, item.input, item.callId);
+    execution.rawArguments = item.rawArguments;
     return { item, executionId: execution.executionId, execution, modelStep };
   }
 
   /** Plan all complete calls, then settle contiguous safe batches in provider order. */
   async run(calls: readonly RootCall[], history: Item[]): Promise<void> {
     const plans: Plan[] = [];
-    for (const call of calls) plans.push(await this.#plan(call));
+    for (const call of calls) {
+      plans.push(call.item.toolName === 'goal_check' && calls.length !== 1
+        ? { call, parallelSafe: false, result: errorResult('goal_check must be called by itself after other tool results') }
+        : await this.#plan(call));
+    }
     let position = 0;
     const configured = this.deps.maxParallelToolCalls ?? 3;
     const width = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 3;
@@ -138,7 +160,7 @@ export class TurnTools {
     const base = { call, parallelSafe: false };
     if (!this.#offered.has(call.item.toolName))
       return { ...base, result: errorResult(`Unknown tool: ${call.item.toolName}`) };
-    const tool = this.deps.tools?.get(call.item.toolName);
+    const tool = this.#registry?.get(call.item.toolName);
     if (!tool) return { ...base, result: errorResult(`Unknown tool: ${call.item.toolName}`) };
     if (!this.deps.toolContext) return { ...base, result: errorResult('Tool execution context is unavailable') };
     const context = this.#context(call.execution);
@@ -219,8 +241,14 @@ export class TurnTools {
     return {
       ...this.deps.toolContext!,
       signal: this.signal,
-      runNested: async () => {
-        throw new Error('Nested model execution is not available on the direct M2 path');
+      runNested: (request) => {
+        const parent = current();
+        this.#checkBody(parent);
+        if (!this.deps.runNested) throw new Error('Direct nested execution is not configured');
+        const work = this.deps.runNested(request, { turnId: this.spec.turnId, parentExecutionId: parent.executionId, signal: this.signal });
+        parent.children.add(work);
+        void work.finally(() => parent.children.delete(work)).catch(() => {});
+        return work;
       },
       progress: (chunk) => {
         const execution = current();
@@ -239,6 +267,7 @@ export class TurnTools {
       ) => {
         const parent = current();
         this.#checkBody(parent);
+        if (descriptor.toolName === 'goal_check' || descriptor.toolName === 'propose_goal') throw new Error('goal_check is root-only');
         const execution = this.#allocate(
           descriptor.toolName,
           descriptor.input,
@@ -268,6 +297,8 @@ export class TurnTools {
 
   async #invoke<T>(execution: Execution, operation: () => Promise<T>, audit: (result: T) => ToolResult): Promise<T> {
     this.#checkStart(execution);
+    if (this.exhausted) throw new NativeBudgetExhausted('Native child tool-call budget exhausted');
+    ++this.#physicalCalls;
     await this.events.publish({
       type: 'tool_start_requested',
       executionId: execution.executionId,
@@ -279,6 +310,7 @@ export class TurnTools {
     // A receipt can race cancellation or another interaction's stop decision.
     this.#checkStart(execution);
     execution.admitted = true;
+    this.budget.toolCall(execution.toolName, execution.input, this.#rawArguments(execution));
     let result: ToolResult;
     let value!: T;
     let error: unknown;
@@ -295,6 +327,7 @@ export class TurnTools {
     try {
       // Record the known body outcome immediately, even if descendants/siblings are slow.
       await this.events.publish({ type: 'tool_execution_finished', executionId: execution.executionId, result });
+      ++this.#completed;
     } finally {
       // Detached descendants are still physical work owned by this execution.
       while (execution.children.size > 0) await Promise.allSettled([...execution.children]);
@@ -329,7 +362,7 @@ export class TurnTools {
         const pending = this.#interactions.get(request.requestId);
         if (pending) pending.ready = true;
       });
-      const answer = await decision;
+      const answer = await this.budget.humanWait(() => decision);
       this.#check();
       if (answer.stopAfterApprovalResolution || (request.kind === 'question' && answer.kind === 'deny')) {
         this.#stop ??= nested
@@ -340,6 +373,11 @@ export class TurnTools {
     } finally {
       this.#interactions.delete(request.requestId);
     }
+  }
+
+  #rawArguments(execution: Execution): string {
+    if (execution.rawArguments !== undefined) return execution.rawArguments;
+    try { return JSON.stringify(execution.input) ?? ''; } catch { return ''; }
   }
 
   #allocate(toolName: string, input: unknown, callId: ToolCallId, parentExecutionId?: ExecutionId): Execution {

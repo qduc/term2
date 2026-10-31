@@ -146,7 +146,12 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       },
     },
     async decideInteraction(request, history) {
-      if (request.kind === 'question') return { kind: 'deny', reason: 'Questions require an interactive user' };
+      if (request.kind === 'question') {
+        // This policy has no user to answer. Resolve the exact question with
+        // the stop marker, not an approval denial (which Session must reject).
+        // Session commits this closure and cancels before releasing a body.
+        return { kind: 'answer', answer: '', stopAfterApprovalResolution: true };
+      }
       // Headless auto-approval never silently grants Docker host control.
       if (isDockerRequest(request.toolName, request.input, sessionAccess)) {
         return { kind: 'deny', reason: 'Docker host control requires an explicit interactive approval' };

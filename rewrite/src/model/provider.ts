@@ -45,6 +45,7 @@ import type {
   ModelRef,
   ModelRegistry,
   ModelRequest,
+  ToolCallId,
 } from './index.js';
 
 export type ProviderRegistryDeps = {
@@ -336,6 +337,16 @@ async function* modelEvents(
           delta: event.text,
           ...(event.id ? { id: event.id } : {}),
           ...(event.providerMetadata ? { providerMetadata: event.providerMetadata } : {}),
+        };
+        break;
+      case 'tool_call_streaming_delta':
+        yield {
+          type: 'tool_call_streaming_delta',
+          argumentCharCount: event.argumentCharCount,
+          ...(event.toolName !== undefined ? { toolName: event.toolName } : {}),
+          ...(event.callId !== undefined ? { callId: event.callId as ToolCallId } : {}),
+          ...(event.itemId !== undefined ? { itemId: event.itemId } : {}),
+          ...(event.callIndex !== undefined ? { callIndex: event.callIndex } : {}),
         };
         break;
       case 'tool_call':

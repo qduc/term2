@@ -1,3 +1,4 @@
+import { ResponseToolArgumentScopes } from './tool-argument-stream-scope.js';
 import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
 import OpenAI, { InternalServerError } from 'openai';
@@ -448,6 +449,7 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
   const terminalReasoning: any[] = [];
   const toolNamesByIndex = new Map<number | string, string>();
   const toolArgumentLengthsByIndex = new Map<number | string, number>();
+  const toolArgumentScopes = new ResponseToolArgumentScopes();
   let sawReasoningDelta = false;
   let responseId = '';
   let finishReason: string | undefined;
@@ -508,7 +510,12 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
       const argumentCharCount = (toolArgumentLengthsByIndex.get(index) ?? 0) + event.delta.length;
       toolArgumentLengthsByIndex.set(index, argumentCharCount);
       const toolName = toolNamesByIndex.get(index);
-      yield { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
+      yield {
+        type: 'tool_call_streaming_delta',
+        ...toolArgumentScopes.observe(event),
+        ...(toolName ? { toolName } : {}),
+        argumentCharCount,
+      };
     } else if (
       event?.type === 'response.output_item.done' &&
       (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call')

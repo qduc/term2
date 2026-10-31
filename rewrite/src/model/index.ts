@@ -131,7 +131,21 @@ export type Usage = {
 
 export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal';
 
+/** Actual provider argument progress, not reconstructed from a completed call. */
+export type ToolCallArgumentProgress = {
+  readonly type: 'tool_call_streaming_delta';
+  readonly argumentCharCount: number;
+  readonly toolName?: string;
+  /** Present only when the provider has supplied the real call ID. */
+  readonly callId?: ToolCallId;
+  /** Responses output item identity is not interchangeable with callId. */
+  readonly itemId?: string;
+  /** Provider output/tool-call stream slot, not an engine execution ordinal. */
+  readonly callIndex?: number;
+};
+
 export type ModelEvent =
+  | ToolCallArgumentProgress
   | { readonly type: 'text_delta'; readonly delta: string; readonly partId?: string }
   | {
       readonly type: 'reasoning_delta';

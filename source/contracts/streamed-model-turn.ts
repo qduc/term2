@@ -214,6 +214,15 @@ export type StreamedModelToolDefinition = StreamedModelFunctionTool | StreamedMo
  */
 export const ASSISTANT_TEXT_PART_SEPARATOR = '\n\n';
 
+/** Provider evidence for an argument stream; absent identity is not inferred. */
+export interface StreamedModelToolArgumentScope {
+  /** Actual tool call ID, distinct from a Responses output item ID. */
+  readonly callId?: string;
+  readonly itemId?: string;
+  /** Actual provider output/tool-call stream slot, when present on the frame. */
+  readonly callIndex?: number;
+}
+
 export type StreamedModelTurnEvent =
   | { readonly type: 'text_delta'; readonly text: string; readonly partId?: string }
   | { readonly type: 'codex_rate_limits'; readonly rateLimits: CodexRateLimitInfo }
@@ -226,7 +235,11 @@ export type StreamedModelTurnEvent =
       readonly providerMetadata?: StreamedModelProviderOptions;
     }
   /** Cumulative progress while a provider is assembling a tool call's arguments. */
-  | { readonly type: 'tool_call_streaming_delta'; readonly toolName?: string; readonly argumentCharCount: number }
+  | ({
+      readonly type: 'tool_call_streaming_delta';
+      readonly toolName?: string;
+      readonly argumentCharCount: number;
+    } & StreamedModelToolArgumentScope)
   /**
    * Server-side context compaction, bracketed by the provider's own frames.
    *

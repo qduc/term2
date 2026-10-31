@@ -443,11 +443,7 @@ export class LocalSessionStore implements SessionStore {
         const entries = await log.append(facts);
         for (const entry of entries) current = projectLifecycle(current, entry);
         const restored = loadCanonicalConversation(id, log.root, 'live');
-        current = withTranscript(
-          current,
-          { history: restored.history, messages: restored.messages },
-          restored.history as unknown as Item[],
-        );
+        current = withTranscript(current, restored, restored.history as unknown as Item[]);
         if (!constructing) enqueue(entries.map((entry) => ({ kind: 'fact', entry })));
         if (mutationFailure !== undefined) throw mutationFailure;
         return entries;
@@ -568,6 +564,7 @@ export class LocalSessionStore implements SessionStore {
       },
       retry: (target) =>
         handleClosed ? Promise.resolve({ kind: 'rejected', reason: 'closed' }) : rawSubmission.retry(target),
+      compact: () => (handleClosed ? Promise.reject(new Error('Session handle is closed')) : rawSubmission.compact()),
       setRuntimeSettings: (command) => {
         if (handleClosed) return Promise.reject(new Error('Session handle is closed'));
         return rawSubmission.setRuntimeSettings(command);
@@ -820,11 +817,7 @@ function replayState(
   for (const entry of entries) state = projectLifecycle(state, entry);
   const root = explicitRoot ?? (log as CanonicalLog).root;
   const restored = loadCanonicalConversation(id, root);
-  state = withTranscript(
-    state,
-    { history: restored.history, messages: restored.messages },
-    restored.history as unknown as import('../model/index.js').Item[],
-  );
+  state = withTranscript(state, restored, restored.history as unknown as import('../model/index.js').Item[]);
   const audit = auditCanonicalConversation(id, explicitRoot ?? (log as CanonicalLog).root);
   const hasLifecycleTurn = entries.some(
     (entry) => entry.fact.type === 'session_turn_started' || entry.fact.type === 'session_interrupted',

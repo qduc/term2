@@ -33,7 +33,7 @@ export function createRetryCommand(deps: AdoptedCommandDeps, launch: LaunchTurn)
       if (target !== 'turn' && target !== 'tool') return Promise.reject(new Error('Invalid retry target'));
       if (turn.closing || context.state().status === 'closed')
         return Promise.resolve({ kind: 'rejected', reason: 'closed' });
-      if (turn.interrupting || turn.settingMutation)
+      if (turn.interrupting || turn.settingMutation || turn.compacting)
         return Promise.reject(new Error('Session mutation is in progress'));
       if (turn.poisoned !== undefined) return Promise.reject(turn.poisoned);
       if (!context.state().retryEligibility[target]) return Promise.resolve({ kind: 'ineligible', target });

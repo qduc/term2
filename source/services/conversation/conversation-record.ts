@@ -40,6 +40,7 @@ export class ConversationRecord {
   #pendingReasoningText = '';
   #segmentSource: StreamHistorySource = 'startStream';
   #recoveryBaselines: Record<'initial' | 'decision', AssistantJournalItemLogEvent[]> = { initial: [], decision: [] };
+  #coveredToolOccurrences = new Set<string>();
   readonly #providerContext?: ProviderContinuity;
   readonly #checkpointObserver?: OpenAIRootCheckpointLifecycleObserver;
 
@@ -254,6 +255,7 @@ export class ConversationRecord {
     const selected = selectAcceptedStreamHistory({
       stream,
       toolLedger: this.#ledger.export(),
+      coveredToolOccurrences: this.#coveredToolOccurrences,
       history: this.#segmentBaseline ? [...this.#segmentBaseline.history] : this.#store.getHistory(),
       inputMode,
       source: this.#segmentSource,
@@ -275,17 +277,30 @@ export class ConversationRecord {
   }
 
   snapshot(metadata: { previousResponseId: string | null; model?: string; provider?: string }) {
-    return projectSnapshot({ ...metadata, history: this.#store.getHistory(), toolLedger: this.#ledger.export() });
+    return projectSnapshot({
+      ...metadata,
+      history: this.#store.getHistory(),
+      toolLedger: this.#ledger.export(),
+      coveredToolOccurrences: this.#coveredToolOccurrences,
+    });
   }
   exportState(previousResponseId: string | null) {
     return { history: this.getReconciledHistory(), previousResponseId, toolLedger: this.#ledger.export() };
   }
 
   getReconciledHistory(): ProviderInputItem[] {
-    return projectProviderHistory({ history: this.#store.getHistory(), toolLedger: this.#ledger.export() }).history;
+    return projectProviderHistory({
+      history: this.#store.getHistory(),
+      toolLedger: this.#ledger.export(),
+      coveredToolOccurrences: this.#coveredToolOccurrences,
+    }).history;
   }
   #reconcileAndUpdateHistory(): boolean {
-    const projected = projectProviderHistory({ history: this.#store.getHistory(), toolLedger: this.#ledger.export() });
+    const projected = projectProviderHistory({
+      history: this.#store.getHistory(),
+      toolLedger: this.#ledger.export(),
+      coveredToolOccurrences: this.#coveredToolOccurrences,
+    });
     if (!projected.warnings.length) return false;
     this.#store.replaceHistory(projected.history);
     return true;
@@ -293,7 +308,13 @@ export class ConversationRecord {
 
   /** Conditional compaction acceptance preserves the existing transcript revision guard. */
   replaceHistoryAtRevision(revision: number, history: readonly ProviderInputItem[]): boolean {
-    return this.#store.replaceHistoryAtRevision(revision, history);
+    const replaced = this.#store.replaceHistoryAtRevision(revision, history);
+    if (replaced) {
+      for (const entry of this.#ledger.export()) {
+        this.#coveredToolOccurrences.add(toolOccurrenceKey(entry));
+      }
+    }
+    return replaced;
   }
 
   /** Apply a policy-selected recovery transition without exposing representation precedence. */
@@ -342,6 +363,7 @@ export class ConversationRecord {
     this.#pendingReasoningText = '';
     this.#ledger = new ToolExecutionLedger();
     this.#recoveryBaselines = { initial: [], decision: [] };
+    this.#coveredToolOccurrences.clear();
     this.#segmentSource = 'startStream';
     this.#attachUserTurnCount();
     this.#journal.clear();
@@ -351,11 +373,22 @@ export class ConversationRecord {
     previousResponseId: string | null;
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
+    coveredToolOccurrences?: Iterable<string>;
   }) {
     const validated = ImportedConversationStateSchema.parse(state);
     this.reset();
     this.#ledger.import(validated.toolLedger);
-    const projected = projectImportedState({ ...validated, toolLedger: this.#ledger.export() });
+    if (state.coveredToolOccurrences) {
+      const ledgerKeys = new Set(this.#ledger.export().map(toolOccurrenceKey));
+      for (const key of state.coveredToolOccurrences) {
+        if (ledgerKeys.has(key)) this.#coveredToolOccurrences.add(key);
+      }
+    }
+    const projected = projectImportedState({
+      ...validated,
+      toolLedger: this.#ledger.export(),
+      coveredToolOccurrences: this.#coveredToolOccurrences,
+    });
     for (const item of projected.history) this.#store.addImportedItem(item);
     return { validated, projected };
   }
@@ -404,6 +437,10 @@ export class ConversationRecord {
         return match ? Number.parseInt(match[1]!, 10) <= userCount : ids.has(entry.callId);
       }),
     );
+    const remainingKeys = new Set(this.#ledger.export().map(toolOccurrenceKey));
+    for (const key of [...this.#coveredToolOccurrences]) {
+      if (!remainingKeys.has(key)) this.#coveredToolOccurrences.delete(key);
+    }
     if (pruneJournal) this.#journal.pruneToUserTurnCount(userCount);
   }
   #deliverJournalEvent(event: LogEvent): void {

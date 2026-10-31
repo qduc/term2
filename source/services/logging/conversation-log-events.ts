@@ -124,6 +124,25 @@ export interface ContextCheckpointCreatedEvent {
   item: ProviderInputItem;
 }
 
+export interface ContextCompactionRecordedEvent {
+  type: 'context_compaction_recorded';
+  version: 1;
+  operationId: string;
+  provider: string;
+  model: string;
+  strategy: 'local' | 'native';
+  result:
+    | {
+        kind: 'compacted';
+        snapshot: StateSnapshot;
+      }
+    | {
+        kind: 'not_compacted';
+      };
+  usage?: NormalizedUsage;
+  costRecords?: ModelRequestCost[];
+}
+
 export interface UserInputAcceptedEvent {
   type: 'user_input_accepted';
   version: 1;
@@ -425,6 +444,7 @@ export type LogEvent =
   | GoalChangedEvent
   | EventsRetractedEvent
   | ContextCheckpointCreatedEvent
+  | ContextCompactionRecordedEvent
   | UserMessageEvent
   | UserInputAcceptedEvent
   | ToolOutputRewoundEvent

@@ -30,7 +30,10 @@ export function deriveLocalCheckpointRequestHistory(
   if (
     envelopes.some(
       ({ event }) =>
-        !isTruncatedLogEvent(event) && (event.type === 'tool_output_rewound' || event.type === 'user_turn_retried'),
+        !isTruncatedLogEvent(event) &&
+        (event.type === 'tool_output_rewound' ||
+          event.type === 'user_turn_retried' ||
+          (event.type === 'context_compaction_recorded' && event.result.kind === 'compacted')),
     )
   )
     return { status: 'refused' };

@@ -3,15 +3,15 @@
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/session/adopted/foreground.ts": {
-      "lines": 585,
-      "reason": "Turn launch and its completion facts share one closure; completion is the next seam if it grows."
+      "lines": 591,
+      "reason": "Compact command wiring and the compacting interlock share the foreground command object; compact itself lives in compact-command.ts."
     },
     "rewrite/src/engine/adopted/index.ts": {
-      "lines": 877,
-      "reason": "Not yet reviewed for a job seam."
+      "lines": 886,
+      "reason": "Post-preparation refresh of the private TurnInput copy is owned by the same engine that validates it; not yet reviewed for a job seam."
     },
     "rewrite/src/session/local-store.ts": {
-      "lines": 834,
+      "lines": 827,
       "reason": "Not yet reviewed for a job seam; its submission wrapper grows by one forward per session command."
     },
     "rewrite/src/model/adopted/index.ts": {

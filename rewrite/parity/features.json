@@ -513,6 +513,12 @@
       "parity": [],
       "consumedByNewCode": true
     },
+    "log-event:context_compaction_recorded": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
     "log-event:error": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",

@@ -101,6 +101,7 @@ const warningsFromReconciliation = (result: {
 export function projectProviderHistory(input: {
   history: readonly unknown[];
   toolLedger?: readonly SavedToolExecution[];
+  coveredToolOccurrences?: ReadonlySet<string>;
 }): ProviderHistoryProjection {
   // A provider compaction item is a complete replacement boundary. Replaying
   // completed tool pairs from the local ledger behind it would send stale
@@ -109,7 +110,7 @@ export function projectProviderHistory(input: {
   if (lastReplacementBoundaryIndex(input.history) >= 0) {
     return { history: clone([...input.history]) as ProviderInputItem[], warnings: [] };
   }
-  const reconciled = reconcileHistoryWithToolLedger(input.history, input.toolLedger);
+  const reconciled = reconcileHistoryWithToolLedger(input.history, input.toolLedger, input.coveredToolOccurrences);
   const paired = dropUnpairedFunctionCalls(reconciled.history);
   const removedCallIds = collectRemovedToolCallIds(reconciled.history, paired);
   const warnings = warningsFromReconciliation(reconciled);
@@ -159,6 +160,7 @@ export function projectModelRequestHistory(history: readonly unknown[]): Provide
 export function projectSnapshot(input: {
   history: readonly unknown[];
   toolLedger?: readonly SavedToolExecution[];
+  coveredToolOccurrences?: ReadonlySet<string>;
   previousResponseId: string | null;
   model?: string;
   provider?: string;
@@ -177,6 +179,7 @@ export function projectImportedState(input: {
   history: readonly unknown[];
   previousResponseId: string | null;
   toolLedger?: readonly SavedToolExecution[];
+  coveredToolOccurrences?: ReadonlySet<string>;
 }): ImportedStateProjection {
   const projected = projectProviderHistory(input);
   return {

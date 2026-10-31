@@ -141,6 +141,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
             ...runtimeOptions,
             deps: { ...runtimeOptions.deps, settingsService: binding.service },
             sessionId: context.id,
+            conversationLogRoot: context.root,
             agentClient: client,
           });
         },
@@ -193,6 +194,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
         onSourceEvent: options.onSourceEvent,
         publishFacts: false,
         cancelBackground,
+        reserveNetworkForCompaction: () => network.reserveForCompaction(),
         runtimeSettings: {
           supports: (command) =>
             typeof (command.kind === 'model'

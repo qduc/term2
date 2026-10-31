@@ -81,8 +81,11 @@ export function providerOpaqueSourceOf(item: unknown): string | undefined {
 export function isForeignProviderOpaque(item: unknown, laneTag: string, targetProvider: string = laneTag): boolean {
   const tag = providerOpaqueTagOf(item);
   if (tag === undefined) return false;
-  if (!acceptsProviderOpaqueTag(tag, laneTag)) return true;
   const sourceProvider = providerOpaqueSourceOf(item);
+  if (tag === targetProvider && (sourceProvider === undefined || sourceProvider === targetProvider)) {
+    return false;
+  }
+  if (!acceptsProviderOpaqueTag(tag, laneTag)) return true;
   return sourceProvider !== undefined && sourceProvider !== targetProvider;
 }
 

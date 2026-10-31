@@ -20,6 +20,7 @@ export interface TurnControl {
   /** In flight while a user interrupt runs. */
   interrupting: Promise<void> | undefined;
   settingMutation: boolean;
+  compacting: boolean;
   releaseSettings: (() => void) | undefined;
   /**
    * Aborts the callback gate and installs a fresh one, invalidates the generation, then cancels the active run.
@@ -63,6 +64,7 @@ export function createTurnControl(deps: { engine: AdoptedEngine; runtime: Sessio
     closing: false,
     interrupting: undefined,
     settingMutation: false,
+    compacting: false,
     releaseSettings: undefined,
     stop,
     cancelRun(runId) {

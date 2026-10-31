@@ -229,6 +229,10 @@ export function createAdoptedEngine(options: {
   >;
   readonly assembleAgent: NonNullable<ConstructorParameters<typeof AgentClient>[0]['assembleAgent']>;
   readonly bindSessionClient?: (client: AgentClient) => void;
+  readonly refreshPreparedInput?: (
+    input: TurnInput,
+    ...args: Parameters<NonNullable<ConstructorParameters<typeof AgentClient>[0]['validateApplicationAgent']>>
+  ) => TurnInput;
   readonly validateTurnInput: (
     input: TurnInput,
     ...args: Parameters<NonNullable<ConstructorParameters<typeof AgentClient>[0]['validateApplicationAgent']>>
@@ -252,6 +256,10 @@ export function createAdoptedEngine(options: {
       if (!selectedInput) throw new Error('No adopted turn is active');
       const logical = active.get(selectedInput.turnId);
       if (!logical || logical.modelCalls === 0) {
+        if (initialAgent && options.refreshPreparedInput) {
+          selectedInput = options.refreshPreparedInput(selectedInput, agent, providerId);
+          if (logical) logical.input = selectedInput;
+        }
         options.validateTurnInput(selectedInput, agent, providerId);
         initialAgent = [agent, providerId];
       }
@@ -484,7 +492,7 @@ export function createAdoptedEngine(options: {
           const checkpoint: TurnCheckpoint = {
             turnId: input.turnId,
             checkpointId,
-            input,
+            input: logical.input,
             produced: [...logical.produced],
             pendingCalls: request.pendingCalls,
             modelCalls: logical.modelCalls,
@@ -647,7 +655,7 @@ export function createAdoptedEngine(options: {
             cancel(logical);
             throw aborted();
           }
-          if (logical.modelCalls === 0 && initialAgent) options.validateTurnInput(input, ...initialAgent);
+          if (logical.modelCalls === 0 && initialAgent) options.validateTurnInput(logical.input, ...initialAgent);
           bridge.onModelDispatch?.(event);
           logical.modelCalls++;
         },
@@ -770,6 +778,7 @@ export function createAdoptedEngine(options: {
       };
       client.openTurn();
       selectedInput = input;
+      initialAgent = undefined;
       logical.settled = client
         .runTurn(wrapped)
         .catch((error) => {

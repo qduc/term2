@@ -1,4 +1,5 @@
 /** Private Session-owned network facts and ordered projection. */
+import { validateCompactionSequence } from '../../../../source/services/conversation/conversation-decoder.js';
 import {
   isSandboxNetworkHost,
   isSandboxNetworkPort,
@@ -79,10 +80,13 @@ export function validateNetworkFact(value: Record<string, unknown>): void {
 
 /** Reject impossible history rather than silently making an orphan actionable. */
 export function projectNetworkFacts(facts: readonly { readonly type: string }[]): readonly NetworkRequestFact[] {
+  validateCompactionSequence(facts, { requireSessionBound: true });
   const seen = new Set<string>();
   const pending: NetworkRequestFact[] = [];
   for (const raw of facts) {
-    if (raw.type === 'session_network_requested') {
+    if (raw.type === 'context_compaction_recorded') {
+      if (pending.length > 0) throw new Error('context_compaction_recorded while network approval is pending');
+    } else if (raw.type === 'session_network_requested') {
       const fact = raw as NetworkRequestFact;
       if (seen.has(fact.requestId)) throw new Error('duplicate network request id');
       seen.add(fact.requestId);

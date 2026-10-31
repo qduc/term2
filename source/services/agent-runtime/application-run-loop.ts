@@ -2474,6 +2474,21 @@ function isProviderOpaque(
 }
 
 function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
+  if (item.type === 'provider_opaque' && typeof item.provider === 'string' && item.provider.length > 0) {
+    const payload = asRecord(item.item);
+    if (payload) {
+      return [
+        {
+          type: 'provider_opaque',
+          provider: item.provider,
+          ...(typeof item.sourceProvider === 'string' && item.sourceProvider.length > 0
+            ? { sourceProvider: item.sourceProvider }
+            : {}),
+          item: { ...payload },
+        },
+      ];
+    }
+  }
   if (isProviderOpaque(item)) {
     const { providerOpaque: _marker, ...providerItem } = item;
     return [

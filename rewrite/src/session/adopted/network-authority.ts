@@ -38,6 +38,12 @@ export function createNetworkAuthority(
   let visible: Entry | undefined;
   let queued = 0;
   let pendingRequests = 0;
+  let compactionReserved = false;
+  const compactionWaiters = new Set<{
+    request: SandboxNetworkAccessRequest;
+    release: () => void;
+    cancel: () => void;
+  }>();
   const decisions = new Map<string, { answer: NetworkApprovalAnswer; result: Promise<SandboxNetworkCompletion> }>();
   const serial = <T>(fn: () => Promise<T>): Promise<T> => {
     const result = queue.then(fn);
@@ -63,13 +69,47 @@ export function createNetworkAuthority(
   };
   const poison = () => {
     poisoned = true;
+    for (const waiter of [...compactionWaiters]) {
+      compactionWaiters.delete(waiter);
+      waiter.cancel();
+    }
     coordinator.dispose();
     entries.clear();
     publish();
     failClosed();
   };
   const healthy = () => {
-    try { context.assertHealthy(); return true; } catch { return false; }
+    try {
+      context.assertHealthy();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const reserveForCompaction = (): (() => void) | null => {
+    if (
+      closed ||
+      poisoned ||
+      !healthy() ||
+      context.state().status === 'closed' ||
+      pendingRequests > 0 ||
+      entries.size > 0 ||
+      applying.size > 0 ||
+      compactionReserved
+    ) {
+      return null;
+    }
+    compactionReserved = true;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      compactionReserved = false;
+      for (const waiter of [...compactionWaiters]) {
+        compactionWaiters.delete(waiter);
+        waiter.release();
+      }
+    };
   };
   const requestApproval = async (
     request: SandboxNetworkAccessRequest,
@@ -79,6 +119,28 @@ export function createNetworkAuthority(
     const { host, port } = request;
     pendingRequests++;
     try {
+      while (compactionReserved) {
+        if (closed || poisoned || context.state().status === 'closed' || signal.aborted) return 'deny';
+        const cancelled = await new Promise<boolean>((resolve) => {
+          const waiter = {
+            request,
+            release: () => {
+              signal.removeEventListener('abort', onAbort);
+              compactionWaiters.delete(waiter);
+              resolve(false);
+            },
+            cancel: () => {
+              signal.removeEventListener('abort', onAbort);
+              compactionWaiters.delete(waiter);
+              resolve(true);
+            },
+          };
+          const onAbort = () => waiter.cancel();
+          compactionWaiters.add(waiter);
+          signal.addEventListener('abort', onAbort, { once: true });
+        });
+        if (cancelled || closed || poisoned || context.state().status === 'closed' || signal.aborted) return 'deny';
+      }
       let answer: Promise<NetworkApprovalAnswer> | undefined;
       await serial(async () => {
         context.assertHealthy();
@@ -130,11 +192,15 @@ export function createNetworkAuthority(
   };
   const cancelAll = async (reason: 'execution_ended' | 'helper_lost' | 'session_closed' | 'graph_replaced') => {
     stopReason = reason;
+    const sourceReason =
+      reason === 'helper_lost' ? 'helper_lost' : reason === 'execution_ended' ? 'cancelled' : 'closed';
+    for (const waiter of [...compactionWaiters]) {
+      compactionWaiters.delete(waiter);
+      cancelSource(waiter.request, sourceReason);
+      waiter.cancel();
+    }
     for (const entry of applying) {
-      cancelSource(
-        entry.request,
-        reason === 'helper_lost' ? 'helper_lost' : reason === 'execution_ended' ? 'cancelled' : 'closed',
-      );
+      cancelSource(entry.request, sourceReason);
     }
     return serial(async () => {
       for (const entry of [...entries.values()]) {
@@ -176,7 +242,11 @@ export function createNetworkAuthority(
       !isNetworkAnswer(command.answer)
     )
       return Promise.reject(new Error('Malformed network decision'));
-    try { context.assertHealthy(); } catch (error) { return Promise.reject(error); }
+    try {
+      context.assertHealthy();
+    } catch (error) {
+      return Promise.reject(error);
+    }
     const owned = { requestId: command.requestId, generation: command.generation, answer: command.answer };
     if (closed || poisoned || context.state().status === 'closed')
       return Promise.reject(new Error('Network authority is closed'));
@@ -238,6 +308,7 @@ export function createNetworkAuthority(
   };
   return {
     requestApproval,
+    reserveForCompaction,
     isLive: () => healthy() && !closed && !poisoned && context.state().status !== 'closed',
     hasPending: () => pendingRequests > 0,
     cancelAll,

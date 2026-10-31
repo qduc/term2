@@ -15,7 +15,6 @@ import { SqliteReplayLedger } from '../host/server-auth.js';
 import type { Principal } from '../host/in-process-direct-types.js';
 import type { ServerSessionPresentation, ServerTransportOptions } from '../host/server-contracts.js';
 import { DirectProtocolError } from '../protocol/direct-errors.js';
-import type { DirectLocalStore } from '../session/direct-store.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import type { DirectAuthorityFactory } from './direct-application-workspaces.js';
 import {
@@ -126,8 +125,7 @@ function serverAuthority(grants: DirectWorkspaceAuthority, directory: string, ow
       },
       // A read grant is a real grant here, enforced by the tools. Stored roots with no grant already threw.
       canRun: () => true,
-      createSession: (workspace, model, binding) =>
-        access.sessions.create(workspace, model, binding) as ReturnType<DirectLocalStore['create']>,
+      createSession: (workspace, model, binding) => access.sessions.create(workspace, model, binding),
     };
   };
 }

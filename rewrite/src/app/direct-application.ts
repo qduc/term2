@@ -25,6 +25,7 @@ import type { ProfileSelection } from './tool-contract.js';
 import { startDirectHooks, type DirectHookOptions } from './direct-application-hooks.js';
 import { createDirectRuntimes, type DirectRuntimeOptions, type DirectRuntimes } from './direct-application-runtime.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority, type DirectAuthorityFactory } from './direct-application-workspaces.js';
+import { createDirectInputPreview } from './direct-input-preview.js';
 import { sessionStart } from './direct-host-config-access.js';
 
 export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
@@ -190,6 +191,8 @@ function applicationCapabilities(
   session: DirectSession,
 ): DirectCommandCapabilities {
   return {
+    // Guards are rebuilt from the Session's own snapshot on every call.
+    preview: createDirectInputPreview({ snapshot: (request) => session.snapshotInputPreview(request) }).preview,
     async reset() {
       const state = stateOf(session);
       if (state.activeTurnId !== null) throw new DirectProtocolError('rejected', 'Stop the running turn first.');

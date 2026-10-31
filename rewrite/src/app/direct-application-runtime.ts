@@ -11,6 +11,8 @@ import type { DirectConversationRuntime, DirectRuntimeContext } from '../session
 import { loadSurface } from './agent-surface.js';
 import type { DirectHookRuntime } from './direct-application-hooks.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
+import { createNestedAuthorizer } from './direct-application-nested.js';
+import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
@@ -168,8 +170,13 @@ export function createDirectRuntimes(
           maxParallelToolCalls: runtime.maxParallelToolCalls,
           ...runPolicy(selection.settings, context.id, context.model),
           context: contextFactory,
+          authorizeNested: createNestedAuthorizer(selection.settings, context, runtime.tools),
         },
-        request: { ...request, ...(notice ? { notice } : {}) },
+        request: {
+          ...request,
+          ...(notice ? { notice } : {}),
+          previewMode: readDirectInputPreviewConfiguration(selection.settings, context.model).mode,
+        },
         profile: {
           id: profile.activeProfileId,
           version: profile.activeProfileVersion,

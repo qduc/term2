@@ -168,6 +168,8 @@ export function parseWireCommand(raw: unknown): WireCommand {
     case 'preview': fields(value, ['type', 'text', 'attachments']);
       if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');
       return { type: 'preview', text: text(value.text, 'text'), ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}) };
+    case 'drain_background_notifications': fields(value, ['type', 'requestId']);
+      return { type: 'drain_background_notifications', requestId: id(value.requestId, 'requestId') };
     case 'compact': case 'rollover': case 'command_status':
       fields(value, ['type', 'commandId']); return { type: value.type, commandId: id(value.commandId, 'commandId') };
     case 'queue_resume': case 'queue_discard': case 'list_rewind_targets': case 'reset':

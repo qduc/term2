@@ -6,6 +6,7 @@ import { directDraftId, initialDirectState } from '../session/direct-state.js';
 import { contextFactEvent } from './direct-context.js';
 import type { DirectQueueState } from '../session/direct-queue-types.js';
 import { createDirectQueueState, directQueueSteeredInput, reduceDirectQueue } from '../session/direct-queue-state.js';
+import { argumentStreamEvent } from './direct-argument-stream.js';
 import { commandFactEvent } from './direct-command-receipts.js';
 import { publicRequestCost } from './direct-costs.js';
 import { budgetFactEvent } from './direct-budget.js';
@@ -44,7 +45,9 @@ export class DirectProjection {
     let events: readonly WireEvent[];
     if (update.type === 'state') return this.synchronize(update.state);
     if (update.type === 'transient') {
-      if (update.event.type === 'automatic_memory_notice') {
+      if (update.event.type === 'tool_call_streaming_delta') {
+        events = [argumentStreamEvent(this.#state.sessionId, update.event)];
+      } else if (update.event.type === 'automatic_memory_notice') {
         const { success, command, output } = update.event.notice;
         events = [this.#event('automatic_memory_notice', { success, command, output }, null, this.#state.activeTurnId)];
       } else if (update.event.type === 'task_progress') {
@@ -126,6 +129,8 @@ export class DirectProjection {
       case 'task_finished':
       case 'task_interaction_opened':
       case 'task_interaction_closed': return [taskFactEvent(fact, this.#state, seq)];
+      case 'background_notice_enqueued': return [this.#event('background_notice_enqueued', { notice: structuredClone(fact.notice) }, seq, null)];
+      case 'background_notices_delivered': return [this.#event('background_notices_delivered', { clientRequestId: fact.clientRequestId, turnId: fact.turnId, notificationIds: [...fact.notificationIds] }, seq, fact.turnId)];
       case 'command_started':
       case 'command_finished': return [commandFactEvent(fact, this.#state, seq)];
       case 'request_cost_recorded': return [this.#event('request_cost_recorded', publicRequestCost(fact), seq, fact.turnId)];
@@ -150,9 +155,9 @@ export class DirectProjection {
       case 'branch_event': return this.#branch(fact.branchId, fact.fact, seq, at);
       case 'session_started': return [this.#event('configuration', { model: fact.model, ...(fact.reasoning ? { reasoning: fact.reasoning } : {}) }, seq, null)];
       case 'turn_started': return [
-        this.#event('turn_started', { foreground: true,
+        this.#event('turn_started', { foreground: true, ...(fact.silent ? { silent: true as const } : {}),
           ...(fact.submission ? { admission: { kind: 'started' as const, clientRequestId: fact.submission.clientRequestId, messageId: fact.submission.messageId, turnId: fact.turnId } } : {}),
-          input: fact.input.flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; }),
+          input: fact.silent ? [] : fact.input.flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; }),
         }, seq, turnId),
       ];
       case 'text_delta': {

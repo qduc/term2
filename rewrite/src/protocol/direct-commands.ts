@@ -55,6 +55,12 @@ async function dispatch(session: DirectSession, command: WireCommand, operations
     case 'retry': case 'compact': case 'configure': case 'rewind': case 'rollover':
       return publicCommandResult(command.commandId, await session.command(nativeCommandRequest(command)));
     case 'command_status': return commandStatus(session, command.commandId);
+    case 'drain_background_notifications': {
+      const result = await session.drainBackgroundNotifications(command.requestId);
+      return result.kind === 'not_admitting'
+        ? { ok: false, code: 'not_admitting', message: result.reason }
+        : { ok: true, kind: 'background_drain', result: structuredClone(result) };
+    }
     case 'queue_edit': return queueResult(await session.editQueue(command.messageId, { text: command.text, ...(command.attachments !== undefined ? { attachments: command.attachments } : {}) }));
     case 'queue_retract': return queueResult(await session.retractQueue(command.messageId));
     case 'queue_resume': return queueResult(await session.resumeQueue());

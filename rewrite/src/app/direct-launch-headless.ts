@@ -56,6 +56,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         case 'cancelled':
         case 'context_paused':
         case 'blocked':
+        case 'budget_paused':
           return { kind: outcome };
         default:
           return { kind: 'failed' };

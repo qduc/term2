@@ -41,9 +41,9 @@ export type DirectHeadlessRequest = RunRequest & {
   readonly goal?: DurableGoal;
 };
 
-/** `context_paused` and `blocked` are the resumable stops that exit 2. */
+/** `context_paused`, `blocked` and `budget_paused` are the stops that exit 2. */
 export type DirectHeadlessResult = {
-  readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked';
+  readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked' | 'budget_paused';
 };
 export type DirectHeadlessHandle = Omit<RunHandle, 'result'> & { readonly result: Promise<DirectHeadlessResult> };
 

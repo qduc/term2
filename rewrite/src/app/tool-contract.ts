@@ -35,6 +35,13 @@ export type AgentSurface = {
     /** Withdraw the previous native leaf offering before building a replacement capability snapshot. */
     resetAdaptedTools(): void;
     adaptTool(definition: import('../../../source/tools/types.js').AnyToolDefinition): import('../tools/index.js').Tool;
+    /** Only accepts this surface's host-prepared child requests. App checks billing separately. */
+    resolveNestedAuthority(
+      request: import('../tools/index.js').NestedRunRequest,
+    ): import('../session/direct-branches.js').DirectNestedAuthority;
+    bindTaskCheckIn(
+      configure: import('../session/direct-capabilities.js').DirectContextPort['configureTaskCheckIn'],
+    ): void;
     readonly tools: ToolRegistry;
     readonly toolContext: ToolContextSeed;
     readonly maxParallelToolCalls: number;

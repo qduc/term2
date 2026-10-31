@@ -24,6 +24,7 @@ import {
   reduceDirectNotifications,
   type DirectNotificationState,
 } from './direct-notifications.js';
+import { parseDirectConfigurationFact } from './direct-configuration.js';
 
 export type ReplayOptions = {
   /** False for live history/root settlement; only explicit reopen recovers/pauses the queue. */
@@ -196,6 +197,13 @@ function replayProjection(
       }
       notifications = reduceDirectNotifications(notifications, fact);
       if (fact.type === 'background_notices_delivered') noticeDeliveries.add(fact.turnId);
+      return;
+    }
+    if (fact.type === 'configuration_changed') {
+      // The fact stays accepted audit. Do not prepare a runtime or copy it into provider history.
+      if (sessionId === undefined) throw new Error('replay: configuration changed before the Session started');
+      if (active) throw new Error('replay: configuration changed during an active turn');
+      parseDirectConfigurationFact(fact);
       return;
     }
     if (isDirectQueueFactType(fact.type)) {

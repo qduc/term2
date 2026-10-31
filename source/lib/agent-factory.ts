@@ -95,6 +95,12 @@ export interface AgentFactoryDeps {
   getAskUserAnswer?: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
   skillsService?: SkillsService;
+  /** Omit local memory discovery when another owner supplies context or the workspace is remote. */
+  includeMemory?: boolean;
+  /** Project text already loaded from the execution target; profile gates still apply. */
+  projectInstructions?: string;
+  /** Bind policy callbacks and physical bodies to their actual source leaf and invocation. */
+  withToolInvocation?: <T>(toolName: string, context: unknown, operation: () => Promise<T>) => Promise<T>;
   /** Optional lazy bridge to the production one-shot agent runtime. */
   getAgentRuntime?: () => Pick<AgentRuntime, 'agent'> | null;
   /** Root-session-only policy capability for explicitly opted-in definitions. */
@@ -195,6 +201,8 @@ export function buildAgentTools({
   let tools: ToolRegistry = toolDefinitions
     .filter(() => true)
     .map((definition) => {
+      const invoke = <T>(context: unknown, operation: () => Promise<T>): Promise<T> =>
+        deps.withToolInvocation ? deps.withToolInvocation(definition.name, context, operation) : operation();
       const providerParameters = definition.strictParameters ?? definition.parameters;
       const canonicalParameters =
         definition.canonicalParameters ??
@@ -204,6 +212,16 @@ export function buildAgentTools({
       const wrappedDefinition: AnyToolDefinition = {
         ...definition,
         canonicalParameters,
+        parallelSafe:
+          typeof definition.parallelSafe === 'function'
+            ? (params, context) =>
+                invoke(context, async () =>
+                  (definition.parallelSafe as (params: unknown, context?: unknown) => boolean | Promise<boolean>)(
+                    params,
+                    context,
+                  ),
+                )
+            : definition.parallelSafe,
         postExecutePause: definition.postExecutePause
           ? {
               ...definition.postExecutePause,
@@ -221,7 +239,11 @@ export function buildAgentTools({
               (z.toJSONSchema(toOpenAIStrictToolSchema(providerParameters)) as JsonSchemaObject)
             : definition.parameters,
         needsApproval: wrapNeedsApproval(
-          canonicalParameters ? { ...definition, parameters: canonicalParameters } : definition,
+          {
+            ...definition,
+            ...(canonicalParameters ? { parameters: canonicalParameters } : {}),
+            needsApproval: (params, context) => invoke(context, async () => definition.needsApproval(params, context)),
+          },
           {
             checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
             toolName: definition.name,
@@ -256,7 +278,8 @@ export function buildAgentTools({
           }
 
           const executeOriginal = () => {
-            const execute = () => Promise.resolve(definition.execute(normalizedParams, _context, details));
+            // The scripted gate accepts the physical start before entering this scope.
+            const execute = () => invoke(_context, async () => definition.execute(normalizedParams, _context, details));
             return isScriptedToolCall(_context) && deps.executeScriptedTool
               ? deps.executeScriptedTool(
                   { toolName: definition.name, arguments: normalizedParams, context: _context, details },
@@ -546,6 +569,8 @@ export function buildAgent(
       runResolvedSubagentAsync: deps.runResolvedSubagentAsync,
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
+      includeMemory: deps.includeMemory,
+      projectInstructions: deps.projectInstructions,
       agentRuntime: deps.getAgentRuntime?.() ?? null,
       postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
       sessionAccess: deps.sessionAccess,

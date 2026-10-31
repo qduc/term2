@@ -5,6 +5,7 @@ import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type { AcpBackend, BackendOptions } from './contract.js';
 import { AcpAttachment } from './attachment.js';
+import { promptInput } from './input.js';
 
 async function canonicalCwd(cwd: string): Promise<string> {
   if (!path.isAbsolute(cwd)) throw acp.RequestError.invalidParams(undefined, 'cwd must be an absolute path');
@@ -15,22 +16,6 @@ async function canonicalCwd(cwd: string): Promise<string> {
   } catch {
     throw acp.RequestError.invalidParams(undefined, 'cwd must exist and be a directory');
   }
-}
-
-function promptText(blocks: acp.PromptRequest['prompt']): string {
-  const text = blocks
-    .map((block) => {
-      if (block.type === 'text') return block.text;
-      if (block.type === 'resource_link') return `[Resource: ${String(block.uri)}]`;
-      if (block.type === 'resource') {
-        const resource = block.resource as { type?: string; text?: string };
-        if (resource.type === 'text' && typeof resource.text === 'string') return resource.text;
-      }
-      throw acp.RequestError.invalidParams(undefined, `Unsupported prompt content block: ${block.type}`);
-    })
-    .join('\n');
-  if (!text.trim()) throw acp.RequestError.invalidParams(undefined, 'prompt must contain text');
-  return text;
 }
 
 /**
@@ -125,7 +110,7 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
       }
     },
     async preparePrompt(request) {
-      return await attached(request.sessionId).prepare(createRequestId(), promptText(request.prompt));
+      return await attached(request.sessionId).prepare(createRequestId(), promptInput(request.prompt));
     },
     async cancelSession(sessionId) {
       await attached(sessionId).cancel();

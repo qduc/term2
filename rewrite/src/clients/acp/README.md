@@ -1,113 +1,133 @@
 # Direct ACP client boundary
 
-This subtree implements the experimental ACP v2 client encoding over the **direct**
-Host/Connection contract published in `53d0bc767adab83fe91fd78f6c9da463ad7cd1f8`.
-It imports `protocol/direct-wire.ts` and `host/in-process-direct-types.ts`, not the
-bridge's unprefixed protocol/Host types. Those shared files are intentionally not
-copied into this worker's checkout. Integrate the real shared contracts before
-compiling this client. This is implementation, not a claim of tested M6 parity.
+This subtree implements experimental ACP v2 client encoding against the real
+protocol/Host contracts through `0a27e1345abff53e45c781f59e95a176db309d16`.
+Imports target `protocol/direct-wire.ts` and `host/in-process-direct-types.ts`,
+not the bridge's unprefixed types. Shared files were inspected read-only, not
+copied/cherry-picked into this worker checkout. This is implementation, not
+runtime acceptance or a tested M6 parity claim.
 
 ## App integration
 
-The app composes a `DirectHost`, an authenticated `Principal`, a diagnostic logger,
+The app composes `DirectHost`, an authenticated `Principal`, a diagnostic logger,
 and `AcpWorkspaces`, then calls `createAcpBackend`. Pass that backend and the app
-version to `createAcpAgent` or `serveAcp`. `createStdioAcpIo` adapts Node's actual
-stdio; `serveAcp` uses the same SDK 1.4.0 experimental-v2 `ndJsonStream` as the
-existing ACP executable. JSON-RPC framing, batch messages, request IDs and schema
-validation remain SDK-owned. The adapter retains `initialize`, session new/list/
-resume/prompt/close, cancellation notifications, permission requests and updates.
+version to `createAcpAgent` or `serveAcp`. `createStdioAcpIo` adapts Node stdio;
+`serveAcp` uses SDK 1.4.0 experimental-v2 `ndJsonStream`, as the existing ACP
+executable does. JSON-RPC framing, batches, transport IDs and schema validation
+remain SDK-owned. Initialize, session new/list/resume/prompt/close, cancellation,
+permission requests and session updates retain their ACP v2 method names.
 
-`AcpWorkspaces.authorize` resolves a canonical cwd to an admitted workspace grant.
-`cwd(sessionId)` supplies canonical workspace metadata under the same principal
-as Host access checks. It must query **direct** sessions only. The latter is the
-remaining injected metadata seam: the direct connection snapshot has no workspace
-field, while ACP resume requires checking the requested cwd against the session.
-Neither callback may construct an adopted Session/runtime or import old logs.
+`AcpWorkspaces.authorize` resolves canonical cwd to an admitted workspace grant.
+`cwd(sessionId)` supplies canonical **direct** session workspace metadata under
+the same principal as Host. It is a narrow remaining injection: ACP resume checks
+cwd, but the direct connection snapshot has no workspace field. Neither callback
+may construct an adopted Session/runtime or read old logs.
 
-Host/tool composition must preserve ACP's security posture: write-capable admitted
-workspaces where authorized, `autoApprove:false`, and `allowUnsandboxed:false`.
-The client cannot enforce those tool settings by replacing the workspace grant or
-caching approvals; the app must supply the actual direct tool authority. No
-client flag weakens them. The app must also keep provider/log diagnostics off
-stdout, wire process shutdown signals to `serveAcp`'s optional signal, and dispose
-the Host after `serveAcp` returns. No CLI dispatch, production factory, process
-signal ownership, main entry or default flip is installed in this subtree.
+Host/tool composition must preserve ACP's security posture: authorized write
+workspaces, `autoApprove:false`, `allowUnsandboxed:false`, and real sandbox/tool
+authority. The client cannot manufacture those policies from a workspace grant.
+The app must keep diagnostics off stdout, supply process shutdown signals to
+`serveAcp`, and dispose its Host after serving returns. No production factory,
+CLI dispatch/default flip, global signal handler or runtime fallback lives here.
 
-## Data and lifecycle
+## Admission, content and interactions
 
-- New/resumed session IDs come directly from Host. Resume connects without a
-  historical cursor and replaces only this ACP client's subscription. `replayFrom:
-  start` emits the current public transcript/tool snapshot, then strictly subsequent
-  events. Other replay cursor variants fail explicitly; `seq:null` is not replaced
-  with a client counter. No old-conversation discovery or import occurs.
-- Each prompt submits once with a UUID client request ID and `origin:acp`.
-  Admitted receipts are distinct from completion. A local prompt slot rejects
-  concurrent ACP prompts before submission, preserving the existing busy error;
-  Session still owns actual shared admission. The output-only gate preserves the
-  existing acknowledgement-before-stream ordering without blocking Host progress.
-- Started work waits for its exact `turn_ended`. Queued work is correlated using
-  receipt message ID and `turn_started.input[].id`. Queued cancellation uses
-  `queue_retract`, never an unrelated foreground cancellation; an unavailable
-  capability returns an error. Successful retraction must mean the unstarted
-  message was removed; a racing start must reject retraction. No retry/fallback
-  is performed. Steering receipts need their owning `turnId`; missing identity
-  throws an explicit integration error, not an invented successful turn.
-- Streaming uses wire message IDs and tool **execution** IDs, never provider call
-  IDs. Completed messages honor `replacesDraftId` so a final durable record does
-  not duplicate its streamed draft. ACP v2 full-message upserts support corrections
-  and image display; normal append-compatible text uses chunks. Tool progress is
-  accumulated because ACP tool content updates replace rather than append.
-  Nested wire events are rendered through the same encoder.
-- Every pending interaction has its own permission request and cancellation
-  controller; a slow permission UI does not block the event pump or other
-  approvals. Answers target the exact wire request ID. Another client's already
-  resolved request is stale, not a reason to answer a different owner.
-- The direct contract currently supports only allow/deny. ACP offers the existing
-  `approve`/`reject` option IDs with `allow_once`/`reject_once` kinds and retains
-  the old `allow-once` response alias. Unknown selections, cancelled requests and
-  missing client methods deny. No remembered/scoped `allow_always` is advertised
-  or cached until Session actually supports it. Question interactions are
-  explicitly denied with `stopAfterApprovalResolution:true`; structured question
-  elicitation is not implemented and is not misrepresented as tool approval.
-- Explicit cancel sends a foreground command (or retracts this client's unstarted
-  queued message). Explicit close cancels, observes a known foreground terminal,
-  then detaches. Transport EOF/shutdown only detach subscriptions and pending ACP
-  requests; they do not silently cancel shared Session work. Host disposal is the
-  app's separate responsibility. There is no shutdown deadline or runtime cap.
+- Each prompt sends exactly one UUID-keyed `submit`, with `origin:acp` and explicit
+  **`delivery:reject_if_busy`**. This requires the actual `submitWithDelivery`
+  capability while Session's native facade lacks delivery. Unavailable fails
+  explicitly; there is no auto-delivery fallback, queue-then-retract workflow,
+  queue edit endpoint or speculative retry. A queued/steering receipt violates
+  this requested mode and raises an integration error, not a fictional start.
+- The local ACP slot rejects simultaneous prompts before sending; shared Session
+  still owns cross-client admission. Acknowledgement and the output-only ordering
+  gate do not acknowledge engine work or prove completion. Started work waits for
+  its exact real terminal. The single `turn_started` event may include admission;
+  its input message identity also provides start correlation when the receipt
+  omits turnId. No client sequence is substituted for durable seq.
+- Prompt text, resource links and text resources retain existing interpretation.
+  Images are mapped to image/* MIME and raw padded RFC4648 base64, never fetched
+  from a path/URL or inferred from a data URI. Canonical base64 is checked before
+  admission without a new size cap or provider permission policy. Image-only
+  prompts and text after images are retained: wire text takes the first text
+  part, and typed attachments preserve the remaining block order. Initialize
+  advertises image prompt support; audio/blob resources remain unsupported.
+- Every pending request has its own controller. Questions/permissions do not
+  block the event pump or each other; answers target exact wire request IDs.
+  Stale responses never answer another owner. Nested output/requests use their
+  own identities and cannot change root foreground or settle the root terminal.
+- Approvals retain approve/reject option IDs with allow_once/reject_once and the
+  existing allow-once response alias. Recognized scoped/Docker options are offered
+  only from `supportedGrants`, and sent as exact grant decisions, never collapsed
+  into allow or cached locally. Unsandboxed choices remain excluded by ACP's
+  posture. Actual M2 advertises no scoped grants. Unknown selections, cancellation
+  and missing permission methods deny.
+- Questions use standard ACP v2 `elicitation/create` form mode. Known questions
+  map to stable-ID answer sets: single/multiple choices, descriptions where the
+  schema supports them, and optional custom text. A multi-select can combine
+  offered values with one additional custom answer. The complete set is sent
+  once as `answers`; canonical serialization remains protocol/Session-owned.
+  Without a structured question schema, the form collects a string answer.
+  Explicit decline sends `decline`; cancel, unsupported elicitation, malformed
+  or incomplete responses send decline plus stopAfterApprovalResolution. They
+  are not approval denials, fabricated answers or silent allows.
 
-## Exact remaining contracts and limits
+## Display, terminals and replay
 
-1. **Integration dependency:** the shared direct contracts above require M2
-   `46bf7f77f1b8e0e57aa0b8fdea75414f0f686615`, followed by actual direct host,
-   protocol projection/commands and Session implementations. The old host/runtime
-   is not a substitute. The app launcher and workspace authority are still owed
-   by their owners. This subtree is not wired into an executable here.
-2. **Admission/settlement:** started/queued receipts without turn IDs need the
-   documented message-ID correlation. Steering without a turn ID cannot be
-   observed to completion. An error detected after an incomplete admitted receipt
-   does not undo that admission. M4 must supply turn ownership/settlement, and
-   race-safe queue retraction, before claiming those ACP paths work.
-3. **Snapshot/replay fidelity:** C4's current M2 facade lacks active foreground
-   identity, per-step drafts and some display state, as recorded in the coordinator's
-   `protocol-session-adjustments.md`. This client cannot reconstruct absent state.
-   Close cancellation when the snapshot says running but supplies no observable
-   foreground ID reports an integration error rather than fake completion.
-   If durable message IDs differ from draft IDs, snapshots must retain their
-   display identity/replacement relation for cross-reconnect identity parity;
-   `replacesDraftId` is presently event-only. ACP resume does not delete arbitrary
-   pre-existing client UI state; snapshot replay upserts the IDs Host supplies.
-4. **List metadata:** DirectHost list currently supplies IDs/workspaces/models,
-   not title or updatedAt. ACP returns valid session IDs/cwds and the direct
-   cursor, omitting the optional title/time instead of fabricating them. Exact
-   old list metadata requires a shared-host DTO extension.
-5. **Media/termination:** direct messages expose text/images, and tools expose
-   text output. Structured/media tool result replay needs a richer public tool
-   DTO before ACP can preserve it. Reasoning lacks per-model-step identity and
-   is grouped per wire turn. Budget exhaustion maps to `max_turn_requests` only
-   when the terminal error kind explicitly identifies it; otherwise the actual
-   completed/cancelled/failed/interrupted outcome is used.
-6. **Verification is deferred:** no tests, typecheck/lint, builds, independent
-   review or cold reads were run for this worker, at the user's direction.
-   SDK/type/source inspection and formatting are implementation aids, not runtime
-   compatibility evidence. The final M6 phase must exercise this new backend and
-   real stdio entry, not count the unchanged legacy ACP suite as direct coverage.
+Live messages use the wire's actual draft IDs and `replacesDraftId`, preserving
+model-step identities rather than inventing a naming formula. Append-compatible
+final text sends only its suffix; ACP full-message upserts handle corrections and
+images. Tools use execution IDs, not repeatable provider call IDs. Tool text/image
+content is preserved for live, nested and snapshot output. Public JSON display is
+kept alongside text in rawOutput; opaque provider frames never reach this client.
+Progress is accumulated because ACP tool-content updates replace rather than
+append. A result without a start is still displayed by its execution ID, without
+a duplicate transcript tool message. Reasoning uses its supplied messageId when
+known, otherwise an explicitly coarse per-turn identity; null modelStep does not
+become an invented step.
+
+Snapshots now use real activeTurnId/drafts/reasoning/terminal data. Restored and
+live terminal outcomes share completed/cancelled/failed/interrupted mappings.
+No budget stop reason is inferred from a generic failure or command receipt;
+M3's real budget contract remains feature-owner work. Explicit cancel targets
+foreground work. Explicit close cancels and observes a known foreground terminal
+before detach. Transport EOF/shutdown only detach client subscriptions/requests;
+Host owns shared Session/background lifetime. There is no shutdown deadline or
+runtime cap.
+
+ACP `replayFrom:start` uses a **fresh atomic snapshot plus subsequent live events**.
+Fresh mixed message/tool replay requires authoritative `snapshot.timeline`; null
+must not be interpreted as "all messages happened before all tools." Such a mixed
+replay fails explicitly while that metadata is unavailable. Live snapshot upserts
+preserve the order of previously observed IDs and do not unexpectedly expose old
+history hidden by resume-without-replay. Newly observed mixed snapshot items also
+require a timeline. Existing stream-to-final aliases survive in-place refresh.
+
+The direct Host's numeric cursor overload is now concrete and distinct:
+`DirectReplayConnection` has `snapshot:null`, `replay:{fromSeq,toSeq}` and accepted
+`(fromSeq,toSeq]` events followed by live updates. That path requires retained state
+at fromSeq and must never be treated as a fresh snapshot/reset. This ACP SDK defines
+only the standard `replayFrom:start` cursor plus implementation-specific extension
+variants; no numeric ACP cursor format has been agreed. This client therefore
+keeps the normal no-fromSeq attach above and explicitly rejects unknown cursor
+variants. It neither claims Host cursor replay is unavailable nor invents an ACP
+cursor extension, client seq counter, or snapshot-then-old-tail fallback.
+
+## Remaining owner work and verification limits
+
+- Integrate the real shared protocol/Host implementation and its M2 dependencies,
+  including enriched Session state/store; shared direct imports intentionally do
+  not resolve in this worker's older base. Wire the direct executable and actual
+  reject_if_busy capability. No bridge implementation is an integration substitute.
+- Supply authoritative mixed snapshot.timeline. If committed IDs differ from live
+  draft IDs, preserve their replacement/display relation across fresh snapshots;
+  event-only replacesDraftId cannot guarantee cross-reconnect ACP identity.
+- Direct list metadata lacks optional ACP title/updatedAt. IDs/canonical cwd and
+  the direct page cursor are returned; no timestamps or old-log titles invented.
+- Agree an ACP numeric cursor extension if that transport feature is required.
+  Standard fresh snapshot replay and Host tail replay are not interchangeable.
+- No tests, probes, typechecks/lint/guards, builds, independent review or cold reads
+  ran, per user direction. Source/SDK/type inspection and write-only formatting
+  are implementation aids, not behavioral evidence. End-of-M6 verification must
+  target this backend/new stdio entry rather than count legacy passes as direct
+  acceptance, including image/question/grant errors, busy rejection, nested output,
+  replay ordering/identity, terminal observation, close and EOF.

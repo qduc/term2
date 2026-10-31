@@ -218,7 +218,7 @@ async function untilCancelled(
  * the turn as a failure, with the same settings and messages. Above the provider,
  * so a trip is not retried. Text passes `observeText` before it can be shown.
  */
-function withGenerationGuard(models: ModelRegistry, { settings }: ProfileSelection): ModelRegistry {
+export function withGenerationGuard(models: ModelRegistry, { settings }: ProfileSelection): ModelRegistry {
   const stream = async function* (model: Model, request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
     const maxCharacters = settings.get('agent.maxStreamOutputChars');
     const guard = new GenerationGuard({

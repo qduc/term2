@@ -1,6 +1,6 @@
 /** Live host facade over one direct Conversation. Only that Conversation writes facts. */
 import { randomUUID } from 'node:crypto';
-import type { InteractionDecision, InteractionRequestId } from '../engine/index.js';
+import type { InteractionDecision, InteractionRequestId, TurnId } from '../engine/index.js';
 import type { Item, ItemId, ModelError, ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Conversation, Turn, TurnRequest } from './direct-types.js';
@@ -9,6 +9,7 @@ import type {
   DirectCancelTarget,
   DirectSession,
   DirectSessionCapture,
+  DirectSessionReplayCapture,
   DirectSessionUpdate,
   DirectSubmission,
 } from './facade-types.js';
@@ -18,17 +19,17 @@ import {
   initialDirectState,
   interruptedDirectState,
   reduceDirectFact,
+  directSubmittedTurn,
   type DirectPublicState,
 } from './direct-state.js';
 
 type DirectDurableUpdate = Extract<DirectSessionUpdate, { readonly type: 'fact' }>;
-export type DirectCommittedFact = Pick<DirectDurableUpdate, 'seq' | 'fact'>;
 export type DirectLiveCapture = Omit<DirectSessionCapture, 'state'> & {
   readonly state: DirectPublicState;
   /** Real accepted-log cursor at the same cut as state, not publication position. */
   readonly seq: number;
 };
-export type DirectCatchUp = DirectLiveCapture & { readonly replay: readonly DirectCommittedFact[] };
+export type DirectCatchUp = DirectSessionReplayCapture & { readonly state: DirectPublicState };
 export interface DirectLiveSession extends DirectSession {
   capture(listener: (update: DirectSessionUpdate) => void): DirectLiveCapture;
   /** Durable catch-up then live updates. State is the final cut, never a snapshot to prepend to replay.
@@ -42,7 +43,7 @@ export type DirectSessionOptions = {
   readonly model: ModelRef;
   readonly log: ConversationLog;
   readonly facts: readonly Fact[];
-  readonly request: Omit<TurnRequest, 'input' | 'model'>;
+  readonly request: Omit<TurnRequest, 'input' | 'model' | 'submission'>;
   /** Constructs the real direct conversation with this observing log, never another writer. */
   readonly attach: (log: ConversationLog) => Conversation;
   readonly dispose?: () => void | Promise<void>;
@@ -59,11 +60,11 @@ type Remembered = {
 /**
  * Owns one semantic-stream drain, admission exclusion and an atomic publication cut.
  * The observing log delegates every append before updating state; it never appends on its own.
- * Client request deduplication is live-only until the shared fact vocabulary carries admissions.
+ * Accepted turn_started submission metadata rebuilds admissions and duplicate/conflict identity on open.
  */
 export function createDirectSession(options: DirectSessionOptions): DirectLiveSession {
   let state = initialDirectState(options.id, options.workspace, options.model);
-  const durable: DirectCommittedFact[] = [];
+  const durable: DirectDurableUpdate[] = [];
   let position = 0;
   let seq = 0;
   let active: Active | null = null;
@@ -75,9 +76,21 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   const remembered = new Map<string, Remembered>();
   let scheduled = false;
 
+  const rememberSubmission = (fact: Fact): void => {
+    if (fact.type !== 'turn_started') return;
+    const submitted = directSubmittedTurn(fact);
+    if (!submitted) return;
+    const key = submitted.request.clientRequestId;
+    if (remembered.has(key)) throw new Error(`duplicate durable direct submission ID ${key}`);
+    remembered.set(key, { body: submissionBody(submitted.request), admission: submitted.admission });
+  };
+
+  // Replayed entries get positions in this runtime's projection order; these
+  // are not historical ordinals from the process that originally wrote them.
   for (const fact of options.facts) {
+    rememberSubmission(fact);
     state = reduceDirectFact(state, fact);
-    durable.push({ seq: ++seq, fact });
+    durable.push({ type: 'fact', position: ++position, seq: ++seq, fact });
   }
   state = interruptedDirectState(state);
 
@@ -110,9 +123,10 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   const publishState = (): void => publish({ type: 'state', position: ++position, state });
   const observe = (facts: readonly Fact[]): void => {
     for (const fact of facts) {
+      rememberSubmission(fact);
       state = reduceDirectFact(state, fact);
       const update: DirectDurableUpdate = { type: 'fact', position: ++position, seq: ++seq, fact };
-      durable.push({ seq: update.seq, fact: update.fact });
+      durable.push(update);
       publish(update);
     }
   };
@@ -134,7 +148,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     state = { ...interruptedDirectState(state), status: 'interrupted', runtimeError: fault };
     publishState();
   };
-  const drain = async (turn: Turn): Promise<void> => {
+  const drain = async (turn: Turn, admittedTurnId: TurnId | null): Promise<void> => {
     try {
       let terminal = false;
       for await (const event of turn.events) {
@@ -145,7 +159,10 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         if (event.type === 'turn_ended') {
           terminal = true;
           // A poisoned writer's failed terminal is semantic only, never a fake fact.
-          if (event.result.kind === 'failed' && (state.terminal?.outcome !== 'failed' || state.activeTurnId)) {
+          if (
+            event.result.kind === 'failed' &&
+            (!admittedTurnId || state.terminal?.turnId !== admittedTurnId || state.terminal.outcome !== 'failed')
+          ) {
             recordFault(event.result.error.message);
           }
         }
@@ -160,8 +177,8 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       throw error;
     }
   };
-  const startDrain = (turn: Turn): void => {
-    const done = Promise.resolve().then(() => drain(turn));
+  const startDrain = (turn: Turn, admittedTurnId: TurnId | null): void => {
+    const done = Promise.resolve().then(() => drain(turn, admittedTurnId));
     active = { turn, done };
     // close() still observes this rejection. Avoid an unhandled rejection while
     // the owner is waiting for a client to request shutdown.
@@ -217,27 +234,36 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       const before = seq;
       let turn: Turn;
       try {
-        turn = conversation.run({ ...options.request, model: options.model, input: [input] });
+        turn = conversation.run({
+          ...options.request,
+          model: options.model,
+          input: [input],
+          submission: {
+            clientRequestId: normalized.clientRequestId,
+            messageId,
+            ...(normalized.origin ? { origin: normalized.origin } : {}),
+          },
+        });
       } catch (error) {
         recordFault(error);
         return { kind: 'rejected', clientRequestId: normalized.clientRequestId, reason: fault!.message };
       }
-      startDrain(turn);
       const started = durable.slice(before).find((update) => update.fact.type === 'turn_started');
-      if (started?.fact.type !== 'turn_started')
+      // Match failure settlement to this admission, never a previous failed turn.
+      startDrain(turn, started?.fact.type === 'turn_started' ? started.fact.turnId : null);
+      const original = remembered.get(normalized.clientRequestId);
+      if (
+        started?.fact.type !== 'turn_started' ||
+        !original ||
+        started.fact.submission?.clientRequestId !== normalized.clientRequestId ||
+        started.fact.submission.messageId !== messageId
+      )
         return {
           kind: 'rejected',
           clientRequestId: normalized.clientRequestId,
-          reason: 'conversation did not durably accept the input',
+          reason: 'conversation did not durably accept the correlated input',
         };
-      const admission = {
-        kind: 'started',
-        clientRequestId: normalized.clientRequestId,
-        messageId,
-        turnId: started.fact.turnId,
-      } as const;
-      remembered.set(normalized.clientRequestId, { body, admission });
-      state = { ...state, admissions: [...state.admissions, admission] };
+      const admission = structuredClone(original.admission);
       publishState();
       return admission;
     },
@@ -266,7 +292,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         active?.turn.cancel();
         if (active) await active.done;
         try {
-          conversation.close();
+          await conversation.close();
         } finally {
           await options.dispose?.();
           state = { ...state, status: 'closed', pendingInteractions: [], activeTurnId: null };

@@ -16,12 +16,13 @@ export type DirectRuntimeContext = {
   readonly id: string;
   readonly workspace: Workspace;
   readonly model: ModelRef;
+  readonly binding?: DirectBinding;
   /** Existing metadata must select the actual restored profile/settings on open. */
   readonly metadata?: SessionStartedFact;
 };
 export type DirectConversationRuntime = {
   readonly deps: Omit<ConversationDeps, 'log'>;
-  readonly request: Omit<TurnRequest, 'input' | 'model'>;
+  readonly request: Omit<TurnRequest, 'input' | 'model' | 'submission'>;
   readonly profile: SessionStartedFact['profile'];
   readonly appVersion: string;
   dispose?(): void | Promise<void>;
@@ -47,7 +48,7 @@ const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 /**
  * One live writable facade per ID in this store. Opening replays without writing
  * or resuming execution. No index, side journal, migration or second writer exists.
- * Bindings fail explicitly until the authoritative direct facts can persist them.
+ * Binding metadata is immutable; an expected binding is checked before writable open.
  */
 export function createDirectSessionStore(options: DirectSessionStoreOptions): DirectLocalStore {
   const directory = path.resolve(options.directory);
@@ -111,6 +112,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
               model: context.model,
               profile: ownedRuntime.profile,
               appVersion: ownedRuntime.appVersion,
+              ...(context.binding ? { binding: context.binding } : {}),
               ...(ownedRuntime.request.reasoning !== undefined ? { reasoning: ownedRuntime.request.reasoning } : {}),
             },
           });
@@ -140,7 +142,10 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
   return {
     async create(workspace, model, binding) {
       assertOpen();
-      requireNoBinding(binding);
+      binding = binding ? structuredClone(binding) : undefined;
+      workspace = { ...workspace };
+      model = { ...model };
+      validateBinding(binding);
       const authority = await resolveWorkspace(workspace.root);
       if (!sameWorkspace(authority, workspace))
         throw new Error('requested workspace does not match resolved authority');
@@ -149,22 +154,43 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       await mkdir(directory, { recursive: true });
       assertOpen();
       const id = `conv_${randomUUID()}`;
-      return remember(id, () => construct({ id, workspace: authority, model: structuredClone(model) }, []));
+      return remember(id, () =>
+        construct(
+          {
+            id,
+            workspace: authority,
+            model: structuredClone(model),
+            ...(binding ? { binding: structuredClone(binding) } : {}),
+          },
+          [],
+        ),
+      );
     },
     async open(id, binding) {
       assertOpen();
-      requireNoBinding(binding);
+      binding = binding ? structuredClone(binding) : undefined;
+      validateBinding(binding);
       requireDirectId(id);
-      const existing = sessions.get(id);
-      if (existing) return existing;
-      // Install the promise before any awaits so concurrent opens share the writer.
+      await directNames(directory);
+      const facts = readFacts(logPath(directory, id));
+      const metadata = sessionMetadata(id, facts);
+      validateExpectedBinding(metadata.binding, binding);
+      replay(facts); // validates actual direct history; never repairs on open
+      assertOpen();
+      // Every caller's binding is checked before joining a shared live writer.
+      // remember installs its construction promise before workspace/runtime assembly.
       return remember(id, async () => {
-        await directNames(directory);
-        const facts = readFacts(logPath(directory, id));
-        const metadata = sessionMetadata(id, facts);
-        replay(facts); // validates the actual direct history; never repairs on open
         const workspace = await resolveWorkspace(metadata.workspace);
-        return construct({ id, workspace, model: metadata.model, metadata }, facts);
+        return construct(
+          {
+            id,
+            workspace,
+            model: metadata.model,
+            metadata,
+            ...(metadata.binding ? { binding: metadata.binding } : {}),
+          },
+          facts,
+        );
       });
     },
     async list(cursor) {
@@ -196,9 +222,23 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
   };
 }
 
-function requireNoBinding(binding: DirectBinding | undefined): void {
-  if (binding !== undefined)
-    throw new Error('direct Session bindings require a durable shared fact; binding is not available');
+function validateBinding(binding: DirectBinding | undefined): void {
+  if (
+    binding !== undefined &&
+    (typeof binding.client !== 'string' ||
+      !binding.client.trim() ||
+      typeof binding.id !== 'string' ||
+      !binding.id.trim())
+  ) {
+    throw new Error('direct Session binding requires nonempty client and id');
+  }
+}
+
+function validateExpectedBinding(stored: DirectBinding | undefined, expected: DirectBinding | undefined): void {
+  validateBinding(stored);
+  if (expected && (!stored || expected.client !== stored.client || expected.id !== stored.id)) {
+    throw new Error('direct Session binding does not match the expected client owner');
+  }
 }
 
 function requireDirectId(id: string): void {

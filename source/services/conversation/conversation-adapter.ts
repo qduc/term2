@@ -182,6 +182,7 @@ export class ConversationAdapter {
   #sessionId: string | SessionIdentity;
   #startedAt: string | SessionIdentity;
   #eventSink: ConversationEventSink | null = null;
+  readonly #awaitLogBoundary?: (event: ConversationEvent) => Promise<void>;
   #askUserAnswerSink: AskUserAnswerSink | null;
   #subagentEventSinkHost: SubagentEventSinkHost | null;
   #logger: ILoggingService;
@@ -252,12 +253,15 @@ export class ConversationAdapter {
     preparedLeaseTtlMs?: number;
     discardOnFailure?: boolean;
     queuePersistence?: QueuePersistence<QueuedMessageSnapshot>;
+    /** Optional C2 durability barrier; absent callers retain legacy event ordering. */
+    awaitLogBoundary?: (event: ConversationEvent) => Promise<void>;
   }) {
     this.#sessionId = deps.sessionId;
     this.#startedAt = deps.startedAt;
     this.#askUserAnswerSink = deps.askUserAnswerSink ?? null;
     this.#subagentEventSinkHost = deps.subagentEventSinkHost ?? null;
     this.#logger = deps.logger;
+    this.#awaitLogBoundary = deps.awaitLogBoundary;
     this.#settingsService = deps.settingsService;
     this.#sessionContextService = deps.sessionContextService;
     this.#userTurns = deps.userTurns;
@@ -1126,8 +1130,14 @@ export class ConversationAdapter {
             rawInterruption: null,
           });
         }
-        await this.#eventSink?.(event);
-        this.#logs.dispatchEventToLog(event);
+        if (this.#awaitLogBoundary) {
+          this.#logs.dispatchEventToLog(event);
+          await this.#awaitLogBoundary(event);
+          await this.#eventSink?.(event);
+        } else {
+          await this.#eventSink?.(event);
+          this.#logs.dispatchEventToLog(event);
+        }
         await onEvent?.(event);
       };
       let result: ConversationTerminal;
@@ -1282,8 +1292,14 @@ export class ConversationAdapter {
               rawInterruption: null,
             });
           }
-          await this.#eventSink?.(event);
-          this.#logs.dispatchEventToLog(event);
+          if (this.#awaitLogBoundary) {
+            this.#logs.dispatchEventToLog(event);
+            await this.#awaitLogBoundary(event);
+            await this.#eventSink?.(event);
+          } else {
+            await this.#eventSink?.(event);
+            this.#logs.dispatchEventToLog(event);
+          }
           await onEvent?.(event);
         };
         let result: ConversationTerminal | null;

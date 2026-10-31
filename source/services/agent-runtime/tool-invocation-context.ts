@@ -1,3 +1,4 @@
+import type { NestedApprovalLedger } from '../../contracts/nested-run-driver.js';
 import type { ApprovalRecord } from '../approval/approval-replay.js';
 import type { RunBudgetEvent, RunBudgetEvidence, RunBudgetPolicy } from './run-budget.js';
 
@@ -100,7 +101,7 @@ export interface ToolInvocationContext<T = unknown> {
   /** The run's user context (e.g. SubagentRunContext), from run options. */
   readonly context: T;
   /** This run's approval ledger; decisions made in this run accumulate here. */
-  readonly approvals: ApprovalLedger;
+  readonly approvals: NestedApprovalLedger;
   readonly signal?: AbortSignal;
   /**
    * The run's turn budget, owned and counted by the loop. `count` is the turn

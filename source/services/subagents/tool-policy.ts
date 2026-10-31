@@ -1,3 +1,6 @@
+import { healPatchOperation } from '../../tools/file/patch-healing.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../contracts/nested-run-driver.js';
+import { healSearchReplaceParams } from '../../tools/file/edit-healing.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -1043,6 +1046,8 @@ export class SubagentToolPolicy {
 }
 
 export class SubagentToolFactory {
+  #driverFactory?: NestedRunDriverFactory;
+  #modelBinding?: NestedModelBinding;
   #settings: ISettingsService;
   #logger: ILoggingService;
   #executionContext?: ExecutionContext;
@@ -1052,10 +1057,13 @@ export class SubagentToolFactory {
   #nestedCompatibility?: NestedToolCompatibilityState;
   #readOnly: boolean;
   #shellSandboxRunner?: ShellSandboxRunner;
+  #scopedSandbox?: import('../../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   #runExplorer?: ExplorerRunner;
   #sessionBrowser?: SessionBrowser;
 
   constructor(deps: {
+    driverFactory?: NestedRunDriverFactory;
+    modelBinding?: NestedModelBinding;
     settings: ISettingsService;
     logger: ILoggingService;
     executionContext?: ExecutionContext;
@@ -1064,9 +1072,12 @@ export class SubagentToolFactory {
     nestedCompatibility?: NestedToolCompatibilityState;
     readOnly?: boolean;
     shellSandboxRunner?: ShellSandboxRunner;
+    scopedSandbox?: import('../../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     /** Prior-session transcript browser; provisioned to the librarian only. */
     sessionBrowser?: SessionBrowser;
   }) {
+    this.#driverFactory = deps.driverFactory;
+    this.#modelBinding = deps.modelBinding;
     this.#settings = deps.settings;
     this.#logger = deps.logger;
     this.#executionContext = deps.executionContext;
@@ -1074,7 +1085,8 @@ export class SubagentToolFactory {
     this.#skillsService = deps.skillsService;
     this.#nestedCompatibility = deps.nestedCompatibility;
     this.#readOnly = deps.readOnly ?? false;
-    this.#shellSandboxRunner = deps.shellSandboxRunner;
+    this.#shellSandboxRunner = deps.scopedSandbox?.runner ?? deps.shellSandboxRunner;
+    this.#scopedSandbox = deps.scopedSandbox;
     this.#sessionBrowser = deps.sessionBrowser;
     this.#memoryCapabilities = new MemoryCapabilityBuilder(deps.settings);
   }
@@ -1229,6 +1241,12 @@ export class SubagentToolFactory {
           readOnly: this.#readOnly,
           nestedCompatibility: this.#nestedCompatibility,
           ...(this.#shellSandboxRunner ? { shellSandboxRunner: this.#shellSandboxRunner } : {}),
+          ...(this.#scopedSandbox
+            ? {
+                registerSandboxNetworkPauseController: this.#scopedSandbox.registerPauseController,
+                sandboxChildRegistry: this.#scopedSandbox.childRegistry,
+              }
+            : {}),
         }),
         fsReadScope,
       );
@@ -1251,6 +1269,12 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createApplyPatchToolDefinition({
+                patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
+                  healPatchOperation(path, diff, content, diagnosis, model, key, {
+                    ...healingDeps,
+                    driverFactory: this.#driverFactory,
+                    modelBinding: this.#modelBinding,
+                  }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,
@@ -1270,6 +1294,12 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createSearchReplaceToolDefinition({
+                editHealing: (params, content, model, key, healingDeps) =>
+                  healSearchReplaceParams(params, content, model, key, {
+                    ...healingDeps,
+                    driverFactory: this.#driverFactory,
+                    modelBinding: this.#modelBinding,
+                  }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,
@@ -1353,7 +1383,9 @@ export class SubagentToolFactory {
       onToolComplete?: (toolName: string, result: unknown, context?: unknown, details?: unknown) => void;
     },
   ): ToolRegistry {
-    const providerDef = getProvider(options.providerId);
+    const providerDef = this.#modelBinding
+      ? this.#modelBinding.providerDefinition(options.providerId)
+      : getProvider(options.providerId);
     const capabilities = {
       supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
       usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,

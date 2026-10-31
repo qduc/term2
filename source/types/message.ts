@@ -1,6 +1,6 @@
 import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
-import type { SkillAttachment } from '../types/user-turn.js';
+import type { SkillAttachment, UserTurn } from '../types/user-turn.js';
 
 export interface UserMessage {
   /** Human arrival time, independent of processing/queue delay. */
@@ -17,6 +17,8 @@ export interface UserMessage {
    */
   consumedForAbort?: boolean;
   skill?: SkillAttachment;
+  /** Original normalized adopted submission for explicit retry. */
+  submittedTurn?: UserTurn;
   /** Transcript presentation only; the provider and persistence role remains user. */
   presentation?: 'session_rollover' | 'server_message';
 }

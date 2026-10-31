@@ -1,10 +1,7 @@
 import { z, type ZodTypeAny } from 'zod';
 import type { AnyScriptedToolDefinition, ScriptedToolDefinition } from '../types.js';
-import {
-  MAX_SESSION_BROWSER_CHARS,
-  type Kind,
-  type SessionBrowser,
-} from '../../services/conversation/session-browser.js';
+import { MAX_SESSION_BROWSER_CHARS } from './limits.js';
+import type { Kind, SessionBrowser } from '../../services/conversation/session-browser.js';
 import { boundedJsonFailure, fitsSerializedText } from '../../utils/output/bounded-json.js';
 import { isScriptedToolCall, resolveToolResultMaxBytes } from '../../utils/output/bound-tool-result.js';
 import {

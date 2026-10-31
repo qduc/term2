@@ -11,7 +11,12 @@ import {
   isTruncatedLogEvent,
   type SessionInitEvent,
 } from '../logging/conversation-log-events.js';
-import { decodeLogEnvelope, resolveEnvelopeIdentities, type PersistedLogEnvelope } from './conversation-decoder.js';
+import {
+  decodeLogEnvelope,
+  expandSessionFactBatchEnvelope,
+  resolveEnvelopeIdentities,
+  type PersistedLogEnvelope,
+} from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
 import { auditSessionLog, type SessionAudit } from './session-audit.js';
 
@@ -60,6 +65,19 @@ export function readConversationLogEnvelopes(id: string): PersistedLogEnvelope[]
   } catch {
     return null;
   }
+}
+
+/** Explicit-root variant used by the isolated rewrite session adapter. */
+export function readConversationLogEnvelopesFromDirectory(
+  id: string,
+  directory: string,
+): PersistedLogEnvelope[] | null {
+  if (!SAFE_SESSION_ID.test(id)) return null;
+  const root = path.resolve(directory);
+  const filePath = path.resolve(root, `${id}.jsonl`);
+  if (path.dirname(filePath) !== root) return null;
+  if (!fs.existsSync(filePath)) return null;
+  return readEnvelopes(filePath);
 }
 
 export function setConversationsDirForTest(dir: string | null): void {
@@ -215,15 +233,57 @@ export function generateId(): string {
 function decodeEnvelopeLines(content: string): PersistedLogEnvelope[] {
   const lines = content.split('\n');
   const envelopes: PersistedLogEnvelope[] = [];
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
     const trimmed = line.trim();
     if (!trimmed) continue;
+    // An incomplete final batch is uncommitted regardless of whether the
+    // prefix is itself valid JSON. This includes a killed write before the
+    // closing brace/newline, not only valid JSON missing its newline.
+    if (index === lines.length - 1 && !content.endsWith('\n') && /"type"\s*:\s*"session_fact_batch"/.test(trimmed))
+      continue;
+    let strictSettings = false;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
-      const envelope = decodeLogEnvelope(parsed);
-      if (envelope) envelopes.push(envelope);
-    } catch {
-      // skip corrupt line
+      const rawEvent =
+        typeof parsed === 'object' && parsed !== null ? (parsed as { event?: unknown }).event : undefined;
+      if (typeof rawEvent === 'object' && rawEvent !== null) {
+        const candidate = rawEvent as Record<string, unknown>;
+        strictSettings =
+          candidate['type'] === 'session_settings_initialized' ||
+          (candidate['type'] === 'settings_changed' && Object.hasOwn(candidate, 'sessionMutation'));
+      }
+      const eventType =
+        typeof parsed === 'object' && parsed !== null && typeof (parsed as { event?: unknown }).event === 'object'
+          ? (parsed as { event: { type?: unknown } }).event.type
+          : undefined;
+      // An unterminated new batch is uncommitted even when its bytes happen to
+      // contain valid JSON. Preserve the established old-envelope handling.
+      if (eventType === 'session_fact_batch' && index === lines.length - 1 && !content.endsWith('\n')) continue;
+      if (eventType === 'session_fact_batch') {
+        try {
+          const expanded = expandSessionFactBatchEnvelope(parsed);
+          if (!expanded) throw new Error('batch envelope could not be decoded');
+          envelopes.push(...expanded);
+        } catch (error) {
+          throw new Error(
+            `conversation log line ${index + 1}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } else {
+        const envelope = decodeLogEnvelope(parsed);
+        if (strictSettings && !envelope) throw new Error('invalid session settings envelope');
+        if (envelope) envelopes.push(envelope);
+      }
+    } catch (error) {
+      // New batch integrity errors are surfaced; legacy malformed records
+      // retain the decoder's established skip behavior.
+      const isBatchLine = /"type"\s*:\s*"session_fact_batch"/.test(trimmed);
+      if (strictSettings) throw new Error(`conversation log line ${index + 1}: invalid session settings fact`);
+      if (isBatchLine) {
+        if (error instanceof Error && error.message.startsWith(`conversation log line ${index + 1}:`)) throw error;
+        throw new Error(`conversation log line ${index + 1}: invalid session fact batch`);
+      }
     }
   }
   return envelopes;
@@ -676,19 +736,26 @@ export function listConversations(
 }
 
 const INIT_READ_CHUNK_BYTES = 4096;
-const RELEVANT_LIST_EVENT_TYPE_HINT = /"type"\s*:\s*"(?:session_init|user_message|assistant_turn|undo)"/;
+const RELEVANT_LIST_EVENT_TYPE_HINT =
+  /"type"\s*:\s*"(?:session_init|user_message|assistant_turn|undo|session_fact_batch)"/;
 const UUID_FILENAME_SUFFIX = '.jsonl';
 
-function findSessionInitInLines(lines: readonly string[]): SessionInitEvent | null {
-  for (const line of lines) {
+function findSessionInitInLines(lines: readonly string[], ignoreTornBatchTail = false): SessionInitEvent | null {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
     const trimmed = line.trim();
     if (!trimmed || !trimmed.includes('"session_init"')) continue;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
-      const envelope = decodeLogEnvelope(parsed);
-      if (!envelope || isTruncatedLogEvent(envelope.event)) continue;
-      if (envelope.event.type === 'session_init') {
-        return envelope.event;
+      const rawEvent =
+        typeof parsed === 'object' && parsed !== null ? (parsed as { event?: { type?: unknown } }).event : null;
+      if (ignoreTornBatchTail && index === lines.length - 1 && rawEvent?.type === 'session_fact_batch') continue;
+      const batch = expandSessionFactBatchEnvelope(parsed);
+      const envelopes =
+        batch ?? [decodeLogEnvelope(parsed)].filter((value): value is PersistedLogEnvelope => value !== null);
+      for (const envelope of envelopes) {
+        if (isTruncatedLogEvent(envelope.event)) continue;
+        if (envelope.event.type === 'session_init') return envelope.event;
       }
     } catch {
       // skip corrupt line
@@ -708,14 +775,17 @@ function readFirstSessionInit(filePath: string, fileSize: number): SessionInitEv
     const head = buffer.subarray(0, bytesRead).toString('utf-8');
     const usableEnd = bytesRead < fileSize ? head.lastIndexOf('\n') : head.length;
     if (usableEnd > 0) {
-      const init = findSessionInitInLines(head.slice(0, usableEnd).split('\n'));
+      const init = findSessionInitInLines(
+        head.slice(0, usableEnd).split('\n'),
+        bytesRead >= fileSize && !head.endsWith('\n'),
+      );
       if (init) return init;
     }
   } finally {
     fs.closeSync(fd);
   }
   const content = fs.readFileSync(filePath, 'utf-8');
-  return findSessionInitInLines(content.split('\n'));
+  return findSessionInitInLines(content.split('\n'), !content.endsWith('\n'));
 }
 
 function parseConversationListEntry(filePath: string, updatedAt: string): ConversationListEntry | null {
@@ -726,29 +796,33 @@ function parseConversationListEntry(filePath: string, updatedAt: string): Conver
   let firstUserMessage: string | undefined;
   let messageCount = 0;
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex]!;
     const trimmed = line.trim();
     if (!trimmed || !RELEVANT_LIST_EVENT_TYPE_HINT.test(trimmed)) continue;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
-      const envelope = decodeLogEnvelope(parsed);
-      if (!envelope) continue;
-      // Truncated events carry no lifecycle fields; skip them entirely.
-      if (isTruncatedLogEvent(envelope.event)) continue;
+      const rawEvent =
+        typeof parsed === 'object' && parsed !== null ? (parsed as { event?: { type?: unknown } }).event : null;
+      if (lineIndex === lines.length - 1 && !content.endsWith('\n') && rawEvent?.type === 'session_fact_batch')
+        continue;
+      const batch = expandSessionFactBatchEnvelope(parsed);
+      const decoded =
+        batch ?? [decodeLogEnvelope(parsed)].filter((value): value is PersistedLogEnvelope => value !== null);
+      for (const envelope of decoded) {
+        // Truncated events carry no lifecycle fields; skip them entirely.
+        if (isTruncatedLogEvent(envelope.event)) continue;
 
-      if (!initEnvelope && envelope.event.type === 'session_init') {
-        initEnvelope = envelope;
-      }
-      if (envelope.event.type === 'user_message') {
-        messageCount++;
-        if (!firstUserMessage && envelope.event.message?.text) {
-          firstUserMessage = envelope.event.message.text;
+        if (!initEnvelope && envelope.event.type === 'session_init') initEnvelope = envelope;
+        if (envelope.event.type === 'user_message') {
+          messageCount++;
+          if (!firstUserMessage && envelope.event.message?.text) firstUserMessage = envelope.event.message.text;
+        } else if (envelope.event.type === 'assistant_turn') {
+          messageCount++;
+        } else if (envelope.event.type === 'undo') {
+          const undone = envelope.event.removedUserTurns || 0;
+          messageCount = Math.max(0, messageCount - undone * 2);
         }
-      } else if (envelope.event.type === 'assistant_turn') {
-        messageCount++;
-      } else if (envelope.event.type === 'undo') {
-        const undone = envelope.event.removedUserTurns || 0;
-        messageCount = Math.max(0, messageCount - undone * 2);
       }
     } catch {
       // skip corrupt line
@@ -935,28 +1009,30 @@ export function forkConversation(sourceId: string, newId: string): boolean {
     .readFileSync(srcPath, 'utf-8')
     .split('\n')
     .filter((line) => line.trim());
-  const parsedLines = lines.map((line) => {
+  const tokens = lines.map((line) => {
     try {
-      return decodeLogEnvelope(JSON.parse(line) as unknown);
+      const parsed = JSON.parse(line) as unknown;
+      const batch = expandSessionFactBatchEnvelope(parsed);
+      if (batch) return { raw: null, envelopes: batch };
+      const envelope = decodeLogEnvelope(parsed);
+      return { raw: null, envelopes: envelope ? [envelope] : [] };
     } catch {
-      return null;
+      return { raw: line, envelopes: [] };
     }
   });
-  const identities = resolveEnvelopeIdentities(
-    parsedLines.filter((envelope): envelope is PersistedLogEnvelope => envelope !== null),
-    sourceId,
-    { deduplicateExplicitEventIds: false },
-  );
+  const parsedLines = tokens.flatMap((token) => token.envelopes);
+  const identities = resolveEnvelopeIdentities(parsedLines, sourceId, { deduplicateExplicitEventIds: false });
   let identityIndex = 0;
   let latestInit: PersistedLogEnvelope | null = null;
   let highWaterSeq = 0;
-  const forkedLines = lines.map((line, index) => {
-    const envelope = parsedLines[index];
-    if (!envelope) return line;
-    const identified = identities[identityIndex++]!;
-    if (Number.isSafeInteger(envelope.seq) && envelope.seq > highWaterSeq) highWaterSeq = envelope.seq;
-    if (!isTruncatedLogEvent(identified.event) && identified.event.type === 'session_init') latestInit = identified;
-    return JSON.stringify(identified);
+  const forkedLines = tokens.flatMap((token) => {
+    if (!token.envelopes.length) return [token.raw ?? ''];
+    return token.envelopes.map((envelope) => {
+      const identified = identities[identityIndex++]!;
+      if (Number.isSafeInteger(envelope.seq) && envelope.seq > highWaterSeq) highWaterSeq = envelope.seq;
+      if (!isTruncatedLogEvent(identified.event) && identified.event.type === 'session_init') latestInit = identified;
+      return JSON.stringify(identified);
+    });
   });
   const initEnvelope = latestInit as PersistedLogEnvelope | null;
   if (!initEnvelope || isTruncatedLogEvent(initEnvelope.event) || initEnvelope.event.type !== 'session_init') {
@@ -1033,7 +1109,8 @@ export function hasConversationContent(id: string): boolean {
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       const envelope = decodeLogEnvelope(parsed);
-      if (envelope?.event && CONTENT_EVENT_TYPES.has(envelope.event.type)) {
+      const logical = expandSessionFactBatchEnvelope(parsed) ?? (envelope ? [envelope] : []);
+      if (logical.some((entry) => CONTENT_EVENT_TYPES.has(entry.event.type))) {
         return true;
       }
     } catch {

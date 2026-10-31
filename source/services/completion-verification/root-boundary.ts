@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
 import envPaths from 'env-paths';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -20,6 +21,7 @@ export class RootCompletionBoundary {
   #orchestrator?: CompletionVerificationOrchestrator;
   constructor(
     private deps: {
+      driverFactory: NestedRunDriverFactory;
       settings: ISettingsService;
       logger: ILoggingService;
       executionContext?: ExecutionContext;
@@ -84,6 +86,7 @@ export class RootCompletionBoundary {
             model: () => settings.get('agent.decisionModel'),
           }),
           verify: createIndependentVerifier({
+            driverFactory: this.deps.driverFactory,
             resolveModel: this.deps.resolveModel,
             model: () => settings.get('verifier.model') || this.deps.model(),
           }),

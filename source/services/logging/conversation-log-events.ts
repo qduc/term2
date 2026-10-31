@@ -1,3 +1,4 @@
+import type { SessionSettingsInitialized } from '../settings/session-runtime-settings.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CommandMessage } from '../../tools/types.js';
@@ -76,6 +77,7 @@ export interface SessionInitEvent {
 
 export interface SettingsChangedEvent {
   type: 'settings_changed';
+  sessionMutation?: 1;
   key: string;
   value: unknown;
 }
@@ -120,6 +122,46 @@ export interface ContextCheckpointCreatedEvent {
   sourceRefs: EventReference[];
   sourceDigest?: string;
   item: ProviderInputItem;
+}
+
+export interface ContextCompactionRecordedEvent {
+  type: 'context_compaction_recorded';
+  version: 1;
+  operationId: string;
+  provider: string;
+  model: string;
+  strategy: 'local' | 'native';
+  result:
+    | {
+        kind: 'compacted';
+        snapshot: StateSnapshot;
+      }
+    | {
+        kind: 'not_compacted';
+      };
+  usage?: NormalizedUsage;
+  costRecords?: ModelRequestCost[];
+}
+
+export interface UserInputAcceptedEvent {
+  type: 'user_input_accepted';
+  version: 1;
+  turnId: string;
+  userMessageRef: EventReference;
+  snapshot: StateSnapshot;
+}
+
+export interface ToolOutputRewoundEvent {
+  type: 'tool_output_rewound';
+  version: 1;
+  snapshot: StateSnapshot;
+}
+
+export interface UserTurnRetriedEvent {
+  type: 'user_turn_retried';
+  version: 1;
+  userMessageRef: EventReference;
+  snapshot: StateSnapshot;
 }
 
 export interface UserMessageEvent {
@@ -399,10 +441,15 @@ export type LogEvent =
   | MemoryInjectedLogEvent
   | SessionInitEvent
   | SettingsChangedEvent
+  | SessionSettingsInitialized
   | GoalChangedEvent
   | EventsRetractedEvent
   | ContextCheckpointCreatedEvent
+  | ContextCompactionRecordedEvent
   | UserMessageEvent
+  | UserInputAcceptedEvent
+  | ToolOutputRewoundEvent
+  | UserTurnRetriedEvent
   | ToolStartedLogEvent
   | ToolResultLogEvent
   | CommandMessageLogEvent

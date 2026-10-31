@@ -1,0 +1,16 @@
+{
+  "id": "shell-auto-approve",
+  "description": "With --auto-approve, a shell call the policy allows runs, its output goes back to the model, and the file appears.",
+  "runs": [{ "args": ["--auto-approve", "create hello.txt"] }],
+  "provider": [
+    {
+      "toolCalls": [
+        {
+          "name": "shell",
+          "arguments": { "command": "printf 'hi\\n' > hello.txt", "description": "Write the greeting file" }
+        }
+      ]
+    },
+    { "text": "Created hello.txt." }
+  ]
+}

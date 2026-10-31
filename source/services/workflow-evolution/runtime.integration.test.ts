@@ -1,3 +1,4 @@
+import { createLegacyNestedRunDriver } from '../agent-runtime/legacy-nested-driver.js';
 import { mkdtemp, mkdir, readFile, writeFile, copyFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import { join } from 'node:path';
@@ -132,6 +133,7 @@ it('runs actual activation, fresh Reviewer dispatch, host-approved local reload 
       'memory.enabled': false,
     });
     const runtime = createSubagentRuntime({
+      driverFactory: createLegacyNestedRunDriver,
       logger,
       settings,
       skillsService: skills,

@@ -1,6 +1,10 @@
+import type {
+  NestedRunDriverFactory,
+  ApplicationAgent,
+  NestedModelBinding,
+} from '../../contracts/nested-run-driver.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentResult } from './types.js';
@@ -35,6 +39,8 @@ interface MentorConsultation {
 const mentorLabel = (index: number): string => `Mentor ${String.fromCharCode(65 + index)}`;
 
 export class MentorRunner {
+  #driverFactory?: NestedRunDriverFactory;
+  #modelBinding?: NestedModelBinding;
   #logger: ILoggingService;
   #settings: ISettingsService;
   #sessionContextService: ISessionContextService;
@@ -43,6 +49,8 @@ export class MentorRunner {
   #onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
 
   constructor(deps: {
+    driverFactory?: NestedRunDriverFactory;
+    modelBinding?: NestedModelBinding;
     logger: ILoggingService;
     settings: ISettingsService;
     sessionContextService: ISessionContextService;
@@ -50,6 +58,8 @@ export class MentorRunner {
     onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
     session?: SubagentSession;
   }) {
+    this.#driverFactory = deps.driverFactory;
+    this.#modelBinding = deps.modelBinding;
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
@@ -270,7 +280,9 @@ export class MentorRunner {
 
     mentorSession.switchProvider(mentorProvider);
 
-    const providerDef = getProvider(mentorProvider);
+    const providerDef = this.#modelBinding
+      ? this.#modelBinding.providerDefinition(mentorProvider)
+      : getProvider(mentorProvider);
     if (!providerDef?.createStreamedModel) {
       const providerLabel = providerDef?.label || mentorProvider;
       throw new Error(
@@ -278,15 +290,30 @@ export class MentorRunner {
           `Please check that all required credentials and provider settings are set.`,
       );
     }
-    const streamedModel = await mentorSession.ensureModel(mentorProvider, (providerId) => {
-      const definition = getProvider(providerId);
-      if (!definition?.createStreamedModel) throw new Error(`${providerId} has no streamed model`);
-      return definition.createStreamedModel(mentorModelName, {
-        settingsService: this.#settings,
-        loggingService: this.#logger,
-        sessionContextService: this.#sessionContextService,
-      });
-    });
+    const streamedModel = await mentorSession.ensureModel(
+      mentorProvider,
+      (providerId) => {
+        const definition = this.#modelBinding
+          ? this.#modelBinding.providerDefinition(providerId)
+          : getProvider(providerId);
+        if (!definition?.createStreamedModel) throw new Error(`${providerId} has no streamed model`);
+        if (this.#modelBinding)
+          return this.#modelBinding.scopedModel(
+            { provider: providerId, model: mentorModelName },
+            {
+              settingsService: this.#settings,
+              loggingService: this.#logger,
+              sessionContextService: this.#sessionContextService,
+            },
+          );
+        return definition.createStreamedModel(mentorModelName, {
+          settingsService: this.#settings,
+          loggingService: this.#logger,
+          sessionContextService: this.#sessionContextService,
+        });
+      },
+      this.#modelBinding && signal ? { signal, onDetached: this.#modelBinding.trackDetachedRead } : undefined,
+    );
     if (!streamedModel)
       throw new Error(`${providerDef.label || mentorProvider} is configured but could not be initialized.`);
 
@@ -312,7 +339,9 @@ export class MentorRunner {
 
     const supportsChaining = providerDef.capabilities?.supportsConversationChaining ?? false;
     const input = mentorSession.getInput(task, supportsChaining);
-    const loop = new ApplicationRunLoop({
+    const factory = this.#driverFactory;
+    if (!factory) throw new Error('Missing nested run driver');
+    const loop = factory({
       resolveModel: () => streamedModel,
       resolveMaxParallelToolCalls: () => this.#settings.get('agent.maxParallelToolCalls'),
     });

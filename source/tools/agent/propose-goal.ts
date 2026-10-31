@@ -21,7 +21,8 @@ const PROPOSE_GOAL_DESCRIPTION =
 export interface ProposeGoalDeps {
   getGoal: () => DurableGoal | undefined;
   hasPriorProposal: () => boolean;
-  appendGoal: (goal: DurableGoal) => void;
+  /** May return the durable write, which `execute` awaits before reporting success. */
+  appendGoal: (goal: DurableGoal) => void | Promise<void>;
 }
 
 const proposeGoalSchema = z.object({
@@ -78,7 +79,7 @@ export function createProposeGoalToolDefinition(
       }
       try {
         const goal = createDurableGoal(params.outcome, params.successCriteria);
-        deps.appendGoal(goal);
+        await deps.appendGoal(goal);
         return `Goal proposed and persisted with the user's approval: ${goal.outcome}`;
       } catch (error) {
         return `Error: ${error instanceof Error ? error.message : String(error)}`;

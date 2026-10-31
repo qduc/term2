@@ -3,7 +3,9 @@ import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ApprovalState, type AbortedApprovalContext, type PendingApprovalContext } from './approval-state.js';
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
-import { getCallIdFromObject } from '../interruption-info.js';
+import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
+import { validateApprovalGrant } from './approval-grant-executor.js';
+import type { PendingApproval } from '../../contracts/conversation.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { GenerationGuard } from '../generation-guard.js';
 import type { ToolOwner } from './tool-owner.js';
@@ -95,6 +97,29 @@ export class ApprovalFlowCoordinator {
       generation: this.deps.approvalState.getPending()?.token ?? 0,
       ...(stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     };
+  }
+
+  /** Pure adopted preflight; mutation remains in prepareContinuation. */
+  validateGrant(answer: string, approval: PendingApproval): void {
+    const pending = this.deps.approvalState.getPending();
+    if (!pending || pending.interruption !== approval.rawInterruption) throw new Error('Approval authority is stale');
+    const info = getToolInfoFromInterruption(pending.interruption);
+    validateApprovalGrant(
+      {
+        sessionId: resolveSessionId(this.deps.sessionId),
+        sessionAccess: this.deps.sessionAccess,
+        nestedCompatibility: this.deps.nestedCompatibility,
+        logger: this.deps.logger,
+      },
+      {
+        answer,
+        toolName: info.toolName,
+        rawArguments: info.rawArguments,
+        callId: getCallIdFromObject(pending.interruption),
+        interruption: pending.interruption,
+      },
+      approval,
+    );
   }
 
   abort(): { aborted: boolean; callId?: string } {

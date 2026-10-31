@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../contracts/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { AnyToolDefinition } from '../../tools/types.js';
@@ -44,6 +45,8 @@ export class SubagentManager {
   #mentorActive = false;
 
   constructor(deps: {
+    driverFactory?: NestedRunDriverFactory;
+    modelBinding?: NestedModelBinding;
     logger: ILoggingService;
     settings: ISettingsService;
     executionContext?: ExecutionContext;
@@ -56,6 +59,7 @@ export class SubagentManager {
     nestedCompatibility?: NestedToolCompatibilityState;
     backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
     readOnly?: boolean;
+    scopedSandbox?: import('../../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     sessionBrowser?: SessionBrowser;
   }) {
     this.#logger = deps.logger;

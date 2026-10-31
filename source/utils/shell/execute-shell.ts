@@ -266,6 +266,11 @@ export interface ExecuteShellOptions {
   sshService?: ISSHService;
   execImpl?: ExecImpl;
   pauseOnSandboxNetworkApproval?: boolean;
+  /** Graph-owned registration; absence retains the legacy process-wide lease. */
+  registerSandboxNetworkPauseController?: (controller: {
+    pause: () => void | Promise<void>;
+    resume: () => void | Promise<void>;
+  }) => () => void;
   /** How long to keep reading output after the child exits. */
   drainGraceMs?: number;
   /** How long SIGTERM gets before SIGKILL follows. */
@@ -327,7 +332,7 @@ export async function executeShellCommand(
   options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {
   if (options.gatewayMode && options.env === undefined) throw new GatewayShellEnvironmentError();
-  if (options.pauseOnSandboxNetworkApproval && !options.sshService) {
+  if (options.pauseOnSandboxNetworkApproval && !options.sshService && !options.registerSandboxNetworkPauseController) {
     return await withSandboxExecutionLease(() => executeShellCommandUnleased(command, options));
   }
 
@@ -348,6 +353,7 @@ async function executeShellCommandUnleased(
     sshService,
     execImpl = defaultExecImpl,
     pauseOnSandboxNetworkApproval = false,
+    registerSandboxNetworkPauseController = registerSandboxNetworkApprovalPauseController,
     drainGraceMs = DEFAULT_DRAIN_GRACE_MS,
     terminationGraceMs = DEFAULT_TERMINATION_GRACE_MS,
     childRegistry = new ShellChildRegistry(),
@@ -488,6 +494,7 @@ async function executeShellCommandUnleased(
         clearCommandTimeout();
       };
 
+      childRegistry.assertAvailable();
       const child = execImpl(
         command,
         {
@@ -523,7 +530,7 @@ async function executeShellCommandUnleased(
         childRegistry.add(child);
         startCommandTimeout();
         if (pauseOnSandboxNetworkApproval) {
-          unregisterPauseController = registerSandboxNetworkApprovalPauseController({
+          unregisterPauseController = registerSandboxNetworkPauseController({
             pause: () => {
               if (settled || paused) return;
               pauseCommandTimeout();

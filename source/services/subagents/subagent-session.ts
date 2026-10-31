@@ -2,6 +2,7 @@ import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import { waitForAbortableRead } from '../../contracts/abort-aware-wait.js';
 
 /**
  * General-purpose subagent session. Replaces the private MentorSession shape.
@@ -99,8 +100,16 @@ export class SubagentSession {
   async ensureModel(
     provider: string,
     createModel: (providerId: string) => StreamedModelTurn | Promise<StreamedModelTurn>,
+    wait?: { signal: AbortSignal; onDetached: (operation: Promise<unknown>) => void },
   ): Promise<StreamedModelTurn> {
-    if (!this.#model) this.#model = await createModel(provider);
+    if (!this.#model) {
+      const operation = createModel(provider);
+      const model = wait
+        ? await waitForAbortableRead(Promise.resolve(operation), wait.signal, wait.onDetached)
+        : await operation;
+      if (wait) wait.signal.throwIfAborted();
+      this.#model = model;
+    }
     return this.#model;
   }
 

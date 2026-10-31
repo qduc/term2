@@ -1,3 +1,4 @@
+import { validateMarkedSettings, validateSettingsBaseline } from '../settings/session-runtime-settings.js';
 import type {
   LogEnvelope,
   LogEvent,
@@ -7,6 +8,73 @@ import type {
 import type { Message } from '../../types/message.js';
 
 export type PersistedLogEnvelope = LogEnvelope<PersistedLogEvent>;
+
+/** A logical event recorded inside one crash-atomic physical JSONL record. */
+export type SessionFactBatch = {
+  readonly type: 'session_fact_batch';
+  readonly version: 1;
+  readonly entries: readonly unknown[];
+};
+
+/**
+ * Expands the new session writer's single-line atomic container into the
+ * ordinary logical envelopes consumed by replay, browsing and the index.
+ * Legacy envelopes are returned unchanged. A malformed recognized batch is
+ * an integrity error; silently skipping its members could hide half a state
+ * transition while leaving the physical record apparently valid.
+ */
+export function expandSessionFactBatchEnvelope(value: unknown): PersistedLogEnvelope[] | null {
+  const outer = decodeLogEnvelope(value);
+  if (!outer || outer.event.type !== 'session_fact_batch') return null;
+
+  const event = outer.event as unknown as Record<string, unknown>;
+  const invalid = (reason: string): never => {
+    throw new Error(`invalid session_fact_batch: ${reason}`);
+  };
+  if (event['version'] !== 1) invalid('unsupported version');
+  const rawEntries = event['entries'];
+  if (!Array.isArray(rawEntries)) invalid('entries must be an array');
+  const batchEntries = rawEntries as unknown[];
+  if (batchEntries.length === 0) invalid('entries must be non-empty');
+
+  const entries: PersistedLogEnvelope[] = [];
+  const eventIds = new Set<string>();
+  let previousSeq = -1;
+  for (let index = 0; index < batchEntries.length; index += 1) {
+    const raw: unknown = batchEntries[index];
+    if (typeof raw !== 'object' || raw === null) invalid(`entry ${index + 1} is not an envelope`);
+    const candidate = raw as Record<string, unknown>;
+    if (
+      !Number.isSafeInteger(candidate['v']) ||
+      !Number.isSafeInteger(candidate['seq']) ||
+      Number(candidate['seq']) < 0 ||
+      typeof candidate['ts'] !== 'string' ||
+      typeof candidate['logId'] !== 'string' ||
+      candidate['logId'].length === 0 ||
+      typeof candidate['eventId'] !== 'string' ||
+      candidate['eventId'].length === 0
+    )
+      invalid(`entry ${index + 1} has invalid envelope fields`);
+    const entry = decodeLogEnvelope(candidate);
+    if (entry === null) throw new Error(`invalid session_fact_batch: entry ${index + 1} has an invalid event`);
+    if ((entry.event as { type: string }).type === 'session_fact_batch') invalid(`entry ${index + 1} is nested`);
+    if (entry.seq <= previousSeq) invalid(`entry ${index + 1} is out of order`);
+    if (eventIds.has(entry.eventId!)) invalid(`entry ${index + 1} repeats an eventId`);
+    previousSeq = entry.seq;
+    eventIds.add(entry.eventId!);
+    entries.push(entry);
+  }
+
+  const final = entries.at(-1)!;
+  if (
+    outer.seq !== final.seq ||
+    outer.ts !== final.ts ||
+    outer.logId !== final.logId ||
+    outer.eventId !== final.eventId
+  )
+    invalid('outer envelope does not match final entry');
+  return entries;
+}
 
 /** Materialize stable references without collapsing distinct legacy records. */
 export function resolveEnvelopeIdentities(
@@ -49,11 +117,140 @@ export function resolveEnvelopeIdentities(
 
 type UnknownObject = Record<string, unknown>;
 
-const isObject = (value: unknown): value is UnknownObject => typeof value === 'object' && value !== null;
+const isObject = (value: unknown): value is UnknownObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 const hasString = (value: UnknownObject, key: string): boolean => typeof value[key] === 'string';
+const hasNonEmptyString = (value: UnknownObject, key: string): boolean =>
+  typeof value[key] === 'string' && value[key].length > 0;
 const hasNumber = (value: UnknownObject, key: string): boolean => typeof value[key] === 'number';
+const isNonNegativeInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+
+const isNormalizedUsage = (value: unknown): boolean => {
+  if (!isObject(value) || !isJsonValue(value)) return false;
+  const keys = Object.keys(value);
+  if (keys.length === 0) return false;
+  const intKeys = [
+    'prompt_tokens',
+    'completion_tokens',
+    'total_tokens',
+    'reasoning_tokens',
+    'cache_read_tokens',
+    'cache_creation_tokens',
+  ];
+  const floatKeys = ['prompt_ms', 'completion_ms', 'tokens_per_second', 'ttft_ms'];
+  const boolKeys = ['tokens_per_second_estimated', 'tokens_per_second_burst'];
+  const strKeys = ['upstream_provider'];
+  const allowed = new Set([...intKeys, ...floatKeys, ...boolKeys, ...strKeys]);
+  for (const key of keys) {
+    if (!allowed.has(key)) return false;
+    const item = value[key];
+    if (intKeys.includes(key) && !isNonNegativeInteger(item)) return false;
+    if (floatKeys.includes(key) && (typeof item !== 'number' || !Number.isFinite(item) || item < 0)) return false;
+    if (boolKeys.includes(key) && typeof item !== 'boolean') return false;
+    if (strKeys.includes(key) && (typeof item !== 'string' || item.length === 0)) return false;
+  }
+  return true;
+};
+
+const isModelRequestCost = (value: unknown): boolean => {
+  if (!isObject(value) || !isJsonValue(value)) return false;
+  const allowed = new Set([
+    'requestId',
+    'provider',
+    'model',
+    'serviceTier',
+    'outcome',
+    'usage',
+    'usdMicros',
+    'source',
+    'pricingVersion',
+    'pricedFromProvider',
+    'unpricedReason',
+  ]);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) return false;
+  }
+  if (
+    !hasNonEmptyString(value, 'requestId') ||
+    !hasNonEmptyString(value, 'provider') ||
+    !hasNonEmptyString(value, 'model') ||
+    !isOneOf(value['serviceTier'], ['standard', 'flex', 'batch', 'unknown']) ||
+    !isOneOf(value['outcome'], ['completed', 'failed', 'cancelled'])
+  ) {
+    return false;
+  }
+  if (Object.hasOwn(value, 'usage') && !isNormalizedUsage(value['usage'])) return false;
+  if (Object.hasOwn(value, 'usdMicros')) {
+    if (typeof value['usdMicros'] !== 'number' || !Number.isSafeInteger(value['usdMicros'])) return false;
+    if (!isOneOf(value['source'], ['provider', 'catalog'])) return false;
+    if (value['source'] === 'catalog' && value['usdMicros'] < 0) return false;
+    if (Object.hasOwn(value, 'unpricedReason')) return false;
+  } else if (Object.hasOwn(value, 'source')) {
+    return false;
+  }
+  if (Object.hasOwn(value, 'pricingVersion') && !hasNonEmptyString(value, 'pricingVersion')) return false;
+  if (Object.hasOwn(value, 'pricedFromProvider') && !hasNonEmptyString(value, 'pricedFromProvider')) return false;
+  if (
+    Object.hasOwn(value, 'unpricedReason') &&
+    !isOneOf(value['unpricedReason'], [
+      'missing_usage',
+      'unknown_provider',
+      'unknown_model',
+      'unknown_tier',
+      'ambiguous_usage',
+    ])
+  ) {
+    return false;
+  }
+  return true;
+};
 
 const isMessage = (value: unknown): boolean => isObject(value) && hasString(value, 'id') && hasString(value, 'sender');
+
+const isSubmittedTurn = (value: unknown): boolean => {
+  if (!isObject(value) || !hasString(value, 'text')) return false;
+  if (
+    value['images'] !== undefined &&
+    (!Array.isArray(value['images']) ||
+      !value['images'].every(
+        (image: unknown) =>
+          isObject(image) &&
+          hasString(image, 'id') &&
+          hasString(image, 'data') &&
+          hasString(image, 'mimeType') &&
+          typeof image['byteSize'] === 'number' &&
+          Number.isFinite(image['byteSize']) &&
+          typeof image['displayNumber'] === 'number' &&
+          Number.isFinite(image['displayNumber']),
+      ))
+  )
+    return false;
+  return (
+    value['skill'] === undefined ||
+    (isObject(value['skill']) &&
+      hasString(value['skill'], 'name') &&
+      hasString(value['skill'], 'description') &&
+      hasString(value['skill'], 'body'))
+  );
+};
+const isJsonValue = (value: unknown, seen = new Set<object>()): boolean => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'object' || seen.has(value)) return false;
+  if (
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) !== Object.prototype &&
+    Object.getPrototypeOf(value) !== null
+  )
+    return false;
+  seen.add(value);
+  const valid = Array.isArray(value)
+    ? value.every((item) => isJsonValue(item, seen))
+    : Object.values(value).every((item) => isJsonValue(item, seen));
+  seen.delete(value);
+  return valid;
+};
 
 const isSnapshot = (value: unknown): boolean =>
   isObject(value) &&
@@ -110,7 +307,13 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
   switch (event['type']) {
     case 'session_init':
       return hasString(event, 'id') && hasString(event, 'createdAt');
+    case 'session_settings_initialized':
+      validateSettingsBaseline(event);
+      return true;
     case 'settings_changed':
+      if (Object.hasOwn(event, 'sessionMutation')) {
+        validateMarkedSettings(event);
+      }
       return hasString(event, 'key');
     case 'goal_changed': {
       const goal = event['goal'];
@@ -143,7 +346,98 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
         isObject(event['item'])
       );
     }
+    case 'context_compaction_recorded': {
+      const allowedKeys = new Set([
+        'type',
+        'version',
+        'operationId',
+        'provider',
+        'model',
+        'strategy',
+        'result',
+        'usage',
+        'costRecords',
+      ]);
+      for (const key of Object.keys(event)) {
+        if (!allowedKeys.has(key)) return false;
+      }
+      if (
+        event['version'] !== 1 ||
+        !hasNonEmptyString(event, 'operationId') ||
+        String(event['operationId']).trim() !== event['operationId'] ||
+        String(event['operationId']).length > 256 ||
+        /[\u0000-\u001f\u007f]/.test(String(event['operationId'])) ||
+        !hasNonEmptyString(event, 'provider') ||
+        String(event['provider']).trim() !== event['provider'] ||
+        !hasNonEmptyString(event, 'model') ||
+        String(event['model']).trim() !== event['model'] ||
+        !isOneOf(event['strategy'], ['local', 'native']) ||
+        !isObject(event['result'])
+      ) {
+        return false;
+      }
+      if (Object.hasOwn(event, 'usage') && !isNormalizedUsage(event['usage'])) return false;
+      if (Object.hasOwn(event, 'costRecords')) {
+        if (
+          !Array.isArray(event['costRecords']) ||
+          event['costRecords'].length === 0 ||
+          !event['costRecords'].every(isModelRequestCost)
+        ) {
+          return false;
+        }
+        const ids = event['costRecords'].map((record: UnknownObject) => String(record['requestId']));
+        if (new Set(ids).size !== ids.length) return false;
+      }
+      const result = event['result'];
+      if (result['kind'] === 'compacted') {
+        const resultKeys = Object.keys(result);
+        if (resultKeys.length !== 2 || !Object.hasOwn(result, 'kind') || !Object.hasOwn(result, 'snapshot')) {
+          return false;
+        }
+        const snapshot = result['snapshot'];
+        const snapKeys = isObject(snapshot) ? Object.keys(snapshot) : [];
+        return (
+          isSnapshot(snapshot) &&
+          isObject(snapshot) &&
+          snapKeys.every((key) => ['history', 'previousResponseId', 'toolLedger', 'provider', 'model'].includes(key)) &&
+          snapshot['previousResponseId'] === null &&
+          snapshot['provider'] === event['provider'] &&
+          snapshot['model'] === event['model'] &&
+          Array.isArray(snapshot['history']) &&
+          snapshot['history'].every((item: unknown) => isObject(item)) &&
+          isJsonValue(snapshot)
+        );
+      }
+      if (result['kind'] === 'not_compacted') {
+        const resultKeys = Object.keys(result);
+        if (resultKeys.length !== 1 || !Object.hasOwn(result, 'kind')) {
+          return false;
+        }
+        return Object.hasOwn(event, 'usage') || Object.hasOwn(event, 'costRecords');
+      }
+      return false;
+    }
     case 'user_message':
+      return (
+        isMessage(event['message']) &&
+        isObject(event['message']) &&
+        (event['message']['submittedTurn'] === undefined || isSubmittedTurn(event['message']['submittedTurn']))
+      );
+    case 'user_input_accepted':
+    case 'user_turn_retried':
+    case 'tool_output_rewound':
+      return (
+        event['version'] === 1 &&
+        (event.type !== 'user_input_accepted' || (hasString(event, 'turnId') && !!event['turnId'])) &&
+        (event.type === 'tool_output_rewound' || isEventReferences([event['userMessageRef']])) &&
+        isSnapshot(event['snapshot']) &&
+        isObject(event['snapshot']) &&
+        Array.isArray(event['snapshot']['history']) &&
+        event['snapshot']['history'].every((item: unknown) => isObject(item) && !Array.isArray(item)) &&
+        (event['snapshot']['model'] === undefined || typeof event['snapshot']['model'] === 'string') &&
+        (event['snapshot']['provider'] === undefined || typeof event['snapshot']['provider'] === 'string') &&
+        isJsonValue(event['snapshot'])
+      );
     case 'command_message':
       return isMessage(event['message']);
     case 'assistant_journal_delta':
@@ -265,6 +559,28 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
     return null;
   }
   const eventObj = obj['event'] as Record<string, unknown>;
+  const strictSettings =
+    eventObj['type'] === 'session_settings_initialized' ||
+    (eventObj['type'] === 'settings_changed' && Object.hasOwn(eventObj, 'sessionMutation'));
+  if (
+    strictSettings &&
+    (!Number.isSafeInteger(obj['v']) ||
+      !Number.isSafeInteger(obj['seq']) ||
+      Number(obj['seq']) < 0 ||
+      typeof obj['ts'] !== 'string' ||
+      typeof obj['logId'] !== 'string' ||
+      !obj['logId'] ||
+      typeof obj['eventId'] !== 'string' ||
+      !obj['eventId'])
+  )
+    throw new Error('invalid session settings envelope');
+  if (
+    eventObj['truncated'] === true &&
+    (eventObj['type'] === 'session_settings_initialized' ||
+      eventObj['type'] === 'context_compaction_recorded' ||
+      (eventObj['type'] === 'settings_changed' && Object.hasOwn(eventObj, 'sessionMutation')))
+  )
+    throw new Error('truncated session settings fact');
   if (
     typeof eventObj['type'] !== 'string' ||
     (eventObj['truncated'] !== true && !isStructurallyValidKnownEvent(eventObj))
@@ -310,4 +626,146 @@ export function decodeSavedMessage(value: unknown): Message | null {
     return null;
   }
   return obj as unknown as Message;
+}
+
+export function validateCompactionSequence(
+  facts: readonly { readonly type: string }[],
+  options: { requireSessionBound?: boolean } = {},
+): void {
+  if (!facts.some((fact) => fact.type === 'context_compaction_recorded')) return;
+  const hasLifecycleBinding =
+    options.requireSessionBound === true ||
+    facts.some((fact) => fact.type === 'session_bound' || fact.type === 'session_settings_initialized');
+  let bound = false;
+  let baseline = false;
+  let closed = false;
+  let activeModel: { provider: string; model: string } | undefined;
+  const openAdmissions = new Set<string>();
+  let openTurn: string | null = null;
+  let openSourceTurn = false;
+  const openInteractions = new Set<string>();
+  const seenOperationIds = new Set<string>();
+
+  for (const raw of facts) {
+    const fact = raw as unknown as UnknownObject;
+    switch (raw.type) {
+      case 'session_bound': {
+        bound = true;
+        const model = fact['model'];
+        if (isObject(model) && typeof model['provider'] === 'string' && typeof model['model'] === 'string') {
+          activeModel = { provider: model['provider'], model: model['model'] };
+        }
+        break;
+      }
+      case 'session_settings_initialized': {
+        baseline = true;
+        const model = fact['model'];
+        if (isObject(model) && typeof model['provider'] === 'string' && typeof model['model'] === 'string') {
+          activeModel = { provider: model['provider'], model: model['model'] };
+        }
+        break;
+      }
+      case 'settings_changed': {
+        const key = fact['key'];
+        const value = fact['value'];
+        if (
+          key === 'agent.modelSelection' &&
+          isObject(value) &&
+          typeof value['provider'] === 'string' &&
+          typeof value['model'] === 'string'
+        ) {
+          activeModel = { provider: value['provider'], model: value['model'] };
+        } else if (key === 'agent.model' && typeof value === 'string' && activeModel) {
+          activeModel = { ...activeModel, model: value };
+        } else if (key === 'agent.provider' && typeof value === 'string' && activeModel) {
+          activeModel = { ...activeModel, provider: value };
+        }
+        break;
+      }
+      case 'session_admitted':
+        openAdmissions.add(String(fact['clientRequestId'] ?? ''));
+        break;
+      case 'session_admission_settled':
+        openAdmissions.delete(String(fact['clientRequestId'] ?? ''));
+        if (openTurn === null && fact['result'] !== 'accepted') {
+          openSourceTurn = false;
+        }
+        break;
+      case 'session_turn_started':
+        openTurn = String(fact['turnId'] ?? '');
+        break;
+      case 'session_turn_ended':
+        if (openTurn === String(fact['turnId'] ?? '')) openTurn = null;
+        openSourceTurn = false;
+        break;
+      case 'session_interaction_pending':
+        if (isObject(fact['interaction']) && typeof fact['interaction']['interactionId'] === 'string') {
+          openInteractions.add(fact['interaction']['interactionId']);
+        }
+        break;
+      case 'session_interaction_resolved':
+      case 'session_interaction_recovered':
+        openInteractions.delete(String(fact['interactionId'] ?? ''));
+        break;
+      case 'user_message':
+        if (!isObject(fact['message']) || fact['message']['consumedForAbort'] !== true) {
+          openSourceTurn = true;
+        }
+        break;
+      case 'user_input_accepted':
+      case 'user_turn_retried':
+      case 'tool_output_rewound':
+      case 'assistant_journal_item':
+      case 'assistant_journal_delta':
+      case 'tool_started':
+      case 'tool_result':
+      case 'approval_required':
+        openSourceTurn = true;
+        break;
+      case 'assistant_turn':
+      case 'undo':
+      case 'session_cleared':
+        openSourceTurn = false;
+        break;
+      case 'error':
+        if (openTurn === null) openSourceTurn = false;
+        break;
+      case 'session_interrupted':
+        openAdmissions.clear();
+        openTurn = null;
+        openSourceTurn = false;
+        openInteractions.clear();
+        break;
+      case 'session_closed':
+        closed = true;
+        openAdmissions.clear();
+        openTurn = null;
+        openSourceTurn = false;
+        openInteractions.clear();
+        break;
+      case 'context_compaction_recorded': {
+        if (fact['truncated'] === true || !isStructurallyValidKnownEvent(fact)) {
+          throw new Error('invalid context_compaction_recorded fact');
+        }
+        if (closed) {
+          throw new Error('context_compaction_recorded after session_closed');
+        }
+        const operationId = String(fact['operationId']);
+        if (seenOperationIds.has(operationId)) {
+          throw new Error('duplicate context_compaction_recorded operationId');
+        }
+        seenOperationIds.add(operationId);
+        if (openAdmissions.size > 0 || openTurn !== null || openSourceTurn || openInteractions.size > 0) {
+          throw new Error('context_compaction_recorded while turn or interaction is active');
+        }
+        if (hasLifecycleBinding && (!bound || !baseline || !activeModel)) {
+          throw new Error('context_compaction_recorded before session binding and settings baseline');
+        }
+        if (activeModel && (fact['provider'] !== activeModel.provider || fact['model'] !== activeModel.model)) {
+          throw new Error('context_compaction_recorded provider/model mismatch');
+        }
+        break;
+      }
+    }
+  }
 }

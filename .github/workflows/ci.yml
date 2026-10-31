@@ -16,9 +16,16 @@ on:
   pull_request:
     branches:
       - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
 
 permissions:
   contents: read
+  pull-requests: read
 
 # A newer push to main supersedes an in-flight run of an older commit;
 # cancel the stale run instead of queueing behind it.
@@ -45,8 +52,96 @@ jobs:
         run: pnpm check:no-unit-tests
       - name: Build dist
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
+      - name: Upload built CLI for rewrite port checks
+        uses: actions/upload-artifact@v4
+        with:
+          name: term2-dist
+          path: dist/
+          if-no-files-found: error
       - name: Run guards, CLI integration and safety provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
+
+  port:
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-tests
+      - name: Download built CLI
+        uses: actions/download-artifact@v4
+        with:
+          name: term2-dist
+          path: dist/
+      - name: Reject unapproved golden changes
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          changed="$(git diff --name-only "$PR_BASE...$PR_HEAD" -- rewrite/parity/goldens/)"
+          if [[ -n "$changed" ]]; then
+            # Query live PR state so reruns and label removals cannot reuse a stale event payload.
+            golden_change_allowed="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq 'any(.labels[]; .name == "golden-change")')"
+          else
+            golden_change_allowed='true'
+          fi
+          if [[ -n "$changed" && "$golden_change_allowed" != 'true' ]]; then
+            echo "Golden changes require the golden-change label:"
+            echo "$changed"
+            exit 1
+          fi
+      - name: Check rewrite inventory and old CLI parity
+        run: |
+          node rewrite/parity/inventory.mjs
+          node rewrite/parity/run.mjs check --cli dist/cli.js
+      - name: Typecheck rewrite and check layer boundaries
+        run: |
+          pnpm exec tsc -p rewrite/tsconfig.json
+          node rewrite/scripts/check-layers.mjs
+          node rewrite/scripts/check-complexity.mjs
+          node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts
+      - name: Check the direct headless path
+        run: |
+          node rewrite/scripts/build.mjs
+          node rewrite/parity/run.mjs check --cli rewrite/dist/rewrite/src/app/cli.js headless-plain-answer settings-batch
+          node rewrite/bench/m1-direct.mjs
+      - name: Check adopted approval and crash recovery
+        run: |
+          pnpm exec tsx rewrite/bench/c1-adopted-approval.mts
+          pnpm exec tsx rewrite/bench/c1-adopted-kill.mts
+          pnpm exec tsx rewrite/bench/c3a-foreground.mts
+          for mode in normal fault partial unsupported; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-settings.mts; done
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-settings-legacy.mts
+          for mode in set fsync achieve propose-approve propose-race propose-reject; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-goal.mts; done
+          for mode in human refusal fault; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-budget.mts; done
+          for mode in basic held fsync; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-history-commands.mts; done
+          for mode in local accounting native interleaving; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-compaction.mts; done
+          for mode in plain image skill disabled error retry approval failure cancel; do PROBE_MODE="$mode" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-memory.mts; done
+          pnpm exec tsx rewrite/bench/c3a-owned-handle.mts
+          pnpm exec tsx rewrite/bench/c3a-network.mts
+          pnpm exec tsx rewrite/bench/c3a-network-background.mts
+          for mode in running late; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-network-nested.mts; done
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-network-kill.mts
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-capture.mts
+          for mode in repeat batch reject ask-nav ask-cancel; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-interactions.mts; done
+          pnpm exec tsx rewrite/bench/c3a-retry-turn.mts
+          for target in turn tool; do RETRY_TARGET="$target" pnpm exec tsx rewrite/bench/c3a-retry-effects.mts; done
+          for target in turn tool; do RETRY_TARGET="$target" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-retry-fsync.mts; done
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-retry-kill.mts
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-background-interrupt.mts
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-held-tool.mts
+          node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-toolkill.mts
+          for failure in none session_interaction_pending session_interaction_resolved; do FAIL_TYPE="$failure" node --unhandled-rejections=strict --import tsx rewrite/bench/c3a-postexecute.mts; done
+          pnpm exec tsx rewrite/bench/c3a-input-fsync.mts
+          PROBE_MODE=unknown pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts
+          PROBE_MODE=tool pnpm exec tsx rewrite/bench/c3a-tool-dispatch.mts
+          for mode in valid forged changed-image changed-skill reuse mismatch-reuse; do PROBE_MODE="$mode" pnpm exec tsx rewrite/bench/c3a-surge-capability.mts; done
 
   integration:
     runs-on: ubuntu-22.04

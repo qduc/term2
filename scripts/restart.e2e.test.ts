@@ -164,8 +164,16 @@ export default function register(term2) { for (const type of ['session.start', '
       await child.waitForIdleInput();
       // A functional command is also an input/raw-mode check after the second exec.
       await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+      const helpOutputOffset = child.getVisibleOutput().length;
+      const beforeHelpRevision = child.readComposerRevision();
       await writePtyTextAndSubmit(child, '/help');
-      await child.waitForState((snapshot) => snapshot.visibleOutput.split('Changed compiled core B').length >= 3);
+      // Old help output is still in the PTY history; wait for this command and
+      // its composer clear before the next input can share a chunk with Enter.
+      await child.waitForState(
+        (snapshot) => snapshot.visibleOutput.slice(helpOutputOffset).includes('Changed compiled core B'),
+        5000,
+      );
+      await child.waitForComposerValue('', { afterRevision: beforeHelpRevision, timeoutMs: 5000 });
       expect(await identity()).toEqual(before);
       expect(await activeLeaf()).toBe(latest);
       expect(await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8')).toContain(latest);

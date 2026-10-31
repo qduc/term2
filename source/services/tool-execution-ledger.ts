@@ -567,14 +567,18 @@ export function dropUnpairedFunctionCalls(history: readonly unknown[]): unknown[
 export function reconcileHistoryWithToolLedger(
   history: readonly unknown[],
   ledger: readonly SavedToolExecution[] | undefined,
+  coveredToolOccurrences?: ReadonlySet<string>,
 ): ToolLedgerReconcileResult {
   const entries = normalizeToolLedgerOccurrences(ledger);
-  let next = clone(alignHistoryToolOccurrences(history, entries));
+  let next = clone(alignHistoryToolOccurrences(history, entries, coveredToolOccurrences));
   let addedCompletedPairs = 0;
   let droppedIncompleteCalls = 0;
   const latestTurnNumber = entries.reduce((max, entry) => Math.max(max, turnNumberOf(entry.turnId) ?? 0), 0);
 
   for (const [entryIndex, entry] of entries.entries()) {
+    if (coveredToolOccurrences?.has(toolOccurrenceKey(entry))) {
+      continue;
+    }
     if (hasRecoverableCallPair(entry)) {
       if (hasCallPair(next, entry)) {
         continue;
@@ -711,6 +715,7 @@ export function sanitizeMalformedToolCallArguments(history: readonly unknown[]):
 export function alignHistoryToolOccurrences(
   history: readonly unknown[],
   ledger: readonly SavedToolExecution[],
+  coveredToolOccurrences?: ReadonlySet<string>,
 ): unknown[] {
   const used = new Set<string>();
   // A result belongs to the call we just aligned, not an independently chosen
@@ -735,9 +740,10 @@ export function alignHistoryToolOccurrences(
     const entry = pairedResult
       ? pending.get(pairKey)
       : ledger.find((entry) => {
-          const key = `${tool.type}:${toolOccurrenceKey(entry)}`;
-          if (explicit) return toolOccurrenceKey(entry) === toolOccurrenceKey(tool);
-          if (used.has(key) || entry.callId !== tool.callId) return false;
+          const entryKey = toolOccurrenceKey(entry);
+          const key = `${tool.type}:${entryKey}`;
+          if (explicit) return entryKey === toolOccurrenceKey(tool);
+          if (coveredToolOccurrences?.has(entryKey) || used.has(key) || entry.callId !== tool.callId) return false;
           const evidence = entry.historyItems?.flatMap(normalizeRunItem).find((item) => item.type === tool.type);
           return tool.type === 'tool_call'
             ? comparable(evidence?.type === 'tool_call' ? evidence.arguments : entry.arguments) ===

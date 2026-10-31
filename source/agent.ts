@@ -1,3 +1,6 @@
+import { healPatchOperation } from './tools/file/patch-healing.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from './contracts/nested-run-driver.js';
+import { healSearchReplaceParams } from './tools/file/edit-healing.js';
 import { createDiscordSendToolDefinition } from './tools/discord-send.js';
 import type { DiscordSend } from './services/discord/discord-outbound.js';
 import { createGrepToolDefinition } from './tools/file/grep.js';
@@ -18,7 +21,6 @@ import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
 import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
 import { createRunSubagentToolDefinition, type ForegroundRunSubagentParams } from './tools/agent/run-subagent.js';
 import { createListModelsToolDefinition } from './tools/agent/list-models.js';
-import { SessionIndexService } from './services/conversation/session-index/session-index-service.js';
 import {
   createGetSubagentResultToolDefinition,
   createGetSubagentStatusToolDefinition,
@@ -232,6 +234,8 @@ function positiveIntegerSetting(
  */
 export const getAgentDefinition = (
   deps: {
+    driverFactory?: NestedRunDriverFactory;
+    modelBinding?: NestedModelBinding;
     settingsService: ISettingsService;
     loggingService: ILoggingService;
     getGoal?: () => DurableGoal | undefined;
@@ -269,7 +273,7 @@ export const getAgentDefinition = (
     runResolvedSubagentAsync?: (params: ResolvedSubagentLaunch) => Promise<SubagentRunHandle>;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
-    proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
+    proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
     postExecuteDeniedRead?: boolean;
@@ -281,6 +285,7 @@ export const getAgentDefinition = (
     /** Root-session-only output store + watch layer for background jobs. */
     backgroundShellOutput?: BackgroundShellOutputBundle;
     shellChildRegistry?: ShellChildRegistry;
+    scopedSandbox?: import('./utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
     /** False for non-interactive / headless sessions where user prompts cannot be answered. */
@@ -329,6 +334,7 @@ export const getAgentDefinition = (
     backgroundShellRegistry,
     backgroundShellOutput,
     shellChildRegistry,
+    scopedSandbox,
     allowBackgroundShell = true,
     allowAskUser = true,
     sessionBrowser,
@@ -493,6 +499,9 @@ export const getAgentDefinition = (
     backgroundShellWatches: rootBackgroundShellOutput?.watches,
     configureCheckIn: setTaskCheckInPolicy,
     shellChildRegistry,
+    shellSandboxRunner: scopedSandbox?.runner,
+    registerSandboxNetworkPauseController: scopedSandbox?.registerPauseController,
+    sandboxChildRegistry: scopedSandbox?.childRegistry,
     readOnly,
     allowUnsandboxed: deps.allowUnsandboxed,
   });
@@ -554,6 +563,9 @@ export const getAgentDefinition = (
         getHistory:
           hasCapability('sessions') && !executionContext?.isRemote()
             ? async () => {
+                const { SessionIndexService } = await import(
+                  './services/conversation/session-index/session-index-service.js'
+                );
                 const index = new SessionIndexService();
                 try {
                   return await index.list({ projectPath: executionContext?.getCwd() ?? process.cwd() });
@@ -618,7 +630,18 @@ export const getAgentDefinition = (
     if (filesystemWriteEnabled) {
       if (usesPatchEditingSurface) {
         tools.push(
-          createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+          createApplyPatchToolDefinition({
+            settingsService,
+            loggingService,
+            executionContext,
+            sessionAccess,
+            patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
+              healPatchOperation(path, diff, content, diagnosis, model, key, {
+                ...healingDeps,
+                driverFactory: deps.driverFactory,
+                modelBinding: deps.modelBinding,
+              }),
+          }),
         );
       } else {
         tools.push(
@@ -629,6 +652,12 @@ export const getAgentDefinition = (
             sessionAccess,
           }),
           createSearchReplaceToolDefinition({
+            editHealing: (params, content, model, key, healingDeps) =>
+              healSearchReplaceParams(params, content, model, key, {
+                ...healingDeps,
+                driverFactory: deps.driverFactory,
+                modelBinding: deps.modelBinding,
+              }),
             settingsService,
             loggingService,
             executionContext,

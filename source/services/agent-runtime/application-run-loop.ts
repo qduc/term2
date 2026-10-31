@@ -1,5 +1,8 @@
 import { personalMemoryNotice, withPersonalMemoryContext } from '../conversation/personal-memory-context.js';
 import { conversationTimeGap, formatConversationTimeGap } from '../conversation/conversation-time-gap.js';
+import type { NestedApprovalLedger } from '../../contracts/nested-run-driver.js';
+import { MaxTurnsExceededError } from '../subagents/max-turns-error.js';
+import { waitForAbortableRead } from '../../contracts/abort-aware-wait.js';
 import { isOpenAICompaction, projectModelRequestHistory } from '../conversation/conversation-state-projector.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from './model-context-policy.js';
@@ -11,7 +14,6 @@ import {
   isProviderContextOverflow,
 } from './request-input-limit.js';
 import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
-import type { JsonSchemaDefinition } from '../../contracts/model-types.js';
 import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
 import {
   createContinuationHandle,
@@ -93,43 +95,8 @@ const isToolResultContentParts = (value: unknown): value is readonly StreamedMod
  * another provider's opaque option bag. The index signature remains for legacy
  * provider settings before they are projected by the application configuration.
  */
-export interface AgentModelSettings {
-  temperature?: number;
-  reasoning?: { effort?: string; summary?: string };
-  maxTokens?: number;
-  maxRequestInputTokens?: number | null;
-  /** Hard per-request stream-output budget across text, reasoning, and tool arguments. */
-  maxStreamOutputChars?: number;
-  /** Optional total wall-clock ceiling for each provider request; 0 disables it. Opt-in backstop. */
-  maxModelRequestDurationMs?: number;
-  /** Provider-neutral inactivity window: abort if no streamed delta arrives within this many ms; 0 disables it. */
-  maxModelStreamIdleMs?: number;
-  retry?: { maxRetries?: number };
-  providerData?: Record<string, unknown>;
-  codex?: { promptCacheKey?: string; include?: readonly string[] };
-  [key: string]: unknown;
-}
-
-/** The application-owned agent shape consumed by the replacement run loop. */
-export interface ApplicationAgent {
-  readonly name: string;
-  readonly instructions: string;
-  /** Resolve session-dynamic instruction context once at each provider request boundary. */
-  readonly resolveInstructionsForRequest?: () => string;
-  /** Read personal data only when admitting a human message, never on tool continuations. */
-  readonly resolvePersonalContext?: () => string;
-  /**
-   * Capture the session state rendered into a request, at that same request
-   * boundary. The response's tool calls execute with it (see `RequestSnapshot`).
-   */
-  readonly resolveRequestSnapshot?: () => RequestSnapshot;
-  readonly model: string;
-  readonly memoryContextEnabled?: boolean;
-  modelSettings?: AgentModelSettings;
-  defaultRunOptions?: any;
-  outputType?: JsonSchemaDefinition | 'text';
-  readonly tools: ToolRegistry;
-}
+export type { AgentModelSettings, ApplicationAgent } from '../../contracts/nested-run-driver.js';
+import type { ApplicationAgent } from '../../contracts/nested-run-driver.js';
 
 export interface ApplicationRequestPreparation {
   /** Observe the exact application request immediately before model dispatch. */
@@ -187,7 +154,7 @@ export interface ApplicationRunLoopOptions {
    * pre-seeded ledger to honor decisions already taken (e.g. parent approvals
    * replayed into a nested run — the F5 mechanism).
    */
-  readonly approvals?: ApprovalLedger;
+  readonly approvals?: NestedApprovalLedger;
   /**
    * Legacy model-turn ceiling. With `runBudget`, the policy's `turnBackstop`
    * owns staged behavior while this value remains visible to legacy tools;
@@ -244,6 +211,10 @@ export interface ApplicationRunLoopOptions {
 
 /** Bounded session operations. Only runTurn decides when execution advances. */
 export interface ApplicationTurnSession {
+  readonly approvalBatch?: true;
+  readonly abortPendingModelReads?: true;
+  readonly recordBudgetStopCause?: true;
+  onDetachedModelRead?(operation: Promise<unknown>): void;
   prepare(signal: AbortSignal): Promise<
     | {
         agent: ApplicationAgent;
@@ -256,6 +227,9 @@ export interface ApplicationTurnSession {
   beginSegment(stream: AgentStream): void;
   acceptEvent(event: ApplicationRunEvent): void;
   acceptToolDispatch(callId: string): void;
+  onModelDispatch?(input: { readonly requestId: string; readonly providerId?: string; readonly model: string }): void;
+  beforeToolDispatch?(callId: string): Promise<void>;
+  isFatalError?(error: unknown): boolean;
   acceptSegment(stream: AgentStream): void;
   consume(stream: AgentStream): Promise<void>;
   interrupted(stream: AgentStream): Promise<ApplicationRunLoopOptions>;
@@ -278,23 +252,13 @@ export type NormalStopDecision =
       readonly diagnostics?: Readonly<Record<string, unknown>>;
     };
 
-/**
- * Compatibility error for legacy callers without a staged run budget. The loop
- * owns turn counting — the SDK-era `callModelInputFilter` hook is deliberately
- * not reintroduced.
- */
-export class MaxTurnsExceededError extends Error {
-  readonly maxTurns: number;
-
-  constructor(maxTurns: number) {
-    super(`Max turns (${maxTurns}) exceeded`);
-    this.name = 'MaxTurnsExceededError';
-    this.maxTurns = maxTurns;
-  }
-}
+export { MaxTurnsExceededError };
 
 export interface ApplicationRunLoopDeps {
   readonly resolveModel: (model: string) => StreamedModelTurn | Promise<StreamedModelTurn>;
+  readonly abortPendingModelReads?: true;
+  readonly recordBudgetStopCause?: true;
+  readonly onDetachedModelRead?: (operation: Promise<unknown>) => void;
   /** Root-only optional observation. It returns no policy; the run loop never awaits a Decisions response. */
   readonly decisionShadowObserver?: DecisionShadowObserver;
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
@@ -358,6 +322,9 @@ type RunState = {
   approvalDecisionCallId?: string;
   /** The interruption object the decision answered; binds it to that exact pending call. */
   approvalDecisionInterruption?: unknown;
+  approvalQueue?: Array<
+    Readonly<{ callId: string | undefined; interruption: unknown; decision: 'approved' | 'rejected'; message?: string }>
+  >;
   approvalMessage?: string;
   /** Snapshot of the latest provider request built; the calls its response plans keep it. */
   requestSnapshot?: RequestSnapshot;
@@ -368,7 +335,7 @@ type RunState = {
   /** The run's user context (from options), preserved across continuation. */
   context?: unknown;
   /** This run's approval ledger, preserved across continuation. */
-  approvals: ApprovalLedger;
+  approvals: NestedApprovalLedger;
   /** Model turns taken so far, preserved across continuation. */
   turnCount: number;
   /** Local automatic compactions already paid for in this run. */
@@ -733,6 +700,12 @@ export class ApplicationRunLoop {
         state.runBudgetInteractionDecision = this.#takeRunBudgetGrant(state) ? 'continue' : 'stop';
         return;
       }
+      if (state.approvalQueue) {
+        state.approvalQueue.push(
+          Object.freeze({ callId: getInterruptionCallId(interruption), interruption, decision: 'approved' }),
+        );
+        return;
+      }
       state.approvalDecision = 'approved';
       state.approvalDecisionCallId = getInterruptionCallId(interruption);
       state.approvalDecisionInterruption = interruption;
@@ -740,6 +713,17 @@ export class ApplicationRunLoop {
     state.reject = (interruption, approvalOptions) => {
       if (isRunBudgetInteraction(interruption)) {
         state.runBudgetInteractionDecision = 'stop';
+        return;
+      }
+      if (state.approvalQueue) {
+        state.approvalQueue.push(
+          Object.freeze({
+            callId: getInterruptionCallId(interruption),
+            interruption,
+            decision: 'rejected',
+            message: approvalOptions?.message,
+          }),
+        );
         return;
       }
       state.approvalDecision = 'rejected';
@@ -1002,6 +986,8 @@ export class ApplicationRunLoop {
     const { state } = context;
     while (state.pendingRunBudgetInteraction) {
       if (state.runBudgetInteractionDecision === 'stop') {
+        if ((context.session?.recordBudgetStopCause || this.#deps.recordBudgetStopCause) && !state.terminalCause)
+          state.terminalCause = 'budget_exhausted';
         state.pendingRunBudgetInteraction = undefined;
         state.runBudgetInteractionDecision = undefined;
         return true;
@@ -1059,6 +1045,7 @@ export class ApplicationRunLoop {
           if (!start) return;
           const options = { ...start.options, signal: turnSignal };
           const state = this.#createState(start.agent, start.input, options);
+          if (session!.approvalBatch) state.approvalQueue = [];
           this.#refreshContinuation(state, options);
           context = this.#createView(state, options, (event) => session!.acceptEvent(event));
           context.session = session;
@@ -1091,6 +1078,7 @@ export class ApplicationRunLoop {
           this.#settleSegment(context, undefined, error);
           await context.observation?.catch(() => undefined);
         }
+        if (session.isFatalError?.(error)) throw error;
         turnSignal?.throwIfAborted();
         if (!(await session.recover(error))) return;
         context = undefined;
@@ -1246,7 +1234,15 @@ export class ApplicationRunLoop {
   /** Own streaming and safe request attempts; never dispatch tools here. */
   async #askModel(context: RunContext): Promise<ModelExchange> {
     const { state, stream, queue, options, requestAbortController } = context;
-    const model = await this.#deps.resolveModel(state.agent.model);
+    const resolution = Promise.resolve(this.#deps.resolveModel(state.agent.model));
+    const model =
+      (context.session?.abortPendingModelReads || this.#deps.abortPendingModelReads) && options.signal
+        ? await waitForAbortableRead(
+            resolution,
+            options.signal,
+            context.session?.onDetachedModelRead ?? this.#deps.onDetachedModelRead,
+          )
+        : await resolution;
     const maxRetries = state.agent.modelSettings?.retry?.maxRetries ?? 0;
     let attempt = 0;
     let streamedToolCalls: Array<Extract<StreamedModelTurnEvent, { type: 'tool_call' }>> = [];
@@ -1364,9 +1360,19 @@ export class ApplicationRunLoop {
         let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
         let iteratorFinished = false;
         try {
+          options.signal?.throwIfAborted();
+          context.session?.onModelDispatch?.({
+            requestId,
+            providerId: state.currentProviderId,
+            model: state.agent.model,
+          });
           iterator = model.stream(request)[Symbol.asyncIterator]();
           while (true) {
-            const nextOperation = iterator.next();
+            const read = iterator.next();
+            const abortReads = context.session?.abortPendingModelReads || this.#deps.abortPendingModelReads;
+            const detached = context.session?.onDetachedModelRead ?? this.#deps.onDetachedModelRead;
+            const nextOperation =
+              abortReads && options.signal ? waitForAbortableRead(read, options.signal, detached) : read;
             const next = await deadline.wait(
               toolArgumentRunaway ? toolArgumentRunaway.wait(nextOperation) : nextOperation,
             );
@@ -1444,7 +1450,21 @@ export class ApplicationRunLoop {
         } finally {
           deadline.dispose();
           toolArgumentRunaway?.dispose();
-          if (iterator && !iteratorFinished) void iterator.return?.().catch(() => undefined);
+          if (iterator && !iteratorFinished) {
+            if (context.session?.abortPendingModelReads || this.#deps.abortPendingModelReads) {
+              try {
+                const returned = iterator.return?.();
+                if (returned) {
+                  const operation = Promise.resolve(returned);
+                  if (options.signal?.aborted)
+                    (context.session?.onDetachedModelRead ?? this.#deps.onDetachedModelRead)?.(operation);
+                  void operation.catch(() => undefined);
+                }
+              } catch {
+                /* Best-effort late iterator cleanup. */
+              }
+            } else void iterator.return?.().catch(() => undefined);
+          }
         }
       };
       const dispatch = async (): Promise<void> => {
@@ -1822,7 +1842,18 @@ export class ApplicationRunLoop {
         stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
         await this.#waitForDecision(context);
         ({ state, stream, queue, options, toolContext } = context);
-        if (state.approvalDecision) {
+        if (state.approvalQueue?.length) {
+          state.toolExecution.validateApprovalBatch(state.approvalQueue);
+          const batch = state.approvalQueue.splice(0);
+          for (const decision of batch)
+            state.toolExecution.resolveApproval(
+              { callId: decision.callId, interruption: decision.interruption },
+              decision.decision,
+              decision.message,
+              state.approvals,
+            );
+          answeredApproval = true;
+        } else if (state.approvalDecision) {
           state.toolExecution.resolveApproval(
             { callId: state.approvalDecisionCallId, interruption: state.approvalDecisionInterruption },
             state.approvalDecision,
@@ -1921,6 +1952,14 @@ export class ApplicationRunLoop {
         outputPush(stream, queue, { type: 'item', item: callItem });
       },
       onExecutionStarted: (callId: string) => state.live?.session?.acceptToolDispatch(callId),
+      ...(state.live?.session?.beforeToolDispatch
+        ? {
+            beforeToolDispatch: async (callId: string) => {
+              await state.live?.session?.beforeToolDispatch?.(callId);
+              state.live?.options.signal?.throwIfAborted();
+            },
+          }
+        : {}),
       onDispatch: (entry: ToolPlanEntry) => {
         outputPush(stream, queue, {
           type: 'tool_call_dispatched',
@@ -2449,6 +2488,21 @@ function isProviderOpaque(
 }
 
 function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
+  if (item.type === 'provider_opaque' && typeof item.provider === 'string' && item.provider.length > 0) {
+    const payload = asRecord(item.item);
+    if (payload) {
+      return [
+        {
+          type: 'provider_opaque',
+          provider: item.provider,
+          ...(typeof item.sourceProvider === 'string' && item.sourceProvider.length > 0
+            ? { sourceProvider: item.sourceProvider }
+            : {}),
+          item: { ...payload },
+        },
+      ];
+    }
+  }
   if (isProviderOpaque(item)) {
     const { providerOpaque: _marker, personalMemoryContext: _personalContext, ...providerItem } = item;
     return [

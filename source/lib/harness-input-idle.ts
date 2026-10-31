@@ -11,6 +11,7 @@ let lastPhase: PublishedPhase | null = null;
 let generation = 0;
 let lastComposerValue: string | null = null;
 let composerRevision = 0;
+let approvalRevision = 0;
 
 export type HarnessInputState = {
   readonly owner: InputOwner['kind'];
@@ -112,6 +113,7 @@ export function resetHarnessInputIdleForTests(): void {
   generation = 0;
   lastComposerValue = null;
   composerRevision = 0;
+  approvalRevision = 0;
 }
 
 function composerStatePath(idlePath: string): string {
@@ -127,4 +129,21 @@ function writeAtomically(path: string, payload: string): void {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Test-only: published after the approval prompt's input subscription effect. */
+export function publishHarnessApprovalReady(callId: string): void {
+  const path = process.env[HARNESS_IDLE_ENV];
+  if (!path) return;
+  approvalRevision += 1;
+  writeAtomically(`${path}.approval`, `${JSON.stringify({ revision: approvalRevision, callId })}\n`);
+}
+
+export function readHarnessApprovalReady(path: string): { revision: number; callId: string } | null {
+  try {
+    const state = JSON.parse(readFileSync(`${path}.approval`, 'utf8'));
+    return Number.isInteger(state.revision) && state.revision > 0 && typeof state.callId === 'string' ? state : null;
+  } catch {
+    return null;
+  }
 }

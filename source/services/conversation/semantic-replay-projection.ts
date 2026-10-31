@@ -8,7 +8,13 @@ export type SemanticReplayProjection =
   | { status: 'projected'; state: RestoredState }
   | {
       status: 'unsupported';
-      reason: 'legacy_undo_snapshot' | 'unresolved_retraction_refs' | 'unverifiable_checkpoint';
+      reason:
+        | 'legacy_undo_snapshot'
+        | 'unresolved_retraction_refs'
+        | 'unverifiable_checkpoint'
+        | 'accepted_input_snapshot'
+        | 'tool_rewind_snapshot'
+        | 'user_retry_snapshot';
       seq: number;
     };
 
@@ -97,6 +103,21 @@ export function projectSemanticEvents(
     const key = envelopeRefKey(envelope);
     if (key && retractedRefs.has(key)) continue;
     if (envelope.event.type === 'events_retracted') continue;
+    if (envelope.event.type === 'user_input_accepted') {
+      if (retractedRefs.has(refKey(envelope.event.userMessageRef))) continue;
+      if (!options.diagnosticIncludeCompatibilitySnapshots)
+        return { status: 'unsupported', reason: 'accepted_input_snapshot', seq: envelope.seq };
+    }
+    if (envelope.event.type === 'tool_output_rewound' || envelope.event.type === 'user_turn_retried') {
+      if (envelope.event.type === 'user_turn_retried' && retractedRefs.has(refKey(envelope.event.userMessageRef)))
+        continue;
+      if (!options.diagnosticIncludeCompatibilitySnapshots)
+        return {
+          status: 'unsupported',
+          reason: envelope.event.type === 'tool_output_rewound' ? 'tool_rewind_snapshot' : 'user_retry_snapshot',
+          seq: envelope.seq,
+        };
+    }
     if (envelope.event.type === 'context_checkpoint_created') {
       checkpoints.push({ envelope, sourceRefs: envelope.event.sourceRefs, item: envelope.event.item });
       continue;

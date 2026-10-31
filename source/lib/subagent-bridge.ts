@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory, NestedModelBinding } from '../contracts/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent, ConversationEventSink } from '../services/conversation/conversation-events.js';
@@ -30,6 +31,8 @@ import type { SessionBrowser } from '../services/conversation/session-browser.js
 import type { SubagentDefinition } from '../services/subagents/types.js';
 
 export interface SubagentBridgeDeps {
+  driverFactory?: NestedRunDriverFactory;
+  modelBinding?: NestedModelBinding;
   logger: ILoggingService;
   settings: ISettingsService;
   executionContext?: ExecutionContext;
@@ -48,6 +51,7 @@ export interface SubagentBridgeDeps {
   /** Session-owned delivery path for approvals after foreground adoption. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   readOnly?: boolean;
+  scopedSandbox?: import('../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   /** Root session transcript browser, lent to the librarian subagent. */
   sessionBrowser?: SessionBrowser;
 }
@@ -167,6 +171,8 @@ export class SubagentBridge {
       this.#subagentManager = deps.subagentManager;
     } else {
       this.#subagentManager = new SubagentManager({
+        driverFactory: deps.driverFactory,
+        modelBinding: deps.modelBinding,
         logger: deps.logger,
         settings: deps.settings,
         executionContext: deps.executionContext,
@@ -177,6 +183,7 @@ export class SubagentBridge {
         skillsService: deps.skillsService,
         toolOwnership: deps.toolOwnership,
         readOnly: deps.readOnly,
+        scopedSandbox: deps.scopedSandbox,
         ...(deps.sessionBrowser ? { sessionBrowser: deps.sessionBrowser } : {}),
         ...(deps.backgroundApprovalPauseSink ? { backgroundApprovalPauseSink: deps.backgroundApprovalPauseSink } : {}),
       });

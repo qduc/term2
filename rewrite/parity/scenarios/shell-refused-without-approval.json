@@ -1,0 +1,12 @@
+{
+  "id": "shell-refused-without-approval",
+  "description": "Without --auto-approve, a shell call that needs approval is refused, the refusal goes back to the model, and the file survives.",
+  "runs": [{ "args": ["clean up the workspace"] }],
+  "seed": { "victim.txt": "must survive\n" },
+  "provider": [
+    {
+      "toolCalls": [{ "name": "shell", "arguments": { "command": "rm victim.txt", "description": "Remove the file" } }]
+    },
+    { "text": "I could not remove the file." }
+  ]
+}

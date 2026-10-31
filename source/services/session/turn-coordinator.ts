@@ -12,7 +12,8 @@ import type { InitialTurnRunOptions } from './turn-attempt-factory.js';
 import { randomUUID } from 'node:crypto';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
-import { resolveSessionId, type SessionIdSource } from './session-identity.js';
+import type { SessionIdSource } from './session-identity.js';
+import { AutomaticMemoryFinalizer } from './automatic-memory-finalizer.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 import type { AutomaticMemoryCanary } from '../memory/automatic-memory-canary.js';
@@ -33,6 +34,7 @@ export interface TurnCoordinatorDeps {
   hookEvents?: HookEventFactory;
   automaticMemory?: AutomaticMemoryCanary;
   automaticMemoryAllowed?: () => boolean;
+  automaticMemoryFinalizer?: AutomaticMemoryFinalizer;
 }
 
 type ForwardedTurnOutcome = {
@@ -44,7 +46,11 @@ export class TurnCoordinator {
   #activeTurnId: string | undefined;
   #activeTurnStartedAt = 0;
 
-  constructor(private readonly deps: TurnCoordinatorDeps) {}
+  readonly #automaticMemoryFinalizer: AutomaticMemoryFinalizer;
+
+  constructor(private readonly deps: TurnCoordinatorDeps) {
+    this.#automaticMemoryFinalizer = deps.automaticMemoryFinalizer ?? new AutomaticMemoryFinalizer(deps);
+  }
 
   async *start(input: string | UserTurn, options: TurnStartOptions = {}): AsyncIterable<ConversationEvent> {
     if (!this.deps.statusMachine.is('idle')) {
@@ -83,7 +89,7 @@ export class TurnCoordinator {
         !options.skipUserMessage &&
         !options.modelOnlyInput
       ) {
-        yield* this.#recordAutomaticMemory(input);
+        yield* this.#automaticMemoryFinalizer.record(input);
       }
     } catch (error) {
       if (!processed) {
@@ -209,44 +215,6 @@ export class TurnCoordinator {
   }
 
   // ── Private helpers ──────────────────────────────────────────
-
-  async *#recordAutomaticMemory(input: string | UserTurn): AsyncGenerator<ConversationEvent> {
-    if (!this.deps.automaticMemory || !this.deps.sessionId || this.deps.automaticMemoryAllowed?.() === false) return;
-    if (typeof input !== 'string' && (input.images?.length || input.skill)) return;
-    const text = typeof input === 'string' ? input : input.text;
-    try {
-      const receipt = await this.deps.automaticMemory.record(text, resolveSessionId(this.deps.sessionId));
-      if (!receipt) return;
-      yield {
-        type: 'command_message',
-        message: {
-          id: `memory-${receipt.id}`,
-          sender: 'command',
-          status: 'completed',
-          command: 'Automatic memory canary',
-          output: `Learned (project): ${receipt.quote}\nSource session: ${receipt.sourceSessionId}\nReview with memory_get({scope:"project",id:"${receipt.id}"}); undo with ${receipt.undo}`,
-          success: true,
-          toolName: 'automatic_memory',
-          callId: `memory-${receipt.id}`,
-        },
-      };
-    } catch {
-      this.deps.automaticMemory = undefined;
-      yield {
-        type: 'command_message',
-        message: {
-          id: `memory-error-${randomUUID()}`,
-          sender: 'command',
-          status: 'failed',
-          command: 'Automatic memory canary disabled',
-          output:
-            'Automatic memory stopped after a storage error. No further automatic writes will be attempted in this session; review the memory index before retrying.',
-          success: false,
-          toolName: 'automatic_memory',
-        },
-      };
-    }
-  }
 
   /**
    * End the turn's steer scope only once the turn itself is over.

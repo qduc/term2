@@ -2,7 +2,7 @@ import type { CodexRateLimitInfo } from './streamed-model-turn.js';
 import type { ProviderInputItem } from './provider-input.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../services/cost/model-cost.js';
-import type { RunBudgetEvent } from '../services/agent-runtime/run-budget.js';
+import type { RunBudgetEvent } from './nested-run-driver.js';
 
 /**
  * Closed event protocol consumed by the session/UI pipeline.

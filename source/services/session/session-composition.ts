@@ -1,4 +1,6 @@
 import { resolveOutputAllocation } from '../agent-runtime/model-context-policy.js';
+import { AgentChatFailure } from '../../lib/agent-chat-service.js';
+import type { ModelRequestCost } from '../cost/model-cost.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
@@ -16,7 +18,11 @@ import {
   createCheckpointSourceDigest,
   resolveCheckpointSourceRefs,
 } from '../conversation/conversation-checkpoint-provenance.js';
-import { readConversationLogEnvelopes, generateId } from '../conversation/conversation-persistence.js';
+import {
+  readConversationLogEnvelopes,
+  readConversationLogEnvelopesFromDirectory,
+  generateId,
+} from '../conversation/conversation-persistence.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { getMethod, getToolInfoFromInterruption } from '../interruption-info.js';
@@ -52,6 +58,8 @@ import { GenerationGuard } from '../generation-guard.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import { SessionTurnAdapter } from './session-turn-adapter.js';
+import { SessionTurnDomain } from './session-turn-domain.js';
+import { AutomaticMemoryFinalizer } from './automatic-memory-finalizer.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import { TurnAttemptFactory } from './turn-attempt-factory.js';
 import { InitialInputPreparer } from './initial-input-preparer.js';
@@ -166,6 +174,11 @@ export type SessionRuntimeInternals = {
   compactContext: (options?: {
     signal?: AbortSignal;
     onStarted?: () => void | Promise<void>;
+    onStrategy?: (strategy: 'local' | 'native') => void;
+    onAccounting?: (observation: {
+      usage?: { inputTokens: number; outputTokens: number };
+      costRecords?: readonly ModelRequestCost[];
+    }) => void;
   }) => Promise<LocalCompactionOutcome | { kind: 'busy' } | { kind: 'stale' } | NativeCompactionFailure>;
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   recoveryExecutor: DefaultRecoveryExecutor;
@@ -173,6 +186,8 @@ export type SessionRuntimeInternals = {
   retryEventPresenter: RetryEventPresenter;
   turnAccumulator: TurnItemAccumulator;
   turnAdapter: SessionTurnAdapter;
+  createTurnDomain(): SessionTurnDomain;
+  automaticMemoryFinalizer: AutomaticMemoryFinalizer;
   freshStartRetriesAllowed: boolean;
   /** @internal Resolved ask-user-answer sink (derived from option or agent client). */
   resolvedAskUserAnswerSink: AskUserAnswerSink | null;
@@ -232,6 +247,8 @@ export type CreateSessionRuntimeInternalsOptions = {
   toolCallMarkers?: ToolCallMarkerStore;
   /** Install the interactive nested owner; headless callers retain fail-closed fallback behavior. */
   enableNestedApproval?: boolean;
+  /** Optional explicit directory for reading canonical conversation log envelopes. */
+  conversationLogRoot?: string;
 };
 
 export type CreateConversationSessionOptions = Omit<CreateSessionRuntimeInternalsOptions, 'turnAccumulator'>;
@@ -337,6 +354,11 @@ export type SessionRuntime = {
   compactContext: (options?: {
     signal?: AbortSignal;
     onStarted?: () => void | Promise<void>;
+    onStrategy?: (strategy: 'local' | 'native') => void;
+    onAccounting?: (observation: {
+      usage?: { inputTokens: number; outputTokens: number };
+      costRecords?: readonly ModelRequestCost[];
+    }) => void;
   }) => Promise<LocalCompactionOutcome | { kind: 'busy' } | { kind: 'stale' } | NativeCompactionFailure>;
   logs: SessionLogs;
   approval: SessionApprovalQuery;
@@ -432,6 +454,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     hookEvents: suppliedHookEvents,
     toolCallMarkers: suppliedToolCallMarkers,
     enableNestedApproval = false,
+    conversationLogRoot,
   } = options;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
   const identity = suppliedIdentity ?? new SessionIdentity(initialSessionId, startedAt);
@@ -595,7 +618,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     hotTail: readonly ProviderInputItem[];
     checkpoint: ProviderInputItem;
   }): void => {
-    const envelopes = readConversationLogEnvelopes(identity.current);
+    const envelopes = conversationLogRoot
+      ? readConversationLogEnvelopesFromDirectory(identity.current, conversationLogRoot)
+      : readConversationLogEnvelopes(identity.current);
     const sourceRefs: EventReference[] | null = envelopes
       ? resolveCheckpointSourceRefs({ envelopes, history: input.history, hotTail: input.hotTail })
       : null;
@@ -892,7 +917,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     provider: agentClient?.getProvider?.(),
   });
 
-  const turnAdapter = new SessionTurnAdapter({
+  const turnDomainDeps = {
     agentClient,
     logger,
     sessionId: identity,
@@ -917,24 +942,32 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolCallMarkers,
     hookLifecycle,
     hookEvents,
-  });
-
-  const turnCoordinator = new TurnCoordinator({
-    statusMachine: appState.statusMachine,
-    turnAdapter,
-    approvalFlow,
-    providerContinuity,
-    shellAutoApproval,
+  };
+  const createTurnDomain = () => new SessionTurnDomain(turnDomainDeps);
+  const automaticMemoryFinalizer = new AutomaticMemoryFinalizer({
     sessionId: identity,
     automaticMemory,
     automaticMemoryAllowed: () =>
       !!settingsService?.get('memory.enabled') &&
       sessionAccess?.isReadOnly !== true &&
       !resolveActiveEnforcement(settingsService).denials.has('filesystem-mutation'),
-    hookLifecycle,
-    hookEvents,
   });
-  terminateActiveTurn = () => turnCoordinator.terminate();
+  let compatibilityAdapter: SessionTurnAdapter | undefined;
+  let compatibilityCoordinator: TurnCoordinator | undefined;
+  const getTurnAdapter = () => (compatibilityAdapter ??= new SessionTurnAdapter(turnDomainDeps));
+  const getTurnCoordinator = () =>
+    (compatibilityCoordinator ??= new TurnCoordinator({
+      statusMachine: appState.statusMachine,
+      turnAdapter: getTurnAdapter(),
+      approvalFlow,
+      providerContinuity,
+      shellAutoApproval,
+      sessionId: identity,
+      automaticMemoryFinalizer,
+      hookLifecycle,
+      hookEvents,
+    }));
+  terminateActiveTurn = () => compatibilityCoordinator?.terminate();
 
   const stateFacade = state;
 
@@ -980,7 +1013,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     disposed = true;
     backgroundCheckInScheduler.dispose();
     getMethod<[scheduler: undefined], void>(agentClient, 'setBackgroundCheckInScheduler')?.call(agentClient, undefined);
-    turnAdapter.abortLiveRun();
+    compatibilityAdapter?.abortLiveRun();
     postExecutePending.close();
     generationGuard.invalidate();
     // Abort any active SDK work only if a turn is currently running.
@@ -1044,6 +1077,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const compactContext = async (options?: {
     signal?: AbortSignal;
     onStarted?: () => void | Promise<void>;
+    onStrategy?: (strategy: 'local' | 'native') => void;
+    onAccounting?: (observation: {
+      usage?: { inputTokens: number; outputTokens: number };
+      costRecords?: readonly ModelRequestCost[];
+    }) => void;
   }): Promise<LocalCompactionOutcome | { kind: 'busy' } | { kind: 'stale' } | NativeCompactionFailure> => {
     if (!appState.statusMachine.is('idle')) return { kind: 'busy' };
     const snapshot = record.getProviderHistorySnapshot();
@@ -1075,6 +1113,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       >
     >(agentClient, 'compactCodexSessionHistory');
     if (provider === 'codex' && compactCodex) {
+      options?.onStrategy?.('native');
       const before = estimateContext({
         history: snapshot.history,
         contextWindow: catalog?.contextWindow,
@@ -1084,7 +1123,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       // call, history replacement) is a started compaction whose outcome must
       // be reported with a terminal frame by the caller.
       await options?.onStarted?.();
+      if (options?.signal?.aborted) throw abortError();
       const remote = await compactCodex.call(agentClient, snapshot.history, options?.signal);
+      if (options?.signal?.aborted) throw abortError();
       if (remote.kind !== 'compacted') {
         return remote.kind === 'failed'
           ? // A native codex failure is not a local size outcome. Report it under
@@ -1123,52 +1164,81 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         droppedOpaqueItems: 0,
       };
     }
+    options?.onStrategy?.('local');
     const liveGenerator = getMethod<[string, string], ContextSummaryGenerator>(
       agentClient,
       'createContextSummaryGenerator',
     )?.call(agentClient, identity.current, identity.promptCacheKey);
-    const compactor = new LocalContextCompactor(
-      liveGenerator ?? {
-        generate: async ({ renderedInput, maxOutputTokens, signal }) => {
-          if (signal?.aborted) throw abortError();
-          const chatOptions = {
-            provider,
-            model,
-            reasoningEffort,
-            instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
-            maxTokens: maxOutputTokens,
-            signal,
-          };
-          const aborted = new Promise<never>((_, reject) => {
-            signal?.addEventListener(
-              'abort',
-              () => {
-                getMethod<[], void>(agentClient, 'abort')?.call(agentClient);
-                reject(abortError());
-              },
-              { once: true },
-            );
-          });
-          const generate = async () => {
-            if (agentClient.chatDetailed) {
-              const result = await agentClient.chatDetailed(renderedInput, chatOptions);
-              return {
-                text: result.text,
-                usage: result.usage
-                  ? {
-                      inputTokens: result.usage.prompt_tokens,
-                      outputTokens: result.usage.completion_tokens,
-                    }
-                  : undefined,
-                costRecords: result.costRecords,
-              };
-            }
-            return { text: await agentClient.chat(renderedInput, chatOptions) };
-          };
-          return signal ? Promise.race([generate(), aborted]) : generate();
-        },
+    const baseGenerator: ContextSummaryGenerator = liveGenerator ?? {
+      generate: async ({ renderedInput, maxOutputTokens, signal }) => {
+        if (signal?.aborted) throw abortError();
+        const chatOptions = {
+          provider,
+          model,
+          reasoningEffort,
+          instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
+          maxTokens: maxOutputTokens,
+          signal,
+        };
+        const aborted = new Promise<never>((_, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => {
+              getMethod<[], void>(agentClient, 'abort')?.call(agentClient);
+              reject(abortError());
+            },
+            { once: true },
+          );
+        });
+        const generate = async () => {
+          if (agentClient.chatDetailed) {
+            const result = await agentClient.chatDetailed(renderedInput, chatOptions);
+            return {
+              text: result.text,
+              usage: result.usage
+                ? {
+                    inputTokens: result.usage.prompt_tokens,
+                    outputTokens: result.usage.completion_tokens,
+                  }
+                : undefined,
+              costRecords: result.costRecords,
+            };
+          }
+          return { text: await agentClient.chat(renderedInput, chatOptions) };
+        };
+        return signal ? Promise.race([generate(), aborted]) : generate();
       },
-    );
+    };
+    const compactor = new LocalContextCompactor({
+      requestContext: baseGenerator.requestContext,
+      generate: async (request) => {
+        try {
+          const result = await baseGenerator.generate(request);
+          const hasReportedUsage =
+            result.usage !== undefined &&
+            (typeof result.usage.inputTokens === 'number' || typeof result.usage.outputTokens === 'number');
+          if (hasReportedUsage || (result.costRecords && result.costRecords.length > 0)) {
+            options?.onAccounting?.({
+              ...(hasReportedUsage
+                ? {
+                    usage: {
+                      inputTokens: result.usage?.inputTokens ?? 0,
+                      outputTokens: result.usage?.outputTokens ?? 0,
+                    },
+                  }
+                : {}),
+              ...(result.costRecords && result.costRecords.length > 0 ? { costRecords: result.costRecords } : {}),
+            });
+          }
+          return result;
+        } catch (error) {
+          if (error instanceof AgentChatFailure && error.costRecords.length > 0) {
+            options?.onAccounting?.({ costRecords: error.costRecords });
+          }
+          throw error;
+        }
+      },
+    });
     const outcome = await compactor.compactAtBoundary({
       history: snapshot.history,
       provider,
@@ -1229,7 +1299,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     conversationLogger,
     streamProcessor,
     appState,
-    turnCoordinator,
+    get turnCoordinator() {
+      return getTurnCoordinator();
+    },
     stateFacade,
     runtimeController,
     dispose,
@@ -1246,7 +1318,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retryClassifier,
     retryEventPresenter,
     turnAccumulator: resolvedTurnAccumulator,
-    turnAdapter,
+    get turnAdapter() {
+      return getTurnAdapter();
+    },
+    createTurnDomain,
+    automaticMemoryFinalizer,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost: resolvedSubagentEventSinkHost

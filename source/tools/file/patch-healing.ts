@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../contracts/nested-run-driver.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { applyDiff } from '../../utils/apply-diff.js';
 import {
@@ -16,6 +17,8 @@ export interface PatchHealingResult {
 }
 
 export type PatchHealingDeps = {
+  driverFactory?: NestedRunDriverFactory;
+  modelBinding?: NestedModelBinding;
   settingsService?: ISettingsService;
   loggingService?: ILoggingService;
   providerId?: string;
@@ -182,6 +185,8 @@ export async function healPatchOperation(
       });
     } else if (deps.settingsService && deps.loggingService) {
       modelOutput = await runHealingPrompt(prompt, instructions, model, apiKey, {
+        driverFactory: deps.driverFactory,
+        modelBinding: deps.modelBinding,
         settingsService: deps.settingsService,
         loggingService: deps.loggingService,
         providerId,

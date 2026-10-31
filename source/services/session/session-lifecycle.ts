@@ -149,6 +149,7 @@ export class SessionLifecycle {
     previousResponseId: string | null;
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
+    coveredToolOccurrences?: Iterable<string>;
   }): void {
     const { validated: validatedState, projected } = this.#record.importState(state);
     this.#terminateActiveTurn?.();
@@ -192,6 +193,20 @@ export class SessionLifecycle {
 
   // ── Undo ──────────────────────────────────────────────────────────
 
+  reserveHistoryMutation(command: Parameters<ConversationRecord['reserveHistoryMutation']>[0]) {
+    const reservation = this.#record.reserveHistoryMutation(command);
+    if (reservation.kind !== 'reserved') return reservation;
+    return {
+      kind: 'reserved' as const,
+      apply: () => {
+        if (!reservation.consume()) return null;
+        if (command.kind === 'undo_last') return this.undoLastUserTurn();
+        if (command.kind === 'undo_count') return this.undoNUserTurns(command.count);
+        return this.rewindToTarget(command.targetId as RewindTargetId);
+      },
+    };
+  }
+
   undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.#record.removeLastUserTurn();
     if (removed === null) return null;
@@ -200,15 +215,17 @@ export class SessionLifecycle {
   }
 
   /** Discard the latest attempt, retaining the exact original provider input. */
-  retryLastUserTurn(): boolean {
+  retryLastUserTurn(options?: { logUndo?: boolean }): boolean {
     const retry = this.#record.retryLastUserTurn();
     if (!retry) return false;
     this.#afterUndo();
-    this.#conversationLogger.log({
-      type: 'undo',
-      removedUserTurns: 1,
-      snapshot: { ...this.getCurrentSnapshot(), ...retry.discardedSnapshot },
-    });
+    if (options?.logUndo !== false) {
+      this.#conversationLogger.log({
+        type: 'undo',
+        removedUserTurns: 1,
+        snapshot: { ...this.getCurrentSnapshot(), ...retry.discardedSnapshot },
+      });
+    }
     return true;
   }
 
@@ -269,7 +286,10 @@ export class SessionLifecycle {
     const provider = providerFn
       ? providerFn.call(this.#agentClient)
       : this.#settingsService?.get('agent.modelSelection').provider;
-    const model = this.#settingsService?.get('agent.modelSelection').model;
+    const modelFn = getMethod<[], string>(this.#agentClient, 'getModel');
+    const model =
+      this.#settingsService?.get('agent.modelSelection').model ??
+      (modelFn ? modelFn.call(this.#agentClient) : undefined);
     return this.#record.snapshot({
       previousResponseId: this.#providerContinuity.previousResponseId,
       ...(model ? { model } : {}),
@@ -298,6 +318,7 @@ export class SessionLifecycle {
     previousResponseId: string | null;
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
+    coveredToolOccurrences?: Iterable<string>;
   }): void {
     this.importPersistedState(state);
   }
@@ -345,6 +366,7 @@ export class SessionLifecycle {
 export type SessionState = Pick<
   SessionLifecycle,
   | 'reset'
+  | 'reserveHistoryMutation'
   | 'undoLastUserTurn'
   | 'retryLastUserTurn'
   | 'peekLastToolOutput'

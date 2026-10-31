@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory, NestedModelBinding } from '../contracts/nested-run-driver.js';
 import type { DiscordSend } from '../services/discord/discord-outbound.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
@@ -10,6 +11,7 @@ import type { AgentFactoryDeps } from './agent-factory.js';
 import { buildAgent } from './agent-factory.js';
 import { createEditorImpl } from './editor-impl.js';
 import { getProvider } from '../providers/index.js';
+import type { ProviderDefinition } from '../providers/registry.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
@@ -36,11 +38,15 @@ export interface AgentSource {
 }
 
 export interface AgentConfigurationDeps {
+  assembleAgent?: typeof buildAgent;
+  providerCapabilities?: (providerId: string) => ProviderDefinition['capabilities'];
+  driverFactory?: NestedRunDriverFactory;
+  modelBinding?: NestedModelBinding;
   logger: ILoggingService;
   settings: ISettingsService;
   getGoal?: () => DurableGoal | undefined;
   /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
-  proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
+  proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
   sessionContextService: ISessionContextService;
   executionContext?: ExecutionContext;
   toolInterceptorRegistry: ToolInterceptorRegistry;
@@ -59,6 +65,7 @@ export interface AgentConfigurationDeps {
   /** Root-session-owned output store + watch layer; nested clients omit it. */
   backgroundShellOutput?: BackgroundShellOutputBundle;
   shellChildRegistry?: ShellChildRegistry;
+  scopedSandbox?: import('../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
   /** False for non-interactive / headless sessions where user prompts cannot be answered. */
@@ -93,10 +100,14 @@ export class AgentConfiguration implements AgentSource {
   // Callback for side effects before rebuild
   #onConfigChanged?: (changedKey?: string) => void;
 
+  #driverFactory?: NestedRunDriverFactory;
+  #modelBinding?: NestedModelBinding;
+  #assembleAgent?: typeof buildAgent;
+  #providerCapabilities?: (providerId: string) => ProviderDefinition['capabilities'];
   #logger: ILoggingService;
   #settings: ISettingsService;
   #getGoal?: () => DurableGoal | undefined;
-  #proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
+  #proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
   #executionContext?: ExecutionContext;
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #askUserAnswerStore: AskUserAnswerStore;
@@ -110,6 +121,7 @@ export class AgentConfiguration implements AgentSource {
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
   #shellChildRegistry?: ShellChildRegistry;
+  #scopedSandbox?: import('../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   #allowBackgroundShell: boolean;
   #allowAskUser: boolean;
   #sessionBrowser?: SessionBrowser;
@@ -144,6 +156,10 @@ export class AgentConfiguration implements AgentSource {
     deps: AgentConfigurationDeps,
   ) {
     // Store deps
+    this.#driverFactory = deps.driverFactory;
+    this.#modelBinding = deps.modelBinding;
+    this.#assembleAgent = deps.assembleAgent;
+    this.#providerCapabilities = deps.providerCapabilities;
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#getGoal = deps.getGoal;
@@ -161,6 +177,7 @@ export class AgentConfiguration implements AgentSource {
     this.#backgroundShellRegistry = deps.backgroundShellRegistry;
     this.#backgroundShellOutput = deps.backgroundShellOutput;
     this.#shellChildRegistry = deps.shellChildRegistry;
+    this.#scopedSandbox = deps.scopedSandbox;
     this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
     this.#allowAskUser = deps.allowAskUser ?? true;
     this.#sessionBrowser = deps.sessionBrowser;
@@ -192,7 +209,7 @@ export class AgentConfiguration implements AgentSource {
       this.#agent = config.agentOverride;
     } else {
       this.#isTransientClient = false;
-      const buildResult = buildAgent(
+      const buildResult = (this.#assembleAgent ?? buildAgent)(
         { selection: this.#selection, reasoningEffort: config.reasoningEffort },
         this.#buildFactoryDeps(),
       );
@@ -204,7 +221,9 @@ export class AgentConfiguration implements AgentSource {
   // AgentSource implementation
   getAgent(sessionId?: string, promptCacheKey?: string): ApplicationAgent {
     if (sessionId && !this.#isTransientClient) {
-      const capabilities = getProvider(this.#selection.provider)?.capabilities;
+      const capabilities = this.#providerCapabilities
+        ? this.#providerCapabilities(this.#selection.provider)
+        : getProvider(this.#selection.provider)?.capabilities;
       const supportsPromptCacheKey = capabilities?.supportsPromptCacheKey;
       if (!supportsPromptCacheKey || !sessionId) {
         return this.#agent;
@@ -264,6 +283,8 @@ export class AgentConfiguration implements AgentSource {
   // Build the factory deps (used by buildAgent and for agent rebuilds)
   #buildFactoryDeps(approvalPolicyRegistry = this.#approvalPolicyRegistry): AgentFactoryDeps {
     return {
+      driverFactory: this.#driverFactory,
+      modelBinding: this.#modelBinding,
       settings: this.#settings,
       logger: this.#logger,
       ...(this.#getGoal ? { getGoal: this.#getGoal } : {}),
@@ -305,6 +326,7 @@ export class AgentConfiguration implements AgentSource {
       backgroundShellRegistry: this.#backgroundShellRegistry,
       backgroundShellOutput: this.#backgroundShellOutput,
       shellChildRegistry: this.#shellChildRegistry,
+      scopedSandbox: this.#scopedSandbox,
       allowBackgroundShell: this.#allowBackgroundShell,
       allowAskUser: this.#allowAskUser,
       sessionBrowser: this.#sessionBrowser,
@@ -342,7 +364,7 @@ export class AgentConfiguration implements AgentSource {
   rebuildAgent(): void {
     if (this.#isTransientClient) return;
     const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
-    const buildResult = buildAgent(
+    const buildResult = (this.#assembleAgent ?? buildAgent)(
       {
         selection: this.#selection,
         reasoningEffort: this.#reasoningEffort as any,

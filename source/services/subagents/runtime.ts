@@ -1,3 +1,4 @@
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../contracts/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
@@ -20,6 +21,8 @@ import type { SessionBrowser } from '../conversation/session-browser.js';
 import { classifyPoolEntryFailure } from '../retry/provider-failure-classification.js';
 
 export interface SubagentRuntimeDeps {
+  driverFactory?: NestedRunDriverFactory;
+  modelBinding?: NestedModelBinding;
   logger: ILoggingService;
   settings: ISettingsService;
   sessionContextService: ISessionContextService;
@@ -34,6 +37,7 @@ export interface SubagentRuntimeDeps {
   /** Session-owned queue/control sink for pauses from adopted child runs. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   readOnly?: boolean;
+  scopedSandbox?: import('../../utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   sessionBrowser?: SessionBrowser;
 }
 
@@ -76,6 +80,8 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
   });
 
   const toolFactory = new SubagentToolFactory({
+    driverFactory: deps.driverFactory,
+    modelBinding: deps.modelBinding,
     settings: deps.settings,
     logger: deps.logger,
     executionContext: deps.executionContext,
@@ -83,6 +89,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     skillsService: deps.skillsService,
     nestedCompatibility,
     readOnly: deps.readOnly,
+    scopedSandbox: deps.scopedSandbox,
     sessionBrowser: deps.sessionBrowser,
   });
 
@@ -94,6 +101,8 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
   const rolePoolSelector = new SubagentRolePoolSelector(deps.settings);
 
   const nestedRunner = new NestedSubagentRunner({
+    driverFactory: deps.driverFactory,
+    modelBinding: deps.modelBinding,
     logger: deps.logger,
     settings: deps.settings,
     sessionContextService: deps.sessionContextService,
@@ -161,6 +170,8 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
 
   const mentorSession = new SubagentSession('mentor', 'mentor');
   const mentorRunner = new MentorRunner({
+    driverFactory: deps.driverFactory,
+    modelBinding: deps.modelBinding,
     logger: deps.logger,
     settings: deps.settings,
     sessionContextService: deps.sessionContextService,

@@ -1,3 +1,4 @@
+import { createLegacyNestedRunDriver } from '../agent-runtime/legacy-nested-driver.js';
 import { expect, it, vi } from 'vitest';
 import type { Message } from '../../types/message.js';
 import { splitStaticHistory } from '../../components/message/MessageList.js';
@@ -70,6 +71,7 @@ const sessionContextService = {
 it('projects background lifecycle without making the foreground message history dynamic', async () => {
   managerInstances.length = 0;
   const bridge = new SubagentBridge({
+    driverFactory: createLegacyNestedRunDriver,
     logger: logger as any,
     settings: settings as any,
     sessionContextService: sessionContextService as any,

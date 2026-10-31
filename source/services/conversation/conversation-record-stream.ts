@@ -71,14 +71,20 @@ export const lastOpenAICompaction = (items: readonly unknown[]): ProviderOpaqueI
 const compactedProviderHistory = (
   existingHistory: readonly ProviderInputItem[],
   output: readonly unknown[],
-): ProviderInputItem[] | undefined => {
+): { history: ProviderInputItem[]; checkpoint: ProviderInputItem; replaced: number; index: number } | undefined => {
   const compaction = lastOpenAICompaction(output);
   if (!compaction) return undefined;
   const userTurns = existingHistory.filter((item) => {
     const message = projectConversationMessage(item);
     return message?.role === 'user' && !message.isSynthetic;
   });
-  return [...userTurns, projectPersistedAssistantItemToProviderHistory(compaction)];
+  const checkpoint = projectPersistedAssistantItemToProviderHistory(compaction);
+  return {
+    history: [...userTurns, checkpoint],
+    checkpoint,
+    replaced: existingHistory.length - userTurns.length,
+    index: userTurns.length,
+  };
 };
 
 const toolItemSignature = (item: unknown): string | null => {
@@ -171,14 +177,22 @@ const warnIfStreamHistoryReplayedTools = ({
 export function selectAcceptedStreamHistory(input: {
   stream: AgentStream;
   toolLedger?: SavedToolExecution[];
+  coveredToolOccurrences?: ReadonlySet<string>;
   history: ProviderInputItem[];
   inputMode: 'delta' | 'full_history';
   source: StreamHistorySource;
   logger: ILoggingService;
   sessionId: SessionIdSource;
-}): { terminal: boolean; history?: ProviderInputItem[]; lastResponseId: string | null } {
-  const { stream, inputMode, source, logger, sessionId } = input;
-  const history = alignHistoryToolOccurrences(input.history, input.toolLedger ?? []) as ProviderInputItem[];
+}): {
+  terminal: boolean;
+  history?: ProviderInputItem[];
+  lastResponseId: string | null;
+  compactionEvidence?: { checkpoint: ProviderInputItem; replaced: number; index: number };
+} {
+  const { stream, inputMode, source, logger, sessionId, coveredToolOccurrences } = input;
+  const align = (items: readonly unknown[]) =>
+    alignHistoryToolOccurrences(items, input.toolLedger ?? [], coveredToolOccurrences);
+  const history = align(input.history) as ProviderInputItem[];
   const snapshot = extractFinalizationSnapshot(stream);
   const projected = {
     history: canonicalProviderHistoryItems(snapshot.history),
@@ -189,7 +203,7 @@ export function selectAcceptedStreamHistory(input: {
   warnIfStreamHistoryReplayedTools({ logger, sessionId, source, snapshot: extractReplaySnapshot(stream) });
   if (!terminal) return { terminal, lastResponseId: snapshot.lastResponseId };
   const append = (items: unknown[]): ProviderInputItem[] => {
-    const offered = alignHistoryToolOccurrences(canonicalProviderHistoryItems(items), input.toolLedger ?? []);
+    const offered = align(canonicalProviderHistoryItems(items));
     const { kept, droppedSignatures } = dropAlreadyCommittedToolItems(offered, history);
     if (droppedSignatures.length)
       logger.warn('Dropped replayed tool call/result items before committing stream history', {
@@ -207,21 +221,32 @@ export function selectAcceptedStreamHistory(input: {
     return [...history, ...(kept as ProviderInputItem[])];
   };
   let accepted: ProviderInputItem[] | undefined;
+  let compactionEvidence: { checkpoint: ProviderInputItem; replaced: number; index: number } | undefined;
   const replacement = compactedProviderHistory(history, projected.output);
   const hasCanonicalItems = [...snapshot.newItems, ...snapshot.output].some(isCanonicalApplicationItemEvent);
   if (stream.historyReplacedByCompaction && projected.history.length) {
     // Acceptance cannot depend on a presentation log sink replaying assistant_turn.
-    accepted = alignHistoryToolOccurrences(projected.history, input.toolLedger ?? []) as ProviderInputItem[];
-  } else if (replacement) accepted = replacement;
-  else if (inputMode === 'delta') {
+    accepted = align(projected.history) as ProviderInputItem[];
+  } else if (replacement) {
+    accepted = replacement.history;
+    compactionEvidence = {
+      checkpoint: replacement.checkpoint,
+      replaced: replacement.replaced,
+      index: replacement.index,
+    };
+  } else if (inputMode === 'delta') {
     if (projected.output.length) accepted = append(projected.output);
   } else if (hasCanonicalItems && hasConversationMessageItems(projected.history)) {
-    accepted = alignHistoryToolOccurrences(projected.history, input.toolLedger ?? []) as ProviderInputItem[];
+    accepted = align(projected.history) as ProviderInputItem[];
   } else if (hasConversationMessageItems(projected.newItems)) accepted = append(projected.newItems);
   else if (hasConversationMessageItems(projected.output)) accepted = append(projected.output);
-  else if (hasConversationMessageItems(projected.history))
-    accepted = alignHistoryToolOccurrences(projected.history, input.toolLedger ?? []) as ProviderInputItem[];
+  else if (hasConversationMessageItems(projected.history)) accepted = align(projected.history) as ProviderInputItem[];
   else if (hasToolResultItems(projected.newItems)) accepted = append(projected.newItems);
   else if (hasToolResultItems(projected.output)) accepted = append(projected.output);
-  return { terminal, ...(accepted ? { history: accepted } : {}), lastResponseId: snapshot.lastResponseId };
+  return {
+    terminal,
+    ...(accepted ? { history: accepted } : {}),
+    ...(compactionEvidence ? { compactionEvidence } : {}),
+    lastResponseId: snapshot.lastResponseId,
+  };
 }

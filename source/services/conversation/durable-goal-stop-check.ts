@@ -373,42 +373,58 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
  * Only root clients get this policy, and `run_code` cannot call `goal_check`.
  * The check must name the goal read here (`formatRecordedGoalCheck`): a check
  * recorded for a goal that was replaced mid-turn never closes its successor.
+ *
+ * A callback that returns a promise (the adopted session's durable goal write)
+ * is awaited, and the decision reports `goalMarkedAchieved` only once that
+ * write settles; a synchronous callback keeps the decision synchronous.
  */
 export function createGoalStopPolicy(
   getGoal: () => DurableGoal | undefined,
-  onGoalAchieved?: (goal: DurableGoal) => void,
-): (history: readonly ProviderInputItem[], agent: Pick<ApplicationAgent, 'tools'>) => NormalStopDecision {
+  onGoalAchieved?: (goal: DurableGoal) => void | Promise<void>,
+): (
+  history: readonly ProviderInputItem[],
+  agent: Pick<ApplicationAgent, 'tools'>,
+) => NormalStopDecision | Promise<NormalStopDecision> {
   return (history, agent) => {
     if (!agent.tools.some((tool) => tool.name === TOOL_NAME_GOAL_CHECK)) return { action: 'stop' };
     const goal = getGoal();
     const decision = decideGoalStop(goal, history);
     if (decision.reason === 'no_active_goal') return { action: 'stop' };
-    let goalMarkedAchieved: boolean | undefined;
     if (decision.reason === 'achieved' && goal?.status === 'active' && onGoalAchieved) {
+      let written: void | Promise<void>;
       try {
-        onGoalAchieved({ ...goal, status: 'achieved' });
-        goalMarkedAchieved = true;
+        written = onGoalAchieved({ ...goal, status: 'achieved' });
       } catch {
         // The surface reports its own persistence failure; the turn still stops.
-        goalMarkedAchieved = false;
+        return goalStopResult(decision, false);
       }
+      if (written instanceof Promise)
+        return written.then(
+          () => goalStopResult(decision, true),
+          () => goalStopResult(decision, false),
+        );
+      return goalStopResult(decision, true);
     }
-    const diagnostics = {
-      guard: 'goal_stop_check',
-      guardClass: 'runaway',
-      reason: decision.reason,
-      limit: MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK,
-      turnLimit: MAX_GOAL_STOP_REMINDERS_PER_TURN,
-      ...('remindersWithoutWork' in decision ? { remindersWithoutWork: decision.remindersWithoutWork } : {}),
-      ...('remindersThisTurn' in decision ? { remindersThisTurn: decision.remindersThisTurn } : {}),
-      ...('limitReached' in decision ? { limitReached: decision.limitReached } : {}),
-      ...('lastProblem' in decision ? { lastProblem: decision.lastProblem } : {}),
-      ...(goalMarkedAchieved !== undefined ? { goalMarkedAchieved } : {}),
-    };
-    if (decision.action === 'continue') return { action: 'continue', reminder: decision.reminder, diagnostics };
-    if (decision.reason === 'unresolved') {
-      return { action: 'stop', terminalCause: decision.terminalCause, diagnostics };
-    }
-    return { action: 'stop', diagnostics };
+    return goalStopResult(decision, undefined);
   };
+}
+
+function goalStopResult(decision: GoalStopDecision, goalMarkedAchieved: boolean | undefined): NormalStopDecision {
+  const diagnostics = {
+    guard: 'goal_stop_check',
+    guardClass: 'runaway',
+    reason: decision.reason,
+    limit: MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK,
+    turnLimit: MAX_GOAL_STOP_REMINDERS_PER_TURN,
+    ...('remindersWithoutWork' in decision ? { remindersWithoutWork: decision.remindersWithoutWork } : {}),
+    ...('remindersThisTurn' in decision ? { remindersThisTurn: decision.remindersThisTurn } : {}),
+    ...('limitReached' in decision ? { limitReached: decision.limitReached } : {}),
+    ...('lastProblem' in decision ? { lastProblem: decision.lastProblem } : {}),
+    ...(goalMarkedAchieved !== undefined ? { goalMarkedAchieved } : {}),
+  };
+  if (decision.action === 'continue') return { action: 'continue', reminder: decision.reminder, diagnostics };
+  if (decision.reason === 'unresolved') {
+    return { action: 'stop', terminalCause: decision.terminalCause, diagnostics };
+  }
+  return { action: 'stop', diagnostics };
 }

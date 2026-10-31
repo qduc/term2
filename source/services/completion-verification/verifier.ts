@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  ApplicationRunLoop,
-  type ApplicationAgent,
-  type ApplicationRunLoopDeps,
-} from '../agent-runtime/application-run-loop.js';
+import type { ApplicationAgent, NestedRunDriverFactory } from '../../contracts/nested-run-driver.js';
 import {
   reportSchema,
   type VerificationRequest,
@@ -16,7 +12,8 @@ export const VERIFIER_VERSION = 'fresh-repository-verifier-v1';
 
 /** Fresh run, literal instructions, a single original-goal message, no inherited history or memory. */
 export function createIndependentVerifier(deps: {
-  resolveModel: ApplicationRunLoopDeps['resolveModel'];
+  resolveModel: Parameters<NestedRunDriverFactory>[0]['resolveModel'];
+  driverFactory: NestedRunDriverFactory;
   model: () => string;
 }) {
   return async (request: VerificationRequest, signal: AbortSignal): Promise<VerificationReport> => {
@@ -25,7 +22,7 @@ export function createIndependentVerifier(deps: {
     let deniedMutation = false;
     // One transport per independent attempt, reused only within this fresh run.
     const model = Promise.resolve().then(() => deps.resolveModel(deps.model()));
-    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const loop = deps.driverFactory({ resolveModel: () => model });
     const agent: ApplicationAgent = {
       name: 'Independent completion verifier',
       model: deps.model(),

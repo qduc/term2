@@ -28,6 +28,7 @@ import { mcpMemberName } from './tools/system/run-code/mcp-script-surface.js';
 import { createConversationLogWriter } from './services/logging/conversation-log-writer.js';
 import { type RestoredState, getConversationsDir } from './services/conversation/conversation-persistence.js';
 import type { DurableGoal } from './services/logging/conversation-log-events.js';
+import type { LogEvent } from './services/logging/conversation-log-events.js';
 import { formatGoalClosedByCheck, type GoalAchievedSlot } from './services/conversation/durable-goal.js';
 import {
   GOAL_CHECK_UNRESOLVED_CAUSE,
@@ -92,6 +93,41 @@ export interface NonInteractiveConfig {
   abort?: () => void;
   mcpAllowlist?: readonly string[];
   mcpToolSource?: import('./services/mcp/mcp-tool-source.js').McpToolSource;
+}
+
+export interface NonInteractivePersistence {
+  capture(event: LogEvent): void;
+  admit(input: { prompt: string; userMessageId: string }): Promise<void>;
+  beforeDecision(input: { answer: string; rejectionReason?: string; approvalAnswer?: string }): Promise<void>;
+  eventBoundary(event: ConversationEvent): Promise<void>;
+  flush(): Promise<void>;
+  assertHealthy(): void;
+  dispose(): Promise<void>;
+}
+
+export type NonInteractivePersistenceFactoryInput = {
+  readonly sessionId: string;
+  readonly resumedConversation: RestoredState | undefined;
+  readonly metadata: Partial<import('./services/logging/conversation-log-events.js').SessionInitEvent> & {
+    readonly createdAt: string;
+  };
+  readonly settingsService: ISettingsService;
+  readonly logger: ILoggingService;
+  readonly runtime: ReturnType<typeof createConversationRuntime>['runtime'];
+  readonly adapter: ReturnType<typeof createConversationRuntime>['adapter'];
+};
+export type NonInteractivePersistenceFactory = (
+  input: NonInteractivePersistenceFactoryInput,
+) => Promise<NonInteractivePersistence>;
+
+let nonInteractivePersistenceFactory: NonInteractivePersistenceFactory | null = null;
+/** Install a process-local C2 proof composition; legacy CLI callers never install this. */
+export function installNonInteractivePersistenceFactory(factory: NonInteractivePersistenceFactory): () => void {
+  if (nonInteractivePersistenceFactory) throw new Error('A non-interactive persistence factory is already installed.');
+  nonInteractivePersistenceFactory = factory;
+  return () => {
+    if (nonInteractivePersistenceFactory === factory) nonInteractivePersistenceFactory = null;
+  };
 }
 
 export const createNonInteractiveSessionId = (): string => `non-interactive-${randomUUID()}`;
@@ -617,8 +653,10 @@ export async function runNonInteractive(
   });
 
   let runtime: ReturnType<typeof createConversationRuntime>['runtime'] | undefined;
+  let persistence: NonInteractivePersistence | undefined;
   let logWriter: ReturnType<typeof createConversationLogWriter> | undefined;
   let fatal = false;
+  let runFailure: unknown;
   try {
     const createdRuntime = createConversationRuntime({
       sessionId,
@@ -633,6 +671,13 @@ export async function runNonInteractive(
       },
       hookLifecycle: config.hookLifecycle ?? clientHandle.hookLifecycle,
       hookEvents: config.hookEvents ?? clientHandle.hookEvents,
+      ...(nonInteractivePersistenceFactory
+        ? {
+            awaitLogBoundary: async (event: ConversationEvent) => {
+              await persistence?.eventBoundary(event);
+            },
+          }
+        : {}),
     });
     runtime = createdRuntime.runtime;
     if (config.resumedConversation) {
@@ -653,14 +698,7 @@ export async function runNonInteractive(
       }
     }
     {
-      logWriter = createConversationLogWriter({
-        sessionId,
-        dir: getConversationsDir(),
-        logger: config.logger,
-      });
-      logWriter.init({
-        id: sessionId,
-        createdAt: createdRuntime.runtime.sessionStartedAt,
+      const metadata = {
         projectPath: process.cwd(),
         ...getProfileMetadata(config.settingsService.get('app.activeProfileId')),
         model: config.settingsService.get('agent.modelSelection').model,
@@ -670,18 +708,47 @@ export async function runNonInteractive(
           : {}),
         ...(config.resumedConversation?.forkedFrom ? { forkedFrom: config.resumedConversation.forkedFrom } : {}),
         ...(config.resumedConversation?.rolloverFrom ? { rolloverFrom: config.resumedConversation.rolloverFrom } : {}),
-      });
-      if (config.initialGoal) {
-        logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });
-        config.onGoalPersisted?.(config.initialGoal);
+      };
+      if (nonInteractivePersistenceFactory) {
+        persistence = await nonInteractivePersistenceFactory({
+          sessionId,
+          resumedConversation: config.resumedConversation,
+          metadata: { ...metadata, createdAt: createdRuntime.runtime.sessionStartedAt },
+          settingsService: config.settingsService,
+          logger: config.logger,
+          runtime: createdRuntime.runtime,
+          adapter: createdRuntime.adapter,
+        });
+        createdRuntime.runtime.logs.setLogSink((event) => persistence!.capture(event));
+        if (config.initialGoal) {
+          persistence.capture({ type: 'goal_changed', version: 1, goal: config.initialGoal });
+          await persistence.flush();
+          config.onGoalPersisted?.(config.initialGoal);
+        }
+      } else {
+        logWriter = createConversationLogWriter({
+          sessionId,
+          dir: getConversationsDir(),
+          logger: config.logger,
+        });
+        logWriter.init({
+          id: sessionId,
+          createdAt: createdRuntime.runtime.sessionStartedAt,
+          ...metadata,
+        });
+        if (config.initialGoal) {
+          logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });
+          config.onGoalPersisted?.(config.initialGoal);
+        }
+        createdRuntime.runtime.logs.setLogSink((event) => logWriter!.append(event));
       }
-      createdRuntime.runtime.logs.setLogSink((event) => logWriter!.append(event));
       if (config.goalAchievedSlot) {
         // Same write as the launch goal above: append, then publish to prompt readers.
         const goalStderr = config.stderr ?? process.stderr;
         config.goalAchievedSlot.handler = (goal) => {
           try {
-            logWriter!.append({ type: 'goal_changed', version: 1, goal, source: 'goal_check' });
+            if (persistence) persistence.capture({ type: 'goal_changed', version: 1, goal, source: 'goal_check' });
+            else logWriter!.append({ type: 'goal_changed', version: 1, goal, source: 'goal_check' });
           } catch (error) {
             goalStderr.write(`Goal update failed: ${error instanceof Error ? error.message : String(error)}\n`);
             throw error;
@@ -692,7 +759,11 @@ export async function runNonInteractive(
       }
       // Headless turns have no UI message writer. Commit the accepted request
       // before dispatch so a context/budget pause can actually be resumed.
-      logWriter.append({ type: 'user_message', message: { id: randomUUID(), sender: 'user', text: config.prompt } });
+      if (persistence) {
+        await persistence.admit({ prompt: config.prompt, userMessageId: randomUUID() });
+      } else {
+        logWriter!.append({ type: 'user_message', message: { id: randomUUID(), sender: 'user', text: config.prompt } });
+      }
     }
     if (config.settingsService) {
       primeActiveProfileNoticeIfActive(config.settingsService, (text) => {
@@ -710,7 +781,38 @@ export async function runNonInteractive(
         }),
       );
     }
-    return await runWithSession(createdRuntime.adapter, {
+    let firstSend = true;
+    const session = persistence
+      ? {
+          sendMessage: async (input: string | UserTurn, options?: SendMessageOptions) => {
+            persistence!.assertHealthy();
+            if (firstSend) firstSend = false;
+            else
+              await persistence!.admit({
+                prompt: typeof input === 'string' ? input : input.text,
+                userMessageId: randomUUID(),
+              });
+            const result = await createdRuntime.adapter.sendMessage(input, options);
+            persistence!.assertHealthy();
+            return result;
+          },
+          handleApprovalDecision: async (
+            answer: string,
+            rejectionReason?: string,
+            options?: HandleApprovalDecisionOptions,
+          ) => {
+            persistence!.assertHealthy();
+            await persistence!.beforeDecision({ answer, rejectionReason, approvalAnswer: options?.approvalAnswer });
+            const result = await createdRuntime.adapter.handleApprovalDecision(answer, rejectionReason, options);
+            persistence!.assertHealthy();
+            return result;
+          },
+          setEventSink: (sink: ((event: ConversationEvent) => void) | null) =>
+            createdRuntime.adapter.setEventSink(sink),
+          exportState: () => createdRuntime.runtime.state.exportState(),
+        }
+      : createdRuntime.adapter;
+    return await runWithSession(session, {
       ...config,
       recoverySessionId: sessionId,
       agentClient: clientHandle.agentClient,
@@ -743,6 +845,7 @@ export async function runNonInteractive(
     });
   } catch (error) {
     fatal = true;
+    runFailure = error;
     throw error;
   } finally {
     removeBackgroundShellInterceptor();
@@ -757,7 +860,20 @@ export async function runNonInteractive(
     await runtime?.shutdown();
     if (config.goalAchievedSlot) config.goalAchievedSlot.handler = undefined;
     runtime?.logs.setLogSink(null);
-    await logWriter?.close();
+    if (persistence) {
+      try {
+        persistence.assertHealthy();
+        await persistence.flush();
+      } catch (error) {
+        if (runFailure === undefined) {
+          fatal = true;
+          runFailure = error;
+        }
+      } finally {
+        await persistence.dispose();
+      }
+    } else await logWriter?.close();
     clientHandle.dispose();
   }
+  if (runFailure !== undefined) throw runFailure;
 }

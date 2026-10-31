@@ -1,0 +1,1740 @@
+{
+  "about": "Port tracker. One entry per feature of the current architecture. status: todo | in_progress | adopted | ported | dropped. parity: scenario ids in rewrite/parity/scenarios that prove it. Entries with manual: true are behaviours no extractor can see. Maintained by rewrite/parity/inventory.mjs.",
+  "features": {
+    "behaviour:approval-call-binding": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:auto-approve-policy": {
+      "status": "todo",
+      "manual": true,
+      "parity": [
+        "shell-auto-approve",
+        "tools-batch"
+      ],
+      "consumedByNewCode": true
+    },
+    "behaviour:background-shell-jobs": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:context-compaction": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:headless-prompt-run": {
+      "status": "in_progress",
+      "manual": true,
+      "parity": [
+        "headless-plain-answer",
+        "settings-batch"
+      ],
+      "consumedByNewCode": true
+    },
+    "behaviour:headless-refuses-unapproved-tools": {
+      "status": "todo",
+      "manual": true,
+      "parity": [
+        "shell-refused-without-approval"
+      ],
+      "consumedByNewCode": true
+    },
+    "behaviour:input-queue": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:interactive-tui": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:mcp-servers": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:old-conversations-resumable": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:profile-tool-surface": {
+      "status": "in_progress",
+      "manual": true,
+      "parity": [
+        "headless-plain-answer",
+        "unknown-tool-call",
+        "settings-batch"
+      ],
+      "consumedByNewCode": true
+    },
+    "behaviour:resume-replays-history": {
+      "status": "todo",
+      "manual": true,
+      "parity": [
+        "resume-follow-up"
+      ],
+      "consumedByNewCode": true
+    },
+    "behaviour:sandbox-execution": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:skills-discovery": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:ssh-remote-workspace": {
+      "status": "todo",
+      "manual": true,
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "behaviour:unknown-tool-result": {
+      "status": "todo",
+      "manual": true,
+      "parity": [
+        "unknown-tool-call"
+      ],
+      "consumedByNewCode": true
+    },
+    "cli-flag:auto-approve": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": [
+        "shell-auto-approve"
+      ]
+    },
+    "cli-flag:codex-login": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:control-socket": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:discord-input": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:fork": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:goal": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:goal-criteria": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:grok-login": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:help": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:json": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": [
+        "json-events"
+      ]
+    },
+    "cli-flag:list-models": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:lite": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:model": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:profile": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": [
+        "unknown-tool-call"
+      ]
+    },
+    "cli-flag:provider": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:quiet": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:reasoning": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:refresh": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:remote-dir": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:resume": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": [
+        "resume-follow-up"
+      ]
+    },
+    "cli-flag:show-reasoning": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:ssh": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:ssh-port": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-flag:version": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-subcommand:acp": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-subcommand:control": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-subcommand:discord": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "cli-subcommand:serve": {
+      "status": "todo",
+      "source": "source/cli.tsx",
+      "parity": []
+    },
+    "gateway-route:abort": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:command_invoke": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:credential_delete": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:credential_write": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:events_connect": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:interaction_resolve": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:message_submit": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:model_list": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:oauth_delete": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:oauth_login": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:oauth_select": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:session_create": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:session_list": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:session_read": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:session_update": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:settings_read": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:settings_write": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:workspace_candidate_browse": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:workspace_candidate_select": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:workspace_candidate_validate": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "gateway-route:workspace_list": {
+      "status": "todo",
+      "source": "source/gateway/gateway.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:approval.requested": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:approval.resolved": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:session.end": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:session.start": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:status.change": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:tool.after": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:tool.before": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:tool.error": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:turn.end": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:turn.error": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "hook-event:turn.start": {
+      "status": "todo",
+      "source": "source/services/hooks/hook-contracts.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:approval_required": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:approval_resolved": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:assistant_journal_delta": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:assistant_journal_item": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:assistant_turn": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:background_shell_completed": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:background_shell_output": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:background_shell_started": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:command_message": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:context_checkpoint_created": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:context_compaction_recorded": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:error": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:events_retracted": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:goal_changed": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:memory_injected": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:openai_root_checkpoint_lifecycle": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:openai_root_selector_parity": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:session_cleared": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:session_init": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:session_rollover": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:settings_changed": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:subagent_completed": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:subagent_interrupted": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:subagent_question": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:subagent_started": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:subagent_tool_started": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:subagent_transferred": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:tool_output_rewound": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:tool_result": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:tool_started": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:undo": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:user_input_accepted": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:user_message": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "log-event:user_turn_retried": {
+      "status": "todo",
+      "source": "source/services/logging/conversation-log-events.ts",
+      "parity": [],
+      "consumedByNewCode": true
+    },
+    "provider:ai-sdk-anthropic": {
+      "status": "todo",
+      "source": "source/providers/ai-sdk-anthropic.provider.ts",
+      "parity": []
+    },
+    "provider:ai-sdk-google": {
+      "status": "todo",
+      "source": "source/providers/ai-sdk-google.provider.ts",
+      "parity": []
+    },
+    "provider:ai-sdk-openrouter": {
+      "status": "todo",
+      "source": "source/providers/ai-sdk-openrouter.provider.ts",
+      "parity": []
+    },
+    "provider:codex": {
+      "status": "todo",
+      "source": "source/providers/codex.provider.ts",
+      "parity": []
+    },
+    "provider:grok": {
+      "status": "todo",
+      "source": "source/providers/grok.provider.ts",
+      "parity": []
+    },
+    "provider:llama-cpp": {
+      "status": "todo",
+      "source": "source/providers/llama-cpp.provider.ts",
+      "parity": []
+    },
+    "provider:neuralwatt": {
+      "status": "todo",
+      "source": "source/providers/neuralwatt.provider.ts",
+      "parity": []
+    },
+    "provider:openai": {
+      "status": "todo",
+      "source": "source/providers/openai.provider.ts",
+      "parity": []
+    },
+    "provider:openai-compatible": {
+      "status": "todo",
+      "source": "source/providers/openai-compatible.provider.ts",
+      "parity": []
+    },
+    "provider:opencode": {
+      "status": "todo",
+      "source": "source/providers/opencode.provider.ts",
+      "parity": []
+    },
+    "provider:openrouter": {
+      "status": "todo",
+      "source": "source/providers/openrouter.provider.ts",
+      "parity": []
+    },
+    "setting:agent.autoApproveReasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.backgroundCheckIn.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.backgroundCheckIn.intervalMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.backgroundWaitTimeoutMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.balancedModel": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.balancedReasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.cheapModel": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.cheapReasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.choreModel": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.codex.websocketFirstFrameTimeoutMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.codex.websocketInterFrameTimeoutMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.completionVerification": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.contextCompaction.compactThreshold": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.contextCompaction.compactThresholdTokens": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.contextCompaction.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.contextCompaction.mode": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.decisionModel": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.disabledProviders": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.favoriteModels": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.maxModelRequestDurationMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.maxModelStreamIdleMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.maxOutputTokens": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:agent.maxParallelToolCalls": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.maxRequestInputTokens": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.maxStreamOutputChars": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.maxTurns": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.mentorPool": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.mentorReasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.mentorSamples": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.modelNicknames": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.modelSelection": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:agent.openai.apiKey": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.openrouter.apiKey": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.openrouter.baseUrl": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.openrouter.referrer": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.openrouter.title": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.reasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:agent.retryAttempts": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.escalation": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.extensionPercent": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.identicalToolCallThreshold": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.maxActiveTimeMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.maxParentExtensions": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.maxUnpricedTokens": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.maxUsdMicros": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.softHeadroomActiveTimeMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.softHeadroomUnpricedTokens": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.softHeadroomUsdMicros": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.turnBackstop": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.warningHeadroomActiveTimeMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.warningHeadroomUnpricedTokens": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.runBudget.warningHeadroomUsdMicros": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.sessionRollover.autoBrief": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.sessionRollover.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.sessionRollover.milestones": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.smartModel": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.smartReasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.subagentExplorerReasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.subagentLibrarianReasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.subagentWorkerReasoningEffort": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.temperature": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:agent.transport": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.useFlexServiceTier": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:agent.verificationMaxRepairs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.activeProfileId": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:app.liteMode": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.mentorMode": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.notifications": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.notificationsOnApproval": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.notificationsOnComplete": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.orchestratorMode": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.planMode": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.searchViaShell": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:app.shellPath": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:debug.debugBashTool": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:enable_agent_workflow": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:environment.nodeEnv": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:hooks.includeToolArguments": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:hooks.includeToolResults": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:hooks.includeUserText": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:hooks.project.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:hooks.timeoutMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:hooks.trustedProjectRoots": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:hooks.user.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:logging.debugLogging": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:logging.disableLogging": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:logging.logLevel": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:logging.suppressConsoleOutput": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:memory.contextBudgetChars": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:memory.directory": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:memory.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:memory.searchDefaultLimit": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:memory.searchMaxLimit": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:sandbox.allowNetworking": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:sandbox.allowReadExtra": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:sandbox.dockerHostControlProjects": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:sandbox.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:sandbox.readPolicy": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:shell.autoApproveMode": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:shell.backgroundTimeout": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:shell.maxOutputChars": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:shell.maxOutputLines": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:shell.timeout": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ssh.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ssh.host": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ssh.port": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ssh.remoteDir": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ssh.username": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:subagent.asyncMessageCap": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:subagent.asyncSessionTtlMs": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.backgroundTasks.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.codeContext.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.enableEditHealing": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.fileRead.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.fileWrite.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:tools.logFileOperations": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.memory.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:tools.mentor.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.sessions.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.shell.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:tools.skills.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.subagents.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:tools.userInteraction.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:tools.web.enabled": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": [
+        "settings-batch"
+      ]
+    },
+    "setting:ui.displayMode": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ui.historySize": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ui.pasteThreshold": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ui.skin": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:ui.theme": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:verifier.model": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:webSearch.exa.apiKey": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:webSearch.firecrawl.apiKey": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:webSearch.firecrawl.baseUrl": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:webSearch.provider": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:webSearch.searxng.baseUrl": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "setting:webSearch.tavily.apiKey": {
+      "status": "todo",
+      "source": "source/services/settings/settings-schema.ts",
+      "parity": []
+    },
+    "slash:auto-approve": {
+      "status": "todo",
+      "source": "source/commands/auto-approve-command.ts",
+      "parity": []
+    },
+    "slash:bridge": {
+      "status": "todo",
+      "source": "source/commands/bridge-command.ts",
+      "parity": []
+    },
+    "slash:clear": {
+      "status": "todo",
+      "source": "source/commands/clear-command.ts",
+      "parity": []
+    },
+    "slash:compact": {
+      "status": "todo",
+      "source": "source/commands/compact-command.ts",
+      "parity": []
+    },
+    "slash:copy": {
+      "status": "todo",
+      "source": "source/commands/copy-command.ts",
+      "parity": []
+    },
+    "slash:effort": {
+      "status": "todo",
+      "source": "source/commands/effort-command.ts",
+      "parity": []
+    },
+    "slash:goal": {
+      "status": "todo",
+      "source": "source/commands/goal-command.ts",
+      "parity": []
+    },
+    "slash:handoff": {
+      "status": "todo",
+      "source": "source/commands/handoff-command.ts",
+      "parity": []
+    },
+    "slash:mcp": {
+      "status": "todo",
+      "source": "source/commands/mcp-status-command.ts",
+      "parity": []
+    },
+    "slash:mcp-login": {
+      "status": "todo",
+      "source": "source/commands/mcp-login-command.ts",
+      "parity": []
+    },
+    "slash:model": {
+      "status": "todo",
+      "source": "source/commands/model-command.ts",
+      "parity": []
+    },
+    "slash:profile": {
+      "status": "todo",
+      "source": "source/commands/mode-commands.ts",
+      "parity": []
+    },
+    "slash:quit": {
+      "status": "todo",
+      "source": "source/commands/quit-command.ts",
+      "parity": []
+    },
+    "slash:resume": {
+      "status": "todo",
+      "source": "source/commands/resume-command.ts",
+      "parity": []
+    },
+    "slash:retry-tool": {
+      "status": "todo",
+      "source": "source/commands/retry-tool-command.ts",
+      "parity": []
+    },
+    "slash:retry-turn": {
+      "status": "todo",
+      "source": "source/commands/retry-failed-turn-command.ts",
+      "parity": []
+    },
+    "slash:sandbox": {
+      "status": "todo",
+      "source": "source/commands/sandbox-command.ts",
+      "parity": []
+    },
+    "slash:skills": {
+      "status": "todo",
+      "source": "source/commands/skills-command.ts",
+      "parity": []
+    },
+    "slash:usage": {
+      "status": "todo",
+      "source": "source/commands/usage-command.ts",
+      "parity": []
+    },
+    "tool:activate_skill": {
+      "status": "todo",
+      "source": "source/tools/agent/activate-skill.ts",
+      "parity": []
+    },
+    "tool:apply_patch": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:ask_mentor": {
+      "status": "todo",
+      "source": "source/tools/agent/ask-mentor.ts",
+      "parity": []
+    },
+    "tool:ask_orchestrator": {
+      "status": "todo",
+      "source": "source/tools/agent/ask-orchestrator.ts",
+      "parity": []
+    },
+    "tool:ask_user": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:cancel_run": {
+      "status": "todo",
+      "source": "source/tools/agent/run-subagent-async.ts",
+      "parity": []
+    },
+    "tool:cancel_shell_job": {
+      "status": "todo",
+      "source": "source/tools/system/shell.ts",
+      "parity": []
+    },
+    "tool:cancel_shell_monitor": {
+      "status": "todo",
+      "source": "source/tools/system/shell.ts",
+      "parity": []
+    },
+    "tool:code_context_search": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:configure_task_check_in": {
+      "status": "todo",
+      "source": "source/tools/agent/configure-task-check-in.ts",
+      "parity": []
+    },
+    "tool:create_file": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:describe": {
+      "status": "todo",
+      "source": "source/tools/system/run-code/run-code-runtime.ts",
+      "parity": []
+    },
+    "tool:discord_send": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:enter_worktree": {
+      "status": "todo",
+      "source": "source/tools/system/worktree.ts",
+      "parity": []
+    },
+    "tool:exit_worktree": {
+      "status": "todo",
+      "source": "source/tools/system/worktree.ts",
+      "parity": []
+    },
+    "tool:get_shell_job": {
+      "status": "todo",
+      "source": "source/tools/system/shell.ts",
+      "parity": []
+    },
+    "tool:get_subagent_result": {
+      "status": "todo",
+      "source": "source/tools/agent/run-subagent-async.ts",
+      "parity": []
+    },
+    "tool:get_subagent_status": {
+      "status": "todo",
+      "source": "source/tools/agent/run-subagent-async.ts",
+      "parity": []
+    },
+    "tool:glob": {
+      "status": "todo",
+      "source": "source/tools/file/glob.ts",
+      "parity": []
+    },
+    "tool:goal_check": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:grep": {
+      "status": "todo",
+      "source": "source/tools/file/grep.ts",
+      "parity": [
+        "tools-batch"
+      ]
+    },
+    "tool:list_models": {
+      "status": "todo",
+      "source": "source/tools/agent/list-models.ts",
+      "parity": []
+    },
+    "tool:memory_create": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:memory_delete": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:memory_get": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:memory_list": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:memory_search": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:memory_update": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:monitor_shell_job": {
+      "status": "todo",
+      "source": "source/tools/system/shell.ts",
+      "parity": []
+    },
+    "tool:propose_goal": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:read_code_outline": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": []
+    },
+    "tool:read_file": {
+      "status": "todo",
+      "source": "source/tools/file/read-file.ts",
+      "parity": [
+        "tools-batch"
+      ]
+    },
+    "tool:run_agent_workflow": {
+      "status": "todo",
+      "source": "source/tools/run-agent-workflow.ts",
+      "parity": []
+    },
+    "tool:run_code": {
+      "status": "todo",
+      "source": "source/tools/system/run-code/run-code-runtime.ts",
+      "parity": [
+        "tools-batch"
+      ]
+    },
+    "tool:run_explorer": {
+      "status": "todo",
+      "source": "source/tools/agent/run-explorer.ts",
+      "parity": []
+    },
+    "tool:run_subagent": {
+      "status": "todo",
+      "source": "source/tools/agent/run-subagent.ts",
+      "parity": [
+        "subagent-batch"
+      ]
+    },
+    "tool:run_subagent_async": {
+      "status": "todo",
+      "source": "source/tools/agent/run-subagent-async.ts",
+      "parity": []
+    },
+    "tool:search_replace": {
+      "status": "todo",
+      "source": "source/tools/tool-names.ts",
+      "parity": [
+        "tools-batch"
+      ]
+    },
+    "tool:send_message": {
+      "status": "todo",
+      "source": "source/tools/agent/run-subagent-async.ts",
+      "parity": []
+    },
+    "tool:session_rollover": {
+      "status": "todo",
+      "source": "source/tools/session-rollover/session-rollover-tool.ts",
+      "parity": []
+    },
+    "tool:shell": {
+      "status": "todo",
+      "source": "source/tools/system/shell.ts",
+      "parity": [
+        "shell-auto-approve",
+        "shell-refused-without-approval",
+        "tools-batch"
+      ]
+    },
+    "tool:web_fetch": {
+      "status": "todo",
+      "source": "source/tools/web/web-fetch.ts",
+      "parity": []
+    },
+    "tool:web_search": {
+      "status": "todo",
+      "source": "source/tools/web/web-search.ts",
+      "parity": []
+    }
+  }
+}

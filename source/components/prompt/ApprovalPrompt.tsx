@@ -1,5 +1,6 @@
 import React, { FC } from 'react';
 import os from 'node:os';
+import { publishHarnessApprovalReady } from '../../lib/harness-input-idle.js';
 import { Box, Text, useInput } from 'ink';
 import {
   READ_FILE_SESSION_APPROVE_ANSWER,
@@ -807,6 +808,12 @@ const ApprovalPrompt: FC<Props> = ({
       }
     }
   });
+
+  // Ink's useInput subscribes in its preceding passive effect. This opt-in
+  // harness signal is scoped to tests that provide distinct call IDs.
+  React.useEffect(() => {
+    if (approval.callId && !waitingForAskUserAnswer) publishHarnessApprovalReady(approval.callId);
+  }, [approval.callId, approval.argumentsText, currentQuestionIndex, waitingForAskUserAnswer]);
 
   // A system check-in, not a tool approval: continue or stop, no denial reason.
   if (approval.checkIn) {

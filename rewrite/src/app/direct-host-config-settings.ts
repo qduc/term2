@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { SettingsProjection } from '../host/server-contracts.js';
 import { DirectHostConfigError } from './direct-host-config-error.js';
 
 const SAFE_KEYS = [
@@ -53,34 +54,8 @@ export type SecretFreeCredential = {
   source: CredentialSource;
   writable: boolean;
 };
-export type SettingsProjection = {
-  schemaVersion: 1;
-  revision: string;
-  defaultsRevision: string;
-  settings: {
-    safeDefaults: Record<
-      string,
-      { value?: unknown; source: string; scope: 'global' | 'session'; confirmRequired: boolean; persistable: boolean }
-    >;
-    credentials: Record<string, SecretFreeCredential>;
-    providers: readonly {
-      id: string;
-      label: string;
-      isCustom: boolean;
-      active: boolean;
-      disabled: boolean;
-      credential: SecretFreeCredential;
-    }[];
-    oauthAccounts: Record<string, readonly { id: string; label: string; isSelected: boolean; isInUse: boolean }[]>;
-    safety: {
-      sandbox: 'enabled' | 'disabled';
-      approval: 'off' | 'advisory' | 'auto' | 'unsafe-active' | 'hidden';
-      backgroundShell: 'disabled-by-gateway';
-      workspaceAccess: 'read' | 'read_write';
-      network: 'denied' | 'confirmation-required';
-    };
-  };
-};
+/** Public projection is the host contract; safeValue is its redaction boundary. */
+export type { SettingsProjection } from '../host/server-contracts.js';
 
 export type DirectSettingsBackend = {
   get(key: string): unknown;
@@ -290,7 +265,7 @@ export class DirectGlobalConfiguration {
     }
     const oauthAccounts = { codex: this.#accounts('codex'), grok: this.#accounts('grok') };
     const approval = this.settings.get('shell.autoApproveMode');
-    const settingsOnly = {
+    const settingsOnly: SettingsProjection['settings'] = {
       safeDefaults,
       credentials,
       providers,
@@ -367,7 +342,7 @@ function isSafeValue(value: unknown): boolean {
   );
 }
 
-function safeValue(value: unknown): unknown {
+function safeValue(value: unknown): SettingsProjection['settings']['safeDefaults'][string]['value'] {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
     if (

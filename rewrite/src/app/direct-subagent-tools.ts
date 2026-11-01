@@ -24,11 +24,12 @@ import {
 import { SubagentRolePoolSelector } from '../../../source/services/subagents/subagent-role-pool-selector.js';
 import { SubagentToolFactory, SubagentToolPolicy } from '../../../source/services/subagents/tool-policy.js';
 import type {
-  NestedSubagentResult,
+  SubagentResult,
   SubagentDefinition,
   SubagentRunHandle,
   SubagentRunStatus,
 } from '../../../source/services/subagents/types.js';
+import { SUBAGENT_ROLES } from '../../../source/services/subagents/types.js';
 import {
   deriveAuthorizedWorktreeScope,
   pinWorkerWorktree,
@@ -128,7 +129,10 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     );
   };
 
-  const prepare = async (params: Launch, mode: 'foreground' | 'background'): Promise<NestedRunRequest> => {
+  const prepare = async (
+    params: Launch,
+    mode: 'foreground' | 'background',
+  ): Promise<NestedRunRequest & { readonly input: string }> => {
     current();
     if (params.continue_run_id)
       throw new Error('Continuing a prior subagent run is not available in the native Session');
@@ -171,7 +175,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
         throw new Error('Resolved AgentSpec worktree identity changed before admission');
     } else {
       if (!params.role || !params.task) throw new Error('Subagent launch requires a role/task or agent_spec');
-      definition = pool.resolveForSpawn(params.role, loadRoleDefinition(params.role, settings));
+      const loaded = loadRoleDefinition(params.role, settings);
+      const pooledRole = SUBAGENT_ROLES.find((role) => role === params.role);
+      definition = pooledRole ? pool.resolveForSpawn(pooledRole, loaded) : loaded;
       task = params.task;
       if (definition.role === 'mentor' && !params.mentorConsultation) {
         const mentors = SubagentPoolEntrySchema.array().parse(settings.get('agent.mentorPool'));
@@ -234,7 +240,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     });
     // Reviewer remains evidence-only: its sole delegated path is another
     // native explorer branch, not inherited workspace or arbitrary agent tools.
-    factory.setExplorerRunner(async (question) => run({ role: 'explorer', task: question }, 'foreground'));
+    factory.setExplorerRunner(async (question) => run({ role: 'explorer', task: question }));
     const filesChanged: string[] = [];
     const searchViaShell = resolveSubagentSearchViaShell(settings, definition.canRunShell);
     const parentNames = new Set(options.graph().map((tool) => tool.name));
@@ -313,19 +319,21 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       },
       available: (context: Pick<ToolContext, 'workspace' | 'settings'>) => registry.available(context).map(counted),
     };
-    const request: NestedRunRequest = Object.freeze({
+    const request: NestedRunRequest & { readonly input: string } = Object.freeze({
       mode,
       ...(params.name ? { name: params.name } : {}),
       role: definition.role,
       // Original caller field for the native task producer; never reconstruct from label or history.
       input: params.agent_spec ? params.agent_spec.goal : params.task!,
       label: task,
-      instructions: buildInstructions(definition, searchViaShell, {
+      instructions: buildInstructions(
+        definition,
+        definitions,
+        searchViaShell,
+        settings,
         executionContext,
         skillsService,
-        tools: definitions,
-        task,
-      }),
+      ),
       items: Object.freeze([
         { type: 'user_message' as const, id: randomUUID() as ItemId, content: [{ type: 'text' as const, text: task }] },
       ]),
@@ -344,9 +352,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     preparedEvidence.set(request, evidence);
     return request;
   };
-  const run = async (params: Launch, mode: 'foreground' | 'background'): Promise<NestedSubagentResult> => {
+  const run = async (params: Launch): Promise<SubagentResult> => {
     const context = current();
-    const request = await prepare(params, mode);
+    const request = await prepare(params, 'foreground');
     const result = await context.runNested(request);
     const evidence = preparedEvidence.get(request)!;
     const runId = result.runId ?? (result.outcome.kind === 'background' ? result.outcome.runId : undefined);
@@ -363,8 +371,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     return {
       runId: result.outcome.runId,
       ...(params.name ? { name: params.name } : {}),
-      role: params.role ?? 'agent',
+      role: request.role ?? 'agent',
       status: 'running',
+      task: request.input,
     };
   };
   const resolved = (params: ResolvedSubagentLaunch): Launch => {
@@ -380,9 +389,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     };
   };
   const callbacks: DelegationCallbacks = {
-    runSubagent: (params) => run(params, 'foreground'),
+    runSubagent: (params) => run(params),
     runSubagentAsync: start,
-    runResolvedSubagent: (params) => run(resolved(params), 'foreground'),
+    runResolvedSubagent: (params) => run(resolved(params)),
     runResolvedSubagentAsync: (params) => start(resolved(params)),
     async createMentor(task) {
       const configured = SubagentPoolEntrySchema.array().parse(settings.get('agent.mentorPool'));
@@ -391,7 +400,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       const count = Math.max(1, Math.min(8, Math.floor(settings.get('agent.mentorSamples') ?? 1)));
       const models = configured.length ? configured.slice(0, 8) : Array.from({ length: count }, () => undefined);
       const results = await Promise.all(
-        models.map((mentorModel) => run({ role: 'mentor', task, mentorModel, mentorConsultation: true }, 'foreground')),
+        models.map((mentorModel) => run({ role: 'mentor', task, mentorModel, mentorConsultation: true })),
       );
       for (const result of results)
         if (result.status !== 'completed') throw new Error(result.error ?? `Mentor consultation ${result.status}`);
@@ -494,19 +503,18 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
 }
 
 /** Project accepted outcomes and execution evidence, never requested calls or invented usage/diffs. */
-function projectResult(result: NestedRunResult, role: string, evidence?: ExecutionEvidence): NestedSubagentResult {
+function projectResult(result: NestedRunResult, role: string, evidence?: ExecutionEvidence): SubagentResult {
   const runId = result.runId ?? (result.outcome.kind === 'background' ? result.outcome.runId : undefined);
   if (!runId) throw new Error('Session did not return an accepted subagent run ID');
   // Native distinct-name receipts are not counts. Keep only actual adapter
   // execution entries; missing telemetry must not become a fabricated count.
   const acceptedNames = result.toolsUsed === undefined ? undefined : new Set(result.toolsUsed);
   const tools = [...(evidence?.toolCounts ?? [])].filter(([name]) => !acceptedNames || acceptedNames.has(name));
-  const status =
-    result.outcome.kind === 'background'
-      ? 'running'
-      : result.outcome.kind === 'budget_exhausted'
-      ? 'interrupted'
-      : result.outcome.kind;
+  // Only runAsync returns an admission handle. Foreground and settled task
+  // retrieval must never present a background receipt as a terminal result.
+  if (result.outcome.kind === 'background')
+    throw new Error('Expected a subagent result, received background admission');
+  const status = result.outcome.kind === 'budget_exhausted' ? 'interrupted' : result.outcome.kind;
   return {
     agentId: runId,
     role,
@@ -524,8 +532,8 @@ function projectResult(result: NestedRunResult, role: string, evidence?: Executi
     toolsUsed: tools.map(([toolName, count]) => ({ toolName, count })),
     ...(result.outcome.kind === 'failed' ? { error: result.outcome.error.message } : {}),
     ...(result.outcome.kind === 'budget_exhausted' ? { terminalCause: 'budget_exhausted' as const } : {}),
-    ...(result.outcome.kind === 'interrupted'
-      ? { terminalCause: result.outcome.terminalCause ?? 'provider_continuation_unknown' }
+    ...(result.outcome.kind === 'interrupted' && result.outcome.terminalCause !== undefined
+      ? { terminalCause: result.outcome.terminalCause }
       : {}),
   };
 }

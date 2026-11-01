@@ -4,6 +4,7 @@ import { getProfileMetadata } from '../../../source/services/profiles/active-pro
 import { canonicalProfileId, legacyModeFromProfileId } from '../../../source/services/profiles/legacy-adapter.js';
 import {
   SettingsSchema,
+  AgentSettingsSchema,
   type SettingKey,
   type SettingValue,
 } from '../../../source/services/settings/settings-schema.js';
@@ -25,7 +26,7 @@ const sessionUpdate = z
     expectedRevision: z.string().min(1),
     admission: z.literal('idle').optional(),
     modelSelection: ModelSelectionSchema.strict().optional(),
-    reasoningEffort: SettingsSchema.shape.agent.unwrap().shape.reasoningEffort.optional(),
+    reasoningEffort: AgentSettingsSchema.out.shape.reasoningEffort.optional(),
     mode: z.enum(['standard', 'bare', 'lite', 'plan', 'mentor', 'orchestrator']).optional(),
   })
   .strict();

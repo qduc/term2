@@ -65,7 +65,7 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
       throw error;
     }
     if (plan.class === 'noop') return { message: `${plan.targetId} is already active.` };
-    if (plan.class === 'structural' && latest().messages.some((message) => message.role !== 'system')) {
+    if (plan.class === 'structural' && latest().messages.length > 0) {
       return {
         message: `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then \`${retry}\`.`,
       };

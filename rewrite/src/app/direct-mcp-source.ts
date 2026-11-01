@@ -1,7 +1,7 @@
 /** One immutable offered catalog, with calls still owned by the live source manager. */
 import type { McpToolSource } from '../../../source/services/mcp/mcp-tool-source.js';
 import { createMcpCatalog, MCP_TOOL_BINDING } from '../../../source/tools/system/run-code/mcp-script-surface.js';
-import { TOOL_NAME_DESCRIBE } from '../../../source/tools/tool-names.js';
+import { TOOL_NAME_DESCRIBE } from '../../../source/tools/system/run-code/run-code-runtime.js';
 
 export type DirectMcpApprovalPolicy = {
   readonly mcpAllowlist: readonly string[];

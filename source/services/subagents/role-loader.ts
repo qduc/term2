@@ -205,6 +205,8 @@ function buildAvailableToolGuidance(
   return lines.join('\n');
 }
 
+/** Build the child prompt from its actual offered tools and execution context.
+ * Remote execution omits local project instructions and local memory sections. */
 export function buildInstructions(
   definition: SubagentDefinition,
   toolDefinitions: readonly Pick<AnyToolDefinition, 'name'>[],
@@ -248,8 +250,8 @@ export function buildInstructions(
     resolvePrompt(path.join(BASE_PROMPT_PATH, 'fragments/skill-instruction-conflicts.md')),
     worktreeHygiene,
     definition.instructions,
-    memoryCapability.guidance,
-    memoryCapability.context,
+    memoryCapability?.guidance,
+    memoryCapability?.context,
     toolGuidance,
     ...inlineSections,
     `Environment: ${envInfo}${agentsInstructions}${skillsInstructions}`,

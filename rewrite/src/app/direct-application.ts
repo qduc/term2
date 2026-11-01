@@ -4,8 +4,6 @@
  * Sessions, so a client disconnecting never stops work another client can see.
  */
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
 import { SkillsService, type SkillInfo } from '../../../source/services/skills/skills-service.js';
 import { createDirectInProcessHost } from '../host/in-process-direct.js';
@@ -18,7 +16,7 @@ import { forkDirectConversation } from '../session/direct-fork.js';
 import { createDirectSessionStore, type DirectLocalStore } from '../session/direct-store.js';
 import type { DurableGoal } from '../session/direct-goal.js';
 import type { DirectSession, DirectSessionState } from '../session/facade-types.js';
-import { readFacts } from '../session/log.js';
+import { readDirectLogLineage } from '../session/direct-rolling-log.js';
 import { replay } from '../session/replay.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
@@ -30,14 +28,12 @@ import {
   type DirectRuntimes,
   type DirectSessionSettings,
 } from './direct-application-runtime.js';
-import { rollSessionOver } from './direct-application-rollover.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority, type DirectAuthorityFactory } from './direct-application-workspaces.js';
 import { createDirectInputPreview } from './direct-input-preview.js';
-import { sessionStart } from './direct-host-config-access.js';
 import { createDirectMcpRefresh } from './direct-application-mcp.js';
 import type { DirectMcp } from './direct-mcp.js';
 
-export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun' | 'rollover'> & {
+export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly conversationsDir: string;
   /** Interactive local app only. Borrowed catalog; manager outlives app.close(). */
   readonly mcpCatalog?: Pick<DirectMcp, 'onCatalogChanged'>;
@@ -83,30 +79,6 @@ export type DirectApplication = {
   close(): Promise<void>;
 };
 
-type LogLine = { readonly at: string; readonly seq: number };
-
-/**
- * The accepted times, read from the lines themselves. `seq` pins `updatedAt` to
- * the caller's snapshot, so a newer append cannot overtake that cut. A torn last
- * line was never accepted, and it is the only line that can fail to parse.
- */
-function logTimes(logPath: string, seq?: number | null): { readonly first: LogLine; readonly last: LogLine } {
-  const parsed = fs
-    .readFileSync(logPath, 'utf8')
-    .split('\n')
-    .flatMap((line): LogLine[] => {
-      try {
-        return line ? [JSON.parse(line) as LogLine] : [];
-      } catch {
-        return [];
-      }
-    });
-  const first = parsed[0];
-  if (!first) throw new Error(`Direct log has no accepted lines: ${logPath}`);
-  const reached = parsed.filter((line) => seq === undefined || seq === null || line.seq <= seq);
-  return { first, last: reached[reached.length - 1] ?? first };
-}
-
 export async function createDirectApplication(options: DirectApplicationOptions): Promise<DirectApplication> {
   const { selection, sessionBinding } = options;
   const hooks = options.hooks ? await startDirectHooks(options.hooks, selection) : null;
@@ -114,20 +86,6 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     {
       ...options,
       canRun: (workspace) => authority.canRun(workspace),
-      async rollover(sessionId, request) {
-        const state = stateOf(await store.open(sessionId));
-        const binding = sessionStart(options.conversationsDir, sessionId).binding;
-        return rollSessionOver({
-          sessionId,
-          state,
-          ...(request ? { request } : {}),
-          create: () =>
-            runtimes.inheriting(sessionId, () =>
-              store.create(state.workspace, state.model, binding, { rolloverFrom: sessionId }),
-            ),
-          carryGoal: (successor, goal) => writeGoal(successor, goal, 'launcher'),
-        });
-      },
     },
     hooks,
   );
@@ -139,7 +97,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
   const refresh = options.mcpCatalog
     ? createDirectMcpRefresh(options.mcpCatalog, (message) => selection.logger.warn(message))
     : undefined;
-  // Every app-owned opening, including successor/rollover paths, observes the
+  // Every app-owned opening, including clear/handoff successors, observes the
   // same manager epoch. A catalog change during async construction remains stale.
   const store: DirectLocalStore = {
     ...nativeStore,
@@ -200,14 +158,19 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     },
     goal: async (sessionId) => stateOf(await store.open(sessionId)).context.goal.goal,
     sessionDetails(sessionId, seq) {
-      const logPath = path.join(options.conversationsDir, `${sessionId}.jsonl`);
-      const record = runtimes.get(sessionId);
-      const { first, last } = logTimes(logPath, seq);
+      const lineage = readDirectLogLineage(
+        options.conversationsDir,
+        sessionId,
+        seq === undefined || seq === null ? {} : { throughSeq: seq },
+      );
+      const record = runtimes.get(lineage.logicalSessionId);
+      const first = lineage.entries[0]!;
+      const last = lineage.entries.at(-1)!;
       return {
         createdAt: first.at,
         updatedAt: last.at,
         earliestSeq: first.seq,
-        logPath,
+        logPath: lineage.path,
         profileId: record?.profileId ?? null,
         settings: record?.settings ?? null,
         rebuilt: record?.rebuilt ?? false,
@@ -270,7 +233,7 @@ async function successor(
   state: DirectSessionState,
   model: ModelRef,
 ): Promise<DirectSession> {
-  const binding = sessionStart(directory, session.id).binding;
+  const binding = readDirectLogLineage(directory, session.id).metadata.binding;
   const next = await runtimes.inheriting(session.id, () => store.create(state.workspace, model, binding));
   const { goal } = state.context.goal;
   if (goal) writeGoal(next, goal, 'launcher');
@@ -325,15 +288,19 @@ function headlessPolicy(input: HeadlessPolicyInput): HeadlessApprovalDecider {
   const { store, runtimes, directory, sessionId, autoApprove, signal } = input;
   return async (interaction) => {
     if (interaction.kind === 'question') return decideHeadlessApproval(interaction, autoApprove);
-    const runtime = runtimes.get(sessionId);
-    if (!runtime) throw new Error(`No runtime for session ${sessionId}`);
     const session = await store.open(sessionId);
-    const { state, unsubscribe } = session.capture(() => undefined);
+    const runtime = runtimes.get(session.id);
+    if (!runtime) throw new Error(`No runtime for session ${session.id}`);
+    const { state, seq, unsubscribe } = session.capture(() => undefined);
     unsubscribe();
     const request = state.pendingInteractions.find((pending) => pending.requestId === interaction.requestId);
     // Already settled by cancellation. The answer this produces is reported stale.
     if (!request) return { decision: { kind: 'deny' } };
-    const { history } = replay(readFacts(path.join(directory, `${sessionId}.jsonl`)));
+    const { entries } = readDirectLogLineage(directory, session.id, { throughSeq: seq });
+    const { history } = replay(
+      entries.map((entry) => entry.fact),
+      { recoverQueue: false, recoverActiveTurn: false },
+    );
     const decision = await runtime.scope(() =>
       untilAborted(runtime.surface.decideInteraction(request, history), signal),
     );

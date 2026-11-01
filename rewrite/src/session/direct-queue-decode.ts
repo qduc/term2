@@ -107,8 +107,8 @@ export function parseDirectQueueFact(raw: unknown): DirectQueueFact {
         throw new Error('Invalid pending steer admission');
     } else if (
       item.admission.kind === 'steering' ||
-      item.turnId !== undefined ||
-      (item.admission.kind === 'started' ? !item.admission.turnId : item.admission.turnId !== undefined)
+      (item.admission.kind === 'started' && !item.admission.turnId) ||
+      (item.turnId !== undefined && item.turnId !== item.admission.turnId)
     ) {
       throw new Error('Invalid queued/start admission');
     }

@@ -29,6 +29,8 @@ export type AgentWireV2ChangeType =
   | 'reasoning'
   | 'message'
   | 'task_changed'
+  | 'tool_called'
+  | 'error'
   | 'tool_progress'
   | 'task_progress'
   | 'automatic_memory_notice'
@@ -48,6 +50,7 @@ export type AgentWireV2ChangeType =
 /** Must match the shared source's v2 live allowlist. A live batch cannot carry durable state. */
 const LIVE_CHANGE_TYPES = new Set<AgentWireV2ChangeType>([
   'reasoning_delta',
+  'error',
   'tool_progress',
   'tool_call_streaming_delta',
   'task_progress',
@@ -141,6 +144,9 @@ export function encodeAgentWireV2(
     const live = changes.filter(change => LIVE_CHANGE_TYPES.has(change.type));
     return live.length ? { schemaVersion: 2, kind: 'live', sessionId: event.sessionId, changes: live } : null;
   }
+  // Native runtime errors are synchronized state observations, never accepted
+  // facts. Refuse to turn one into a synthetic durable boundary.
+  if (event.type === 'error') return unavailable('runtime error is live-only and cannot be accepted');
   if (!Number.isSafeInteger(event.seq) || event.seq < 1)
     return unavailable('accepted v2 event has no positive safe cursor');
   if (!event.sessionId) return unavailable('accepted v2 event has no session identity');
@@ -271,6 +277,10 @@ function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2C
       return change({ type: 'message', payload: event.payload }, branch);
     case 'task_changed':
       return change({ type: 'task_changed', payload: event.payload }, branch);
+    case 'tool_called':
+      return change({ type: 'tool_called', payload: event.payload }, branch);
+    case 'error':
+      return change({ type: 'error', payload: event.payload }, branch);
     case 'tool_progress':
       return change({ type: 'tool_progress', payload: event.payload }, branch);
     case 'tool_call_streaming_delta':

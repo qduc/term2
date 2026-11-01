@@ -76,6 +76,30 @@ existing accepted lifecycle events; inventing a status event would fabricate
 replay provenance. If a native accepted status producer is added later, it
 needs a separate exact `{status}` contract and consumer intake.
 
+### Tool calls and transient runtime errors
+
+- `tool_called` is a real accepted native fact emitted before a physical
+  `tool_started`. It carries the exact `{tool: WireTool}` public descriptor
+  (`status:'called'`, actual execution/call/turn identity and public input), and
+  may be branch-scoped. It is needed for an accepted pending tool call that has
+  not reached physical start; it must not be relabelled as `tool_started` or
+  discarded. The server maps it now; shared/browser intake is required.
+- `error` is a native **transient** observation: `DirectProjection` publishes it
+  with `seq:null` when synchronized runtime error state appears. It carries
+  `{error: WireError}` only. The server maps it as `event: live` and refuses any
+  accepted error boundary; consumers must not checkpoint it or infer a durable
+  terminal. It may accompany a transient `turn_ended`/snapshot update that is
+  not representable as accepted v2 evidence.
+- `model_response_completed` is accepted native audit with modelStep/stopReason/
+  optional costUsd, but the shared reducer has no public state change and no
+  current M6 client consumes it. It is not mapped in this step; do not synthesize
+  a cost/terminal from it.
+- `budget_observed` is accepted native evidence retained in the direct snapshot's
+  `budgetObservations`, but no current M6 client behavior consumes that field.
+  It is not mapped in this step; budget-opened/closed authority remains separate.
+
+These are explicit remaining vocabulary gaps, not parity claims.
+
 Live frames are named `event: live`, have no SSE id or seq/time fields, and carry
 only the shared v2 live change types. They never advance a resume checkpoint and
 do not claim replay parity. Reconnect uses the last fully applied accepted seq.
@@ -123,4 +147,5 @@ combined migration must update both consumer pins plus the browser parser,
 atomic reducer, sparse cursor, hydration/replay and BFF config handling, then
 provide independent verification. Until then no v2 runtime support, replay
 parity, fresh branch history, aggregate cost reconstruction, complete M6
-transcript/task-history delivery or M6 completion is claimed.
+transcript/task-history/tool-call delivery, model-response/budget-observation
+delivery or M6 completion is claimed.

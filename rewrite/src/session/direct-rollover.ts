@@ -58,15 +58,21 @@ export function createDirectRolloverTool(
   };
 }
 
-/** Select only this process's completed root boundary; never replay an external rollover on reopen. */
-export function directRolloverAtBoundary(facts: readonly Fact[], turnId: TurnId): DirectCommandRequest | undefined {
+/** The accepted request of this completed root, whether or not its command was reserved yet. */
+export function directAcceptedRolloverAt(
+  facts: readonly Fact[],
+  turnId: TurnId,
+): Extract<Fact, { type: 'rollover_requested' }> | undefined {
   const terminal = facts.find((fact) => fact.type === 'turn_ended' && fact.turnId === turnId);
   if (terminal?.type !== 'turn_ended' || terminal.outcome !== 'completed') return undefined;
   const request = facts.find((fact) => fact.type === 'rollover_requested' && fact.turnId === turnId);
-  if (
-    request?.type !== 'rollover_requested' ||
-    facts.some((fact) => fact.type === 'command_started' && fact.commandId === request.commandId)
-  )
+  return request?.type === 'rollover_requested' ? request : undefined;
+}
+
+/** Select only this process's completed root boundary; never replay an external rollover on reopen. */
+export function directRolloverAtBoundary(facts: readonly Fact[], turnId: TurnId): DirectCommandRequest | undefined {
+  const request = directAcceptedRolloverAt(facts, turnId);
+  if (!request || facts.some((fact) => fact.type === 'command_started' && fact.commandId === request.commandId))
     return undefined;
   return { commandId: request.commandId, operation: { kind: 'rollover', request: structuredClone(request.request) } };
 }

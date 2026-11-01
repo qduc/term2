@@ -181,8 +181,9 @@ card or physical execution. Public descriptor/input is not provider-native histo
 
 Cost and request receipts have no additional branch wrapper. Request payload
 ancestry already owns the physical request. Branch receipt panels select the
-same root records, not new charges. No request sum, aggregate-plus-request sum,
-compaction-reference charge, invented currency, pricing estimate or missing
+same root records, not new charges. The root panel derives a receipt-scoped
+summary from the latest records, as described below. No aggregate-plus-request
+sum, compaction-reference charge, invented currency, pricing lookup or missing
 metric default is computed. Null/omitted fields, recorded zero, empty arrays and
 signed accounting values remain distinct. Details disclose the measured record
 and original outcome, including unknown/unpriced evidence.
@@ -211,12 +212,45 @@ and tool results must remain intact in the provider/runtime lane. This browser
 slice does not edit that lane. Actual provider continuation must be verified
 after M6; UI chunk handling does not establish it.
 
-The aligned native base has **no accepted aggregate-cost producer**. Fresh-process
-root hydration supplies aggregate cost as previous native projection cost or
-null, and notices as previous native projection notices or an empty array; it
-does not reconstruct historical cost/notices. Actual request receipts are
-retained independently. Browser preservation is not fresh-process parity, and
-the vocabulary does not authorize synthesizing missing producers or history.
+### Receipt-scoped presentation (native candidate `65194f48`)
+
+The selected native source has **no aggregate-cost producer or complete historic
+receipt-coverage marker**. An actual `cost` snapshot/event is retained separately
+as native aggregate evidence, not substituted for, reconciled with or added to
+the receipt amount. Null/absence does not erase real request receipts.
+
+`lib/term2/receipt-cost.ts#summarizeReceiptCosts` is a **pure root presentation**
+over the current validated latest-per-physical-`requestId` receipt set. It does
+not write accepted state, append a fact, emit an event, retain a second journal
+or create a cursor. Snapshot hydration and incremental corrections use the same
+`nativeState.requestCosts`, already upserted by that actual request identity.
+Branch subsets remain views of root receipts; no branch summary is added again.
+
+Arithmetic follows `source/services/cost/model-cost.ts#summarizeCost`: sum signed
+supplied USD micros (zero/credits included), count priced (`usdMicros` present)
+and unpriced receipts, and label pricing `unavailable` if none are priced,
+`partial` if some are unpriced, otherwise `estimated` if any supplied price is
+catalog-sourced, else `exact`. These labels describe **only the supplied receipt
+set**, never complete historical coverage. A `partial` sum can also contain
+catalog estimates. No catalog/usage/model lookup or response-cost fallback runs.
+The browser has no runtime/type dependency on that source module: direct reuse
+fails Turbopack's `.js` dependency resolution, and its BigInt literals also fail
+the browser's ES2017 type target. The small presentation arithmetic stays local;
+a bounded author check compares it to the actual pure source implementation.
+
+The UI always says **historical coverage unknown; not a complete session bill**.
+Absent receipt evidence means unavailable counts, not an inferred empty set.
+An observed empty set has zero observed counts but no available charge; an
+all-unpriced set likewise never displays zero as a bill. With priced receipts,
+known amount is shown in USD to six decimals and exact USD micros, preserving
+zero, negative corrections and a net-zero known sum. Complete record replacement
+can remove a previously priced amount, and the derived view clears it naturally.
+No synthetic record fills missing history.
+
+Accepted notice replay is a separate native responsibility. The native source
+report traces accepted-prefix notice recovery on this candidate; raw reasoning
+and progress remain live-only. Neither that trace nor this receipt derivation
+claims runtime reopen/reconnect/provider parity or gate acceptance.
 
 ## Live errors and transient runtime lifecycle
 

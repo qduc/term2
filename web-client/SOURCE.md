@@ -165,8 +165,19 @@ transient observations are connection-local and
 removed on disconnect/hydration; later accepted lifecycle supersedes a live
 failure. No provider-native history is built from these public records.
 `sse.ts#consumeSseResponse` owns SSE framing and shared-envelope validation.
-`Term2NativeEvidence` presents exact observations/limitations without equating
-native verification with user-task success or request receipts with extra bills.
+`lib/term2/receipt-cost.ts#summarizeReceiptCosts(receipts)` is pure presentation:
+it selects latest complete physical records by actual requestId, then returns
+known signed USD micros, priced/unpriced counts and receipt-set pricing status.
+Undefined input stays unavailable; empty/all-unpriced sets do not become zero
+bills. It mirrors the existing pure source `summarizeCost` arithmetic without a
+runtime or type import (Turbopack `.js` resolution and the ES2017 target make that
+module incompatible here). It performs no pricing lookup or native-state write.
+`Term2NativeEvidence` renders this only at root, separately from native aggregate
+evidence, with explicit unknown historical coverage and no complete-session-bill
+claim. Branch lists show the same physical charges, not additional costs.
+Correction/hydration both use the same `nativeState.requestCosts` receipt seam.
+See WIRE.md for exact status semantics and compatibility limits. Native
+verification is not user-task success and request receipts are not extra bills.
 These are cohesive internal seams of this module, not separately versioned
 public packages. Wire versions, same-cut semantics and exact external originals
 are recorded in WIRE.md.
@@ -191,10 +202,12 @@ may settle visible activity, while hydration/current accepted state owns recover
 No status_changed, missing terminal or missed transient history is fabricated.
 
 Other limits: no durable browser outbox or retry handle across navigation; no
-browser-owned journal/history synthesis; native fresh-process aggregate
-cost/notice coverage can be incomplete; absent branch capability differs from
+browser-owned journal/history synthesis; historical receipt coverage is unknown and native aggregate
+cost can be unavailable; absent branch capability differs from
 an empty branch list; null branch queue/usage is not fabricated empty/zero.
-The old artifact remains pinned to 0.1.0, so new source imports are not installed
-support. No #65 tests, probes, typechecks, guards, lint, builds, reviews, pack or
-runtime/provider acceptance have run during the implementation freeze. The
-combined gate stays closed; this documentation claims no end-to-end acceptance.
+The receipt-presentation work starts from candidate `65194f48`, which already
+pins the shared 0.2.0 artifact; this change adds no wire vocabulary or package pin.
+Its fast browser build and bounded pure author checks do not establish browser
+journeys, replay/provider behavior or independent acceptance. Slow suites/full
+review/provider workflows remain deferred. The combined gate stays closed;
+this documentation claims no end-to-end acceptance.

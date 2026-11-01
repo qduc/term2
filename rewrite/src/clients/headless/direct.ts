@@ -411,9 +411,16 @@ export async function runDirectHeadless(
       if (pendingNext !== null) return pendingNext;
       const pending = iterator!.next();
       pendingNext = pending;
-      void pending.catch(() => {
-        if (pendingNext === pending) pendingNext = null;
-      });
+      // Clear on either resolution: an event must be consumed once. Leaving the
+      // resolved promise cached makes the main loop reprocess the same frame.
+      void pending.then(
+        () => {
+          if (pendingNext === pending) pendingNext = null;
+        },
+        () => {
+          if (pendingNext === pending) pendingNext = null;
+        },
+      );
       return pending;
     };
     // Every race arm has the same discriminator; a wake/timeout is not an iterator item.

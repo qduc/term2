@@ -69,9 +69,6 @@ type Flag = {
   readonly interactiveNoOp?: boolean;
 };
 
-const JSON_HELD =
-  'the old NDJSON event schema needs a protocol-owned read model, which the direct protocol does not expose yet';
-
 /** Builds one flag. `suffix` is its help placeholder: ' <x>' takes a value, '[=<x>]' takes only an inline one. */
 const opt = (names: string[], suffix: string, help: string, refusal?: string, value?: Flag['value']): Flag => {
   const kind: Flag['value'] = value ?? (suffix.startsWith(' <') ? 'next-or-empty' : suffix.startsWith('[=') ? 'optional' : undefined);
@@ -100,7 +97,6 @@ const FLAGS: readonly Flag[] = [
     names: ['--json'],
     label: '--json',
     help: 'Emit newline-delimited JSON (NDJSON) events in non-interactive mode',
-    refusal: JSON_HELD,
     interactiveNoOp: true,
   },
   opt(['--ssh'], ' <user@host>', 'Enable SSH mode for a remote host'),

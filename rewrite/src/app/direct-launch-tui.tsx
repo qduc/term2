@@ -23,6 +23,7 @@ import { createDirectControlBridge, type DirectControlBridge } from './direct-la
 import { createDirectTuiCommands } from './direct-launch-tui-commands.js';
 import { performRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
+import { INTERACTIVE_TERMINAL_REQUIRED } from './direct-launch.js';
 import { openDirectApplicationMcp } from './direct-application-mcp.js';
 import type { DirectMcp } from './direct-mcp.js';
 
@@ -142,6 +143,12 @@ async function runTui(
         : await app.host.connect(app.principal, sessionId);
     if (request.goal) await app.setGoal(initial.sessionId, request.goal, 'launcher');
 
+    // An admitted CLI goal belongs to Session even when this process cannot render Ink.
+    if (!(stdin.isTTY && stdout.isTTY)) {
+      stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
+      return 1;
+    }
+
     // Ask before Ink takes stdin: the terminal's reply arrives as input.
     const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)
       ? await detectTerminalBackground({ stdin, stdout })
@@ -193,12 +200,15 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
   let exitCode: number;
   let mcp: DirectMcp | undefined;
   try {
-    mcp = await openDirectApplicationMcp({
-      target,
-      conversationsDir: request.conversationsDir,
-      interactive: true,
-      onNotice: (message) => stderr.write(`MCP: ${message}\n`),
-    });
+    // Terminal refusal must not start MCP subprocesses or authorization flows.
+    if (stdin.isTTY && stdout.isTTY) {
+      mcp = await openDirectApplicationMcp({
+        target,
+        conversationsDir: request.conversationsDir,
+        interactive: true,
+        onNotice: (message) => stderr.write(`MCP: ${message}\n`),
+      });
+    }
     exitCode = await runTui(request, target, pending, mcp);
   } finally {
     try {

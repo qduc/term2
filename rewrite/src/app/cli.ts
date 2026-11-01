@@ -31,6 +31,7 @@ import { isControlSocketName } from '../../../source/services/control-socket/con
 import { createAppSettings } from './settings.js';
 import {
   launchDirect,
+  INTERACTIVE_TERMINAL_REQUIRED,
   runDirectHeadlessOnHost,
   type DirectHeadlessRequest,
   type DirectLaunchRequest,
@@ -47,7 +48,6 @@ import {
   type SessionOptions,
 } from './cli-args.js';
 
-const NO_PROMPT_MESSAGE = 'term2 needs an interactive terminal; for one-shot use: term2 "<prompt>"';
 const HOME_DIRECTORY_REFUSAL =
   'Headless startup refused from the home or root directory. Start in a project directory.';
 
@@ -80,12 +80,7 @@ function packageVersion(): string {
  * resume, not SSH, and (without a prompt, or with --auto-approve for a prompt).
  */
 function homeGuardApplies(options: SessionOptions, hasPrompt: boolean): boolean {
-  return (
-    !options.lite &&
-    options.resumeId === null &&
-    options.ssh === null &&
-    (!hasPrompt || options.autoApprove)
-  );
+  return !options.lite && options.resumeId === null && options.ssh === null && (!hasPrompt || options.autoApprove);
 }
 
 /**
@@ -501,8 +496,11 @@ async function main(argv: readonly string[]): Promise<number> {
           stderr.write(`${HOME_DIRECTORY_START_WARNING.trimEnd()}\nCancelled.\n`);
           return 1;
         }
-        stderr.write(`${NO_PROMPT_MESSAGE}\n`);
-        return 1;
+        if (command.options.goal === null) {
+          stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
+          return 1;
+        }
+        // Preserve an admitted user goal through the native launcher before terminal refusal.
       }
       requireNativeConversation(command.options.resumeId);
       return runInteractive(command.options);

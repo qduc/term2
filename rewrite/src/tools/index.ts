@@ -92,6 +92,10 @@ export type NestedRunResult = {
   readonly runId?: string;
   /** Distinct tool names with accepted physical start receipts in this branch, in first-start order. */
   readonly toolsUsed?: readonly string[];
+  /** Counts of accepted branch-local physical starts, including scripted leaves.
+   * Not successful bodies, offered tools, descendants, or adapter-entry estimates.
+   * Absent means unknown; an accepted settled branch with no starts returns []. */
+  readonly toolUseCounts?: readonly { readonly toolName: string; readonly count: number }[];
   readonly items: readonly Item[];
   readonly outcome: NestedRunOutcome;
 };

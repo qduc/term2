@@ -54,6 +54,7 @@ function spawnCli(
 }
 
 let testDir = '';
+let conversationsDir = '';
 let cliTempDir = '';
 
 /**
@@ -137,6 +138,10 @@ function writeSettings(homeDir: string, settings: Record<string, unknown>): stri
 
 beforeEach(() => {
   testDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-')));
+  // Keep native conversation storage private; HOME, project guidance and scratch
+  // are siblings, not entries in the conversation namespace.
+  conversationsDir = path.join(testDir, 'conversations');
+  fs.mkdirSync(conversationsDir, { recursive: true });
   // The app suffix makes this the child's SANDBOX_TEMP_DIR on every platform,
   // independent of HOME and the runner's own temporary directory.
   cliTempDir = path.join(testDir, 'scratch', 'term2-nodejs');
@@ -440,7 +445,7 @@ fs.createWriteStream = (filename, options) => {
         XDG_DATA_HOME: path.join(home, '.local', 'share'),
         XDG_RUNTIME_DIR: path.join(testDir, 'runtime'),
         TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
-        TERM2_CONVERSATIONS_DIR: path.join(testDir, 'conversations'),
+        TERM2_CONVERSATIONS_DIR: conversationsDir,
         TZ: process.env.TZ,
         LOG_LEVEL: 'debug',
         NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --require=${JSON.stringify(preload)}`,
@@ -498,13 +503,13 @@ fs.createWriteStream = (filename, options) => {
     it('CLI validates goal flags before startup', async () => {
       const { status, stderr } = await spawnCli(
         [cliPath(), '--goal-criteria', 'must pass'],
-        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
       );
       expect(status).toBe(1);
       expect(stderr).toContain('--goal-criteria requires --goal');
       const overBound = await spawnCli(
         [cliPath(), '--goal', 'x'.repeat(2001)],
-        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
       );
       expect(overBound.status).toBe(1);
       expect(overBound.stderr).toContain('Goal outcome must be at most 2000 characters');
@@ -513,14 +518,14 @@ fs.createWriteStream = (filename, options) => {
     it('interactive launch persists the goal before requiring a terminal', async () => {
       const { status, stderr } = await spawnCli(
         [cliPath(), '--lite', '--goal', 'Interactive outcome', '--goal-criteria', 'Visible result'],
-        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+        createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
       );
       expect(status).toBe(1);
       expect(stderr).toContain('term2 needs an interactive terminal');
-      const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
+      const logPath = fs.readdirSync(conversationsDir).find((file) => file.endsWith('.jsonl'));
       expect(logPath, stderr).toBeDefined();
       const events = fs
-        .readFileSync(path.join(testDir, logPath!), 'utf8')
+        .readFileSync(path.join(conversationsDir, logPath!), 'utf8')
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line).event);
@@ -541,7 +546,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const { status, stderr } = await spawnCli(
           [cliPath(), '--goal', 'Noninteractive outcome', '--goal-criteria', 'Provider returns', 'hello'],
-          createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+          createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
         );
         expect(status).toBe(2);
         // The text-only mock never calls goal_check, so the active-goal stop check
@@ -554,10 +559,10 @@ fs.createWriteStream = (filename, options) => {
         expect(sentRequest).toContain('goal_check');
         expect(JSON.stringify(mock.capturedRequests()[1])).toContain('Durable goal stop check');
         expect(stderr).toContain('Goal stop check unresolved');
-        const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
+        const logPath = fs.readdirSync(conversationsDir).find((file) => file.endsWith('.jsonl'));
         expect(logPath).toBeDefined();
         const events = fs
-          .readFileSync(path.join(testDir, logPath!), 'utf8')
+          .readFileSync(path.join(conversationsDir, logPath!), 'utf8')
           .trim()
           .split('\n')
           .map((line) => JSON.parse(line).event);
@@ -657,7 +662,7 @@ fs.createWriteStream = (filename, options) => {
               ...(json ? ['--json'] : []),
               'Run the fixture',
             ],
-            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
           );
           expect(result.status, result.stderr).toBe(2);
           expect(rootRequests).toBe(background ? 6 : 3);
@@ -679,9 +684,9 @@ fs.createWriteStream = (filename, options) => {
             expect(result.stdout).toContain('Unresolved partial output');
             if (background) expect(result.stdout).toContain('Foreground partial output');
           }
-          const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
+          const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
           const events = fs
-            .readFileSync(path.join(testDir, saved), 'utf8')
+            .readFileSync(path.join(conversationsDir, saved), 'utf8')
             .trim()
             .split('\n')
             .map((line) => JSON.parse(line).event);
@@ -739,7 +744,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const result = await spawnCli(
           [cliPath(), '--profile', 'bare', '--json', 'Compute six times seven'],
-          createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+          createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
         );
         expect(result.status, result.stderr).toBe(0);
         const requests = mock.capturedRequests();
@@ -768,9 +773,9 @@ fs.createWriteStream = (filename, options) => {
           .map((line) => JSON.parse(line));
         expect(output.at(-1)).toMatchObject({ type: 'completed', finalText: 'Ordinary result: 42' });
         expect(result.stderr).not.toContain('Goal stop check unresolved');
-        const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
+        const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
         const events = fs
-          .readFileSync(path.join(testDir, saved), 'utf8')
+          .readFileSync(path.join(conversationsDir, saved), 'utf8')
           .trim()
           .split('\n')
           .map((line) => JSON.parse(line).event);
@@ -831,7 +836,7 @@ fs.createWriteStream = (filename, options) => {
         try {
           const result = await spawnCli(
             [cliPath(), '--json', '--goal', 'Explicit fixture outcome', 'Reply to the current request'],
-            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
           );
           expect(result.status, result.stderr).toBe(0);
           expect(requests).toBe(status === 'not_achieved' ? 3 : 2);
@@ -841,9 +846,9 @@ fs.createWriteStream = (filename, options) => {
             .map((line) => JSON.parse(line));
           expect(events.at(-1)).toMatchObject({ type: 'completed', finalText: 'Honest fixture response' });
           expect(result.stderr).not.toContain('Goal stop check unresolved');
-          const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
+          const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
           const log = fs
-            .readFileSync(path.join(testDir, saved), 'utf8')
+            .readFileSync(path.join(conversationsDir, saved), 'utf8')
             .trim()
             .split('\n')
             .map((line) => JSON.parse(line).event);
@@ -902,7 +907,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const { status, stdout, stderr } = await spawnCli(
           [cliPath(), '--goal', 'Noninteractive outcome', '--goal-criteria', 'Provider returns', 'hello'],
-          createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+          createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
         );
         expect(status, stderr).toBe(0);
         // One request for the check, one for the final reply: no reminder.
@@ -912,9 +917,9 @@ fs.createWriteStream = (filename, options) => {
         expect(stderr).toContain(
           "Goal (achieved): Noninteractive outcome\nSuccess criteria: Provider returns\nCompletion accepted after the model's goal_check.",
         );
-        const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
+        const logPath = fs.readdirSync(conversationsDir).find((file) => file.endsWith('.jsonl'));
         const events = fs
-          .readFileSync(path.join(testDir, logPath!), 'utf8')
+          .readFileSync(path.join(conversationsDir, logPath!), 'utf8')
           .trim()
           .split('\n')
           .map((line) => JSON.parse(line).event);
@@ -1055,7 +1060,7 @@ fs.createWriteStream = (filename, options) => {
               'math.ts exports add(a, b) returning a + b',
               'worker-prompt-sentinel',
             ],
-            createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+            createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
             repo,
           );
           expect(status, stderr).toBe(0);
@@ -1119,7 +1124,7 @@ fs.createWriteStream = (filename, options) => {
         const id = explicit ? 'resume-goal-explicit' : 'resume-goal-implicit';
         const originalGoal = { id: `old-${id}`, outcome: 'Original', status: 'active' };
         fs.writeFileSync(
-          path.join(testDir, `${id}.jsonl`),
+          path.join(conversationsDir, `${id}.jsonl`),
           [
             {
               v: 3,
@@ -1141,12 +1146,12 @@ fs.createWriteStream = (filename, options) => {
         const args = [cliPath(), '--resume', id, '--lite', ...(explicit ? ['--goal', 'Replacement'] : [])];
         const { status, stderr } = await spawnCli(
           args,
-          createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+          createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
         );
         expect(status).toBe(1);
         expect(stderr).toContain('term2 needs an interactive terminal');
         const events = fs
-          .readFileSync(path.join(testDir, `${id}.jsonl`), 'utf8')
+          .readFileSync(path.join(conversationsDir, `${id}.jsonl`), 'utf8')
           .trim()
           .split('\n')
           .map((line) => JSON.parse(line).event);
@@ -1181,7 +1186,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const { status, stderr } = await spawnCli(
           [cliPath(), '--lite'],
-          createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+          createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
         );
         expect(status).toBe(1);
         expect(stderr).toContain('term2 needs an interactive terminal');
@@ -1193,9 +1198,9 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --resume ls prints list of conversations and exits', () => {
-      // Create a mock conversation file in the testDir
+      // Create a mock conversation file in the conversations directory
       const convId = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6';
-      const filePath = path.join(testDir, `${convId}.jsonl`);
+      const filePath = path.join(conversationsDir, `${convId}.jsonl`);
       const initEnvelope = {
         v: 1,
         seq: 1,
@@ -1231,7 +1236,7 @@ fs.createWriteStream = (filename, options) => {
 
       // Create a second mock conversation from a different project path
       const otherConvId = 'b22d4fae-7dec-11d0-a765-00a0c91e6bf6';
-      const otherFilePath = path.join(testDir, `${otherConvId}.jsonl`);
+      const otherFilePath = path.join(conversationsDir, `${otherConvId}.jsonl`);
       const otherInitEnvelope = {
         v: 1,
         seq: 1,
@@ -1253,7 +1258,7 @@ fs.createWriteStream = (filename, options) => {
       const stdout = execFileSync('node', [cliPath(), '--resume', 'ls'], {
         env: createTestChildEnv({
           HOME: testDir,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         }),
       }).toString();
@@ -1271,9 +1276,9 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --resume list also works', () => {
-      // Create a mock conversation file in the testDir
+      // Create a mock conversation file in the conversations directory
       const convId = 'a12d4fae-7dec-11d0-a765-00a0c91e6bf6';
-      const filePath = path.join(testDir, `${convId}.jsonl`);
+      const filePath = path.join(conversationsDir, `${convId}.jsonl`);
       const initEnvelope = {
         v: 1,
         seq: 1,
@@ -1293,7 +1298,7 @@ fs.createWriteStream = (filename, options) => {
       const stdout = execFileSync('node', [cliPath(), '--resume', 'list'], {
         env: createTestChildEnv({
           HOME: testDir,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         }),
       }).toString();
@@ -1310,7 +1315,7 @@ fs.createWriteStream = (filename, options) => {
         execFileSync('node', [cliPath(), '--resume', 'dummy'], {
           env: createTestChildEnv({
             HOME: tempHome,
-            TERM2_CONVERSATIONS_DIR: testDir,
+            TERM2_CONVERSATIONS_DIR: conversationsDir,
             DISABLE_LOGGING: '1',
           }),
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -1331,7 +1336,7 @@ fs.createWriteStream = (filename, options) => {
     it('CLI --resume does not suggest --fork for a conversation from another project', async () => {
       const conversationId = 'c22d4fae-7dec-11d0-a765-00a0c91e6bf6';
       fs.writeFileSync(
-        path.join(testDir, `${conversationId}.jsonl`),
+        path.join(conversationsDir, `${conversationId}.jsonl`),
         `${JSON.stringify({
           v: 1,
           seq: 1,
@@ -1350,7 +1355,7 @@ fs.createWriteStream = (filename, options) => {
         [cliPath(), '--resume', conversationId],
         createTestChildEnv({
           HOME: testDir,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         }),
       );
@@ -1369,7 +1374,7 @@ fs.createWriteStream = (filename, options) => {
         execFileSync('node', [cliPath(), '--list-models', '--resume', 'abc123'], {
           env: createTestChildEnv({
             HOME: tempHome,
-            TERM2_CONVERSATIONS_DIR: testDir,
+            TERM2_CONVERSATIONS_DIR: conversationsDir,
             DISABLE_LOGGING: '1',
           }),
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -1396,7 +1401,7 @@ fs.createWriteStream = (filename, options) => {
         execFileSync('node', [cliPath(), '--list-models', '--resume', 'abc123', '--fork'], {
           env: createTestChildEnv({
             HOME: tempHome,
-            TERM2_CONVERSATIONS_DIR: testDir,
+            TERM2_CONVERSATIONS_DIR: conversationsDir,
             DISABLE_LOGGING: '1',
           }),
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -1423,7 +1428,7 @@ fs.createWriteStream = (filename, options) => {
           stdout = execFileSync('node', [cliPath(), '--list-models'], {
             env: createTestChildEnv({
               HOME: tempHome,
-              TERM2_CONVERSATIONS_DIR: testDir,
+              TERM2_CONVERSATIONS_DIR: conversationsDir,
               DISABLE_LOGGING: '1',
             }),
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -1453,7 +1458,7 @@ fs.createWriteStream = (filename, options) => {
         execFileSync('node', [cliPath(), '--refresh', 'hello'], {
           env: createTestChildEnv({
             HOME: tempHome,
-            TERM2_CONVERSATIONS_DIR: testDir,
+            TERM2_CONVERSATIONS_DIR: conversationsDir,
             DISABLE_LOGGING: '1',
           }),
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -1481,7 +1486,7 @@ fs.createWriteStream = (filename, options) => {
           stdout = execFileSync('node', [cliPath(), '--list-models', '--refresh'], {
             env: createTestChildEnv({
               HOME: tempHome,
-              TERM2_CONVERSATIONS_DIR: testDir,
+              TERM2_CONVERSATIONS_DIR: conversationsDir,
               DISABLE_LOGGING: '1',
             }),
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -1514,7 +1519,7 @@ fs.createWriteStream = (filename, options) => {
           execFileSync('node', [cliPath()], {
             env: createTestChildEnv({
               HOME: tempHome,
-              TERM2_CONVERSATIONS_DIR: testDir,
+              TERM2_CONVERSATIONS_DIR: conversationsDir,
               DISABLE_LOGGING: '1',
             }),
             cwd: tempHome,
@@ -1547,7 +1552,7 @@ fs.createWriteStream = (filename, options) => {
           execFileSync('node', [cliPath()], {
             env: createTestChildEnv({
               HOME: tempHome,
-              TERM2_CONVERSATIONS_DIR: testDir,
+              TERM2_CONVERSATIONS_DIR: conversationsDir,
               DISABLE_LOGGING: '1',
             }),
             cwd: '/',
@@ -1606,7 +1611,7 @@ fs.createWriteStream = (filename, options) => {
         execFileSync('node', [cliPath(), '--provider', providerName, 'hello'], {
           env: createTestChildEnv({
             HOME: tempHome,
-            TERM2_CONVERSATIONS_DIR: testDir,
+            TERM2_CONVERSATIONS_DIR: conversationsDir,
             DISABLE_LOGGING: '1',
           }),
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -1640,7 +1645,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { status, stderr } = await spawnCli([cliPath(), '--model', 'nonexistent-xyz-pattern', 'hello'], childEnv);
@@ -1670,7 +1675,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { status, stderr } = await spawnCli(
@@ -1703,7 +1708,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { status, stdout, stderr } = await spawnCli([cliPath(), '--json', '--model', 'mock', 'hello'], childEnv);
@@ -1741,7 +1746,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { status, stdout, stderr } = await spawnCli(
@@ -1794,7 +1799,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { stdout, stderr } = await spawnCli([cliPath(), '--model', 'mock-beta'], childEnv);
@@ -1820,7 +1825,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { stdout, stderr } = await spawnCli(
@@ -1850,7 +1855,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { status } = await spawnCli([cliPath(), '--model', 'mock-beta', 'hello'], childEnv);
@@ -1874,7 +1879,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { status } = await spawnCli([cliPath(), 'explain this function'], childEnv);
@@ -1905,7 +1910,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const childEnv = createTestChildEnv({
           HOME: tempHome,
-          TERM2_CONVERSATIONS_DIR: testDir,
+          TERM2_CONVERSATIONS_DIR: conversationsDir,
           DISABLE_LOGGING: '1',
         });
         const { stdout, stderr } = await spawnCli([cliPath(), '--model'], childEnv);
@@ -2105,7 +2110,7 @@ fs.createWriteStream = (filename, options) => {
           'utf8',
         );
         const resumeId = 'saved-standard';
-        const resumePath = path.join(testDir, `${resumeId}.jsonl`);
+        const resumePath = path.join(conversationsDir, `${resumeId}.jsonl`);
         const savedHistory = selection.endsWith('-resume')
           ? [
               {
@@ -2147,7 +2152,7 @@ fs.createWriteStream = (filename, options) => {
               '--json',
               'Write a result file',
             ],
-            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
             repo,
           );
           expect(result.status, result.stderr).toBe(0);
@@ -2207,9 +2212,9 @@ fs.createWriteStream = (filename, options) => {
             activeProfileVersion: '2.0.0',
             activeProfileDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
           });
-          const saved = fs.readdirSync(testDir).find((name) => name.endsWith('.jsonl'))!;
+          const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
           const events = fs
-            .readFileSync(path.join(testDir, saved), 'utf8')
+            .readFileSync(path.join(conversationsDir, saved), 'utf8')
             .trim()
             .split('\n')
             .map((line) => JSON.parse(line).event);
@@ -2267,7 +2272,7 @@ fs.createWriteStream = (filename, options) => {
         try {
           const result = await spawnCli(
             [cliPath(), '--profile', profile, '--goal', 'Deliver a reply', 'Reply'],
-            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
             testDir,
           );
           expect(result.status, result.stderr).toBe(profile === 'pair' ? 0 : 2);
@@ -2293,7 +2298,7 @@ fs.createWriteStream = (filename, options) => {
         try {
           const result = await spawnCli(
             [cliPath(), '--profile', profile, 'Interpret reasonably and reply'],
-            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
             testDir,
           );
           expect(result.status, result.stderr).toBe(0);
@@ -2360,7 +2365,7 @@ fs.createWriteStream = (filename, options) => {
       try {
         const result = await spawnCli(
           [cliPath(), '--profile', 'bare', 'Attempt the fixture edit'],
-          createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+          createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
           workspace,
         );
         expect(result.status, result.stderr).toBe(0);

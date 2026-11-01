@@ -40,7 +40,11 @@ engine acceptance token.
    rollover.
 4. Rollover records its rotation, optional priority handoff admission, and
    command completion in one accepted batch before its prepared generation is
-   installed. A rejected preparation is disposed.
+   installed. A rejected preparation is disposed. A model-requested rollover is
+   consumed by the held root's own reserved command: that command's
+   `command_started` receipt does not make its accepted request look foreign to
+   the foreground veto, while any other command, running turn or pending
+   decision still vetoes.
 5. Queue steering remains FIFO and completion is held until the settled root's
    boundary policy has released it. Child/background completion releases its
    parent through the engine boundary, not by bypassing the journal.

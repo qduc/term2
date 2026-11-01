@@ -170,6 +170,9 @@ async function runTui(
               initial={initial}
               bridge={bridge}
               restart={(plan) => {
+                // Node's native exec failure can abort rather than throw. Publish
+                // recovery before cleanup as well, while this terminal still exists.
+                stderr.write(`Restart recovery command: ${plan.manualCommand}\n`);
                 pending.plan = plan;
               }}
               onExit={() => instance.unmount()}
